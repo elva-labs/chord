@@ -58,7 +58,7 @@
           { id: "once", label: "Allow once", testid: "conduct-once", key: 1, primary: true, run: () => run("once") },
           ...(ask.once
             ? []
-            : [{ id: "allow", label: "Allow for this session", testid: "conduct-allow", key: 2, run: () => run("allow") }]),
+            : [{ id: "allow", label: "Allow its starts in this project", testid: "conduct-allow", key: 2, run: () => run("allow") }]),
           { id: "no", label: "Don't allow", testid: "conduct-no", key: ask.once ? 2 : 3, run: () => run("no") },
         ],
   );

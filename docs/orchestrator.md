@@ -803,7 +803,8 @@ not used.
 The first time a session asks to start another anywhere else, the window
 puts the question to the user and holds the call while it is up, as under
 [a call that waits on the user](#a-call-that-waits-on-the-user): Allow
-once, Allow for this session, which allows it from now on, or Don't allow.
+once, Allow its starts in this project, which lets the asking session
+start sessions there from now on without asking, or Don't allow.
 It docks over the caller's composer while the conversation of a caller
 that runs in Chord is on screen. Otherwise it stands over the window,
 centred above the composer and dock of the conversation on screen so that
@@ -895,7 +896,7 @@ A call whose question was still in front of the user went with the window,
 and is told as not done; one the user had allowed that was still under way
 is told as perhaps done, with the `sessions` listing to see what runs.
 
-![The question over the window: which session wants to start one, in which project, the prompt it would give, and Allow once, Allow for this session or Don't allow.](orchestrator-ask.png)
+![The question over the window: which session wants to start one, in which project, the prompt it would give, and Allow once, Allow its starts in this project or Don't allow.](orchestrator-ask.png)
 
 ## In the panes
 
