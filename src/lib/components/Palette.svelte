@@ -67,6 +67,7 @@
     palette.query;
     palette.mode;
     palette.steps;
+    palette.ready;
     chosen = untrack(() => {
       const starting = startingId();
       return items.find((item) => item.id === starting)?.id ?? items.find(pickable)?.id ?? null;
@@ -91,9 +92,11 @@
   /** The list as runs of rows under one heading, each with the place its
       first row holds in the list. A new session's step is one list, which
       its field already names, so it has no heading, except how it runs when
-      it offers workflows as well as agents. */
+      it offers workflows as well as agents, and what typing on the
+      defaults' line finds, which answers more than one question. */
   const headed = $derived(
     palette.mode !== "new" ||
+      palette.ready ||
       (items.some((item) => item.group === WORKFLOWS) && items.some((item) => item.group === ALONE)),
   );
   const sections = $derived.by(() => {
@@ -174,7 +177,11 @@
       ? "Go to a session or project"
       : palette.mode === "commands"
         ? "Run a command"
-        : asking === "project"
+        : palette.ready
+          ? palette.query === ""
+            ? "Enter starts it"
+            : ""
+          : asking === "project"
           ? "Which project"
           : asking === "account"
             ? "Under which account"
@@ -297,8 +304,17 @@
                   />
                 </svg>
               {/if}
-              <span class="label" data-testid="palette-label">{item.label}</span>
-              {#if item.kind === "session"}
+              <span
+                class="label"
+                class:unnamed={item.kind === "session" && item.unnamed}
+                data-testid="palette-label">{item.label}</span
+              >
+              {#if item.kind === "ready"}
+                <span class="detail" data-testid="palette-detail">{item.detail}</span>
+                <kbd>↵</kbd>
+              {:else if item.kind === "change"}
+                <span class="detail"></span>
+              {:else if item.kind === "session"}
                 <span class="detail" data-testid="palette-detail">{item.project}</span>
                 <span class="end" data-testid="palette-end">{item.when}</span>
               {:else if item.kind === "choice"}
@@ -331,6 +347,14 @@
           <span><kbd>↵</kbd> open</span>
         {/if}
         <span><kbd>&gt;</kbd> commands</span>
+        <span><kbd>esc</kbd> close</span>
+      {:else if palette.mode === "new" && palette.ready}
+        {#if palette.query.trim() === ""}
+          <span><kbd>↵</kbd> start</span>
+        {:else if items.length > 0}
+          <span><kbd>↵</kbd> choose</span>
+        {/if}
+        <span><kbd>⌫</kbd> back</span>
         <span><kbd>esc</kbd> close</span>
       {:else if palette.mode === "new"}
         <span><kbd>↵</kbd> {stepsLeft(palette.steps).length === 1 ? "start" : "choose"}</span>
@@ -483,6 +507,26 @@
   .row.off {
     color: var(--ink-3);
     cursor: default;
+  }
+
+  /* The defaults a new session starts with, on one line Enter accepts. */
+  /* A session nothing names yet reads "New session", quietly. */
+  .label.unnamed {
+    color: var(--ink-3);
+  }
+
+  .row[data-kind="ready"] .label {
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .row[data-kind="ready"] .detail {
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+
+  .row[data-kind="change"] {
+    color: var(--accent);
   }
 
   .label {

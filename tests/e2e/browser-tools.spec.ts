@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew, sessionBox } from "./fake";
 
 /**
  * The tools an agent drives the embedded browser with.
@@ -63,6 +63,7 @@ test.describe("the browser's tools", () => {
 
   test("browser_open opens a tab, shows it, and answers with its id and url", async ({ page }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(1);
     await push(page, {
       id: "b-1",
@@ -84,9 +85,11 @@ test.describe("the browser's tools", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
-    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
     // The user is looking at a page of session 2's own.
     await push(page, {
       id: "b-h0",
@@ -120,20 +123,20 @@ test.describe("the browser's tools", () => {
     const shot = (await answerTo(page, "b-h3"))!;
     expect(shot.error).toBeNull();
     expect(shot.content).toContain("/2-fake.png");
-    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
     await expect(page.getByTestId("browser-tab")).toHaveCount(1);
     await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "1");
 
     // The sessions pane is folded while reviewing: stepped to by chord.
     await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
     await expect(page.getByTestId("browser-tab")).toHaveCount(1);
     await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "2");
 
     // Back to session 2: its own tab is in front again.
     await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
-    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
     await expect(page.getByTestId("browser-tab")).toHaveCount(1);
     await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "1");
   });

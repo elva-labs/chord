@@ -40,7 +40,7 @@ import {
   create,
   lastChanged,
   modelLabel,
-  moreLabel,
+  earlierLabel,
   nextNeedingYou,
   reopened,
   reset as resetSessions,
@@ -208,26 +208,6 @@ describe("active and inactive", () => {
       active: ["/a", "/b"],
       inactive: ["/never", "/old-a", "/old-b"],
     });
-  });
-
-  // A new session asked for in an inactive project opens its choice under
-  // its name, so it is drawn among the active ones while that is open, in
-  // its own place by the order, and back under Inactive once it is not.
-  it("draws the project a session is asked for in among the active ones", () => {
-    touch("/b", NOW - DAY);
-    touch("/old", NOW - 30 * DAY);
-    const paths = ["/b", "/old"];
-    for (const path of paths) sessions.history[path] = [];
-
-    expect(splitProjects(paths, null, "used", NOW, "/old")).toEqual({
-      active: ["/b", "/old"],
-      inactive: [],
-    });
-    expect(splitProjects(paths, null, "used", NOW)).toEqual({
-      active: ["/b"],
-      inactive: ["/old"],
-    });
-    expect(lastUsed("/old")).toBe(NOW - 30 * DAY);
   });
 
   // Two checkouts of the same name sort by their paths, so the order
@@ -459,10 +439,7 @@ describe("what a row says", () => {
     expect(modelLabel("gpt-5-codex")).toBe("gpt-5-codex");
   });
 
-  it("counts the folded tail by how long ago its oldest changed", () => {
-    expect(moreLabel(3, NOW - 3600_000, NOW)).toBe("3 more from today");
-    expect(moreLabel(8, NOW - 3 * DAY, NOW)).toBe("8 more from this week");
-    expect(moreLabel(2, NOW - 12 * DAY, NOW)).toBe("2 more from this month");
-    expect(moreLabel(9, NOW - 90 * DAY, NOW)).toBe("9 more");
+  it("counts the folded tail on one quiet line", () => {
+    expect(earlierLabel(26)).toBe("Earlier · 26");
   });
 });

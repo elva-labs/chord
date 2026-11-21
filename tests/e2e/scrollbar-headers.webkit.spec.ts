@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { installFakeCore } from "./fake";
+import { installFakeCore, startNew } from "./fake";
 
 const SESSIONS = "section[data-pane='sessions']";
 const PROJECTS = Array.from({ length: 12 }, (_, n) => `/home/ada/dev/project${String(n + 1).padStart(2, "0")}`);
@@ -9,11 +9,13 @@ async function open(page: Page, settings: Record<string, unknown>) {
   await installFakeCore(page, { open: PROJECTS, settings });
   await page.goto("/");
   await expect(page.locator(`${SESSIONS} [data-testid='project-head']`)).toHaveCount(12);
-  for (let n = 0; n < 12; n += 1) {
-    const add = page.locator(`${SESSIONS} [data-testid='project-head']`).nth(n).getByTestId("project-new-session");
+  for (const path of PROJECTS) {
+    // A project that starts a session comes forward, so each is found by its path.
+    const proj = page.locator(`${SESSIONS} section.proj`).filter({ has: page.locator(`[data-row="project:${path}"]`) });
     for (let s = 0; s < 3; s += 1) {
-      await add.click();
-      await expect(page.locator(`${SESSIONS} section.proj`).nth(n).getByTestId("session-row")).toHaveCount(s + 1);
+      await proj.getByTestId("project-new-session").click();
+      await startNew(page);
+      await expect(proj.getByTestId("session-row")).toHaveCount(s + 1);
     }
   }
 }

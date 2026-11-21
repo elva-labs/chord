@@ -129,7 +129,7 @@ import { reset as resetHook } from "$lib/hook.svelte";
 import { remote, resetRemote } from "$lib/remote.svelte";
 import { offered, pickResume, resetResume, resume } from "$lib/resume.svelte";
 import { projects, resetProjects, touch } from "$lib/projects.svelte";
-import { palette, resetPalette } from "$lib/palette.svelte";
+import { palette, paletteItems, pickItem, resetPalette } from "$lib/palette.svelte";
 import { settings } from "$lib/settings.svelte";
 import { conductor, resetConductor } from "$lib/conductor.svelte";
 import { chordFor, describe as describeChord } from "$lib/keys.svelte";
@@ -219,6 +219,14 @@ async function renderChanges() {
     expect(screen.getAllByRole("treeitem").length).toBeGreaterThan(0),
   );
 }
+
+/** Starts the session the palette offers as it stands, as Enter does. */
+function startReady() {
+  const ready = paletteItems().find((item) => item.kind === "ready")!;
+  const outcome = pickItem(ready);
+  if (outcome.type === "close") outcome.then();
+}
+
 const rowNames = () =>
   screen
     .getAllByRole("treeitem")
@@ -245,10 +253,10 @@ describe("Pane shell", () => {
 });
 
 describe("SessionsPane", () => {
-  it("asks for a project when none is open", () => {
+  it("lists nothing when no project is open, leaving the opening to the agent pane", () => {
     render(SessionsPane);
-    expect(screen.getByTestId("no-project")).toBeInTheDocument();
-    expect(screen.getByTestId("open-first-project")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("project-section")).toHaveLength(0);
+    expect(screen.queryByText(/Open/)).toBeNull();
   });
 
   it("lists open projects with their sessions", () => {
@@ -259,7 +267,8 @@ describe("SessionsPane", () => {
 
     render(SessionsPane);
     expect(screen.getByText("one")).toBeInTheDocument();
-    expect(screen.getByText("session 1")).toBeInTheDocument();
+    // Nothing names it yet, so it reads as a new session, not by its number.
+    expect(screen.getByText("New session")).toBeInTheDocument();
     // Nothing left for the row: one line, and the dot says what it is
     // doing, in words only for a screen reader.
     const row = screen.getByTestId("session-row");
@@ -277,9 +286,9 @@ describe("SessionsPane", () => {
     expect(screen.getByText("no git")).toBeInTheDocument();
   });
 
-  // With codex installed too, the new-session row offers the choice, and
-  // every agent's outside sessions are one row of earlier sessions. No row
-  // says whose agent it is.
+  // With codex installed too, a project's new session asks in the palette,
+  // which offers both agents, and every agent's outside sessions are one fold
+  // of earlier sessions. No row says whose agent it is.
   it("offers both agents and tells their sessions apart", async () => {
     applyDetect(
       {
@@ -303,29 +312,34 @@ describe("SessionsPane", () => {
 
     render(SessionsPane);
     expect(screen.queryByTestId("agent-tag")).toBeNull();
-    // The project's own new session opens the choice under its name, a row
-    // per agent.
+    // The project's own new session asks in the palette, on its defaults.
     await fireEvent.click(screen.getByTestId("project-new-session"));
-    const options = screen.getAllByTestId("agent-option");
-    expect(options.map((option) => option.dataset.agent)).toEqual([
-      "claude-code",
-      "codex",
-    ]);
-    expect(options[0]).toHaveTextContent("Claude Code");
-    expect(options[1]).toHaveTextContent("Codex");
+    expect(palette.open).toBe(true);
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: "/repo" }]);
+    expect(palette.ready).toBe(true);
+    const ready = paletteItems().find((item) => item.kind === "ready")!;
+    expect(ready.label).toBe("New session");
+    expect(ready).toMatchObject({ detail: "Claude Code" });
 
-    await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toHaveTextContent("2 earlier sessions"),
-    );
+    // Change offers a row per agent.
+    pickItem(paletteItems().find((item) => item.kind === "change")!);
+    expect(palette.ready).toBe(false);
+    const options = paletteItems().filter((item) => item.kind === "choice");
+    expect(options.map((option) => option.label)).toEqual(["Claude Code", "Codex"]);
 
-    await fireEvent.click(options[1]);
+    await waitFor(() => expect(screen.getByTestId("earlier-fold")).toHaveTextContent("Earlier · 2"));
+
+    const outcome = pickItem(options[1]);
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") outcome.then();
     expect(sessions.all.at(-1)?.agent).toBe("codex");
     expect(layout.focus).toBe("agent");
-    expect(screen.queryByTestId("agent-choice")).toBeNull();
     expect(screen.getByTestId("new-session")).toBeInTheDocument();
 
-    // The row opens the list to resume from, every agent's together.
-    await fireEvent.click(screen.getByTestId("earlier-sessions"));
+    // With nothing folded, the fold opens the list to resume from, every
+    // agent's together.
+    await fireEvent.click(screen.getByTestId("earlier-fold"));
     expect(resume.open).toBe(true);
     expect(resume.agent).toBeNull();
     expect(offered().map((entry) => entry.id)).toEqual(["c1", "x1"]);
@@ -343,35 +357,47 @@ describe("SessionsPane", () => {
     workspace.active = "/repo";
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
     render(SessionsPane);
+    const choices = () => paletteItems().filter((item) => item.kind === "choice");
+    const change = () => pickItem(paletteItems().find((item) => item.kind === "change")!);
+    const take = (outcome: ReturnType<typeof pickItem>) => {
+      expect(outcome.type).toBe("close");
+      if (outcome.type === "close") outcome.then();
+    };
+
+    // The defaults follow the workflow, and Change lists it first, marked
+    // as the default.
     await fireEvent.click(screen.getByTestId("project-new-session"));
-    const flow = screen.getByTestId("workflow-option");
-    expect(flow).toHaveTextContent("Build and review");
-    expect(flow).toHaveTextContent("default");
-    expect(flow).toHaveClass("cursor");
-    const choice = screen.getByTestId("agent-choice");
-    const rows = [...choice.querySelectorAll("[data-testid='workflow-option'], [data-testid='agent-option']")];
-    expect(rows[0]).toBe(flow);
-    await fireEvent.click(flow);
+    expect(paletteItems().find((item) => item.kind === "ready")).toMatchObject({ detail: "Build and review" });
+    change();
+    expect(choices()[0]).toMatchObject({ label: "Build and review", end: "default" });
+    expect(choices().map((item) => item.id)).toEqual(["workflow:Build and review", "agent:claude-code", "agent:codex"]);
+    take(pickItem(choices()[0]));
     const started = sessions.all.at(-1)!;
     expect(started.workflow?.name).toBe("Build and review");
     expect(started.agent).toBe("claude-code");
 
     // The project's own choice of workflow says so.
+    resetPalette();
     adoptWorkflows({ list: [defaultWorkflow()], default: null, overrides: { "/repo": "Build and review" } });
     await fireEvent.click(screen.getByTestId("project-new-session"));
-    expect(screen.getByTestId("workflow-option")).toHaveTextContent("project's workflow");
-    await fireEvent.click(screen.getAllByTestId("agent-option")[1]);
+    change();
+    expect(choices()[0]).toMatchObject({ label: "Build and review", end: "project's workflow" });
+    take(pickItem(choices()[2]));
     expect(sessions.all.at(-1)?.workflow).toBeNull();
     expect(sessions.all.at(-1)?.agent).toBe("codex");
 
     // Where the project follows none, only the agents are offered.
+    resetPalette();
     adoptWorkflows({ list: [defaultWorkflow()], default: null, overrides: {} });
     await fireEvent.click(screen.getByTestId("project-new-session"));
-    expect(screen.queryByTestId("workflow-option")).toBeNull();
-    expect(screen.getAllByTestId("agent-option")).toHaveLength(2);
+    change();
+    expect(choices().map((item) => item.id)).toEqual(["agent:claude-code", "agent:codex"]);
   });
 
-  it("picks the agent from the keyboard, Enter opening the choice and Escape closing it", async () => {
+  // The head's button and the project's own ask in the palette, which
+  // knows the project with one open and offers its defaults. Enter on the
+  // line starts the session, and the choice of agent sticks.
+  it("asks for a new session in the palette from the keyboard and from the project's button", async () => {
     applyDetect(
       {
         id: "codex",
@@ -388,9 +414,7 @@ describe("SessionsPane", () => {
     render(SessionsPane);
     const nav = screen.getByTestId("sessions-nav");
     // The new-session button is the fourth stop: the sort and the menu on
-    // the title's row, then the field and the button beside it. It asks in
-    // the palette, which knows the project with one open and asks for the
-    // agent.
+    // the title's row, then the field and the button beside it.
     await fireEvent.keyDown(nav, { key: "Home" });
     for (let step = 0; step < 3; step += 1) await fireEvent.keyDown(nav, { key: "ArrowDown" });
     expect(screen.getByTestId("new-session")).toHaveClass("cursor");
@@ -398,35 +422,51 @@ describe("SessionsPane", () => {
     expect(palette.open).toBe(true);
     expect(palette.mode).toBe("new");
     expect(palette.steps).toEqual([{ kind: "project", path: "/repo" }]);
-    expect(screen.queryByTestId("agent-choice")).toBeNull();
+    expect(palette.ready).toBe(true);
+    expect(sessions.all).toHaveLength(0);
     resetPalette();
 
-    // The project's own button opens the choice under its name, with the
-    // cursor on its default.
+    // The project's own button asks the same, and nothing starts until the
+    // palette's answer.
     await fireEvent.click(screen.getByTestId("project-new-session"));
-    let options = screen.getAllByTestId("agent-option");
-    expect(options[0]).toHaveClass("cursor");
+    expect(palette.open).toBe(true);
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: "/repo" }]);
     expect(sessions.all).toHaveLength(0);
-    const head = screen.getByTestId("project-head").getBoundingClientRect();
-    expect(screen.getByTestId("agent-choice").getBoundingClientRect().top).toBeGreaterThanOrEqual(head.top);
 
-    // Escape closes it and puts the cursor on the project it opened under.
-    await fireEvent.keyDown(nav, { key: "Escape" });
-    expect(screen.queryByTestId("agent-choice")).toBeNull();
-    expect(screen.getByTestId("project-head")).toHaveClass("cursor");
-
-    await fireEvent.click(screen.getByTestId("project-new-session"));
-    await fireEvent.keyDown(nav, { key: "ArrowDown" });
-    options = screen.getAllByTestId("agent-option");
-    expect(options[1]).toHaveClass("cursor");
-    await fireEvent.keyDown(nav, { key: "Enter" });
+    pickItem(paletteItems().find((item) => item.kind === "change")!);
+    const codex = paletteItems().find((item) => item.id === "agent:codex")!;
+    const outcome = pickItem(codex);
+    if (outcome.type === "close") outcome.then();
     expect(sessions.all[0].agent).toBe("codex");
-    // The choice sticks: the next choice opens on it, and it is marked.
+    // The choice sticks: the next ask offers it as the defaults.
     expect(sessions.preferred["/repo"]).toBe("codex");
+    resetPalette();
     await fireEvent.click(screen.getByTestId("project-new-session"));
-    options = screen.getAllByTestId("agent-option");
-    expect(options[1]).toHaveClass("cursor");
-    expect(options[1]).toHaveTextContent("last used");
+    expect(paletteItems().find((item) => item.kind === "ready")).toMatchObject({ detail: "Codex" });
+    startReady();
+    expect(sessions.all.at(-1)?.agent).toBe("codex");
+    expect(sessions.all).toHaveLength(2);
+  });
+
+  // Nothing names a new session until it is given a title, and its row says
+  // so in muted ink rather than by its number.
+  it("reads a session with no name as New session, and one given a title by it", async () => {
+    workspace.open.push(repo("/repo", "repo"));
+    workspace.active = "/repo";
+    const blank = create("/repo");
+    started(blank.key, "pty-1", "session-1");
+    const named = create("/repo");
+    started(named.key, "pty-2", "session-2");
+    named.title = "rename the cache";
+
+    render(SessionsPane);
+    const label = (key: string) =>
+      document.querySelector<HTMLElement>(`[data-row="session:${key}"] [data-testid="session-row"] .label`)!;
+    expect(label(blank.key)).toHaveTextContent("New session");
+    expect(label(blank.key)).toHaveClass("unnamed");
+    expect(label(named.key)).toHaveTextContent("rename the cache");
+    expect(label(named.key)).not.toHaveClass("unnamed");
   });
 
   it("shows a session working, and one waiting for you", async () => {
@@ -540,8 +580,8 @@ describe("SessionsPane", () => {
 
   // With that started session on screen, everything that follows the
   // project on screen follows the starter's: its header is marked, and its
-  // past sessions and its row of earlier ones stand under it. Its own +
-  // opens the choice there, where it is drawn, and starts in it.
+  // past sessions and its fold of earlier ones stand under it. Its own +
+  // asks for a new session in it.
   it("follows the starter's project as the one on screen while its started session is", async () => {
     applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
     workspace.open.push(repo("/starter", "starter"), repo("/kid", "kid"), repo("/other", "other"));
@@ -579,13 +619,17 @@ describe("SessionsPane", () => {
     expect(section("/starter").querySelector("[data-testid='project-head']")).toHaveClass("on");
     expect(section("/other").querySelector("[data-testid='project-head']")).not.toHaveClass("on");
     await waitFor(() => expect(within(section("/starter")).getByTestId("past-session")).toHaveTextContent("earlier work"));
-    expect(within(section("/starter")).getByTestId("earlier-sessions")).toHaveTextContent("1 earlier session");
+    expect(within(section("/starter")).getByTestId("earlier-fold")).toHaveTextContent("Earlier · 1");
     expect(screen.getAllByTestId("past-session")).toHaveLength(1);
 
     await fireEvent.click(within(section("/starter")).getByTestId("project-new-session"));
-    const choice = within(section("/starter")).getByTestId("agent-choice");
-    expect(within(choice).getAllByTestId("agent-option")[0]).toHaveClass("cursor");
-    await fireEvent.click(within(choice).getAllByTestId("agent-option")[1]);
+    expect(palette.open).toBe(true);
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: "/starter" }]);
+    expect(palette.ready).toBe(true);
+    pickItem(paletteItems().find((item) => item.kind === "change")!);
+    const outcome = pickItem(paletteItems().find((item) => item.id === "agent:codex")!);
+    if (outcome.type === "close") outcome.then();
     expect(sessions.all.at(-1)?.project).toBe("/starter");
     expect(sessions.all.at(-1)?.agent).toBe("codex");
   });
@@ -614,7 +658,7 @@ describe("SessionsPane", () => {
   });
 
   // Down goes through the rows in the order the pane shows them: the
-  // sessions, then the row of earlier ones.
+  // sessions, then the fold of earlier ones.
   it("walks the rows in the order they are shown", async () => {
     workspace.open.push(repo("/repo", "repo"));
     workspace.active = "/repo";
@@ -628,12 +672,12 @@ describe("SessionsPane", () => {
     render(SessionsPane);
     const nav = screen.getByTestId("sessions-nav");
     await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toBeInTheDocument(),
+      expect(screen.getByTestId("earlier-fold")).toBeInTheDocument(),
     );
 
     expect(screen.getByTestId("session-row").closest("[data-row]")).toHaveClass("cursor");
     await fireEvent.keyDown(nav, { key: "ArrowDown" });
-    expect(screen.getByTestId("earlier-sessions")).toHaveClass("cursor");
+    expect(screen.getByTestId("earlier-fold")).toHaveClass("cursor");
     await fireEvent.keyDown(nav, { key: "Enter" });
     expect(resume.open).toBe(true);
   });
@@ -652,10 +696,10 @@ describe("SessionsPane", () => {
     render(SessionsPane);
     const nav = screen.getByTestId("sessions-nav");
     await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toBeInTheDocument(),
+      expect(screen.getByTestId("earlier-fold")).toBeInTheDocument(),
     );
     await fireEvent.keyDown(nav, { key: "ArrowDown" });
-    expect(screen.getByTestId("earlier-sessions")).toHaveClass("cursor");
+    expect(screen.getByTestId("earlier-fold")).toHaveClass("cursor");
     await fireEvent.keyDown(nav, { key: "Enter" });
     expect(resume.open).toBe(true);
 
@@ -664,7 +708,7 @@ describe("SessionsPane", () => {
     expect(document.activeElement).toBe(document.body);
     returnFocus();
     await waitFor(() => expect(document.activeElement).toBe(nav));
-    expect(screen.getByTestId("earlier-sessions")).toHaveClass("cursor");
+    expect(screen.getByTestId("earlier-fold")).toHaveClass("cursor");
     await fireEvent.keyDown(nav, { key: "ArrowUp" });
     expect(screen.getByTestId("project-head")).toHaveClass("cursor");
   });
@@ -949,11 +993,18 @@ describe("SessionsPane", () => {
     const idle = document.querySelector<HTMLElement>('[data-row="idle:/old"]')!;
     await fireEvent.click(within(idle).getByTestId("project-more"));
     await fireEvent.click(within(idle).getByTestId("project-menu-new"));
+    // The menu asks in the palette, and nothing starts until it answers.
+    expect(palette.open).toBe(true);
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: "/old" }]);
+    expect(palette.ready).toBe(true);
+    expect(sessions.all).toHaveLength(0);
+    startReady();
     expect(workspace.active).toBe("/old");
     expect(sessions.all.map((session) => session.project)).toEqual(["/old"]);
     // The project left behind was never used, and takes the other's place
     // under the fold, which stays open.
-    expect(screen.getByTestId("inactive-project")).toHaveTextContent("here");
+    await waitFor(() => expect(screen.getByTestId("inactive-project")).toHaveTextContent("here"));
   });
 
   // A row left from the last quit starts once it is on screen, so asking
@@ -971,12 +1022,10 @@ describe("SessionsPane", () => {
       return { here, left };
     }
 
-    const choice = (path: string) =>
-      document.querySelector<HTMLElement>(`[data-row="project:${path}"]`)!.closest("section")!;
     const heads = () =>
       [...document.querySelectorAll<HTMLElement>("[data-row^='project:'] .name")].map((name) => name.textContent);
 
-    it("opens the choice from the header's + and changes nothing else until one is picked", async () => {
+    it("asks in the palette from the header's + and changes nothing else until it is answered", async () => {
       const { here, left } = twoProjects();
       touch("/here");
       const asked = Date.now() - 3600 * 1000;
@@ -986,7 +1035,10 @@ describe("SessionsPane", () => {
       const head = document.querySelector<HTMLElement>('[data-row="project:/there"]')!;
       await fireEvent.click(within(head).getByTestId("project-new-session"));
 
-      expect(within(choice("/there")).getByTestId("agent-choice")).toBeInTheDocument();
+      expect(palette.open).toBe(true);
+      expect(palette.mode).toBe("new");
+      expect(palette.steps).toEqual([{ kind: "project", path: "/there" }]);
+      expect(palette.ready).toBe(true);
       expect(workspace.active).toBe("/here");
       expect(sessions.active).toBe(here.key);
       expect(left.status).toBe("dormant");
@@ -996,7 +1048,9 @@ describe("SessionsPane", () => {
       await fireEvent.pointerLeave(document.querySelector<HTMLElement>('[data-pane="sessions"]')!);
       expect(heads()).toEqual(["here", "there"]);
 
-      await fireEvent.click(within(choice("/there")).getAllByTestId("agent-option")[1]);
+      pickItem(paletteItems().find((item) => item.kind === "change")!);
+      const outcome = pickItem(paletteItems().find((item) => item.id === "agent:codex")!);
+      if (outcome.type === "close") outcome.then();
       const made = sessions.all.at(-1)!;
       expect(made.project).toBe("/there");
       expect(made.agent).toBe("codex");
@@ -1006,7 +1060,7 @@ describe("SessionsPane", () => {
       expect(projects.used["/there"]).toBeGreaterThan(asked);
     });
 
-    it("opens the choice from an inactive project's menu among the active ones, and scrolls to it", async () => {
+    it("asks in the palette from an inactive project's menu, leaving it under Inactive until it is answered", async () => {
       const { here, left } = twoProjects();
       touch("/here");
       const asked = Date.now() - 30 * 24 * 3600 * 1000;
@@ -1016,26 +1070,29 @@ describe("SessionsPane", () => {
       await fireEvent.click(screen.getByTestId("inactive-fold"));
       const idle = document.querySelector<HTMLElement>('[data-row="idle:/there"]')!;
       await fireEvent.click(within(idle).getByTestId("project-more"));
-      const scrolled = vi.mocked(Element.prototype.scrollIntoView);
-      scrolled.mockClear();
       await fireEvent.click(within(idle).getByTestId("project-menu-new"));
 
-      await waitFor(() => expect(scrolled.mock.contexts).toContain(choice("/there")));
-      expect(within(choice("/there")).getByTestId("agent-choice")).toBeInTheDocument();
-      expect(screen.queryByTestId("inactive-fold")).toBeNull();
+      expect(palette.open).toBe(true);
+      expect(palette.mode).toBe("new");
+      expect(palette.steps).toEqual([{ kind: "project", path: "/there" }]);
+      expect(palette.ready).toBe(true);
       expect(workspace.active).toBe("/here");
       expect(sessions.active).toBe(here.key);
       expect(left.status).toBe("dormant");
       expect(projects.used["/there"]).toBe(asked);
-
-      // Backing out puts it back under Inactive, as nothing used it.
-      await fireEvent.click(screen.getByTestId("choice-cancel"));
-      expect(screen.queryByTestId("agent-choice")).toBeNull();
       expect(heads()).toEqual(["here"]);
       expect(screen.getByTestId("inactive-project")).toHaveTextContent("there");
-      expect(projects.used["/there"]).toBe(asked);
-      expect(sessions.active).toBe(here.key);
+
+      // Answering starts the session in it, which brings it among the
+      // active projects.
+      startReady();
+      const made = sessions.all.at(-1)!;
+      expect(made.project).toBe("/there");
+      expect(workspace.active).toBe("/there");
+      expect(sessions.active).toBe(made.key);
       expect(left.status).toBe("dormant");
+      expect(projects.used["/there"]).toBeGreaterThan(asked);
+      await waitFor(() => expect(heads()).toContain("there"));
     });
   });
 
@@ -1100,7 +1157,7 @@ describe("SessionsPane", () => {
     const row = (key: string) =>
       document.querySelector<HTMLElement>(`[data-row="session:${key}"] [data-testid="session-row"]`)!;
     await waitFor(() => expect(row(left.key).querySelector(".when")!.textContent).not.toBe("now"));
-    expect(row(live.key).querySelector(".label")).toHaveTextContent("session 1");
+    expect(row(live.key).querySelector(".label")).toHaveTextContent("New session");
     expect(row(live.key).querySelector(".when")).toHaveTextContent("now");
     expect(within(row(live.key)).getByTestId("session-note")).toHaveTextContent("Tests green, ready to merge.");
     expect(within(row(live.key)).getByTestId("session-model")).toHaveTextContent("Opus 4.1");
@@ -1173,8 +1230,9 @@ describe("SessionsPane", () => {
 
     render(SessionsPane);
     // Each row's time is its transcript's, once the history is read.
-    await waitFor(() => expect(screen.getByTestId("quiet-more")).toHaveTextContent("3 more from this week"));
+    await waitFor(() => expect(screen.getByTestId("earlier-fold")).toHaveTextContent("Earlier · 3"));
     const labels = () => screen.getAllByTestId("session-row").map((row) => row.querySelector(".label")!.textContent);
+    await waitFor(() => expect(labels().every((label) => /^work \d$/.test(label!))).toBe(true));
     expect(labels()).toHaveLength(2);
 
     const shown = labels();
@@ -1183,13 +1241,13 @@ describe("SessionsPane", () => {
     await waitFor(() => expect(document.activeElement).toBe(nav));
     await fireEvent.keyDown(nav, { key: "Home" });
     for (let i = 0; i < 7; i += 1) await fireEvent.keyDown(nav, { key: "ArrowDown" });
-    const fold = screen.getByTestId("quiet-more");
+    const fold = screen.getByTestId("earlier-fold");
     expect(fold).toHaveClass("cursor");
     expect(fold).toHaveAttribute("aria-expanded", "false");
     await fireEvent.keyDown(nav, { key: "Enter" });
-    expect(screen.getByTestId("quiet-more")).toBe(fold);
+    expect(screen.getByTestId("earlier-fold")).toBe(fold);
     expect(fold).toHaveAttribute("aria-expanded", "true");
-    expect(fold).toHaveTextContent("3 more from this week");
+    expect(fold).toHaveTextContent("Earlier · 3");
     // The rows it let out stand under it, the ones shown before above it,
     // and the cursor walks on from it to the first of them.
     const rows = [...document.querySelectorAll("[data-row^='session:'], [data-row^='more:']")];
@@ -1233,12 +1291,12 @@ describe("SessionsPane", () => {
     loadRemembered();
 
     render(SessionsPane);
-    await waitFor(() => expect(screen.getByTestId("quiet-more")).toHaveTextContent("3 more from today"));
-    await fireEvent.click(screen.getByTestId("quiet-more"));
+    await waitFor(() => expect(screen.getByTestId("earlier-fold")).toHaveTextContent("Earlier · 3"));
+    await fireEvent.click(screen.getByTestId("earlier-fold"));
     const names = [...document.querySelectorAll("[data-row]")]
       .filter((row) => /^(session|past|more):/.test(row.getAttribute("data-row")!))
       .map((row) => row.querySelector(".label, .fold-text")!.textContent);
-    expect(names).toEqual(["left-1", "left-2", "3 more from today", "left-3", "past-1", "past-2"]);
+    expect(names).toEqual(["left-1", "left-2", "Earlier · 3", "left-3", "past-1", "past-2"]);
   });
 
   // A live row's × sits over its end and stops the session, which leaves
@@ -1263,8 +1321,8 @@ describe("SessionsPane", () => {
       expect(screen.getByTestId("past-session")).toBeInTheDocument(),
     );
     await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toHaveTextContent(
-        "1 earlier session",
+      expect(screen.getByTestId("earlier-fold")).toHaveTextContent(
+        "Earlier · 1",
       ),
     );
 
@@ -1273,8 +1331,8 @@ describe("SessionsPane", () => {
       expect(screen.queryByTestId("past-session")).not.toBeInTheDocument(),
     );
     await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toHaveTextContent(
-        "2 earlier sessions",
+      expect(screen.getByTestId("earlier-fold")).toHaveTextContent(
+        "Earlier · 2",
       ),
     );
 
@@ -1313,6 +1371,11 @@ describe("SessionsPane", () => {
     await fireEvent.keyDown(nav, { key: "Home" });
     for (let step = 0; step < 3; step += 1) await fireEvent.keyDown(nav, { key: "ArrowDown" });
     await fireEvent.keyDown(nav, { key: "Enter" });
+    expect(palette.open).toBe(true);
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: "/repo" }]);
+    expect(sessions.all).toHaveLength(0);
+    startReady();
     expect(sessions.all).toHaveLength(1);
     expect(layout.focus).toBe("agent");
   });
@@ -1372,16 +1435,15 @@ describe("SessionsPane", () => {
 
     render(SessionsPane);
     await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toBeInTheDocument(),
+      expect(screen.getByTestId("earlier-fold")).toBeInTheDocument(),
     );
-    // It opens a dialog rather than opening in place: a glyph of its own,
-    // not the chevron, and an ellipsis.
-    expect(screen.getByTestId("earlier-sessions").textContent!.trim()).toBe("2 earlier sessions…");
-    expect(screen.getByTestId("earlier-sessions").querySelector(".history")).not.toBeNull();
-    expect(screen.getByTestId("earlier-sessions").querySelector(".chev:not(.history)")).toBeNull();
+    // With nothing folded in place, the fold counts them and opens a dialog.
+    expect(screen.getByTestId("earlier-fold").textContent!.trim()).toBe("Earlier · 2");
+    expect(screen.getByTestId("earlier-fold")).not.toHaveAttribute("aria-expanded");
+    expect(screen.queryByTestId("earlier-sessions")).toBeNull();
     expect(screen.queryByTestId("past-session")).not.toBeInTheDocument();
 
-    await fireEvent.click(screen.getByTestId("earlier-sessions"));
+    await fireEvent.click(screen.getByTestId("earlier-fold"));
     expect(resume.open).toBe(true);
     expect(offered().map((entry) => entry.id)).toEqual(["abc-123", "def-456"]);
   });
@@ -1395,9 +1457,9 @@ describe("SessionsPane", () => {
 
     render(SessionsPane);
     await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toBeInTheDocument(),
+      expect(screen.getByTestId("earlier-fold")).toBeInTheDocument(),
     );
-    await fireEvent.click(screen.getByTestId("earlier-sessions"));
+    await fireEvent.click(screen.getByTestId("earlier-fold"));
     pickResume(offered()[0]);
 
     expect(sessions.all).toHaveLength(1);
@@ -1413,13 +1475,13 @@ describe("SessionsPane", () => {
 
     render(SessionsPane);
     await waitFor(() =>
-      expect(screen.getByTestId("earlier-sessions")).toBeInTheDocument(),
+      expect(screen.getByTestId("earlier-fold")).toBeInTheDocument(),
     );
-    await fireEvent.click(screen.getByTestId("earlier-sessions"));
+    await fireEvent.click(screen.getByTestId("earlier-fold"));
     pickResume(offered()[0]);
 
     await waitFor(() =>
-      expect(screen.queryByTestId("earlier-sessions")).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("earlier-fold")).not.toBeInTheDocument(),
     );
   });
 
@@ -1429,6 +1491,11 @@ describe("SessionsPane", () => {
 
     render(SessionsPane);
     await fireEvent.click(screen.getByTestId("new-session"));
+    expect(palette.open).toBe(true);
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: "/repo" }]);
+    expect(sessions.all).toHaveLength(0);
+    startReady();
     expect(sessions.all).toHaveLength(1);
   });
 
@@ -1450,8 +1517,8 @@ describe("SessionsPane", () => {
   });
 
   // One new-session button in the head, which asks in the palette which
-  // project, and one in each project's header, which brings that project
-  // forward first.
+  // project, and one in each project's header, which asks for a session in
+  // that project.
   it("offers a new session from the head and from each project's header", async () => {
     workspace.open.push(repo("/one", "one"), repo("/two", "two"));
     workspace.active = "/one";
@@ -1471,12 +1538,17 @@ describe("SessionsPane", () => {
     await fireEvent.click(
       document.querySelector<HTMLElement>('[data-row="project:/two"] [data-testid="project-new-session"]')!,
     );
+    expect(palette.open).toBe(true);
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: "/two" }]);
+    expect(sessions.all).toHaveLength(0);
+    startReady();
     expect(workspace.active).toBe("/two");
     expect(sessions.all.map((session) => session.project)).toEqual(["/two"]);
   });
 
-  // A project's + with nothing to choose, and the choice of agent, start
-  // the session through the palette's own call, so the two cannot drift.
+  // A session asked for from a project's + starts through the palette's own
+  // call, on its defaults or on the agent changed to.
   it("starts a session the way the palette does", async () => {
     workspace.open.push(repo("/one", "one"), repo("/two", "two"));
     workspace.active = "/one";
@@ -1487,17 +1559,23 @@ describe("SessionsPane", () => {
     const plus = (path: string) =>
       document.querySelector<HTMLElement>(`[data-row="project:${path}"] [data-testid="project-new-session"]`)!;
     await fireEvent.click(plus("/two"));
+    expect(startSession).not.toHaveBeenCalled();
+    startReady();
     expect(startSession).toHaveBeenCalledTimes(1);
-    expect(startSession).toHaveBeenLastCalledWith("/two");
+    expect(startSession).toHaveBeenLastCalledWith("/two", undefined, undefined, undefined);
     expect(Date.now() - projects.used["/two"]).toBeLessThan(1000);
 
     applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
     await tick();
+    resetPalette();
     await fireEvent.click(plus("/one"));
     expect(startSession).toHaveBeenCalledTimes(1);
-    await fireEvent.click(screen.getAllByTestId("agent-option")[1]);
+    pickItem(paletteItems().find((item) => item.kind === "change")!);
+    const outcome = pickItem(paletteItems().find((item) => item.id === "agent:codex")!);
+    expect(startSession).toHaveBeenCalledTimes(1);
+    if (outcome.type === "close") outcome.then();
     expect(startSession).toHaveBeenCalledTimes(2);
-    expect(startSession).toHaveBeenLastCalledWith("/one", "codex", null);
+    expect(startSession).toHaveBeenLastCalledWith("/one", "codex", undefined, undefined);
     expect(sessions.all.map((session) => [session.project, session.agent])).toEqual([
       ["/two", "claude-code"],
       ["/one", "codex"],
@@ -1527,7 +1605,7 @@ describe("SessionsPane", () => {
     layout.focus = "sessions";
 
     render(SessionsPane);
-    expect(screen.getByTestId("go-to")).toHaveTextContent("Go to session or project");
+    expect(screen.getByTestId("go-to")).toHaveTextContent("Go to a session or project");
     expect(screen.getByTestId("go-to").querySelector("kbd")).toHaveTextContent(describeChord(chordFor("goto")));
     expect(describeChord(chordFor("goto"))).not.toBe(describeChord(chordFor("palette")));
     await fireEvent.click(screen.getByTestId("go-to"));

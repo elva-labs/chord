@@ -87,34 +87,41 @@ const NEW_SESSION = "[data-testid='new-session']";
 const NEW_HERE =
   "[data-testid='project-head'].on [data-testid='project-new-session']";
 
-/** A new session from the + on the pane's head. With one project open and
-    both fakes on PATH, the palette asks only how the session should run,
-    and the agent is picked from its list by its name. Starting puts the
-    palette away, and nothing is left over the window. */
-async function startFromHead(driver: WebDriver, agent: string) {
-  const asking = By.css("[data-testid='palette'][data-mode='new']");
-  await clickUntil(
-    driver,
-    By.css(NEW_SESSION),
-    async () => (await driver.findElements(asking)).length > 0,
-  );
+/** The palette asking for a new session. */
+const ASKING = By.css("[data-testid='palette'][data-mode='new']");
+
+/** Clicks the palette's row that reads this, once the palette offers it. */
+async function pickRow(driver: WebDriver, label: string) {
   const row = (await driver.wait(
     () =>
       driver.executeScript(
-        (agent: string) =>
+        (label: string) =>
           [
             ...document.querySelectorAll("[data-testid='palette-row']"),
           ].find(
             (row) =>
               row.querySelector("[data-testid='palette-label']")
-                ?.textContent === agent,
+                ?.textContent === label,
           ) ?? null,
-        agent,
+        label,
       ),
     10_000,
-    `the palette never offered ${agent}`,
+    `the palette never offered ${label}`,
   )) as WebElement;
   await row.click();
+}
+
+/** A new session from a +: the palette opens on the project's defaults,
+    and the agent is picked by its name through Change. Starting puts the
+    palette away, and nothing is left over the window. */
+async function startFrom(driver: WebDriver, plus: string, agent: string) {
+  await clickUntil(
+    driver,
+    By.css(plus),
+    async () => (await driver.findElements(ASKING)).length > 0,
+  );
+  await pickRow(driver, "Change");
+  await pickRow(driver, agent);
   await driver.wait(
     async () =>
       (await driver.findElements(By.css("[data-testid='palette-scrim']")))
@@ -124,18 +131,30 @@ async function startFromHead(driver: WebDriver, agent: string) {
   );
 }
 
-/** A new session from the + on the header of the project on screen: the
-    choice opens under the project's name, and the agent is picked there. */
+/** A new session from the + on the pane's head. With one project open the
+    palette starts on that project's defaults. */
+async function startFromHead(driver: WebDriver, agent: string) {
+  await startFrom(driver, NEW_SESSION, agent);
+}
+
+/** A new session from the + on the header of the project on screen. */
 async function startHere(driver: WebDriver, agent: string) {
-  const option = By.css(
-    `[data-testid='agent-option'][data-agent='${agent}']`,
-  );
-  await clickUntil(
-    driver,
-    By.css(NEW_HERE),
-    async () => (await driver.findElements(option)).length > 0,
-  );
-  await driver.findElement(option).click();
+  await startFrom(driver, NEW_HERE, agent);
+}
+
+/** The height of every pane on screen, by its name, and the window's. The
+    panes divide the window between them, above the status bar. */
+function paneHeights(driver: WebDriver): Promise<Record<string, number>> {
+  return driver.executeScript(() => {
+    const out: Record<string, number> = {};
+    for (const pane of document.querySelectorAll<HTMLElement>(
+      "section[data-pane]",
+    )) {
+      out[pane.dataset.pane!] = pane.getBoundingClientRect().height;
+    }
+    out.window = window.innerHeight;
+    return out;
+  });
 }
 
 /** What the window held when a click did nothing: its size, the element's
@@ -243,7 +262,7 @@ afterAll(async () => {
 });
 
 describe("the real app", () => {
-  it("comes up with three panes filling the window", async () => {
+  it("comes up with the panes that show filling the window", async () => {
     const { driver } = app;
     await driver.wait(
       until.elementLocated(By.css("section[data-pane='agent']")),
@@ -252,19 +271,12 @@ describe("the real app", () => {
     await driver.manage().window().setRect({ width: 1440, height: 900 });
     await new Promise((r) => setTimeout(r, 500));
 
-    const heights: Record<string, number> = await driver.executeScript(() => {
-      const out: Record<string, number> = {};
-      for (const pane of document.querySelectorAll<HTMLElement>(
-        "section[data-pane]",
-      )) {
-        out[pane.dataset.pane!] = pane.getBoundingClientRect().height;
-      }
-      out.window = window.innerHeight;
-      return out;
-    });
-    // The panes divide the window between them, above the status bar.
+    // No project is open at first launch, which leaves the changes pane
+    // nothing to show: the sessions and the agent hold the window.
+    const heights = await paneHeights(driver);
     expect(heights.window).toBeGreaterThan(800);
-    for (const pane of ["sessions", "agent", "changes"]) {
+    expect(heights.changes, "changes").toBeUndefined();
+    for (const pane of ["sessions", "agent"]) {
       expect(heights[pane], pane).toBeGreaterThan(heights.window - 120);
     }
   });
@@ -275,6 +287,12 @@ describe("the real app", () => {
     await waitForPaneText(driver, SESSIONS, repo.split(/[\\/]/).pop()!);
     await waitForPaneText(driver, TREE, "lib.rs");
     expect(await textOf(driver, TREE)).not.toContain("README.md");
+    // With a project open the changes pane joins, and all three fill the
+    // window.
+    const heights = await paneHeights(driver);
+    for (const pane of ["sessions", "agent", "changes"]) {
+      expect(heights[pane], pane).toBeGreaterThan(heights.window - 120);
+    }
   });
 
   it("starts the agent in a pty, in the project, with the id it was given", async () => {
@@ -1257,8 +1275,8 @@ describe("the real app", () => {
       const remote = `ssh://test${repo}`;
       await openProjects(driver, [remote]);
       await waitForPaneText(driver, SESSIONS, repo.split(/[\\/]/).pop()!);
-      // From the remote project's own +, which asks under its name.
-      await startHere(driver, "claude-code");
+      // From the remote project's own +, which opens on its defaults.
+      await startHere(driver, "Claude Code");
       await waitForText(driver, "FAKE CLAUDE --session-id");
       await waitForText(driver, "in ");
       expect(await screenText(driver)).toMatch(
@@ -1296,7 +1314,7 @@ describe("the real app", () => {
     // whatever the tests before left in the list; then codex from the
     // palette, over a session already running.
     try {
-      await startHere(driver, "claude-code");
+      await startHere(driver, "Claude Code");
     } catch (error) {
       throw new Error(
         `${(error as Error).message}; ${await sceneReport(driver, NEW_HERE)}`,
@@ -1341,37 +1359,46 @@ describe("the real app", () => {
       until.elementLocated(By.css("[data-testid='project-account']")),
       15_000,
     );
-    // Which page answered, by when it was loaded, and what the choice held:
-    // what a missing account option is read against.
+    // Which page answered, by when it was loaded, and what the palette held:
+    // what a missing account is read against.
     const scene = () =>
       driver.executeScript(() =>
         [
           `page ${performance.timeOrigin}`,
           `tag ${document.querySelector("[data-testid='project-account']")?.textContent ?? "none"}`,
-          `choice ${document.querySelector("[data-testid='agent-choice']") !== null}`,
-          `accounts ${document.querySelectorAll("[data-testid='account-option']").length}`,
-          `agents ${document.querySelectorAll("[data-testid='agent-option']").length}`,
+          `palette ${document.querySelector("[data-testid='palette']")?.getAttribute("data-mode") ?? "closed"}`,
+          `rows ${[...document.querySelectorAll("[data-testid='palette-row']")].map((row) => row.textContent?.trim()).join(" | ")}`,
         ].join(", "),
       ) as Promise<string>;
     const tagged = await scene();
     try {
-      const choice = By.css("[data-testid='agent-option']");
-      const opened = async () =>
-        (await driver.findElements(choice)).length === 2;
-      await clickUntil(driver, By.css(NEW_HERE), opened);
-      const chose = await scene();
-      // The choice starts on the project's account.
-      const work = await located(
+      const ready = By.css("[data-testid='palette-row'][data-kind='ready']");
+      await clickUntil(
         driver,
-        "[data-testid='account-option'][data-account='Work']",
-      ).catch(async (error: Error) => {
-        throw new Error(
-          `${error.message}\nwith the tag: ${tagged}\nwith the choice: ${chose}\nnow: ${await scene()}`,
-        );
-      });
-      expect(await work.getAttribute("aria-checked")).toBe("true");
-      const options = await driver.findElements(choice);
-      await options[1].click();
+        By.css(NEW_HERE),
+        async () => (await driver.findElements(ready)).length > 0,
+      );
+      const chose = await scene();
+      // The defaults start on the project's account. The line's words are
+      // read from the page, not as rendered: the palette fades in, and a
+      // fading row reads as no text to the driver.
+      const detail = () =>
+        driver.executeScript(
+          () =>
+            document.querySelector(
+              "[data-testid='palette-row'][data-kind='ready'] [data-testid='palette-detail']",
+            )?.textContent ?? "",
+        ) as Promise<string>;
+      await driver
+        .wait(async () => (await detail()).includes("Work"), 10_000)
+        .catch(async () => {
+          throw new Error(
+            `the defaults read ${await detail()}\nwith the tag: ${tagged}\nwith the palette: ${chose}\nnow: ${await scene()}`,
+          );
+        });
+      await pickRow(driver, "Change");
+      await pickRow(driver, "Work");
+      await pickRow(driver, "Codex");
       // Codex was pointed at the account's home, which exists by the time
       // it starts: Codex refuses one that does not.
       await waitForText(driver, `home ${codexHome}`);

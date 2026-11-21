@@ -39,7 +39,7 @@ async function withTwo(page: Page, settings: Record<string, unknown> = {}) {
 test("lists every past session of its own until a span is chosen", async ({ page }) => {
   await withTwo(page);
   await expect(page.getByTestId("past-session")).toHaveCount(2);
-  await expect(page.getByTestId("earlier-sessions")).toHaveCount(0);
+  await expect(page.getByTestId("earlier-fold")).toHaveCount(0);
 
   await page.keyboard.press(`${MOD}+,`);
   await page.getByTestId("settings-tab-sessions").click();
@@ -52,7 +52,7 @@ test("lists every past session of its own until a span is chosen", async ({ page
   // bring back by widening the span.
   await expect(page.getByTestId("past-session")).toHaveCount(1);
   await expect(page.getByTestId("past-session")).toContainText("fresh work");
-  await expect(page.getByTestId("earlier-sessions")).toContainText("1");
+  await expect(page.getByTestId("earlier-fold")).toHaveText("Earlier · 1");
 
   await page.keyboard.press(`${MOD}+,`);
   await page.getByTestId("settings-tab-sessions").click();
@@ -64,7 +64,7 @@ test("lists every past session of its own until a span is chosen", async ({ page
 test("reads the span from the machine's settings", async ({ page }) => {
   await withTwo(page, { pastSessions: "week" });
   await expect(page.getByTestId("past-session")).toHaveCount(1);
-  await expect(page.getByTestId("earlier-sessions")).toContainText("1");
+  await expect(page.getByTestId("earlier-fold")).toHaveText("Earlier · 1");
 });
 
 // The history clock reads the projects in use every minute, and the ones
@@ -143,8 +143,8 @@ test("lists the past sessions last, behind a fold that opens and closes", async 
   await page.goto("/");
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
 
-  const fold = page.getByTestId("quiet-more");
-  await expect(fold).toHaveText("3 more from today");
+  const fold = page.getByTestId("earlier-fold");
+  await expect(fold).toHaveText("Earlier · 3");
   await expect(fold).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByTestId("past-session")).toHaveCount(0);
 
@@ -177,13 +177,13 @@ test("lists the past sessions last, behind a fold that opens and closes", async 
     "in-front",
     "left-1",
     "left-2",
-    "3 more from today",
+    "Earlier · 3",
     "left-3",
     "past-1",
     "past-2",
   ]);
   for (let at = 1; at < drawn.length; at += 1) expect(drawn[at].top).toBeGreaterThan(drawn[at - 1].top);
-  const names = drawn.filter((row) => !row.name.endsWith("from today"));
+  const names = drawn.filter((row) => !row.name.startsWith("Earlier"));
   for (const row of names) expect(row.left).toBeCloseTo(names[0].left, 0);
 
   await fold.click();
@@ -191,6 +191,64 @@ test("lists the past sessions last, behind a fold that opens and closes", async 
   await expect(page.getByTestId("past-session")).toHaveCount(0);
   await expect(page.getByTestId("session-row")).toHaveCount(3);
 });
+
+// The fold counts the sessions this window does not list as well. Open, it
+// ends on a row that opens the dialog to resume them from.
+for (const look of ["modern", "terminal"] as const) {
+  test(`counts the sessions the window does not list, and opens the resume dialog from the fold, in the ${look} look`, async ({ page }) => {
+    const now = Math.floor(Date.now() / 1000);
+    const HOUR = 60 * 60;
+    const own = ["in-front", "left-1", "past-1", "left-2", "past-2", "left-3"];
+    await installFakeCore(page, {
+      open: [PROJECT],
+      settings: { look },
+      transcripts: [...own, "elsewhere-1"].map((id, hours) => ({
+        id,
+        modified: now - hours * HOUR,
+        size: 100,
+        title: id,
+      })),
+    });
+    await page.addInitScript(
+      ({ project, ids }) => {
+        if (localStorage.getItem("chord.open") !== null) return;
+        localStorage.setItem("chord.mine", JSON.stringify({ [project]: ids }));
+        localStorage.setItem(
+          "chord.open",
+          JSON.stringify({
+            open: ids
+              .filter((id: string) => !id.startsWith("past"))
+              .map((id: string) => ({ project, id, agent: "claude-code", startIn: null, model: null })),
+            active: "in-front",
+          }),
+        );
+      },
+      { project: PROJECT, ids: own },
+    );
+    await page.goto("/");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
+
+    const fold = page.getByTestId("earlier-fold");
+    await expect(fold).toHaveText("Earlier · 4");
+    await expect(page.getByTestId("earlier-sessions")).toHaveCount(0);
+    await fold.click();
+    await expect(fold).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByTestId("earlier-sessions")).toHaveText("1 more from before…");
+    // Both lines sit in a session row's columns: the glyph centred under
+    // the dots, the words where the names start.
+    const dot = await page.locator("[data-ordinal] .dot").first().boundingBox();
+    const name = await page.locator("[data-ordinal] .first .label").first().boundingBox();
+    for (const line of [fold, page.getByTestId("earlier-sessions")]) {
+      const glyph = await line.locator(".chev").boundingBox();
+      const words = await line.locator(".fold-text").boundingBox();
+      expect(Math.abs(glyph!.x + glyph!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThanOrEqual(1);
+      expect(Math.abs(words!.x - name!.x)).toBeLessThanOrEqual(1);
+    }
+    await page.getByTestId("earlier-sessions").click();
+    await expect(page.getByTestId("resume")).toBeVisible();
+    await expect(page.getByTestId("resume-filter")).toBeFocused();
+  });
+}
 
 test("resumes a past session in the worktree the app made for it as its own", async ({ page }) => {
   const now = Math.floor(Date.now() / 1000);
@@ -226,8 +284,8 @@ test("resumes a past session in the worktree the app made for it as its own", as
 
 // A row left from the last quit whose conversation went on from its notes
 // comes back under the new conversation's id, and is still called by the
-// name it had; one nothing names is numbered, never shown by its id.
-test("names a row left from the last quit by the conversation it went on from, and numbers one nothing names", async ({ page }) => {
+// name it had; one nothing names reads New session, never shown by its id.
+test("names a row left from the last quit by the conversation it went on from, and reads New session for one nothing names", async ({ page }) => {
   const now = Math.floor(Date.now() / 1000);
   await installFakeCore(page, {
     open: [PROJECT],
@@ -256,6 +314,6 @@ test("names a row left from the last quit by the conversation it went on from, a
   const labels = page.locator("[data-testid='session-row'] .label");
   await expect(labels).toHaveCount(2);
   await expect(labels.filter({ hasText: "Login flow rework" })).toBeVisible();
-  await expect(labels.filter({ hasText: /^session \d+$/ })).toBeVisible();
+  await expect(labels.filter({ hasText: /^New session$/ })).toBeVisible();
   await expect(page.locator("[data-testid='session-row']").filter({ hasText: /aaaa1111|bbbb2222|cccc3333/ })).toHaveCount(0);
 });

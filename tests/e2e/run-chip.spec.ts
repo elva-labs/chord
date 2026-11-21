@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * Where a workflow's run stands, on the orchestrator's header, on the rail
@@ -88,6 +88,7 @@ async function begin(page: Page, workflow = PLAN_WORK_REVIEW) {
   await installFakeCore(page, { settings: settingsWith(workflow) });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(chip(page)).toBeVisible();
 }
 
@@ -406,6 +407,7 @@ test.describe("an integrated orchestrator's thread", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     await page.getByTestId("composer-input").fill("Fix the flaky cache test");
     await page.keyboard.press("Enter");
@@ -446,6 +448,7 @@ test.describe("an integrated orchestrator's thread", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("branch-readout")).toHaveText("main");
     // The header's chip comes with the first message.
     await page.getByTestId("composer-input").fill("Fix the flaky cache test");

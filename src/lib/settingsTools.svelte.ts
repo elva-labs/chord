@@ -62,7 +62,7 @@ import {
   type Keymap,
   type PresetName,
 } from "$lib/keys.svelte";
-import { label, runningByToken } from "$lib/sessions.svelte";
+import { runningByToken, toldName } from "$lib/sessions.svelte";
 import { AGENT_ORDER, CODEX_DEFAULT, modelsOf } from "$lib/models";
 import {
   changed,
@@ -707,7 +707,7 @@ function changesOf(next: Next): Change[] {
     names, or an agent, for a call that names none the window runs. */
 function callerOf(request: SettingsRequest): string {
   const session = runningByToken(request.session);
-  return session === null ? "An agent" : label(session);
+  return session === null ? "An agent" : toldName(session);
 }
 
 /** Runs a change when the ones before it are done. */

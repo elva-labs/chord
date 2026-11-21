@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { DEFAULT_FIXTURE, PROJECT, installFakeCore } from "./fake";
+import { DEFAULT_FIXTURE, PROJECT, installFakeCore, startNew } from "./fake";
 
 // Mentioning a file with @ and attaching any file, in an integrated
 // session's composer, against the fake core's repository and its scripted
@@ -25,6 +25,7 @@ async function openIntegrated(page: Page) {
   await installFakeCore(page, { open: [PROJECT], fixture: FIXTURE, settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(input(page)).toBeVisible();
 }
 
@@ -180,6 +181,7 @@ test.describe("mentioning a file with @", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await input(page).click();
     await page.keyboard.type("@module29999");
     await page.keyboard.press("Enter");

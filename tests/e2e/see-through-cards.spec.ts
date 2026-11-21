@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { BUILD_AND_REVIEW, PROJECT, backgroundAtRest, installFakeCore } from "./fake";
+import { BUILD_AND_REVIEW, PROJECT, backgroundAtRest, installFakeCore, startNew } from "./fake";
 
 /**
  * Cards that let the background through: with a background of the user's
@@ -163,6 +163,7 @@ function script(page: Page, body: string) {
     pane, and the terminal panel with two shells side by side. */
 async function working(page: Page) {
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   await expect(page.locator(`${AGENT} .xterm-screen`)).toBeVisible();
   await page.locator(TREE).getByText("mod.rs", { exact: true }).click();
@@ -179,6 +180,7 @@ async function working(page: Page) {
     block of it, a command with its output open, and the find bar. */
 async function conversation(page: Page) {
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeVisible();
   await script(
     page,
@@ -254,6 +256,7 @@ for (const look of LOOKS)
       test("nothing solid in a card: the menus over the conversation", async ({ page }) => {
         await open(page, look, appearance, { integrated: ["claude-code"] });
         await page.getByTestId("start-agent").click();
+        await startNew(page);
         await expect(page.getByTestId("composer-input")).toBeVisible();
         await page.getByTestId("composer-input").click();
         await page.keyboard.type("/");
@@ -300,6 +303,7 @@ for (const look of LOOKS)
     test(`nothing solid in a card: the board section and its rows, ${look}, ${appearance}`, async ({ page }) => {
       await open(page, look, appearance);
       await page.getByTestId("start-agent").click();
+      await startNew(page);
       await expect(page.locator(TREE)).toBeVisible();
       await conduct(page, "b-1", "start", { project: PROJECT, prompt: "Fix the flaky cache test", name: "Fix the cache" });
       await conduct(page, "b-2", "start", { project: PROJECT, prompt: "Bump the client", name: "Bump the client" });
@@ -327,6 +331,7 @@ for (const look of LOOKS)
         workflows: { list: [BUILD_AND_REVIEW], default: null, overrides: {} },
       });
       await page.getByTestId("start-agent").click();
+      await startNew(page);
       await expect(page.getByTestId("model-chip")).toBeEnabled();
       await page.getByTestId("more-chip").click();
       await page.getByTestId("more-option").filter({ hasText: "Workflow" }).click();
@@ -350,6 +355,7 @@ test("with no share on the cards stamps nothing and leaves the agent's card soli
   await expect(page.locator(":root")).toHaveAttribute("data-background", /.*/);
   await expect(page.locator(":root")).not.toHaveAttribute("data-cards", /.*/);
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   const card = await page.locator(`${AGENT} > .body`).evaluate((body) => {
     const style = getComputedStyle(body);
@@ -438,6 +444,7 @@ for (const look of LOOKS)
       test("in the conversation", async ({ page }) => {
         await open(page, look, appearance, { integrated: ["claude-code"], backgrounds: { teal: STRONG } });
         await page.getByTestId("start-agent").click();
+        await startNew(page);
         await expect(page.getByTestId("composer-input")).toBeVisible();
         await script(
           page,
@@ -473,6 +480,7 @@ for (const look of LOOKS)
       test("in a terminal", async ({ page }) => {
         await open(page, look, appearance, { backgrounds: { teal: STRONG } });
         await page.getByTestId("start-agent").click();
+        await startNew(page);
         await expect(page.locator(`${AGENT} .xterm-screen`)).toBeVisible();
         const ink = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ink").trim());
         const low = await lowestContrast(page, `${AGENT} [data-testid='terminal']`, ink, `${AGENT} .xterm-screen, ${AGENT} .xterm-helpers`);
@@ -485,6 +493,7 @@ test.describe("a terminal on a see-through card", () => {
     test(`keeps its selection and its inverse cells readable, ${appearance}`, async ({ page }) => {
       await open(page, "modern", appearance, { backgrounds: { teal: STRONG } });
       await page.getByTestId("start-agent").click();
+      await startNew(page);
       await expect(page.locator(`${AGENT} .xterm-screen`)).toBeVisible();
       await expect
         .poll(() => page.evaluate(() => Object.keys((window as unknown as { __outputs?: object }).__outputs ?? {})))

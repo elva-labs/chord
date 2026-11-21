@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * A session's row menu reopens a terminal session as a conversation and a
@@ -31,6 +31,7 @@ test("reopens a terminal session as a conversation in the same row, from its men
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.locator(ROW)).toHaveCount(1);
   await expect.poll(async () => (await spawns(page)).length).toBe(1);
   const [spawned] = await spawns(page);
@@ -110,7 +111,7 @@ test("draws what a session reopened as a conversation said before, under its acc
   });
   await page.goto("/");
   await page.locator(`[data-row="project:${PROJECT}"]`).getByTestId("project-new-session").click();
-  await page.getByTestId("agent-option").click();
+  await startNew(page);
   await spokenTerminal(page);
   await agent(page, `f.transcript("session-1", ${JSON.stringify(earlier("Run the tests"))}, "claude-code", "~/.claude-work"); f.holdHistory();`);
 
@@ -147,6 +148,7 @@ test("says why it draws nothing from before when the agent kept no record of the
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await spokenTerminal(page);
   await page.locator(ROW).click({ button: "right" });
   await page.getByTestId("session-menu-reopen").click();
@@ -166,6 +168,7 @@ test("asks before it reopens a conversation in a terminal in the middle of a tur
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   await agent(page, `f.send("${H}", crypto.randomUUID(), "Fix the slow start"); f.startTurn("${H}");`);
   await expect(page.locator(".session .dot.working")).toHaveCount(1);
@@ -205,6 +208,7 @@ test("reopens a session another started, which stays its starter's, and whose wa
   await installFakeCore(page, { open: [PROJECT, LEAD], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   const conduct = (request: { id: string; tool: string; arguments: Record<string, unknown> }) =>
     page.evaluate(
@@ -249,6 +253,7 @@ test("goes on in a terminal in the mode chosen on the chip", async ({ page }) =>
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] }, defaultMode: "auto" });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   const chip = page.getByTestId("mode-chip");
   await expect(chip).toHaveText("Auto");
   await chip.click();
@@ -269,6 +274,7 @@ test("offers no reopen for an agent that runs only in a terminal", async ({ page
   await installFakeCore(page, { open: [PROJECT], integrable: [] });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect.poll(async () => (await spawns(page)).length).toBe(1);
   await page.locator(ROW).click({ button: "right" });
   await expect(page.getByTestId("session-menu").getByRole("menuitem")).toHaveText(["Mark as unread", "Stop"]);

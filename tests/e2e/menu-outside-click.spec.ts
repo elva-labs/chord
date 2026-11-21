@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * A menu in a pane goes away on a press anywhere in the window, in any
@@ -13,6 +13,7 @@ test("a session row's menu closes on a click in the conversation's composer, whi
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
 
   await page.locator(ROW).first().click({ button: "right" });
@@ -30,6 +31,7 @@ test("a session row's menu closes on a click on a terminal in the agent pane", a
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(`${AGENT} .xterm`)).toBeVisible();
 
   await page.locator(ROW).first().click({ button: "right" });
@@ -44,6 +46,7 @@ test("a session row's menu closes when the window loses focus and a click inside
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(ROW)).toHaveCount(1);
 
   await page.locator(ROW).first().click({ button: "right" });
@@ -62,6 +65,7 @@ test("the changes pane's menu closes on a press in another pane", async ({ page 
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(`${AGENT} .xterm`)).toBeVisible();
 
   await page.getByTestId("changes-menu").click();

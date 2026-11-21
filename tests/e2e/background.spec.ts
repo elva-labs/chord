@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, SETTINGS_FILE, backgroundAtRest, installFakeCore } from "./fake";
+import { PROJECT, SETTINGS_FILE, backgroundAtRest, installFakeCore, startNew } from "./fake";
 
 /**
  * A background of the user's own: painted behind the chrome from the
@@ -56,6 +56,7 @@ test("tints the chrome with the palette's background and leaves the panes that h
   await open(page, { appearance: "light", backgrounds: { teal: LAGOON } });
   await backgroundAtRest(page);
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
 
   const side = await pixel(page, ...(await at(page, SESSIONS, 0.5, 0.8)));

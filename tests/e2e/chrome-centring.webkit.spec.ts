@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * The words of the window's chrome stand in the middle of their row, in
@@ -35,6 +35,7 @@ async function open(page: Page, look: string, background: boolean) {
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeFocused();
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "idle");
   await page.evaluate(() => document.fonts.ready);

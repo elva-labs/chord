@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // A conversation the usage limit cut short goes on by itself when the
 // limit resets: the chip that chooses it, what the row says while it
@@ -22,6 +22,7 @@ async function open(page: Page) {
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeFocused();
 }
 
@@ -95,6 +96,7 @@ test("is offered only where the account has a session window, off until chosen, 
 
   // The next new session starts with it on.
   await page.getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.locator("[data-testid='composer-input']:visible")).toBeFocused();
   // It is on, so it shows without the plus.
   await expect(chip(page)).toHaveText("Auto-resume on");

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, foldedWidth, installFakeCore } from "./fake";
+import { PROJECT, foldedWidth, installFakeCore, startNew } from "./fake";
 
 /**
  * How the sessions pane folds and opens. Its column eases between its folded
@@ -116,6 +116,7 @@ test.describe("the sessions pane's motion", () => {
 
   test("the agent's pty hears one size, once the column has arrived", async ({ page }) => {
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect
       .poll(() =>
         page.evaluate(
@@ -393,6 +394,7 @@ test.describe("a motion interrupted", () => {
     await page.goto("/");
     FOLDED = await foldedWidth(page);
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='conversation'].active")).toBeVisible();
   });
 

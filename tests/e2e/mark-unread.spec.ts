@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew, sessionRowOf } from "./fake";
 
 /**
  * A session's row menu marks it unread, and an unread row read: the row is
@@ -11,15 +11,19 @@ import { PROJECT, installFakeCore } from "./fake";
 const ROW = "[data-testid='session-row']";
 const LINE = "Plugin in main-truck staged, need approvals";
 
-const row = (page: Page, name: string) => page.locator(ROW).filter({ hasText: name });
+/** A nameless row reads "New session", so "session N" is found by its number. */
+const row = (page: Page, name: string) =>
+  sessionRowOf(page, Number(name.replace("session ", "")));
 
 /** Two terminal sessions, the second on screen. */
 async function two(page: Page) {
   await installFakeCore(page, { open: [PROJECT], settings: { chime: true } });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(row(page, "session 1")).toContainText("running");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(ROW)).toHaveCount(2);
 }
 

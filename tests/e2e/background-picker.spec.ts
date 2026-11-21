@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, SETTINGS_FILE, backgroundAtRest, installFakeCore } from "./fake";
+import { PROJECT, SETTINGS_FILE, backgroundAtRest, installFakeCore, startNew } from "./fake";
 
 /**
  * The background picker by pointer: placing a colour on the pad and
@@ -341,6 +341,7 @@ test.describe("cards", () => {
       page.evaluate(() => Object.keys((window as unknown as { __CHORD_TERMINALS__?: object }).__CHORD_TERMINALS__ ?? {}).length);
     for (let i = 1; i <= 3; i++) {
       await page.getByTestId("new-session").click();
+      await startNew(page);
       await expect.poll(terminals).toBe(i);
     }
     type Terminals = { __CHORD_TERMINALS__: Record<string, { options: { theme: object } }>; __themes?: object[] };

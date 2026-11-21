@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { shown } from "$lib/thread";
   import HooksNotice from "$lib/components/HooksNotice.svelte";
   import WorkflowTagButton from "$lib/components/WorkflowTagButton.svelte";
   import RunChip from "$lib/components/RunChip.svelte";
@@ -9,23 +8,19 @@
   import Pane from "$lib/components/Pane.svelte";
   import TerminalView from "$lib/components/TerminalView.svelte";
   import ConversationView from "$lib/components/conversation/ConversationView.svelte";
-  import { core, type AgentId } from "$lib/core";
+  import { core } from "$lib/core";
   import {
     AGENTS,
     agent,
     agentLabel,
     applyDetect,
     detectFailed,
-    installed,
     unavailableReason,
   } from "$lib/agent.svelte";
   import { agentVisible, layout, overlayHoldsKeyboard } from "$lib/layout.svelte";
   import {
     activeSession,
-    create,
-    defaultAgent,
-    label,
-    otherWay,
+    rowName,
     launch,
     belled,
     refusedAsHeld,
@@ -40,7 +35,6 @@
     wake,
   } from "$lib/sessions.svelte";
   import { referenced } from "$lib/show.svelte";
-  import type { SessionKind } from "$lib/sessionKind.svelte";
   import type { Session } from "$lib/sessions.svelte";
   import {
     conversationOf,
@@ -51,11 +45,10 @@
     unspoken,
   } from "$lib/integrated.svelte";
   import { heldModel, modelInUse } from "$lib/settingChoices";
-  import { accountOf } from "$lib/accounts.svelte";
   import { conductor, dismissRefusal, runStanding, workflowTag } from "$lib/conductor.svelte";
-  import { workspace } from "$lib/workspace.svelte";
+  import { pick, projectLabel, workspace } from "$lib/workspace.svelte";
   import { startsIn } from "$lib/orchestratorFolder.svelte";
-  import { touch } from "$lib/projects.svelte";
+  import { openNew } from "$lib/palette.svelte";
   import { sizeOf } from "$lib/zoom.svelte";
 
   let current = $derived(activeSession());
@@ -88,7 +81,7 @@
     current === null
       ? "Agent"
       : integrated
-        ? shown(label(current))
+        ? (rowName(current) ?? "New session")
         : `Agent · ${agentLabel(current.agent)}`,
   );
 
@@ -147,16 +140,6 @@
     }
   });
 
-  /** Whether the new-session button has opened into the choice of agent. */
-  let choosing = $state(false);
-
-  // The choice belongs to the bar it opened in: another session coming up
-  // closes it.
-  $effect(() => {
-    void current?.key;
-    choosing = false;
-  });
-
   let wrap = $state<HTMLDivElement | null>(null);
 
   // A project with no session has no terminal to take the keyboard, so a
@@ -185,72 +168,16 @@
     });
   });
 
-  /** Starting a session uses its project. */
+  /** New session opens the palette on its step for the project on screen,
+      where its defaults wait for Enter. */
   function startAnother() {
-    if (installed().length > 1) choosing = true;
-    else if (workspace.active !== null) {
-      touch(workspace.active);
-      create(workspace.active);
-    }
-  }
-
-  function startWith(id: AgentId) {
-    choosing = false;
-    if (workspace.active === null) return;
-    touch(workspace.active);
-    create(workspace.active, null, id);
-  }
-
-  /** The agent a new session here starts with, and the other way it can
-      run, when it has one. */
-  let firstAgent = $derived(workspace.active === null ? null : defaultAgent(workspace.active));
-  let other = $derived(workspace.active === null ? null : otherWay(workspace.active));
-
-  /** One session started the other way from New session, alone. */
-  function startOther(kind: SessionKind) {
-    choosing = false;
-    const project = workspace.active;
-    if (project === null || firstAgent === null) return;
-    touch(project);
-    create(project, null, firstAgent, null, null, null, accountOf(project), null, kind);
-  }
-
-  /** Escape backs out of the choice while one of its buttons has focus.
-      From the terminal it is the agent's. */
-  function onChoiceKey(e: KeyboardEvent) {
-    if (e.key !== "Escape") return;
-    e.stopPropagation();
-    choosing = false;
+    if (workspace.active !== null) openNew(workspace.active);
   }
 </script>
 
-<!-- The way to a session from here. With several agents installed the
-     button opens, in place, into one button each; with one there is
-     nothing to choose and it starts. -->
+<!-- The way to a session from here: the palette's new session. -->
 {#snippet starters()}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="starters" onkeydown={onChoiceKey}>
-    {#if choosing && installed().length > 1}
-      {#each installed() as id (id)}
-        <button onclick={() => startWith(id)} data-testid={`start-agent-${id}`} data-agent={id}
-          >{agentLabel(id)}</button
-        >
-      {/each}
-      <button
-        class="cancel"
-        onclick={() => (choosing = false)}
-        aria-label="Cancel"
-        data-testid="start-agent-cancel">×</button
-      >
-    {:else}
-      {#if other !== null && firstAgent !== null}
-        <button class="quiet" onclick={() => startOther(other!)} data-testid="start-other"
-          >{other === "integrated" ? "New session in Chord" : "New session in a terminal"}</button
-        >
-      {/if}
-      <button onclick={startAnother} data-testid="start-agent">New session</button>
-    {/if}
-  </div>
+  <button onclick={startAnother} data-testid="start-agent">New session</button>
 {/snippet}
 
 {#snippet head()}
@@ -322,19 +249,24 @@
         {/if}
       </div>
     {:else if workspace.active === null}
-      <div class="overlay" data-testid="agent-status">
-        <p class="message">Open a project to start a session.</p>
+      <div class="empty" data-testid="agent-status">
+        <p class="message">Open a project to start.</p>
+        <button class="primary" onclick={() => void pick()} disabled={workspace.opening} data-testid="empty-open"
+          >Open project</button
+        >
       </div>
     {:else if current === null && !startsIn(workspace.active)}
       <!-- The orchestrator folder: its sessions are there to read and
            resume, and nothing new starts in it. -->
-      <div class="overlay" data-testid="agent-status">
-        <p class="message">No session open. Resume a past one from the list.</p>
+      <div class="empty" data-testid="agent-status">
+        <p class="message">No session open in {projectLabel(workspace.active)}.</p>
       </div>
     {:else if current === null}
-      <div class="overlay" data-testid="agent-status">
-        <p class="message">No session open. Resume a past one from the list, or start a new one.</p>
-        {@render starters()}
+      <div class="empty" data-testid="agent-status">
+        <p class="message">No session open in {projectLabel(workspace.active)}.</p>
+        <button class="primary" onclick={startAnother} data-testid="start-agent"
+          >New session</button
+        >
       </div>
     {:else if leaving(current)}
       <div class="overlay" data-testid="agent-status">
@@ -449,15 +381,28 @@
     max-width: 64ch;
   }
 
-  .overlay > button,
-  .starters {
+  .overlay > button {
     margin-left: auto;
   }
 
-  .starters {
+  /* An empty pane says one thing, with its one button under it, in the
+     middle. */
+  .empty {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 30px 20px;
+    text-align: center;
+  }
+
+  .empty .message {
+    font-family: var(--chrome);
+    font-size: 13.5px;
   }
 
   button {
@@ -474,20 +419,20 @@
     cursor: pointer;
   }
 
-  button.quiet {
-    border-color: transparent;
-    background: none;
-    color: var(--ink-2);
+  button.primary {
+    padding: 7px 16px;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--surface);
   }
 
-  button.quiet:hover {
-    color: var(--ink);
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
-  .cancel {
-    padding: 4px 6px;
-    border-color: transparent;
-    background: none;
-    color: var(--ink-2);
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 </style>

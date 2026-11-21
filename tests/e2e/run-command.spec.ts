@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // A line that begins with `!` runs in the shell of the session's folder,
 // and so does a command the agent wrote for the user to run, by its mark.
@@ -46,6 +46,7 @@ async function open(page: Page, options: { codex?: boolean; look?: "modern" | "t
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
 }
 

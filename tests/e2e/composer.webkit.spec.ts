@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // The composer's field and the room the thread leaves above it, in both
 // looks, in WebKit: the app's webview on macOS, which draws the caret over
@@ -15,6 +15,7 @@ async function open(page: Page, look: "modern" | "terminal") {
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], look } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(input(page)).toBeEnabled();
 }
 

@@ -6,7 +6,16 @@ when the window is too small.
 ## The three shapes
 
 **Working** is three panes: projects and sessions, the agent, the changes.
-The agent takes whatever the side panes do not.
+The agent takes whatever the side panes do not. With no project open there
+are no changes to show, so the changes pane stays away until one is, and
+comes back as it was.
+
+The agent pane with nothing on screen holds one centred line and one
+button in the accent. On first launch, with no project open, it reads
+`Open a project to start.` over Open project. With a project and no
+session in it on screen, it reads `No session open in` and the project's
+name, over New session, which asks for one in the palette as every new
+session does.
 
 **Reviewing** is the changes pane grown into a file viewer, with the sessions
 pane folded. Inside the pane the tree keeps the left column and the

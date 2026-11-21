@@ -25,7 +25,13 @@ export const accounts = $state({
   /** The projects with a word of their own: a name, or null for the
       agents' own, whatever the rest. */
   overrides: {} as Record<string, string | null>,
+  /** The account last picked for a new session in each project, a name or
+      null for the agents' own: the window's own memory, kept between runs
+      on this machine. */
+  picked: {} as Record<string, string | null>,
 });
+
+const PICKED_KEY = "chord.pickedAccounts";
 
 /** What the agents' own directories are called where a name is shown, and
     the name the start tool takes for them. No account of the user's can be
@@ -111,6 +117,51 @@ export function overrideOf(project: string): string | null | undefined {
   if (own === undefined) return undefined;
   if (own === null) return null;
   return own in accounts.list ? own : undefined;
+}
+
+/** The account a new session in a project starts under unless another is
+    picked: the project's own word always, else the one last picked for a
+    new session there, else the one for every project. */
+export function accountToStart(project: string): string | null {
+  const last = lastPicked(project);
+  return last === undefined ? accountOf(project) : last;
+}
+
+/** The account last picked in a project where that is what a new session
+    there starts under: the project names none of its own, and the pick is
+    still an account. Undefined otherwise. */
+export function lastPicked(project: string): string | null | undefined {
+  if (overrideOf(project) !== undefined) return undefined;
+  const last = accounts.picked[project];
+  return last === null || (last !== undefined && last in accounts.list) ? last : undefined;
+}
+
+/** Remembers the account picked for a new session in a project. */
+export function pickAccount(project: string, account: string | null) {
+  if (account !== null && !(account in accounts.list)) return;
+  if (accounts.picked[project] === account) return;
+  accounts.picked[project] = account;
+  try {
+    localStorage.setItem(PICKED_KEY, JSON.stringify(accounts.picked));
+  } catch {
+    // Non-fatal: the pick does not survive a restart.
+  }
+}
+
+/** The picks kept from the last run. One that does not read is dropped. */
+export function loadPicked() {
+  try {
+    const raw = localStorage.getItem(PICKED_KEY);
+    if (raw === null) return;
+    const stored: unknown = JSON.parse(raw);
+    if (typeof stored !== "object" || stored === null) return;
+    const picked: Record<string, string | null> = {};
+    for (const [project, account] of Object.entries(stored))
+      if (account === null || typeof account === "string") picked[project] = account;
+    accounts.picked = picked;
+  } catch {
+    // Nothing picked, then.
+  }
 }
 
 /** Where an agent keeps its configuration under an account, or nothing
@@ -218,4 +269,5 @@ export function reset() {
   accounts.list = {};
   accounts.everywhere = null;
   accounts.overrides = {};
+  accounts.picked = {};
 }

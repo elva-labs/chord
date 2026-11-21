@@ -81,6 +81,8 @@ import {
   identified,
   isLive,
   label,
+  named,
+  toldName,
   loadHistory,
   loadRemembered,
   output,
@@ -968,7 +970,7 @@ describe("starting a session", () => {
       // The session of the user's own, named by its token, is asked about,
       // and its answer stands for it alone.
       const first = handle(call("start", { project: A, prompt: "One" }, { session: top.token }));
-      expect(conductor.asking?.caller).toBe(label(top));
+      expect(conductor.asking?.caller).toBe(toldName(top));
       allow();
       await settle();
       cameUp(forProject(A).at(-1)!.key, "pty-1", "sid-1");
@@ -4607,7 +4609,7 @@ describe("starting in a workflow's shape", () => {
     expect(conductor.refusals[mate.key]).toBeUndefined();
     // The plain one is held to nothing of the workflow's: it is asked about.
     const plain = handle(call("start", { project: B, prompt: "Go" }, { session: mate.token }));
-    expect(conductor.asking?.caller).toBe(label(mate));
+    expect(conductor.asking?.caller).toBe(toldName(mate));
     refuse();
     await plain;
     // A call that names neither is neither's.
@@ -5468,7 +5470,7 @@ describe("sessions told apart by their tokens", () => {
     expect(byKey(kid.key)).not.toBeNull();
     // It is asked about its own start, the first's answer being the first's.
     const asked = handle(call("start", { project: B, prompt: "Two" }, { session: two.token }));
-    expect(conductor.asking?.caller).toBe(label(two));
+    expect(conductor.asking?.caller).toBe(toldName(two));
     refuse();
     await asked;
     // The cap is each one's own.
@@ -6903,18 +6905,20 @@ describe("a call that waits on the user", () => {
 
   it("takes a stopped caller's question down, starts nothing for it, and puts none of its questions up", async () => {
     const first = caller();
+    named(first.key, "First");
     const held = await heldPast(elsewhere());
     // Another caller's start waits behind it.
     const other = caller("caller-2", "pty-2");
+    named(other.key, "Other");
     const second = elsewhere("caller-2", "Fix the docs");
     void handle(second);
     await settle();
-    expect(conductor.asking?.caller).toBe(label(first));
+    expect(conductor.asking?.caller).toBe(toldName(first));
     // The first caller stops: its question goes, and the next comes up.
     close(first.key);
     flushSync();
     await settle();
-    expect(conductor.asking?.caller).toBe(label(other));
+    expect(conductor.asking?.caller).toBe(toldName(other));
     expect(conductor.asking?.prompt).toBe("Fix the docs");
     expect(forProject(B)).toHaveLength(0);
     expect(answerTo(held)?.content).toBe(WAITS);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, NO_WORKFLOW, ORCHESTRATOR_FOLDER, installFakeCore } from "./fake";
+import { PROJECT, NO_WORKFLOW, ORCHESTRATOR_FOLDER, installFakeCore, startNew } from "./fake";
 
 /**
  * A session that directs others, driven by a fake core.
@@ -66,10 +66,12 @@ const row = (page: Page, project: string) =>
  */
 async function orchestrate(page: Page) {
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
 
   // The starter is a session like any other, from its project's own +.
   await row(page, LEAD).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   // The pointer leaves the pane, so the order settles with the project
   // used last at the top.
@@ -120,7 +122,7 @@ test.describe("the orchestrator", () => {
     const started = page.getByTestId("started-session");
     await expect(started).toHaveCount(1);
     await expect(started).toContainText("demo");
-    await expect(started).toContainText("session 2");
+    await expect(started).toContainText("Bump the client");
     const above = (await parent.boundingBox())!;
     const kid = (await started.boundingBox())!;
     expect(kid.y).toBeGreaterThanOrEqual(above.y + above.height - 1);
@@ -151,7 +153,8 @@ test.describe("the orchestrator", () => {
     // Its own name comes first, and the project it runs in after it.
     const name = (await started.locator(".label").boundingBox())!;
     const where = (await started.getByTestId("started-where").boundingBox())!;
-    expect(where.x).toBeGreaterThanOrEqual(name.x + name.width - 1);
+    // A long name leaves it no room on the line, so it wraps under the name.
+    expect(where.x >= name.x + name.width - 1 || where.y >= name.y + name.height - 1).toBe(true);
 
     // The chevron at the end of the orchestrator's second line folds the
     // started sessions into a dot each, with what they are doing in words
@@ -324,8 +327,9 @@ test.describe("the orchestrator", () => {
     await event("session-3", "prompt");
     await event("session-3", "stop");
     await expect(news).toHaveText("1 not heard yet");
-    const name = await page.getByTestId("started-session").locator(".label").textContent();
-    const starter = await page.locator(".session.starter .label").textContent();
+    // The tooltip and the screen reader's text name both as their rows read.
+    const name = (await page.getByTestId("started-session").locator(".label").textContent())!;
+    const starter = (await page.locator(".session.starter > .row .label").first().textContent())!;
     await expect(news).toHaveAttribute(
       "title",
       `${starter} has not heard: ${name} stopped. It hears on its next wait, or with your next message.`,
@@ -631,7 +635,7 @@ test.describe("the orchestrator folder", () => {
     // palette.
     await folder(page).locator(".project-row").click();
     await expect(folder(page)).toHaveClass(/\bon\b/);
-    await expect(page.getByTestId("agent-status")).toHaveText("No session open. Resume a past one from the list.");
+    await expect(page.getByTestId("agent-status")).toHaveText("No session open in orchestrator.");
     await expect(page.getByTestId("start-agent")).toHaveCount(0);
     // The changes pane says why it has nothing to show.
     await expect(page.getByTestId("folder-notice")).toBeVisible();
@@ -860,6 +864,7 @@ test.describe("a started session in a project of its own", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await row(page, PROJECT).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await push(page, {
       id: "o-1",
@@ -894,6 +899,7 @@ test.describe("a started session in a project of its own", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await row(page, PROJECT).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await push(page, {
       id: "o-1",
@@ -925,6 +931,7 @@ test.describe("a started session in a project of its own", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await row(page, PROJECT).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await push(page, {
       id: "o-1",
@@ -963,6 +970,7 @@ test.describe("a started session in a project of its own", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await row(page, PROJECT).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await push(page, {
       id: "o-1",
@@ -981,6 +989,8 @@ test.describe("a started session in a project of its own", () => {
     await expect(options).toHaveCount(2);
     await expect(options.first()).toContainText("demo");
     await expect(options.first()).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-testid='palette-row'][data-kind='ready']")).toBeVisible();
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(async () => (await page.evaluate(() => (window as unknown as { __spawns: { project: string }[] }).__spawns)).at(-1)?.project).toBe(PROJECT);
@@ -1013,7 +1023,7 @@ for (const width of [300, 240, 180]) {
     await row(page, LEAD).getByTestId("project-new-session").click();
     // With accounts there is a choice to make, which starts on the
     // project's own.
-    await page.getByTestId("agent-option").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     const start = async (id: string, project: string, name: string, account?: string) => {
       await push(page, {
@@ -1079,6 +1089,7 @@ for (const width of [300, 240, 180]) {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await row(page, LEAD).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     for (const [id, name] of [
       ["o-1", "Startup history scan"],
