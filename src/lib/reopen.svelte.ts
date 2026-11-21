@@ -1,7 +1,7 @@
 import type { AgentId } from "$lib/core";
 import type { SessionKind } from "$lib/sessionKind.svelte";
 import { pendingMove, recordMove } from "$lib/sessionMoves.svelte";
-import { carryOver } from "$lib/conductor.svelte";
+import { cameBackOver, carryOver, workOver } from "$lib/conductor.svelte";
 import { handleOf, reattach } from "$lib/integrated.svelte";
 import {
   activeSession,
@@ -29,7 +29,10 @@ import {
  * they are selected. A session another session started is on record as
  * any other is, and comes back under the session that started it, which
  * the caller's own record still says, where it stood among the others: a
- * line from the user or from its starter starts it in its row.
+ * line from the user or from its starter starts it in its row. The record
+ * says whether its work was over at the quit, so one that was only resting
+ * toward being put away goes on resting toward it, and one the quit cut
+ * off at work stays until it is woken, closed or stopped.
  *
  * A row comes back unread if it was unread at the quit, with the line under
  * its name, as the sessions keep it by id; the one the restore puts on
@@ -76,6 +79,10 @@ interface Open {
   /** It runs in a worktree the app made for it. A record from before says
       nothing, which reads as not. */
   made?: boolean;
+  /** Another session started it and its work was over: it was resting
+      toward being put away. A record from before says nothing, which reads
+      as not, so the row stays until it is woken, closed or stopped. */
+  over?: boolean;
 }
 
 /** The way a row is due to move to and has not yet, as the record keeps
@@ -96,7 +103,7 @@ function onRecord(session: Session): boolean {
 
 function isOpenEntry(entry: unknown): entry is Open {
   if (typeof entry !== "object" || entry === null) return false;
-  const { project, id, agent, startIn, model, runsOn, account, kind, handle, spoken, token, own, moves, made } =
+  const { project, id, agent, startIn, model, runsOn, account, kind, handle, spoken, token, own, moves, made, over } =
     entry as Record<string, unknown>;
   return (
     typeof project === "string" &&
@@ -112,7 +119,8 @@ function isOpenEntry(entry: unknown): entry is Open {
     (token === undefined || (typeof token === "string" && token !== "")) &&
     (own === undefined || typeof own === "boolean") &&
     (moves === undefined || moves === "terminal" || moves === "integrated") &&
-    (made === undefined || typeof made === "boolean")
+    (made === undefined || typeof made === "boolean") &&
+    (over === undefined || typeof over === "boolean")
   );
 }
 
@@ -207,6 +215,7 @@ export function reopen(
     );
     row.madeTree = entry.made === true;
     row.runsOn = entry.runsOn ?? null;
+    if (entry.over === true) cameBackOver(row.key);
     if (entry.moves !== undefined) recordMove(row.key, entry.moves);
     // A window reloaded while the core still runs the session takes it up
     // where it is; after a restart there is nothing to take up, and the
@@ -284,6 +293,7 @@ export function reopen(
             kind: session.kind,
             ...(session.ownWay ? { own: true } : {}),
             ...(session.madeTree ? { made: true } : {}),
+            ...(workOver(session) ? { over: true } : {}),
             ...movesOf(session),
             ...(session.kind === "integrated"
               ? { handle: handleOf(session.key), spoken: session.engaged, token: session.token }

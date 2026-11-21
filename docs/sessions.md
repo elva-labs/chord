@@ -193,11 +193,13 @@ not, as the project's header describes above. A session closed by hand
 before the quit stays closed, and a session whose project did not open
 again is left out. A session another session started comes back under its
 starter, where it stood among the others, and a line sent to it, by the
-user or by its starter, starts it in its row; one the workbench had put
-away before the quit stays put away, see
-[orchestrator](orchestrator.md#when-the-work-is-over). A session left open in the `orchestrator`
-folder of an earlier version comes back too, and lists that folder again;
-see [orchestrator](orchestrator.md).
+user or by its starter, starts it in its row. One the workbench had put
+away before the quit stays put away, one whose work was over at the quit is
+put away by the same rest as before it, and one the quit cut off at work
+stays until it is woken, closed or stopped; see
+[orchestrator](orchestrator.md#when-the-work-is-over). A session left open
+in the `orchestrator` folder of an earlier version comes back too, and
+lists that folder again; see [orchestrator](orchestrator.md).
 
 A row that was unread when the app quit comes back unread, with the line
 it had under its name, whether it went unread by itself or was marked by

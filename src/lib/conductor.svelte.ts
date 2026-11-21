@@ -311,8 +311,10 @@ export function stopStarted(key: string): void {
  * among the earlier sessions, as a stopped one does, but it stays on its
  * starter's list, and a line its starter sends it resumes it. The time is
  * kept by the window, so a reload counts it again from the start. A row
- * left from before a restart has nothing running and stays as it came
- * back, until a line starts it in its row.
+ * left from before a restart has nothing running: one whose work was over
+ * at the quit rests on toward being put away as it did before, and any
+ * other stays as it came back until a line starts it in its row, the user
+ * closes it or its starter stops it.
  */
 
 /** How long a started session stays at least once its work is over: long
@@ -354,18 +356,49 @@ function openToUser(session: Session): boolean {
   return session.unread || sessions.active === key || drafting(key) || typingInto(key) || userWriting(key);
 }
 
+/** The rows brought back from before a restart whose work was over at the
+    quit, by key. Each rests toward being put away as it did before the
+    quit until it works again, and a line from its starter is work. */
+const overAtQuit = new SvelteSet<string>();
+
+/** Marks a row brought back from before a restart as one whose work was
+    over at the quit. */
+export function cameBackOver(key: string) {
+  overAtQuit.add(key);
+}
+
+/** Whether a started session's work is over as far as it and its starter
+    go, whatever is still the user's of it: it is running, ended its turn
+    itself with nothing left running and no error, its starter has been
+    told, it asks nothing, and none of the sessions it started itself is at
+    work or has come to rest without its hearing. A row brought back from
+    before a restart whose work was over at the quit is over, running or
+    not, until it works again. The record of open rows keeps this, so a
+    restart puts away only what was on its way out. */
+export function workOver(session: Session): boolean {
+  void heard.version;
+  if (session.id === null || startedFor(session.key) === null) return false;
+  const mark = stops.get(session.key);
+  const before = overAtQuit.has(session.key) && mark?.worked !== true;
+  if (session.status === "dormant") {
+    if (!before) return false;
+  } else {
+    if (session.status !== "running" || session.working || session.needs !== null) return false;
+    if (!before && (mark === undefined || !mark.worked || mark.rest !== "quiet" || mark.told !== "quiet")) return false;
+    if (!before && restWay(session).way !== "done") return false;
+  }
+  // What it started itself reports to it: it stays while one of those is
+  // at work or has a rest it has not heard.
+  return !startedBy(session.token).some((kid) => atWork(kid) || untold(kid));
+}
+
 /** Whether a started session's work is over, as far as the rows say: see
     above. What no row says, a call naming it, is asked as it goes. */
 function overWith(session: Session): boolean {
-  if (session.id === null || startedFor(session.key) === null) return false;
-  if (session.status !== "running" || session.working || session.needs !== null) return false;
+  if (!workOver(session)) return false;
   if (reopeningRow(session.key) || openToUser(session)) return false;
-  const mark = stops.get(session.key);
-  if (mark === undefined || !mark.worked || mark.rest !== "quiet" || mark.told !== "quiet") return false;
-  if (restWay(session).way !== "done") return false;
-  // What it started itself reports to it: it stays while one of those is
-  // at work or has a rest it has not heard.
-  if (startedBy(session.token).some((kid) => atWork(kid) || untold(kid))) return false;
+  // A row left from before a restart has nothing running to close.
+  if (session.status === "dormant") return true;
   return session.kind === "integrated" ? handleOf(session.key) !== null : session.ptyId !== null;
 }
 
@@ -393,6 +426,7 @@ function calledFor(id: string): boolean {
     calls back the ones where something of it opened again. */
 function planPutAways() {
   void heard.version;
+  for (const key of overAtQuit) if (byKey(key) === null) overAtQuit.delete(key);
   const due = new Set(sessions.all.filter(overWith).map((session) => session.key));
   for (const [key, timer] of puttingAway)
     if (!due.has(key)) {
@@ -3385,10 +3419,11 @@ async function resumeSession(
         `Session ${id} ran in the worktree ${worktree}, which is gone. Start a new session for the work instead.`,
       );
 
-    // A row left from before a restart starts where it stands, as selecting
-    // it does. A row that ended is its transcript again; the resumed
-    // session takes its place rather than sitting beside it, with the
-    // shells opened beside it.
+    // A row left from before a restart starts in its row, with the call's
+    // line and model, and is at work again whatever it was at the quit. A
+    // row that ended is its transcript again; the resumed session takes
+    // its place rather than sitting beside it, with the shells opened
+    // beside it.
     const now = byId(id);
     const left = now !== null && now.status === "dormant" ? now : null;
     if (now !== null && left === null) close(now.key, true);
@@ -3400,6 +3435,7 @@ async function resumeSession(
       session.prompt = given;
       if (given !== null) session.engaged = true;
       if (model !== null) session.model = model;
+      overAtQuit.delete(session.key);
       wakeRow(session.key);
     } else {
       session = create(project, id, agent, worktree, given, model, entry.account ?? null, null);
@@ -4678,6 +4714,7 @@ export function resetConductor() {
   allowed.clear();
   seen.clear();
   stops.clear();
+  overAtQuit.clear();
   owed.clear();
   reserved.clear();
   waiting.clear();

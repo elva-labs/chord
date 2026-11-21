@@ -288,11 +288,21 @@ away it answers that none is running.
 After a restart, a session another session started comes back under its
 starter as every row open at the quit does, where it stood among the
 others and with nothing running behind it (see
-[sessions](sessions.md#after-a-restart)). Its work is not over while
-nothing runs, so it is not put away, and its starter hears nothing of it
-until it runs again. Its starter's list says it has not run since the
-workbench was restarted, and a line sent to it, by the user or by its
-starter, resumes it in its row, as a start naming it does.
+[sessions](sessions.md#after-a-restart)). What the restart cut off stays,
+and what was already over goes as it would have. One whose work was over
+at the quit as far as it and its starter go, its turn ended by itself and
+its starter told, with nothing it started still at work, is over still
+though nothing runs: once the user has read it, it is off screen and
+holds no words of theirs, its row closes five minutes later, as it would
+have before the quit, and it is put away as above. Any other, one
+starting, running, asking, at its usage limit or come to rest without its
+starter hearing, stays as it came back until a line wakes it, the user
+closes it or its starter stops it. A record from an earlier version does
+not say which, so each of its sessions stays. Its starter hears nothing of
+either until it runs again, and until it runs or is put away its list
+says it has not run since the workbench was restarted. While its row is
+there, a line sent to it, by the user or by its starter, resumes it in
+that row, as a start naming it does.
 
 ## Who is calling
 

@@ -261,7 +261,7 @@ describe("coming back", () => {
     expect(forProject(A).map((session) => session.madeTree)).toEqual([true, false]);
   });
 
-  it("brings back each session another started under its starter, where it stood, without starting it", async () => {
+  it("brings back each session another started under its starter, where it stood, and keeps it while the record does not say its work was over", async () => {
     const kid = { id: "kid", project: B, worktree: null, agent: "claude-code" as const, name: "Fix it" };
     conductor.started.lead = [kid, { ...kid, id: "chat" }, { ...kid, id: "taken" }];
     let asked = false;
@@ -294,7 +294,120 @@ describe("coming back", () => {
       await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER * 2);
       expect(forProject(B)).toEqual(kids);
       for (const id of ["kid", "chat", "taken"]) expect(spawned.map((options) => options.session)).not.toContain(id);
-      expect(conductor.started.lead.every((entry) => entry.left === undefined)).toBe(true);
+      expect(conductor.started[lead.token].every((entry) => entry.left === undefined)).toBe(true);
+    } finally {
+      unwatch();
+      vi.useRealTimers();
+    }
+  });
+
+  it("puts away after the usual rest a session another started whose work was over at the quit, keeping it on its starter's list", async () => {
+    const kid = { id: "kid", project: B, worktree: null, agent: "claude-code" as const, name: "Fix it" };
+    conductor.started.lead = [kid, { ...kid, id: "busy" }];
+    onRecord([entry(A, "lead"), { ...entry(B, "kid"), over: true }, entry(B, "busy")], "lead");
+    const unwatch = watchStops();
+    vi.useFakeTimers();
+    try {
+      stop = reopen();
+      const [lead] = forProject(A);
+      const [over, busy] = forProject(B);
+      expect(childrenOf(lead)).toEqual([over, busy]);
+      for (const row of [over, busy]) expect(row.status).toBe("dormant");
+      // The record keeps which was over, for a restart before it goes.
+      flushSync();
+      expect(record().open.map((kept) => [kept.id, (kept as { over?: boolean }).over])).toEqual([
+        ["lead", undefined],
+        ["kid", true],
+        ["busy", undefined],
+      ]);
+      await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER - 1000);
+      expect(forProject(B)).toEqual([over, busy]);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(forProject(B)).toEqual([busy]);
+      expect(conductor.started[lead.token].map((entry) => entry.left)).toEqual(["done", undefined]);
+      flushSync();
+      expect(record().open.map((kept) => kept.id)).toEqual(["lead", "busy"]);
+      expect(spawned.map((options) => options.session)).not.toContain("kid");
+    } finally {
+      unwatch();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a session whose work was over at the quit while it is unread or on screen, and puts it away the usual rest after", async () => {
+    conductor.started.lead = [{ id: "kid", project: B, worktree: null, agent: "claude-code", name: "Fix it" }];
+    localStorage.setItem(
+      "chord.waiting",
+      JSON.stringify({ kid: { unread: true, note: "Fixed it", notice: null, at: Date.now() } }),
+    );
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ open: [entry(A, "lead"), { ...entry(B, "kid"), over: true }], active: "lead", waiting: true }),
+    );
+    loadRemembered();
+    const unwatch = watchStops();
+    vi.useFakeTimers();
+    try {
+      stop = reopen();
+      const [lead] = forProject(A);
+      const [kid] = forProject(B);
+      await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER * 2);
+      expect(forProject(B)).toEqual([kid]);
+      // Read, and on screen.
+      select(kid.key);
+      kid.unread = false;
+      flushSync();
+      await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER * 2);
+      expect(forProject(B)).toEqual([kid]);
+      select(lead.key);
+      flushSync();
+      await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER - 1000);
+      expect(forProject(B)).toEqual([kid]);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(forProject(B)).toEqual([]);
+    } finally {
+      unwatch();
+      vi.useRealTimers();
+    }
+  });
+
+  it("goes on resting toward being put away when a session whose work was over at the quit only comes up, and not once it works", async () => {
+    const kid = { id: "looked", project: B, worktree: null, agent: "claude-code" as const, name: "Fix it" };
+    conductor.started.lead = [kid, { ...kid, id: "worked" }, { ...kid, id: "coming" }];
+    onRecord(
+      [
+        entry(A, "lead"),
+        { ...entry(B, "looked"), over: true },
+        { ...entry(B, "worked"), over: true },
+        { ...entry(B, "coming"), over: true },
+      ],
+      "lead",
+    );
+    const unwatch = watchStops();
+    vi.useFakeTimers();
+    try {
+      stop = reopen();
+      const [lead] = forProject(A);
+      const [looked, worked, coming] = forProject(B);
+      for (const row of [looked, worked]) {
+        wake(row.key);
+        started(row.key, `pty-${row.id}`, row.id);
+      }
+      worked.working = true;
+      flushSync();
+      worked.working = false;
+      // Quit while it comes up, it is on record as at work.
+      wake(coming.key);
+      flushSync();
+      expect(record().open.map((kept) => [kept.id, (kept as { over?: boolean }).over])).toEqual([
+        ["lead", undefined],
+        ["looked", true],
+        ["worked", undefined],
+        ["coming", undefined],
+      ]);
+      await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER);
+      expect(forProject(B)).toEqual([worked, coming]);
+      expect(conductor.started[lead.token].map((entry) => entry.left)).toEqual(["done", undefined, undefined]);
     } finally {
       unwatch();
       vi.useRealTimers();

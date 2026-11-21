@@ -66,6 +66,8 @@ import {
   carryOver,
   ALL_PUT_AWAY,
   PUT_AWAY_AFTER,
+  cameBackOver,
+  workOver,
 } from "$lib/conductor.svelte";
 import {
   byKey,
@@ -6525,6 +6527,78 @@ describe("a session the user closed or the app lost", () => {
     // The same rows, in the same order, under the same starter.
     expect(forProject(A)).toEqual([first, second]);
     expect(startedBy(caller.token)).toEqual([first, second]);
+  });
+
+  // What was at work at the quit stays as it came back until it is woken,
+  // closed or stopped: a question, a usage limit, a rest its starter had
+  // not heard. Only a rest its starter heard is on record as over.
+  it("is on record as over only once its starter heard it rest, and one that was not stays after a restart", async () => {
+    const asking = await startOne();
+    const limited = await startAllowed(call("start", { project: A, prompt: "Bump deps" }, as), "pty-2", "sid-2");
+    const untold = await startAllowed(call("start", { project: A, prompt: "Tidy up" }, as), "pty-3", "sid-3");
+    const told = await startAllowed(call("start", { project: A, prompt: "Fix the docs" }, as), "pty-4", "sid-4");
+    exact("sid-2", "prompt");
+    exact("sid-2", "failed", "You've hit your 5-hour limit · resets 4pm (Europe/Stockholm)", false, {
+      error: "rate_limit",
+    });
+    for (const id of ["sid-3", "sid-4"]) {
+      exact(id, "prompt");
+      exact(id, "stop");
+    }
+    asking.needs = "permission";
+    flushSync();
+    for (const id of ["sid-1", "sid-2", "sid-4"]) await handle(call("wait", { session: id }, as));
+    expect([asking, limited, untold, told].map(workOver)).toEqual([false, false, false, true]);
+
+    restarted();
+    const back = ["sid-1", "sid-2", "sid-3"].map((id) => reopened(A, id, "claude-code", null, null, null));
+    flushSync();
+    expect(back.map(workOver)).toEqual([false, false, false]);
+    await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER * 2);
+    expect(forProject(A)).toEqual(back);
+    for (const row of back) expect(row.status).toBe("dormant");
+    // A stop takes one off the pane and off the list.
+    await handle(call("stop", { session: "sid-1" }, as));
+    expect(last().content).toBe("Stopped session sid-1. It is off your list now, and not offered to resume.");
+    expect(forProject(A)).toEqual(back.slice(1));
+    await handle(call("sessions", {}, as));
+    expect(last().content).not.toContain("sid-1");
+    // A wait that names none has nothing running to wait on.
+    await handle(call("wait", {}, as));
+    expect(last().content).toContain("None of the sessions you started is running.");
+  });
+
+  // One whose work was over at the quit rests on toward being put away as
+  // it did before. A line from its starter is work, so that one stays.
+  it("puts away a row whose work was over at the quit after the usual rest, and not one its starter sent a line", async () => {
+    await startOne();
+    await startAllowed(call("start", { project: A, prompt: "Bump deps" }, as), "pty-2", "sid-2");
+    restarted();
+    const first = reopened(A, "sid-1", "claude-code", null, null, null);
+    const second = reopened(A, "sid-2", "claude-code", null, null, null);
+    cameBackOver(first.key);
+    cameBackOver(second.key);
+    flushSync();
+    expect([first, second].map(workOver)).toEqual([true, true]);
+
+    const sending = handle(call("send", { session: "sid-2", text: "Pin the lockfile too" }, as));
+    await settle();
+    expect(second.status).toBe("starting");
+    expect(workOver(second)).toBe(false);
+    started(second.key, "pty-9", "sid-2");
+    flushSync();
+    await sending;
+    expect(last().content).toContain("Your line resumed it.");
+
+    await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER);
+    expect(forProject(A)).toEqual([second]);
+    expect(workOver(second)).toBe(false);
+    await handle(call("sessions", {}, as));
+    expect(last().content).toContain(
+      "put away by the workbench once its work was over  a line you send it resumes it, as start naming session sid-1 does",
+    );
+    await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER);
+    expect(forProject(A)).toEqual([second]);
   });
 
   // A name a start gave is the session's until its agent gives one, after
