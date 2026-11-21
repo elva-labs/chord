@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { attention, resetAttention } from "$lib/attention.svelte";
-import { bareAddress, heedAsks, openAsks, program, resetAskNotices } from "$lib/askNotices.svelte";
+import { bareAddress, heedAsks, openAsks, program, resetAskNotices, sayAsks } from "$lib/askNotices.svelte";
 import { conductor, resetConductor, type Ask as ConductAsk } from "$lib/conductor.svelte";
 import { handleOf, launch, listenIntegrated, resetIntegrated } from "$lib/integrated.svelte";
 import { announce, clicked, notify, resetNotify } from "$lib/notify.svelte";
@@ -282,5 +282,47 @@ describe("the other questions that wait on the user", () => {
     look();
     expect(Array.from(told[0].body)).toHaveLength(100);
     expect(told[0].body.endsWith("…")).toBe(true);
+  });
+});
+
+describe("the live line that says each new question", () => {
+  const conduct = {
+    request: { id: "call-1", arguments: { name: "Fix the cache" } },
+    caller: "Fix the slow startup",
+    outside: null,
+    project: A,
+    prompt: "",
+    worktree: false,
+    round: null,
+    login: null,
+    named: null,
+  } as unknown as ConductAsk;
+
+  it("says a new question once, with the window in front too", async () => {
+    attention.focused = true;
+    const session = await integrated("Fix the cache");
+    fake.ask(handleOf(session.key)!, "Bash", { command: "git status" });
+    expect(sayAsks(openAsks())).toBe("one · Fix the cache: Asks to use Bash to run git");
+    expect(sayAsks(openAsks())).toBe("");
+    conductor.asking = conduct;
+    expect(sayAsks(openAsks())).toBe("one · Fix the slow startup: Wants to start “Fix the cache”");
+  });
+
+  it("holds a change to the settings unsaid until the question before it is answered", async () => {
+    const caller = await integrated("Theme work");
+    conductor.asking = conduct;
+    settingsAsk.asking = {
+      request: { id: "set-1", tool: "settings_change", arguments: {}, cwd: A, session: caller.token },
+      caller: "Theme work",
+      reason: "",
+      changes: [{ field: "appearance", label: "Appearance", from: "Light", to: "Dark" }],
+      theme: null,
+      ground: null,
+      css: null,
+    } as SettingsAsk;
+    expect(sayAsks(openAsks())).toBe("one · Fix the slow startup: Wants to start “Fix the cache”");
+    conductor.asking = null;
+    expect(sayAsks(openAsks())).toBe("one · Theme work: Wants to change the look");
+    expect(sayAsks(openAsks())).toBe("");
   });
 });

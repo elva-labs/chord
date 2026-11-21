@@ -73,6 +73,29 @@ export function heedAsks(now: Waiting[]) {
   open = names;
 }
 
+/** The questions said aloud, by name. */
+let said = new Set<string>();
+
+/**
+ * What the page's one polite live line says of the questions now: each
+ * new one once, as `who: what for`, those that came together in one line.
+ * Empty where none is new. It is said whether the window has focus or
+ * not, and wherever the question shows, in a dock or over the window. A
+ * change to the settings waits unsaid while the workbench's question to
+ * start a session or for a round is up, as it waits unseen behind it.
+ */
+export function sayAsks(now: Waiting[]): string {
+  const held = conductor.asking !== null;
+  const up = now.filter((waiting) => !(held && kindOfName(waiting.name) === "settings"));
+  const fresh = up.filter((waiting) => !said.has(waiting.name));
+  said = new Set(up.map((waiting) => waiting.name));
+  return fresh.map((waiting) => `${waiting.title}: ${waiting.body}`).join(". ");
+}
+
+function kindOfName(name: string): string {
+  return (JSON.parse(name) as string[])[0] ?? "";
+}
+
 function fromRequest(row: Session, request: Request, conversation: Conversation): Waiting {
   const asked = request.asked;
   let body: string;
@@ -188,4 +211,5 @@ function line(text: string): string {
 /** Test seam. */
 export function resetAskNotices() {
   open = new Set();
+  said = new Set();
 }

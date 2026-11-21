@@ -841,7 +841,11 @@ where it takes them; a secret answer is typed hidden. A
 permission the agent withdraws before it is answered says so on the step
 that asked for it, or where no step is known in a note that says what it
 was for, as a question that settles itself does. When the dock goes by
-itself while it has the keyboard, the keyboard goes back to the composer.
+itself while it has the keyboard, the keyboard goes back to the composer;
+where another ask takes the place of the one answered or gone, the
+keyboard goes to its choices. A screen reader is told of each new ask
+once, politely, by who asks and what for, whether it is docked or put
+over the window.
 
 The dock also holds the requests of the sessions this one started. One of
 them names the session that asks, after the step it was started for when

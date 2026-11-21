@@ -471,6 +471,9 @@ test.describe("two asks at once", () => {
     });
     const start = shown(page).getByTestId("conduct-ask");
     await expect(start).toBeVisible();
+    // Each ask is said once, on the one polite live line, as it shows.
+    const said = page.getByTestId("asks-said");
+    await expect(said).toHaveText(/: Wants to start a session$/);
     await changeSettings(page, "s-1", { palette: "amber" });
     // The settings ask waits its turn rather than standing over the dock.
     await expect(page.getByTestId("settings-ask")).toHaveCount(0);
@@ -478,6 +481,7 @@ test.describe("two asks at once", () => {
     await expect(start).toHaveCount(0);
     const ask = page.getByTestId("settings-ask");
     await expect(ask).toBeVisible();
+    await expect(said).toHaveText(/: Wants to change the look$/);
     // It floats above the composer, never over it.
     await expect.poll(() => clearOfFoot(page, ask)).toBe(true);
     await page.getByTestId("settings-decline").click();
