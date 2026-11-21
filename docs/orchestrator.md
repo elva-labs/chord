@@ -204,7 +204,13 @@ A worktree it starts in is trusted where its project is, with either agent,
 so nothing asks on the way in. It has the project's hooks when the project
 has them on, so `sessions` and `wait` follow the agent's own word for what
 it is doing there as they do in the project, except for a project that is
-a folder inside its repository; see [hooks](hooks.md). A start can also
+a folder inside its repository; see [hooks](hooks.md). A start that never
+came up, because the agent failed to start or the folder was not trusted,
+leaves nothing behind: no row, no worktree or branch, no entry on the
+starter's list and no news to the starter. A worktree that holds changes
+stays, and the starter's list keeps it. A start whose agent gives no
+session id at once, as Codex does, is waited for until the id arrives, and
+is not taken back while it runs. A start can also
 name a model, which goes to the agent on its command line and holds from
 the session's first turn, so an orchestrator chooses the model for a piece
 of work when it starts it rather than sending a model command afterwards.
