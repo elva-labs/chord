@@ -36,11 +36,11 @@ The pane's title row carries two small buttons at its end: the order the
 projects are listed in, and a menu with Open project, Open remote project,
 for a folder on another machine, and Settings; see [remote](remote.md).
 Under it sits a
-field, `Go to session or project` with the shortcut of go to, which opens
+field, `Go to a session or project` with the shortcut of go to, which opens
 [go to](focus-model.md#the-palettes), and beside it a button in the accent
-that asks for a new session in the palette, which project first when more
-than one is open, as the palette's New session does. With no project open,
-the pane says so and offers Open project there as well.
+that opens the palette's New session, which asks for the project first when
+more than one is open. With no project open, the pane says so and offers
+Open project there as well.
 
 Each project starts with a header: its name, the account it runs under as a
 tag when that is not the agents' own, and a button that starts a session in
@@ -50,14 +50,16 @@ colour of a removal, Close project; a right click on the header opens it
 too. Closing a project stops everything running in it. The header stays in
 view while the project's rows scroll under it, until the next project's
 pushes it out, and the list's scroll bar is drawn over the headers as it is
-over the rows. A hairline separates one project from the next. With more
-than one agent installed, a new session from a project's own button or menu
-opens the choice in place under the project's name, a row per agent; see
-[agents](adapters.md). Nothing else changes until a session is picked: the
-session on screen stays, the list keeps its order, and the project comes
-forward with the new session once it starts, which is when it counts as
-used. None of the project's other sessions is put on screen on the way, so
-none of them starts. Backing out of the choice leaves everything as it was.
+over the rows. A hairline separates one project from the next. A new
+session from a project's own button or menu opens the palette's New session
+with the project already chosen, on one line of what the session starts on
+that Enter accepts; see [the palettes](focus-model.md#the-palettes). It is
+the one way a session is started, whichever button or key asks for it.
+Nothing else changes until the session starts: the session on screen
+stays, the list keeps its order, and the project comes forward with the new
+session once it starts, which is when it counts as used. None of the
+project's other sessions is put on screen on the way, so none of them
+starts. Backing out of the palette leaves everything as it was.
 The `orchestrator` folder an earlier version kept sessions in is listed among
 the projects while it holds past sessions, with no button for a new session
 and Close project alone in its menu; see [orchestrator](orchestrator.md).
@@ -94,13 +96,13 @@ opening it again, shows a session drawn under it: the one on screen when it
 is one, else its newest. A project whose only sessions hang under a starter
 in another project has none drawn under it, so it is shown with no session
 and the keyboard in the pane, and is itself the project on screen, with its
-past sessions and its row of earlier ones.
+past sessions and its Earlier line.
 
 ## Active and inactive
 
 The projects split by themselves into two. A project is active while a
 session drawn under it is running or waiting for you, while it is the one
-on screen, while the choice for a new session in it is open, and for a span
+on screen, and for a span
 after anything last happened in it; the span is a
 [setting](settings.md#sessions), a week to begin with, and Never keeps
 every project active. The active projects are the list. The rest fold
@@ -112,9 +114,8 @@ stand behind a row that says how many more. Picking one brings it forward,
 which is using it, and it is active again, and the pane scrolls to where it
 lands among the others. Its ⋯, in the place of its time while the pointer is
 on it, opens the same menu as a header's. Its New session does what a
-header's does, and the pane scrolls to the project, which stands among the
-active ones while its choice is open and goes back under Inactive if
-nothing is picked. Nothing is filed by hand.
+header's does, and the project stands among the active ones once the
+session starts. Nothing is filed by hand.
 
 What happens in a project is the user using it, a row drawn under it
 changing what it says, and one of its own transcripts being written, which
@@ -258,10 +259,14 @@ came back unread with a line, as [after a restart](#after-a-restart)
 says. Those rows come after the running
 ones, and the project's past sessions after them. Once a project has more
 than three rows with nothing running, the first two stand and the rest fold
-into one row that counts them, such as `8 more from this week`. Opened, that
-row stays where it is with the rows it holds under it, and closes them away
-again. Every row's name starts at the same place, past its dot. No row says
-which agent it runs.
+away. One quiet line at the end of the project's list counts what is out of
+sight, such as `Earlier · 8`, with a chevron like every other fold: the
+rows folded away and, under the project on screen, the
+[sessions not listed](#past-sessions) as well. Opened, the line stays where
+it is with the rows it holds under it, then a row that opens the sessions
+not listed, and closes them away again. With nothing folded away, the line
+opens the sessions not listed itself. Every row's name starts at the same
+place, past its dot. No row says which agent it runs.
 
 A row says what its agent is doing. Codex's turn-start, completion and
 interruption events are read from its session log every half second. A new
@@ -510,7 +515,9 @@ take as much of the path above them as tells them apart, so two checkouts
 of `main-truck` read `work/main-truck` and `spike/main-truck`, the part in
 front of the name dimmed.
 
-A row is `session N` until the agent says otherwise. Claude Code writes the
+A row reads `New session`, in a quieter ink than a name, until something
+names it: the agent's title, a name the user gave it, or the first words of
+the first message the user sent it. Claude Code writes the
 session's name into the terminal title, with a status glyph in front and its
 own name around it; both are stripped, and a title that was only ever the
 agent's name is no title. Codex keeps names in its own index, which is
@@ -524,7 +531,9 @@ under such an id with no name kept for it takes the name of the nearest
 conversation it went on from. Where none of them has one, it takes the
 title the first of them is listed under, since a conversation that went
 on begins with its briefing and its own title is no name. A row nothing
-names is `session N`, never its id.
+names reads `New session`, never its id or a number, and so does a session
+in a terminal whose first message the window never saw. A past session
+with no title reads `New session` too.
 
 A name the user gives a session through the agent's own rename command is
 the row's name at once and from then on. An in-Chord session hears it
@@ -562,9 +571,8 @@ rest run in a terminal. A session under a
 of its orchestrator's agent says, as any session does, and is told the
 workflow either way; so does a resumed one. A single new
 session can be started the other way from New session's, for the agent the
-project used last: from the project's ⋯ menu, under its New session; from
-the palette, beside New session in the project on screen; and, with no
-session on screen, from the agent pane beside its New session button.
+project used last: from the project's ⋯ menu, under its New session; and from
+the palette, beside New session in the project on screen.
 Started the other way, a session is a pick, as an agent picked is, and
 runs alone whatever the project follows. The + and
 New session start the agent's own way, or the project's workflow, so
@@ -1194,14 +1202,15 @@ about to be woken by the workbench, or with words in its composer or on
 its terminal's line goes on as it is, its row and its pane showing it as
 they always do, and moves once all of that is over. Nor is a session moved
 under its reader: one that comes to rest, or is let go of by what held it,
-while it is on screen stays as it is until it is next shown, and its
-second line says so, as in `Moves to a terminal next time`.
+while it is on screen stays as it is until it is next shown, and the
+tooltip of its dot says so, as in `Moves to a terminal next time`. The row
+itself does not repeat the setting.
 
 What a run ends with it is never ended unasked. A session with a command
 it left running in the background moves once the command ends, and its
-second line says when, as in `Moves to a terminal when npm run dev ends`,
+dot's tooltip says when, as in `Moves to a terminal when npm run dev ends`,
 while its tooltip says that moving it now ends the command. One that holds
-what never ends by itself stays as it is, and its second line says why:
+what never ends by itself stays as it is, and its dot's tooltip says why:
 
 - something allowed, in a conversation, for the rest of that session
   alone, as in `Stays a conversation: moving ends Bash(npm test)`. A
@@ -1217,12 +1226,9 @@ what never ends by itself stays as it is, and its second line says why:
   gone back on`, since Claude Code's terminal does not take the point.
   Whether a conversation is held is the core's to say.
 
-Where the second line holds what the agent left, a word of it takes the
-place of the model, and a session another started says it where its model
-stands; either way the tooltip has the whole. Reopen from the row's menu
-moves any of them now, and asks first, saying what it ends or, for a held
-conversation, that the terminal brings back what was gone back on, which
-on a yes it does.
+Reopen from the row's menu moves any of them now, and asks first, saying
+what it ends or, for a held conversation, that the terminal brings back
+what was gone back on, which on a yes it does.
 
 A session the user started the other way, or reopened the other way from
 its menu, runs its own way, and a later switch leaves it as it is, since
@@ -1418,15 +1424,15 @@ run in the project, including ones started from a plain terminal, and months
 of those would bury the app's own. The sessions this app has run lately are
 remembered by id and listed under the project on screen, one line each
 with its time, among the rows left from the last quit and folded with them
-once there are more than a few. The others, every agent's together, sit
-behind a single row, `33 earlier sessions…`, that counts them and opens a
-dialog over them, with a filter that takes every word you type against a
+once there are more than a few. The others, every agent's together, are
+counted in the project's [Earlier line](#what-a-row-says), behind a row
+that opens a dialog over them, with a filter that takes every word you type against a
 session's name, its id and the worktree it ran in, and Enter or a click on
 one to resume it. With more than one agent installed, the dialog says
 whose each one is. Resuming one adopts it.
 How long lately is, is a [setting](settings.md#sessions): forever to begin
 with, or a span after which a session of the app's own that has not changed
-goes behind the row with the rest, and a row left from the last quit with
+goes behind the Earlier line with the rest, and a row left from the last quit with
 nothing running behind it goes with them.
 Nothing is deleted or moved, and the split does not survive a wiped local
 storage, which only means everything shows as from outside until it is

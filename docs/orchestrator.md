@@ -11,7 +11,7 @@ asked to start others.
 
 To have a session direct the work rather than do it, start it under a
 workflow, from the workflow chip in a new conversation's composer, from
-the palette or from a project's new-session choice, as
+the palette, which a project's new-session button opens as well, as
 [following a workflow](#following-a-workflow) describes. The session that
 follows a workflow is its orchestrator, and is told to direct work rather
 than do it, to start a session per piece in the project it belongs to, on a
@@ -552,9 +552,8 @@ it.
 
 A session runs one of two ways: under a workflow, as its orchestrator, or
 as one agent with no workflow. What the user picks is what starts. Picking
-an agent, in the agent pane, in a project's new-session row or in the
-palette, starts that agent alone. Picking a workflow, in the palette or in
-the choice a project's new-session row opens, starts its orchestrator, on the workflow's agent and model, and a plain new
+an agent in the palette's new session, whichever button opened it,
+starts that agent alone. Picking a workflow there starts its orchestrator, on the workflow's agent and model, and a plain new
 session where there was nothing to pick follows the project's workflow, as
 [settings](settings.md#workflows) describes. A new in-Chord session can
 also be given a workflow, or none, in its composer until its first message,

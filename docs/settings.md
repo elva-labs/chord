@@ -307,8 +307,8 @@ that follows a workflow runs the way its orchestrator's agent is set, as
 any other does. A change moves the sessions already open as well, each
 once it is at rest and opened, as [sessions](sessions.md#when-the-setting-is-switched)
 describes, and the tab says so under the choice. A single new session can be
-started the other way from a project's ⋯ menu, the palette or the agent
-pane. What an in-Chord session is like is in
+started the other way from a project's ⋯ menu or the palette. What an
+in-Chord session is like is in
 [sessions](sessions.md#sessions-in-chord), and the mode it starts in,
 which is the one the agent's own settings name as for a terminal session,
 in [sessions in Chord](integrated.md#the-mode-a-session-starts-in). It is the
@@ -342,7 +342,7 @@ How long a past session stays listed under its project: forever, 30 days,
 7 days or 1 day, forever to begin with. A session this app ran is listed
 under its project, one line with its time, ready to resume, as [sessions](sessions.md#past-sessions)
 describes. Left unchanged for longer than the span chosen, it goes behind
-the row of earlier sessions with the rest of the project's history instead, where it is still
+the project's Earlier line with the rest of its history instead, where it is still
 there to resume and to search; a row left from the last quit, with nothing
 running behind it, goes the same way. Resuming one brings it back to the
 list. Nothing is deleted: the transcripts are the agent's own and stay where
@@ -437,11 +437,11 @@ none. A plain new session, where there is nothing to pick, follows it. In a
 project that follows a workflow, by its own choice or by the default, the
 palette's new session offers every workflow, the project's first, marked as
 the project's workflow or as the default, beside the agents to run alone.
-The choice a project's own new-session row opens, when there is more than
-one agent or an account to pick, offers the project's workflow first in the
-same way, with the cursor on it, above the agents. In a project that follows none it asks nothing it did not ask before
-workflows, whatever other projects chose, and with one agent installed it
-starts that agent at once. An agent picked anywhere starts alone. A
+Its line of defaults starts the project's workflow, and Change picks
+another. In a project that follows none the palette offers no workflows,
+whatever other projects chose, and with one agent installed and no
+account to pick its line has nothing to change. An agent picked anywhere
+starts alone. A
 session under a workflow starts on the workflow's orchestrator, its agent
 and its model, told the workflow's instructions, and keeps the workflow as
 it was for as long as it runs, whatever changes in the settings. Resumed,
