@@ -189,9 +189,10 @@ without saving apart:
 - closing a session or a project whose tabs hold edits no other session has
   open, the question in the sessions pane, which goes, closing nothing, if
   the pane folds, and names the busy shells that would stop with it;
-- closing the window or quitting the app, the question over the whole
-  window, whatever the panes show, naming every unsaved file and counting
-  the sessions and busy shells that stop with the app. While those run it
+- closing the window or quitting the app, the question in a sheet in the
+  middle of the window, whatever the panes show, with Save all first,
+  naming every unsaved file and counting the sessions and busy shells that
+  stop with the app. While those run it
   asks with nothing unsaved as well, as
   [focus](focus-model.md#closing-what-is-in-front) describes.
 

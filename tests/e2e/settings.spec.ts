@@ -290,24 +290,20 @@ test.describe("the hooks notice", () => {
     await expect(page.locator(AGENT)).toBeVisible();
   });
 
-  test("opens the settings at the live updates section, lit", async ({
-    page,
-  }) => {
+  test("turns hooks on for every project from the offer, and goes for good", async ({ page }) => {
     const notice = page.getByTestId("hooks-notice");
     await expect(notice).toBeVisible();
-    await expect(notice).toContainText("Let the agent talk to the workbench");
-    await page.getByTestId("hooks-notice-settings").click();
-    await expect(page.getByTestId("settings")).toBeVisible();
-    await expect(page.getByTestId("settings-tab-sessions")).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    await expect(page.getByTestId("theme-system")).toHaveCount(0);
-    await expect(page.getByTestId("settings-live")).toHaveClass(/lit/);
-    await expect(page.getByTestId("settings-live")).toBeInViewport();
+    await expect(notice).toHaveAccessibleName("Let agents talk to Chord?");
+    await expect(notice).toContainText("Shows when an agent works, waits or asks.");
+    await page.getByTestId("hooks-notice-turn-on").click();
+    await expect(notice).toHaveCount(0);
+    await page.keyboard.press(`${MOD}+,`);
+    await page.getByTestId("settings-tab-sessions").click();
+    await expect(page.getByTestId("hooks-everywhere")).toHaveAttribute("aria-checked", "true");
     await page.keyboard.press("Escape");
-    // Still there: only a dismissal or hooks turned on takes it away.
-    await expect(notice).toBeVisible();
+    await page.reload();
+    await expect(page.locator(AGENT)).toBeVisible();
+    await expect(page.getByTestId("hooks-notice")).toHaveCount(0);
   });
 
   test("goes for good when dismissed", async ({ page }) => {
@@ -319,8 +315,8 @@ test.describe("the hooks notice", () => {
   });
 
   test("goes when hooks are turned on, and stays gone", async ({ page }) => {
-    // The word lands on the tab the section is in, so the choice is there.
-    await page.getByTestId("hooks-notice-settings").click();
+    await page.keyboard.press(`${MOD}+,`);
+    await page.getByTestId("settings-tab-sessions").click();
     await page.getByTestId("hooks-everywhere").click();
     await expect(page.getByTestId("hooks-notice")).toHaveCount(0);
     await page.keyboard.press("Escape");

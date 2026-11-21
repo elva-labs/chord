@@ -291,8 +291,9 @@ agent hooks, chosen once for every project; each project you open follows
 it, and a project that should go the other way can say so under By project. The `orchestrator` folder is among those projects while the
 sessions pane lists it (see [orchestrator](orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
 choice existed starts with them off, and is told once, in a word over the
-agent pane, what turning them on gives; the word's link opens the settings
-at the Sessions tab. What each means for the changes pane and for a session's
+agent pane, what turning them on gives. Turn on there turns them on for
+every project, as this section's choice does; Not now puts the offer away
+for good. What each means for the changes pane and for a session's
 row is in [sessions](sessions.md); what the hooks write and where, and the
 tools they bring the agent, is in [hooks](hooks.md).
 

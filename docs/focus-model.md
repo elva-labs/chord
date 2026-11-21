@@ -210,12 +210,14 @@ So the window's close, by the shortcut, by Close Window on
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>W</kbd>, by the red button or by the
 controls the app draws, and the app's quit, ask first while a session runs,
 a shell has something running in it, by the rule above, or the editor
-holds unsaved edits. The question goes over the whole window. It says how
+holds unsaved edits. The question is a sheet in the middle of the whole
+window, holding the keyboard as a question in a strip does. It says how
 many sessions run and how many of them wait on you, what runs in each busy
 shell and, for one not on screen, the session or project it belongs to,
 that the sessions come back as rows next time to resume, and names
-every unsaved file, with Cancel holding the keyboard, so <kbd>Return</kbd>
-keeps everything. A row left from the last quit runs nothing and counts
+every unsaved file. Its answers are a row walked by the arrow keys, the
+way out to give first and Cancel last, and Cancel holds the keyboard, so
+<kbd>Return</kbd> keeps everything. A row left from the last quit runs nothing and counts
 for nothing, and a window with nothing running, idle shells included,
 closes without a question. There is no setting to turn
 the question off. How it is held for unsaved edits is in
