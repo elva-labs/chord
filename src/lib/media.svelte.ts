@@ -15,7 +15,7 @@
  */
 
 import { Tokenizer, type TokenizerCallbacks } from "htmlparser2";
-import { marked } from "marked";
+import { marked, Parser, type Renderer, type TextRenderer, type Token } from "marked";
 import { runnable } from "$lib/bang";
 import { core, type Media, type PresentRequest } from "$lib/core";
 import { wholeLineageOf } from "$lib/goingOn.svelte";
@@ -407,6 +407,17 @@ const ALLOWED = new Map<string, Map<string, Check>>([
 /** The elements that have no content and so are never closed. */
 const VOID = new Set(["img", "br", "hr", "source"]);
 
+/** The elements that close at the end of the block they were opened in,
+    a paragraph, a heading, a list item, a table cell or a block of HTML,
+    as Markdown's own links and emphasis do: one left open reaches no
+    further than its block. */
+const INLINE = new Set(["a", "b", "i", "strong", "em", "code", "kbd", "sub", "sup", "picture"]);
+
+/** The most elements drawn open at once. An opening tag past them is
+    shown as its text, which bounds both the work of a closing tag and the
+    depth of what is drawn. */
+const DEEPEST = 100;
+
 /** A `srcset` with every image in it one `IMAGE` allows, written anew as
     the browser reads it: each address, and after it a width or a density
     if it has one. Null when an address or a descriptor is anything else. */
@@ -437,19 +448,40 @@ function sources(srcset: string): string | null {
 }
 
 /** The elements drawn from the document's HTML that are still open, the
-    innermost last. Raw HTML comes to the renderer a piece at a time, a
-    `<details>` in one block and its `</details>` after the Markdown inside
-    it, so what is open is kept across the pieces of one `render`. */
+    innermost last, and how many of each name. Raw HTML comes to the
+    renderer a piece at a time, a `<details>` in one block and its
+    `</details>` after the Markdown inside it, so what is open is kept
+    across the pieces of one `render`. */
 let opened: string[] = [];
+const counted = new Map<string, number>();
+
+function push(name: string) {
+  opened.push(name);
+  counted.set(name, (counted.get(name) ?? 0) + 1);
+}
+
+/** The closing tags of the elements open from `at` up, the innermost
+    first, which are then open no longer. */
+function closeFrom(at: number): string {
+  let out = "";
+  while (opened.length > at) {
+    const name = opened.pop()!;
+    counted.set(name, counted.get(name)! - 1);
+    out += `</${name}>`;
+  }
+  return out;
+}
 
 /** An opening tag as it is drawn, or null when it is shown as its text: an
     element `ALLOWED` names, with no attribute it does not name, none
-    twice, and each value one its check keeps. A `<source>` is drawn only
-    directly in a `<picture>`. */
+    twice, and each value one its check keeps, within `DEEPEST` of what is
+    open. A `<source>` is drawn only directly in a `<picture>`. */
 function opening(name: string, attributes: [string, string][], closes: boolean): string | null {
   const allowed = ALLOWED.get(name);
   if (allowed === undefined) return null;
   if (name === "source" && opened.at(-1) !== "picture") return null;
+  const stays = !VOID.has(name) && !closes;
+  if (stays && opened.length >= DEEPEST) return null;
   const seen = new Set<string>();
   let tag = `<${name}`;
   for (const [attribute, value] of attributes) {
@@ -465,24 +497,20 @@ function opening(name: string, attributes: [string, string][], closes: boolean):
   if (VOID.has(name)) return tag;
   // An element written as closing itself, `<b/>`, is drawn empty.
   if (closes) return `${tag}</${name}>`;
-  opened.push(name);
+  push(name);
   return tag;
 }
 
 /** A closing tag as it is drawn, or null when it is shown as its text. It
     closes an element drawn here that is still open, and any opened inside
     it; `</br>` is a line break and the close of another empty element is
-    nothing, as a browser reads them. */
+    nothing, as a browser reads them. One with none of its name open is
+    refused without a look at what is. */
 function closing(name: string): string | null {
   if (name === "br") return "<br>";
   if (VOID.has(name)) return "";
-  const at = opened.lastIndexOf(name);
-  if (at === -1) return null;
-  return opened
-    .splice(at)
-    .reverse()
-    .map((open) => `</${open}>`)
-    .join("");
+  if (!counted.get(name)) return null;
+  return closeFrom(opened.lastIndexOf(name));
 }
 
 /** A piece of a document's raw HTML as HTML to draw. Each tag `opening`
@@ -557,7 +585,13 @@ function markup(html: string): string {
     escaped here: marked leaves text unescaped once it believes a raw block
     such as `<code>` has opened, and only what `markup` writes may be
     markup. Code is escaped by marked itself. */
-renderer.html = ({ text }) => markup(text);
+renderer.html = ({ text, block }) => {
+  const mark = opened.length;
+  const html = markup(text);
+  if (!block) return html;
+  const inline = opened.findIndex((name, at) => at >= mark && INLINE.has(name));
+  return inline === -1 ? html : html + closeFrom(inline);
+};
 said.html = ({ text }) => escapeText(text);
 renderer.text = (token) =>
   "tokens" in token && token.tokens ? renderer.parser.parseInline(token.tokens) : escapeText(token.text);
@@ -584,20 +618,33 @@ function escapeAttribute(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** The parser of a document. Each run of text, the inside of a paragraph,
+    a heading, a list item, a table cell or a link, closes before it ends
+    what its HTML opened in it, so an element left open reaches no further. */
+class Scoped extends Parser {
+  override parseInline(tokens: Token[], drawer?: Renderer | TextRenderer): string {
+    const mark = opened.length;
+    return super.parseInline(tokens, drawer) + closeFrom(mark);
+  }
+}
+
 /** Markdown rendered for the viewer. Raw HTML in the document is drawn
     only as far as `ALLOWED` goes and shown as its text beyond that, and a
     link or an image may point only where `LINK` and `IMAGE` allow, since
     the document is the agent's and the window is the app's. An element
-    the document leaves open is closed at its end. */
+    the document leaves open is closed at the end of its block, or of the
+    document. */
 export function render(markdown: string): string {
   opened = [];
-  const html = marked.parse(markdown, { async: false, gfm: true, renderer }) as string;
-  const left = opened
-    .reverse()
-    .map((open) => `</${open}>`)
-    .join("");
-  opened = [];
-  return html + left;
+  counted.clear();
+  try {
+    const options = { ...marked.defaults, async: false, gfm: true };
+    const html = new Scoped({ ...options, renderer }).parse(marked.lexer(markdown, options));
+    return html + closeFrom(0);
+  } finally {
+    opened = [];
+    counted.clear();
+  }
 }
 
 /** Markdown an agent wrote in a conversation, rendered as `render` does,

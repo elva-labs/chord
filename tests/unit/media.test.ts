@@ -812,6 +812,39 @@ describe("the HTML a document may draw", () => {
     expect(render("<details>\n<summary>s</summary>\n\nleft open")).toMatch(/<\/details>$/);
   });
 
+  it("closes a link or other inline element left open at the end of its block", () => {
+    const box = drawn(
+      '<a href="https://evil.example">\n\n# Heading\n\nSome paragraph.\n\n- item\n\n[real link](https://ok.example)',
+    );
+    for (const selector of ["h1", "p", "li"])
+      expect(box.querySelector(selector)?.closest("a"), selector).toBeNull();
+    expect([...box.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
+      "https://evil.example",
+      "https://ok.example",
+    ]);
+    expect(box.querySelector("a[href='https://ok.example']")?.textContent).toBe("real link");
+    const inline = drawn('one <b>two <a href="https://evil.example">three\n\n# four\n\nx <i>y</i foo="a>b"> z\n\nfive');
+    expect(inline.querySelector("p > b > a")?.textContent).toBe("three");
+    for (const element of inline.querySelectorAll("h1, p"))
+      expect(element.closest("b, a, i"), element.textContent ?? "").toBeNull();
+    expect(inline.lastElementChild?.textContent).toBe("five");
+  });
+
+  it("draws at most a hundred elements open at once, and an opening tag past them as its text", () => {
+    const box = drawn(`${"<div>".repeat(101)}deep`);
+    expect(box.querySelectorAll("div")).toHaveLength(100);
+    expect(box.textContent).toBe("<div>deep");
+    expect(drawn(`${"<b>".repeat(100)}<br><img src="https://example.com/a.png"><i/>x`).querySelector("i")).not.toBeNull();
+  });
+
+  it("refuses a closing tag with nothing of its name open at once, however many there are", () => {
+    const markdown = `x ${"<b>".repeat(100_000)}${"</i>".repeat(100_000)}`;
+    const started = performance.now();
+    const html = render(markdown);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(html.match(/<b>/g)).toHaveLength(100);
+  });
+
   it("reads a tag as a browser does, its case, its entities and a quote in it", () => {
     const box = drawn('<IMG SRC="https://example.com/a.png?x=1&amp;y=2" ALT=\'say "hi" &lt;b&gt;\'> <A HREF=https://example.com>u</A>');
     const image = box.querySelector("img");
