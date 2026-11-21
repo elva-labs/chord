@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { BUILD_AND_REVIEW, DIRECT, PROJECT, installFakeCore } from "./fake";
+import { BUILD_AND_REVIEW, DIRECT, PROJECT, installFakeCore, startNew } from "./fake";
 
 // An integrated Claude Code session's subagents hang under its row on the
 // rail while they run. The fake's first integrated session is int-1; one it
@@ -49,6 +49,7 @@ async function working(page: Page, platform = "Linux x86_64", keep = false) {
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] }, keepIntegrated: keep });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(input(page)).toBeEnabled();
   await input(page).fill("Compare the two ways of reading");
   await input(page).press("Enter");
@@ -398,6 +399,7 @@ test.describe("subagents on the rail", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(input(page)).toBeEnabled();
     await input(page).fill("Fix the flaky cache test");
     await input(page).press("Enter");

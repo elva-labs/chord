@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { PROJECT, WITH_WORKFLOW, installFakeCore } from "./fake";
+import { PROJECT, WITH_WORKFLOW, installFakeCore, startNew, startIntegrated } from "./fake";
 
 // A session that started others answers their requests from its own dock:
 // the request names the session that asks, every choice acts on that
@@ -59,6 +59,7 @@ async function starterWithStarted(page: Page, settings: Record<string, unknown> 
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], ...settings } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(input(page)).toBeEnabled();
   await conduct(page, {
     id: "c-start",
@@ -337,7 +338,7 @@ test.describe("a started session that runs in a terminal", () => {
     // Sessions run in a terminal here; the starter is started the other way.
     await installFakeCore(page, { open: [PROJECT] });
     await page.goto("/");
-    await page.getByTestId("start-other").click();
+    await startIntegrated(page);
     await expect(input(page)).toBeEnabled();
     const starter = (await shown(page).getAttribute("data-session"))!;
     await conduct(page, {

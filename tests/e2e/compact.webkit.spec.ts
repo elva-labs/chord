@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { NO_WORKFLOW, PROJECT, SETTINGS_FILE, columnsAtRest, installFakeCore } from "./fake";
+import { NO_WORKFLOW, PROJECT, SETTINGS_FILE, columnsAtRest, installFakeCore, startNew } from "./fake";
 
 /**
  * Compact mode: the sessions pane out of the layout, slid in over the
@@ -60,6 +60,7 @@ async function startSession(page: Page) {
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await slidOut(page);
 }
 
@@ -311,6 +312,7 @@ test("stands under a question asked over the agent", async ({ page }) => {
   await page.goto("/");
   await slidOut(page);
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await page.evaluate(
     ({ project, other }) =>
       (window as unknown as { __conductRequest: (call: unknown) => void }).__conductRequest({
@@ -346,6 +348,7 @@ test("takes a question in the pane away with it, by the chord, Cmd+B or a change
   await page.clock.install();
   await start(page, { integrated: ["claude-code"] });
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeVisible();
   await page.evaluate(
     `(() => { const f = window.__integrated; f.send("int-1", crypto.randomUUID(), "Keep the cache."); f.startTurn("int-1"); })()`,
@@ -391,6 +394,7 @@ test("takes a question in the pane away with it, by the chord, Cmd+B or a change
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await slidOut(page);
   await ask();
   await page.keyboard.press(`${MOD}+Shift+ArrowDown`);
@@ -440,6 +444,7 @@ for (const look of ["modern", "terminal"] as const)
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await page.getByTestId("new-session").click();
+    await startNew(page);
     const room = await lights(page);
     const clear = async (state: string) => expect(await underLights(page, room), state).toEqual([]);
 
@@ -493,6 +498,7 @@ test("peeks over the focused card's mark while reviewing", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(AGENT)).toBeVisible();
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await page.locator("[data-testid='file-tree']").getByText("mod.rs", { exact: true }).click();
   await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
   await page.keyboard.press(`${MOD}+2`);

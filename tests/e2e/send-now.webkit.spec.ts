@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // A message written while the agent works waits under the thread, and can
 // be sent now or taken back, in WebKit as well as Chromium: WebKit is the
@@ -29,6 +29,7 @@ async function open(page: Page, options: { codex?: boolean; look?: "modern" | "t
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
 }
 

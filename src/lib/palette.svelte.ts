@@ -35,7 +35,7 @@ import {
 import {
   defaultAgent,
   otherWay,
-  label,
+  rowName,
   sessions,
   waitingOnYou,
   type Session,
@@ -69,12 +69,15 @@ import { browser } from "$lib/browser.svelte";
  * the next session that needs you leads the commands, since it is what the
  * palette is opened for most.
  *
- * A new session is asked for in steps in the same field: the project, then
- * the account when accounts are named, then how it runs: under one of the
- * workflows, the project's own first, or as one agent with no workflow.
- * The workflows are offered where the project follows one, by its own
- * choice or by the default for new sessions. Each answer becomes a chip, and a step with
- * nothing to choose is not asked. The session starts on the last answer.
+ * A new session asks for the project when it is not known, then offers
+ * one line: the session it would start, on the agent it used last and the
+ * account the project runs under, which Enter starts. Change, under it,
+ * asks the rest in steps in the same field: the account when accounts are
+ * named, then how it runs: under one of the workflows, the project's own
+ * first, or as one agent with no workflow. The workflows are offered where
+ * the project follows one, by its own choice or by the default for new
+ * sessions. Each answer becomes a chip, and a step with nothing to choose
+ * is not asked. The session starts on the last answer.
  */
 
 export type Mode = "goto" | "commands" | "new";
@@ -104,6 +107,8 @@ export type PaletteItem =
       kind: "session";
       id: string;
       label: string;
+      /** Nothing names it yet, so its label is "New session". */
+      unnamed: boolean;
       group: string;
       session: Session;
       project: string;
@@ -142,6 +147,24 @@ export type PaletteItem =
       group: null;
       action: ActionKey;
       chord: string;
+    }
+  | {
+      /** The session the defaults start, which Enter takes. */
+      kind: "ready";
+      id: "ready";
+      label: string;
+      group: null;
+      /** The answers it starts on. */
+      steps: Step[];
+      /** What it runs on, as one line. */
+      detail: string;
+    }
+  | {
+      /** The way to the questions the defaults answered. */
+      kind: "change";
+      id: "change";
+      label: string;
+      group: null;
     };
 
 /** What picking an item leads to. The palette stays up on a step; it goes
@@ -165,6 +188,9 @@ export const palette = $state({
   query: "",
   /** The answers given so far to a new session's questions. */
   steps: [] as Step[],
+  /** A new session in a known project offers its defaults as one line,
+      until Change or typing asks the questions instead. */
+  ready: false,
   /** What was typed in the commands when a new session was asked for from
       there, which stepping back to them puts in the field again. */
   came: "",
@@ -190,6 +216,7 @@ export function openGoTo() {
   palette.mode = "goto";
   palette.query = "";
   palette.steps = [];
+  palette.ready = false;
   palette.came = "";
   palette.opened += 1;
   stopLeaving();
@@ -200,6 +227,7 @@ export function openCommands() {
   palette.mode = "commands";
   palette.query = "";
   palette.steps = [];
+  palette.ready = false;
   palette.came = "";
   palette.opened += 1;
   stopLeaving();
@@ -228,17 +256,21 @@ export function resetPalette() {
   palette.mode = "goto";
   palette.query = "";
   palette.steps = [];
+  palette.ready = false;
   palette.came = "";
 }
 
 /** The field changed. A `>` first in go to leaves it for commands, with
-    the rest of what was typed. */
+    the rest of what was typed. Typing on a new session's defaults narrows
+    the choices they stand for, where there are any. */
 export function setQuery(text: string) {
   if (palette.mode === "goto" && text.startsWith(">")) {
     palette.mode = "commands";
     palette.query = text.slice(1);
     return;
   }
+  if (palette.mode === "new" && palette.ready && text !== "" && stepsLeft(palette.steps).length > 0)
+    palette.ready = false;
   palette.query = text;
 }
 
@@ -322,7 +354,8 @@ export function goToItems(query: string): PaletteItem[] {
     .map((session): PaletteItem => ({
       kind: "session",
       id: `session:${session.key}`,
-      label: label(session),
+      label: rowName(session) ?? "New session",
+      unnamed: rowName(session) === null,
       group: SESSIONS,
       session,
       project: projectLabel(session.project),
@@ -576,6 +609,47 @@ function accountChoices(project: string): PaletteItem[] {
   }));
 }
 
+/** The answers a new session in a project starts on when none is changed:
+    the project, then for each question it would ask, the account the project
+    runs under and the workflow it follows, else the agent it used last. */
+export function defaultsFor(path: string): Step[] {
+  const steps: Step[] = [{ kind: "project", path }];
+  for (const kind of stepsLeft(steps)) {
+    if (kind === "account") steps.push({ kind, account: accountOf(path) });
+    else if (kind === "agent") {
+      const own = workflowOf(path);
+      steps.push(own === null ? { kind, agent: defaultAgent(path) } : { kind: "workflow", workflow: own.name });
+    }
+  }
+  return steps;
+}
+
+/** The line a new session's defaults read as: how it runs, the agent even
+    where it is not a question, then the account where accounts are named. */
+function readyLine(path: string, steps: Step[]): string {
+  const how = steps.find((step) => step.kind === "agent" || step.kind === "workflow");
+  const account = steps.find((step) => step.kind === "account");
+  return [
+    how === undefined ? agentLabel(defaultAgent(path)) : chipOf(how),
+    ...(account === undefined ? [] : [chipOf(account)]),
+  ].join(" · ");
+}
+
+/** The defaults' line, and Change under it where there is a choice. */
+function readyItems(path: string): PaletteItem[] {
+  const steps = defaultsFor(path);
+  const ready: PaletteItem = {
+    kind: "ready",
+    id: "ready",
+    label: "New session",
+    group: null,
+    steps,
+    detail: readyLine(path, steps),
+  };
+  const change: PaletteItem = { kind: "change", id: "change", label: "Change", group: null };
+  return steps.length > 1 ? [ready, change] : [ready];
+}
+
 /** What the question being asked offers, narrowed by what is typed. */
 export function stepItems(
   query: string,
@@ -585,6 +659,7 @@ export function stepItems(
   const project = projectOfSteps(steps);
   if (asking !== "project" && (project === null || !isOpen(project)))
     return [];
+  if (palette.ready && project !== null) return readyItems(project);
   const all =
     asking === "project"
       ? projectChoices()
@@ -625,7 +700,7 @@ export function startingId(): string | null {
         (item) => item.kind === "session" && item.session.key !== sessions.active,
       )?.id ?? null
     );
-  if (palette.mode !== "new") return null;
+  if (palette.mode !== "new" || palette.ready) return null;
   const project = projectOfSteps(palette.steps);
   if (project === null) return null;
   const asking = nextStep(palette.steps);
@@ -660,12 +735,15 @@ function startOn(steps: Step[]) {
   );
 }
 
-/** Takes an answer, and starts the session when it was the last one asked. */
+/** Takes an answer, and starts the session when it was the last one asked.
+    The project's answer leads to the defaults' line instead. */
 function answer(steps: Step[]): Outcome {
-  if (nextStep(steps) === null)
+  const ready = steps.length === 1 && steps[0].kind === "project";
+  if (!ready && nextStep(steps) === null)
     return { type: "close", then: () => startOn(steps) };
   palette.mode = "new";
   palette.steps = steps;
+  palette.ready = ready;
   palette.query = "";
   return { type: "stay" };
 }
@@ -673,26 +751,49 @@ function answer(steps: Step[]): Outcome {
 /** Starts asking for a new session, in a project when it is known. With
     one project open the project is known, and is not asked. The
     orchestrator folder is never the project, so a new session from one of
-    its rows asks which. */
+    its rows asks which. The palette opens on the step where it is shut. */
 export function beginNew(path: string | null): Outcome {
   if (!isReady()) return { type: "stay" };
   const only = workspace.open.length === 1 ? workspace.open[0].path : null;
   const project = (startsIn(path) ? path : null) ?? only;
-  if (palette.mode !== "new")
-    palette.came = palette.mode === "commands" ? palette.query : "";
-  return answer(project === null ? [] : [{ kind: "project", path: project }]);
+  if (!palette.open) {
+    palette.opened += 1;
+    stopLeaving();
+    palette.came = "";
+  } else if (palette.mode !== "new") palette.came = palette.mode === "commands" ? palette.query : "";
+  const outcome = answer(project === null ? [] : [{ kind: "project", path: project }]);
+  palette.open = true;
+  return outcome;
 }
 
-/** Goes back a step: the last answer is taken back, and with none given
-    the commands list is where the question came from. */
+/** The palette on a new session's step, from a button or a key outside it:
+    the project's defaults when it is known, else which project. */
+export function openNew(path: string | null) {
+  beginNew(path);
+}
+
+/** Goes back a step: from the questions Change asked, the last answer is
+    taken back, and with none given the defaults' line is offered again.
+    From that line, the project is taken back where it was asked, and
+    otherwise the commands list is where the question came from. */
 export function stepBack() {
   palette.query = "";
-  const only = workspace.open.length === 1;
-  if (palette.steps.length > (only ? 1 : 0)) {
+  if (palette.mode === "new" && !palette.ready && palette.steps.length > 1) {
     palette.steps = palette.steps.slice(0, -1);
     return;
   }
+  if (palette.mode === "new" && !palette.ready && palette.steps.length === 1) {
+    palette.ready = true;
+    return;
+  }
+  const only = workspace.open.length === 1;
+  if (palette.steps.length > 0 && !only) {
+    palette.steps = [];
+    palette.ready = false;
+    return;
+  }
   palette.steps = [];
+  palette.ready = false;
   palette.mode = "commands";
   palette.query = palette.came;
 }
@@ -736,6 +837,14 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       };
     case "choice":
       return answer([...palette.steps, item.step]);
+    case "ready": {
+      const steps = item.steps;
+      return { type: "close", then: () => startOn(steps) };
+    }
+    case "change":
+      palette.ready = false;
+      palette.query = "";
+      return { type: "stay" };
     case "attention":
       return { type: "perform", action: { type: "attention" } };
     case "command":

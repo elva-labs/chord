@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew, sessionRowOf } from "./fake";
 
 /**
  * What a plugin shows for one session: a section in the changes pane only
@@ -13,15 +13,19 @@ const CHANGES = "section[data-pane='changes']";
 /** Set to a folder, the test leaves its screenshots there. */
 const SHOTS = process.env.PLUGIN_SESSION_SHOTS;
 
-const row = (page: Page, name: string) => page.locator(ROW).filter({ hasText: name });
+/** A nameless row reads "New session", so "session N" is found by its number. */
+const row = (page: Page, name: string) =>
+  sessionRowOf(page, Number(name.replace("session ", "")));
 
 /** Two terminal sessions, the second on screen, and their tokens. */
 async function two(page: Page, look: "modern" | "terminal") {
   await installFakeCore(page, { open: [PROJECT], settings: { look } });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(row(page, "session 1")).toContainText("running");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(ROW)).toHaveCount(2);
   return page.evaluate(() =>
     ((window as unknown as { __spawns: { token: string }[] }).__spawns).map((spawn) => spawn.token),

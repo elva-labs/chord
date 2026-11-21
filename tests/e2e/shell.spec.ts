@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, SETTINGS_FILE, columnsAtRest, foldedWidth, installFakeCore } from "./fake";
+import { PROJECT, SETTINGS_FILE, columnsAtRest, foldedWidth, installFakeCore, startNew, sessionBox, sessionRowOf } from "./fake";
 
 const SESSIONS = "section[data-pane='sessions']";
 const AGENT = "section[data-pane='agent']";
@@ -52,12 +52,10 @@ function row(page: Page, name: string) {
 }
 
 /** Scope and view live in the pane's menu: open it, pick, it closes. */
-/** The row of the session with this name, wherever the order puts it: the
-    latest change is on top. */
+/** The row of the Nth session started ("session N" reads "New session"),
+    found by its number. */
 function sessionRow(page: Page, name: string) {
-  return page
-    .locator("[data-testid='session-row']")
-    .filter({ has: page.locator(".label", { hasText: new RegExp(`^${name}$`) }) });
+  return sessionRowOf(page, Number(name.replace("session ", "")));
 }
 
 async function chooseAll(page: Page) {
@@ -585,8 +583,10 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     // The first session, by its id, while the second is on screen.
     await page.evaluate(() =>
@@ -613,6 +613,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.locator(TREE).focus();
     await page.keyboard.press("ArrowDown");
@@ -626,6 +627,7 @@ test.describe("the file viewer", () => {
     // show, so the viewer closes and the sessions pane is back in full.
     await page.keyboard.press(`${MOD}+1`);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
     await expect(hunk).toHaveCount(0);
@@ -633,7 +635,7 @@ test.describe("the file viewer", () => {
 
     // Back to the first: its diff is where it was, and the viewer is open.
     await sessionRow(page, "session 1").click();
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
     await expect(hunk).toBeVisible();
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
@@ -646,11 +648,13 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     await sessionRow(page, "session 1").click();
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
     await page.locator(TREE).focus();
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
@@ -661,12 +665,12 @@ test.describe("the file viewer", () => {
 
     await page.keyboard.press(`${MOD}+1`);
     await sessionRow(page, "session 2").click();
-    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
     await expect(hunk).toHaveCount(0);
 
     await sessionRow(page, "session 1").click();
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
     await expect(hunk).toBeVisible();
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
   });
@@ -677,11 +681,13 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     await sessionRow(page, "session 1").click();
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
     await page.evaluate(
       (project) =>
         (window as unknown as { __presentRequest: (request: unknown) => void }).__presentRequest({
@@ -696,12 +702,12 @@ test.describe("the file viewer", () => {
     await expect(caption).toHaveText("One shot.");
 
     await page.keyboard.press(`${MOD}+Shift+ArrowDown`);
-    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
     await expect(caption).toHaveCount(0);
 
     await page.keyboard.press(`${MOD}+Shift+ArrowDown`);
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
     await expect(caption).toHaveText("One shot.");
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
   });
@@ -713,6 +719,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.evaluate((project) => {
       (window as unknown as { __cwds: Record<string, string> }).__cwds = {
@@ -730,13 +737,14 @@ test.describe("the file viewer", () => {
 
     await page.keyboard.press(`${MOD}+1`);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
     await expect(page.locator(CHANGES)).not.toContainText("worktree feature");
     await expect(hunk).toHaveCount(0);
 
     await sessionRow(page, "session 1").click();
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
     await expect(hunk).toBeVisible();
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
   });
@@ -747,6 +755,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.locator(TREE).focus();
     await page.keyboard.press("ArrowDown");
@@ -758,6 +767,7 @@ test.describe("the file viewer", () => {
     await page.keyboard.press(`${MOD}+b`);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
 
     await sessionRow(page, "session 1").click();
@@ -772,8 +782,10 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     // The first session, by its id, while the second is on screen.
     await page.evaluate(() =>
@@ -804,8 +816,10 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     const event = (kind: string, note: string | null = null) =>
       page.evaluate(
@@ -1138,6 +1152,7 @@ test.describe("the file viewer", () => {
       /^\s*▸\s*Processes\s*$/,
     );
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.evaluate(() => {
       const now = Math.floor(Date.now() / 1000);
@@ -1603,6 +1618,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await pushView(page, { html: REACHING, open: true });
     const inner = page.frameLocator("[data-testid='plugin-page']");
@@ -1899,6 +1915,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect.poll(() => columnsOf(page)).toBeGreaterThan(0);
     const before = await columnsOf(page);
     const told = await timesResized(page);

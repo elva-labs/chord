@@ -1,13 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-import { NO_WORKFLOW, PROJECT, installFakeCore } from "./fake";
+import { NO_WORKFLOW, PROJECT, installFakeCore, paletteChoice, startNew } from "./fake";
 
 /**
  * Asking for a new session in a project starts nothing but the session
  * picked. Here each project has a session left open at the last quit,
  * which starts only once it is on screen: the one in front starts as the
  * window opens, and the other project's waits. Asking for a new session
- * in that other project opens the choice under its name and leaves the
- * session on screen where it is, so the one waiting there never starts.
+ * in that other project opens the palette on that project's defaults and
+ * leaves the session on screen where it is, so the one waiting there
+ * never starts.
  */
 
 const OTHER = "/home/ada/dev/other";
@@ -66,22 +67,25 @@ async function open(page: Page, used?: Record<string, number>) {
   expect(await spawned(page)).toEqual(["on-screen"]);
 }
 
-/** The choice is open under the other project, and nothing else moved:
-    the session on screen and its project are the ones from before, and
-    the other project's session is still waiting. */
-async function choosingInOther(page: Page) {
-  await expect(section(page, "other").getByTestId("agent-choice")).toBeVisible();
-  await expect(page.getByTestId("agent-choice")).toHaveCount(1);
+const ready = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='ready']");
+const change = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='change']");
+
+/** The palette is open on the other project's defaults, and nothing else
+    moved: the session on screen and its project are the ones from before,
+    and the other project's session is still waiting. */
+async function askingInOther(page: Page) {
+  await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "new");
+  await expect(ready(page)).toBeVisible();
+  await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
   await expect(head(page, "demo")).toHaveClass(/\bon\b/);
   await expect(head(page, "other")).not.toHaveClass(/\bon\b/);
   await expect(section(page, "demo").locator(".session.on")).toHaveCount(1);
   await stillWaiting(page);
 }
 
-/** Picking an agent starts the new session alone, and it takes the screen. */
-async function pickClaude(page: Page) {
-  await section(page, "other").locator("[data-testid='agent-option'][data-agent='claude-code']").click();
-  await expect(page.getByTestId("agent-choice")).toHaveCount(0);
+/** The defaults' row starts the new session alone, and it takes the screen. */
+async function startInOther(page: Page) {
+  await startNew(page);
   await expect.poll(() => spawned(page)).toHaveLength(2);
   expect(await spawned(page)).toEqual(["on-screen", null]);
   await expect(head(page, "other")).toHaveClass(/\bon\b/);
@@ -89,27 +93,44 @@ async function pickClaude(page: Page) {
   await expect(leftOpen(page).locator(".dot.dormant")).toHaveCount(1);
 }
 
-test("a project's + opens the choice and starts none of the project's sessions", async ({ page }) => {
+test("a project's + opens the palette on its defaults and starts none of the project's sessions", async ({ page }) => {
   await open(page);
   await expect(leftOpen(page).locator(".dot")).toHaveClass(/dormant/);
 
   await head(page, "other").getByTestId("project-new-session").click();
-  await choosingInOther(page);
-  await pickClaude(page);
+  await askingInOther(page);
+  await startInOther(page);
+});
+
+test("Change lists the agents, and the one picked starts alone", async ({ page }) => {
+  await open(page);
+  await head(page, "other").getByTestId("project-new-session").click();
+  await askingInOther(page);
+  await change(page).click();
+  await expect(paletteChoice(page, "Claude Code")).toBeVisible();
+  await expect(paletteChoice(page, "Codex")).toBeVisible();
+  await expect(head(page, "demo")).toHaveClass(/\bon\b/);
+  await stillWaiting(page);
+  await paletteChoice(page, "Codex").click();
+  await expect(page.getByTestId("palette")).toHaveCount(0);
+  await expect.poll(() => spawned(page)).toHaveLength(2);
+  expect(await spawned(page)).toEqual(["on-screen", null]);
+  await expect(head(page, "other")).toHaveClass(/\bon\b/);
+  await expect(leftOpen(page).locator(".dot.dormant")).toHaveCount(1);
 });
 
 // Asking is not using the project: the list keeps its order once the
 // pointer has left the pane, and backing out leaves it as it was.
-test("backing out of the choice leaves everything as it was", async ({ page }) => {
+test("backing out of the palette leaves everything as it was", async ({ page }) => {
   await open(page, { [PROJECT]: 0, [OTHER]: 3600 * 1000 });
   await expect(order(page)).toHaveText(["demo", "other"]);
   await head(page, "other").getByTestId("project-new-session").click();
-  await choosingInOther(page);
+  await askingInOther(page);
   await page.mouse.move(900, 450);
   await expect(order(page)).toHaveText(["demo", "other"]);
 
-  await page.getByTestId("choice-cancel").click();
-  await expect(page.getByTestId("agent-choice")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("palette")).toHaveCount(0);
   await expect(order(page)).toHaveText(["demo", "other"]);
   await expect(head(page, "demo")).toHaveClass(/\bon\b/);
   await stillWaiting(page);
@@ -120,33 +141,39 @@ test("New session in a project's menu does what its + does", async ({ page }) =>
   await open(page);
   await head(page, "other").click({ button: "right" });
   await page.getByTestId("project-menu-new").click();
-  await choosingInOther(page);
-  await pickClaude(page);
+  await askingInOther(page);
+  await startInOther(page);
 });
 
-test("New session in an inactive project's menu opens the choice among the active ones and starts nothing else", async ({
+test("New session in an inactive project's menu opens the palette on it and the project stays inactive until a session starts", async ({
   page,
 }) => {
   await open(page, { [PROJECT]: 0, [OTHER]: 30 * 24 * 3600 * 1000 });
   await expect(head(page, "other")).toHaveCount(0);
+  const inactive = page.getByTestId("inactive-project").filter({ hasText: "other" });
   await page.getByTestId("inactive-fold").click();
-  await page.getByTestId("inactive-project").filter({ hasText: "other" }).click({ button: "right" });
+  await inactive.click({ button: "right" });
   await page.getByTestId("project-menu-new").click();
 
-  await expect(page.getByTestId("inactive-fold")).toHaveCount(0);
-  await choosingInOther(page);
-  await expect(section(page, "other").getByTestId("agent-choice")).toBeInViewport();
-
-  // Nothing used it, so backing out puts it back under Inactive.
-  await page.getByTestId("choice-cancel").click();
-  await expect(head(page, "other")).toHaveCount(0);
-  await expect(page.getByTestId("inactive-project").filter({ hasText: "other" })).toBeVisible();
+  await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "new");
+  await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
   await expect(section(page, "demo").locator(".session.on")).toHaveCount(1);
+  expect(await spawned(page)).toEqual(["on-screen"]);
 
-  await page.getByTestId("inactive-project").filter({ hasText: "other" }).click({ button: "right" });
+  // Nothing used it, so backing out leaves it under Inactive.
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("palette")).toHaveCount(0);
+  await expect(head(page, "other")).toHaveCount(0);
+  await expect(inactive).toBeVisible();
+  expect(await spawned(page)).toEqual(["on-screen"]);
+
+  await inactive.click({ button: "right" });
   await page.getByTestId("project-menu-new").click();
-  await choosingInOther(page);
-  await pickClaude(page);
+  await expect(ready(page)).toBeVisible();
+  await startNew(page);
+  await expect.poll(() => spawned(page)).toHaveLength(2);
+  expect(await spawned(page)).toEqual(["on-screen", null]);
+  await expect(head(page, "other")).toHaveClass(/\bon\b/);
 });
 
 test("New session in the palette leaves the session on screen until the new one starts", async ({ page }) => {
@@ -156,16 +183,8 @@ test("New session in the palette leaves the session on screen until the new one 
   await page.keyboard.press("Enter");
   await page.keyboard.type("other");
   await page.keyboard.press("Enter");
-  await expect(page.getByTestId("palette-chip")).toHaveCount(2);
 
-  // Asking which agent, nothing has moved yet.
-  await expect(head(page, "demo")).toHaveClass(/\bon\b/);
-  await stillWaiting(page);
-
-  await page.locator("[data-testid='palette-row']", { hasText: "Claude Code" }).click();
-  await expect(page.getByTestId("palette")).toHaveCount(0);
-  await expect.poll(() => spawned(page)).toHaveLength(2);
-  expect(await spawned(page)).toEqual(["on-screen", null]);
-  await expect(head(page, "other")).toHaveClass(/\bon\b/);
-  await expect(leftOpen(page).locator(".dot.dormant")).toHaveCount(1);
+  // Asking for the defaults, nothing has moved yet.
+  await askingInOther(page);
+  await startInOther(page);
 });

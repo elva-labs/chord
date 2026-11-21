@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { BUILD_AND_REVIEW } from "./fake";
+import { BUILD_AND_REVIEW, paletteChoice, sessionBox, sessionRowOf, startNew, startWith } from "./fake";
 
 /**
  * Sessions, driven by a fake core.
@@ -465,10 +465,12 @@ const cursorBar = (page: Page) =>
     const row = document.querySelector("[data-testid='sessions-nav'] .cursor");
     return row === null ? null : getComputedStyle(row, "::before").width;
   });
-/** A new session in the project on screen, from the + on its header: it
-    starts, or the choice opens under the project's name. */
-const startHere = (page: Page) =>
-  page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+/** A new session in the project on screen, from the + on its header: the
+    palette opens on the project's New session row, and the row starts it. */
+const startHere = async (page: Page) => {
+  await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+  await startNew(page);
+};
 /** A running session in the project you are looking at, started if there
     is none: nothing starts by itself any more. */
 const running = async (page: Page) => {
@@ -477,9 +479,15 @@ const running = async (page: Page) => {
 };
 const rows = (page: Page) => page.locator("[data-testid='session-row']");
 /** The row of the session with this name, wherever the order puts it: the
-    latest change is on top. */
-const named = (page: Page, name: string) =>
-  rows(page).filter({ has: page.locator(".label", { hasText: new RegExp(`^${name}$`) }) });
+    latest change is on top. A row with no name of its own reads New session,
+    so "session N" finds the Nth session by its close button. */
+const named = (page: Page, name: string) => {
+  const numbered = /^session (\d+)$/.exec(name);
+  if (numbered !== null) return sessionRowOf(page, Number(numbered[1]));
+  return rows(page).filter({ has: page.locator(".label", { hasText: new RegExp(`^${name}$`) }) });
+};
+/** The session on screen, when it is the Nth. */
+const onSession = (page: Page, number: number) => sessionBox(page, number).and(page.locator(".session.on"));
 
 async function open(page: Page, options: FakeOptions = {}) {
   await installFakeCore(page, options);
@@ -499,6 +507,13 @@ test.describe("with no project", () => {
     await expect(page.getByTestId("no-project")).toBeVisible();
     await page.waitForTimeout(300);
     expect(await spawnCount(page)).toBe(0);
+  });
+
+  test("says so first, offers only to open a project, and has no changes pane", async ({ page }) => {
+    await expect(page.getByTestId("agent-status")).toHaveText(/^Open a project to start\.\s*Open/);
+    await expect(page.getByTestId("empty-open")).toBeVisible();
+    await expect(page.getByTestId("start-agent")).toHaveCount(0);
+    await expect(page.locator("section[data-pane='changes']")).toBeHidden();
   });
 });
 
@@ -538,12 +553,17 @@ test.describe("one project", () => {
   // you asked for, resumed from the list or started outright.
   test("waits to be asked before starting a session", async ({ page }) => {
     await expect(page.getByTestId("agent-status")).toContainText(
-      "Resume a past one",
+      "No session open in one.",
     );
     await page.waitForTimeout(300);
     expect(await spawnCount(page)).toBe(0);
 
+    await expect(page.getByTestId("start-agent")).toHaveText("New session");
     await page.getByTestId("start-agent").click();
+    await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "new");
+    await expect(page.getByTestId("palette-row").and(page.locator("[data-kind='ready']"))).toBeVisible();
+    expect(await spawnCount(page)).toBe(0);
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await expect(page.getByTestId("agent-status")).toHaveCount(0);
     expect(await spawnCount(page)).toBe(1);
@@ -563,7 +583,8 @@ test.describe("one project", () => {
   // Claude Code names the session in the terminal title, glyph and all.
   test("calls the session what the agent calls it", async ({ page }) => {
     await running(page);
-    await expect(rows(page).first()).toContainText("session 1");
+    await expect(rows(page).first()).toContainText("New session");
+    await expect(rows(page).first().locator(".label")).toHaveClass(/\bunnamed\b/);
     await page.evaluate(() =>
       window.__fake.emit(
         "pty-1",
@@ -573,7 +594,19 @@ test.describe("one project", () => {
     await expect(rows(page).first()).toContainText(
       "fix-activity-tracking-bugs",
     );
-    await expect(rows(page).first()).not.toContainText("session 1");
+    await expect(rows(page).first()).not.toContainText("New session");
+    await expect(rows(page).first().locator(".label")).not.toHaveClass(/\bunnamed\b/);
+  });
+
+  test("two nameless sessions both read New session", async ({ page }) => {
+    await running(page);
+    await page.getByTestId("project-new-session").click();
+    await startNew(page);
+    await expect(rows(page)).toHaveCount(2);
+    for (const label of await rows(page).locator(".label").all()) {
+      await expect(label).toHaveText("New session");
+      await expect(label).toHaveClass(/\bunnamed\b/);
+    }
   });
 
   // Enter sends; Shift+Enter is a new line. xterm would send the same bare
@@ -652,7 +685,7 @@ test.describe("one project", () => {
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(onSession(page, 1)).toHaveCount(1);
     // Typing goes into the terminal without a click.
     await page.keyboard.type("x");
     await expect.poll(() => typed(page)).toContain("x");
@@ -663,11 +696,11 @@ test.describe("one project", () => {
   }) => {
     await running(page);
     await startHere(page);
-    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(onSession(page, 2)).toHaveCount(1);
     await page.keyboard.press(`${MOD}+Shift+ArrowDown`);
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(onSession(page, 1)).toHaveCount(1);
     await page.keyboard.press(`${MOD}+Shift+ArrowUp`);
-    await expect(page.locator(".session.on")).toContainText("session 2");
+    await expect(onSession(page, 2)).toHaveCount(1);
   });
 
   test("hands the keyboard back to the agent on Escape from a list pane", async ({
@@ -881,8 +914,8 @@ test.describe("several sessions in one project", () => {
   test("adds a second without stopping the first", async ({ page }) => {
     expect(await spawnCount(page)).toBe(2);
     expect(await killed(page)).toEqual([]);
-    await expect(page.locator(SESSIONS)).toContainText("session 1");
-    await expect(page.locator(SESSIONS)).toContainText("session 2");
+    await expect(sessionBox(page, 1)).toHaveCount(1);
+    await expect(sessionBox(page, 2)).toHaveCount(1);
   });
 
   // The whole point of the model.
@@ -1089,11 +1122,11 @@ test.describe("working, and waiting for you", () => {
     await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
     await expect(named(page, "session 1").locator(".dot")).toHaveClass(/unread/);
     await page.keyboard.press(`${MOD}+.`);
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(onSession(page, 1)).toHaveCount(1);
 
     await page.keyboard.press(`${MOD}+.`);
     await expect(page.getByTestId("flash-readout")).toHaveText("Nothing else needs you");
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(onSession(page, 1)).toHaveCount(1);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   });
 
@@ -1311,9 +1344,7 @@ test.describe("working, and waiting for you", () => {
     await page.getByTestId("past-session").hover();
     await page.getByTestId("archive-past").click();
     await expect(page.getByTestId("past-session")).toHaveCount(0);
-    await expect(page.getByTestId("earlier-sessions")).toHaveText(
-      /1 earlier session/,
-    );
+    await expect(page.getByTestId("earlier-fold")).toHaveText("Earlier · 1");
   });
 
   test("does not mark the session you are looking at", async ({ page }) => {
@@ -1490,7 +1521,7 @@ test.describe("several projects", () => {
     expect(Math.abs(field.y + field.height / 2 - (add.y + add.height / 2))).toBeLessThan(1);
     expect(add.x).toBeGreaterThan(field.x + field.width - 1);
     expect(field.width).toBeGreaterThan(add.width * 3);
-    await expect(page.getByTestId("go-to")).toContainText("Go to session or project");
+    await expect(page.getByTestId("go-to")).toContainText("Go to a session or project");
 
     await expect(page.locator(`${SESSIONS} .foot`)).toHaveCount(0);
     const list = (await page.locator(`${SESSIONS} .tree`).boundingBox())!;
@@ -1590,7 +1621,7 @@ test.describe("with codex installed too", () => {
 
   test("Codex breathes only during a reported turn, even with continuous redraws", async ({ page }) => {
     await page.getByTestId("start-agent").click();
-    await page.getByTestId("start-agent-codex").click();
+    await startWith(page, "Codex");
     await running(page);
     await page.clock.install();
     const dot = rows(page).first().locator(".dot");
@@ -1622,12 +1653,13 @@ test.describe("with codex installed too", () => {
     const start = page.getByTestId("start-agent");
     await expect(start).toHaveText("New session");
     await start.click();
-    await expect(start).toHaveCount(0);
-    await expect(page.getByTestId("start-agent-claude-code")).toHaveText("Claude Code");
-    await expect(page.getByTestId("start-agent-codex")).toHaveText("Codex");
+    await expect(page.getByTestId("palette")).toBeVisible();
+    await page.locator("[data-testid='palette-row'][data-kind='change']").click();
+    await expect(paletteChoice(page, "Claude Code")).toBeVisible();
+    await expect(paletteChoice(page, "Codex")).toBeVisible();
     expect(await spawns(page)).toHaveLength(0);
 
-    await page.getByTestId("start-agent-codex").click();
+    await paletteChoice(page, "Codex").click();
     await expect.poll(() => spawns(page)).toHaveLength(1);
     // The agent picked is what starts, alone, though the project follows a
     // workflow whose orchestrator is Claude Code's.
@@ -1637,8 +1669,8 @@ test.describe("with codex installed too", () => {
   });
 
   test("starts Claude Code picked from the pane's row alone, on no model", async ({ page }) => {
-    await startHere(page);
-    await page.locator('[data-testid="agent-option"][data-agent="claude-code"]').click();
+    await page.getByTestId("start-agent").click();
+    await startWith(page, "Claude Code");
     await expect.poll(() => spawns(page)).toHaveLength(1);
     const [spawn] = await spawns(page);
     expect(spawn.agent).toBe("claude-code");
@@ -1646,42 +1678,28 @@ test.describe("with codex installed too", () => {
     expect(spawn.instructions).toBeUndefined();
   });
 
-  test("keeps the agent pane's buttons against its right edge", async ({ page }) => {
-    const status = page.getByTestId("agent-status");
-    const flush = async (testid: string) => {
-      const bar = (await status.boundingBox())!;
-      const box = (await page.getByTestId(testid).boundingBox())!;
-      expect(bar.x + bar.width - (box.x + box.width)).toBeLessThan(40);
-    };
-    await flush("start-agent");
+  test("backs out of the palette's choice without starting anything", async ({ page }) => {
     await page.getByTestId("start-agent").click();
-    await flush("start-agent-cancel");
-
-    const claude = (await page.getByTestId("start-agent-claude-code").boundingBox())!;
-    const codex = (await page.getByTestId("start-agent-codex").boundingBox())!;
-    expect(codex.x - (claude.x + claude.width)).toBeLessThan(20);
-  });
-
-  test("backs out of the agent pane's choice without starting anything", async ({ page }) => {
-    await page.getByTestId("start-agent").click();
-    await page.getByTestId("start-agent-cancel").click();
-    await expect(page.getByTestId("start-agent")).toHaveText("New session");
-
-    await page.getByTestId("start-agent").click();
-    await page.getByTestId("start-agent-codex").focus();
+    await expect(page.getByTestId("palette")).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(paletteChoice(page, "Codex")).toBeVisible();
+    // Backspace on the empty field steps back to the New session row, and Escape closes.
+    await page.keyboard.press("Backspace");
+    await expect(page.locator("[data-testid='palette-row'][data-kind='ready']")).toBeVisible();
     await page.keyboard.press("Escape");
+    await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect(page.getByTestId("start-agent")).toHaveText("New session");
     expect(await spawns(page)).toHaveLength(0);
   });
 
   test("offers both agents and starts the one you pick", async ({ page }) => {
-    await startHere(page);
-    const options = page.getByTestId("agent-option");
-    await expect(options).toHaveCount(2);
-    await expect(options.nth(0)).toHaveText(/Claude Code/);
-    await expect(options.nth(1)).toHaveText(/Codex/);
-    await options.nth(1).click();
-    await expect(page.getByTestId("agent-choice")).toHaveCount(0);
+    await page.getByTestId("start-agent").click();
+    await page.locator("[data-testid='palette-row'][data-kind='change']").click();
+    await expect(paletteChoice(page, "Claude Code")).toBeVisible();
+    await expect(paletteChoice(page, "Codex")).toBeVisible();
+    await paletteChoice(page, "Codex").click();
+    await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawns(page)).toHaveLength(1);
     expect((await spawns(page))[0].agent).toBe("codex");
     // No row says whose agent it is.
@@ -1693,8 +1711,8 @@ test.describe("with codex installed too", () => {
   test("learns a codex session's id and name, and lists it to resume later", async ({
     page,
   }) => {
-    await startHere(page);
-    await page.getByTestId("agent-option").nth(1).click();
+    await page.getByTestId("start-agent").click();
+    await startWith(page, "Codex");
     await running(page);
     await page.evaluate(() => {
       window.__fake.codexTranscripts = [
@@ -1725,8 +1743,8 @@ test.describe("with codex installed too", () => {
         { id: "old", title: "Old thread", modified: 900, size: 10 },
       ],
     });
-    const fold = page.getByTestId("earlier-sessions");
-    await expect(fold).toHaveText(/1 earlier session/);
+    const fold = page.getByTestId("earlier-fold");
+    await expect(fold).toHaveText("Earlier · 1");
     await fold.click();
     await expect(page.getByTestId("resume-filter")).toBeFocused();
     await page.getByTestId("resume-row").click();
@@ -1755,8 +1773,8 @@ test.describe("when a dialog closes", () => {
     });
     await page.keyboard.press(`${MOD}+1`);
     await expect(page.getByTestId("sessions-nav")).toBeFocused();
-    const fold = page.getByTestId("earlier-sessions");
-    await expect(fold).toHaveText(/1 earlier session/);
+    const fold = page.getByTestId("earlier-fold");
+    await expect(fold).toHaveText("Earlier · 1");
     await page.keyboard.press("End");
     await page.keyboard.press("ArrowUp");
     await expect(fold).toHaveClass(/cursor/);
@@ -2046,7 +2064,7 @@ test.describe("the palettes", () => {
       await expect(page.getByText("Nothing matches.")).toBeVisible();
       await page.keyboard.press("Enter");
       await expect(page.getByTestId(PALETTE)).toBeVisible();
-      await expect(page.locator(".session.on")).toContainText("session 2");
+      await expect(onSession(page, 2)).toHaveCount(1);
     });
 
     test("the nothing-waiting row does nothing on Enter or a click", async ({ page }) => {
@@ -2060,7 +2078,7 @@ test.describe("the palettes", () => {
       // Forced: Playwright treats aria-disabled as disabled and would wait forever.
       await row.click({ force: true });
       await expect(page.getByTestId(PALETTE)).toBeVisible();
-      await expect(page.locator(".session.on")).toContainText("session 2");
+      await expect(onSession(page, 2)).toHaveCount(1);
     });
 
     test("hovering the nothing-waiting row does not select it", async ({ page }) => {
@@ -2091,7 +2109,7 @@ test.describe("the palettes", () => {
       await expect(chosen(page)).toHaveAttribute("data-kind", "attention");
       await page.keyboard.press("Enter");
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
-      await expect(page.locator(".session.on")).toContainText("session 1");
+      await expect(onSession(page, 1)).toHaveCount(1);
       await page.keyboard.type("w");
       await expect.poll(() => writtenTo(page, "pty-1")).toBe("w");
     });
@@ -2136,31 +2154,37 @@ test.describe("the palettes", () => {
 
     test("lists the latest change first, with the cursor on the first session that is not on screen", async ({ page }) => {
       await page.keyboard.press(GOTO);
-      await expect(kind(page, "session").first().getByTestId("palette-label")).toHaveText("session 2");
+      // Neither session is named, so both rows read New session: the newest is
+      // first, and the cursor is on the older one, which is not on screen.
+      await expect(kind(page, "session").first().getByTestId("palette-label")).toHaveText("New session");
       await expect(chosen(page)).toHaveAttribute("data-kind", "session");
-      await expect(chosen(page).getByTestId("palette-label")).toHaveText("session 1");
+      await expect(kind(page, "session").nth(1)).toHaveAttribute("aria-selected", "true");
       await page.keyboard.press("Escape");
 
       // A session that changes moves above the rest.
       await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
       await expect(page.locator(`${SESSIONS} .label.unread`)).toHaveCount(1);
       await page.keyboard.press(GOTO);
-      await expect(chosen(page).getByTestId("palette-label")).toHaveText("session 1");
+      await expect(kind(page, "session").first()).toHaveAttribute("aria-selected", "true");
       await page.keyboard.press("Enter");
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
-      await expect(page.locator(".session.on")).toContainText("session 1");
+      await expect(onSession(page, 1)).toHaveCount(1);
       await page.keyboard.type("y");
       await expect.poll(() => writtenTo(page, "pty-1")).toBe("y");
     });
 
-    test("goes to the session typed, with the keyboard in its terminal", async ({ page }) => {
-      await expect(page.locator(".session.on")).toContainText("session 2");
+    test("goes to the session under the cursor, with the keyboard in its terminal", async ({ page }) => {
+      await expect(onSession(page, 2)).toHaveCount(1);
       await page.keyboard.press(GOTO);
-      await page.keyboard.type("session 1");
-      await expect(entries(page).first()).toContainText("session 1");
+      await page.keyboard.type("new session");
+      await expect(kind(page, "session")).toHaveCount(2);
+      // Typing puts the cursor on the first row, the newest, which is on screen.
+      await expect(kind(page, "session").first()).toHaveAttribute("aria-selected", "true");
+      await page.keyboard.press("ArrowDown");
+      await expect(kind(page, "session").nth(1)).toHaveAttribute("aria-selected", "true");
       await page.keyboard.press("Enter");
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
-      await expect(page.locator(".session.on")).toContainText("session 1");
+      await expect(onSession(page, 1)).toHaveCount(1);
       await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
       await page.keyboard.type("x");
       await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
@@ -2172,8 +2196,8 @@ test.describe("the palettes", () => {
       await page.keyboard.type("one");
       await expect(kind(page, "session")).toHaveCount(2);
       await expect(kind(page, "project")).toHaveCount(1);
-      await page.keyboard.type(" session 1");
-      await expect(kind(page, "session")).toHaveCount(1);
+      await page.keyboard.type(" new");
+      await expect(kind(page, "session")).toHaveCount(2);
       await page.keyboard.type(" two");
       await expect(entries(page)).toHaveCount(0);
     });
@@ -2247,7 +2271,8 @@ test.describe("the palettes", () => {
       await expect(page.getByTestId("unfold-sessions")).toBeVisible();
       await expect.poll(() => savedSessionsChosen(page)).toBe(false);
       await page.setViewportSize({ width: 800, height: 800 });
-      await expect(page.getByTestId("unfold-sessions")).toBeVisible();
+      // Too narrow for the pane, its unfold button gives way.
+      await expect(page.getByTestId("unfold-sessions")).toBeDisabled();
       await page.keyboard.press(GOTO);
       await page.keyboard.type("two");
       await page.keyboard.press("Enter");
@@ -2422,37 +2447,33 @@ test.describe("the palettes", () => {
     test("drops a session that is closed while the list is up", async ({ page }) => {
       await page.keyboard.press(GOTO);
       await expect(kind(page, "session")).toHaveCount(2);
-      await expect(chosen(page)).toContainText("session 1");
+      await expect(kind(page, "session").nth(1)).toHaveAttribute("aria-selected", "true");
       // Another way of stopping a session: through the scrim, from the
       // pane behind the palette. Session 2 is not under the cursor.
       await named(page, "session 2").locator("..").getByTestId("close-session").evaluate((el) => (el as HTMLElement).click());
       await expect(kind(page, "session")).toHaveCount(1);
-      await expect(kind(page, "session").first()).toContainText("session 1");
       await expect(chosen(page)).toHaveCount(1);
-      await expect(chosen(page)).toContainText("session 1");
+      await expect(chosen(page)).toHaveAttribute("data-kind", "session");
     });
 
     test("moves the cursor on when the session under it is closed", async ({ page }) => {
       await page.keyboard.press(GOTO);
       await expect(kind(page, "session")).toHaveCount(2);
-      await expect(chosen(page)).toContainText("session 1");
+      await expect(kind(page, "session").nth(1)).toHaveAttribute("aria-selected", "true");
       await named(page, "session 1").locator("..").getByTestId("close-session").evaluate((el) => (el as HTMLElement).click());
       await expect(kind(page, "session")).toHaveCount(1);
-      await expect(kind(page, "session").first()).toContainText("session 2");
       await expect(chosen(page)).toHaveCount(1);
-      await expect(chosen(page)).toContainText("session 2");
+      await expect(chosen(page)).toHaveAttribute("data-kind", "session");
     });
 
     test("keeps the cursor on its entry while sessions change under it", async ({ page }) => {
       await page.keyboard.press(GOTO);
-      const target = kind(page, "session").filter({ hasText: "session 1" });
-      await expect(target).toHaveAttribute("aria-selected", "true");
-      await expect(kind(page, "session").first()).toContainText("session 2");
+      await expect(kind(page, "session").nth(1)).toHaveAttribute("aria-selected", "true");
       await page.evaluate(() => window.__fake.emit("pty-1", "\x07"));
-      await expect(kind(page, "session").first()).toContainText("session 1");
-      await expect(target).toHaveAttribute("aria-selected", "true");
+      // Session 1 changed, so it moves to the top and the cursor goes with it.
+      await expect(kind(page, "session").first()).toHaveAttribute("aria-selected", "true");
       await page.keyboard.press("Enter");
-      await expect(page.locator(".session.on")).toContainText("session 1");
+      await expect(onSession(page, 1)).toHaveCount(1);
     });
 
     test("switches to commands on a > typed first", async ({ page }) => {
@@ -2503,8 +2524,22 @@ test.describe("a new session from the palette", () => {
   const GOTO = `${MOD}+P`;
   const field = (page: Page) => page.getByTestId("palette-field");
   const entries = (page: Page) => page.getByTestId("palette-row");
-  const chips = (page: Page) => page.getByTestId("palette-chip");
   const chosen = (page: Page) => page.locator("[data-testid='palette-row'][aria-selected='true']");
+  const ready = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='ready']");
+  const change = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='change']");
+  /** The new session command, up to the step it opens on. */
+  const askNew = async (page: Page, command = "new session") => {
+    await page.keyboard.press(COMMANDS);
+    await page.keyboard.type(command);
+    await page.keyboard.press("Enter");
+  };
+  /** Change, from the keyboard, so Backspace can step back from it. */
+  const askChange = async (page: Page) => {
+    await expect(ready(page)).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await expect(chosen(page)).toHaveAttribute("data-kind", "change");
+    await page.keyboard.press("Enter");
+  };
 
   test("starts in the project on screen from the keyboard alone, with the keyboard in the new agent", async ({
     page,
@@ -2516,28 +2551,23 @@ test.describe("a new session from the palette", () => {
     await page.keyboard.press("Enter");
 
     await expect(page.getByTestId("palette")).toBeVisible();
-    await expect(chips(page)).toHaveText(["New session"]);
     await expect(field(page)).toBeFocused();
     await expect(field(page)).toHaveValue("");
     await expect(field(page)).toHaveAttribute("placeholder", "Which project");
     // The project on screen leads, with the cursor on it.
-    await expect(page.getByTestId("palette-group")).toHaveCount(0);
     await expect(entries(page).first()).toContainText("one");
     await expect(chosen(page)).toContainText("one");
 
-    // The chip stands inside the field's row, before the text.
-    const chip = (await chips(page).first().boundingBox())!;
-    const input = (await field(page).boundingBox())!;
-    const dialog = (await page.getByTestId("palette").boundingBox())!;
-    expect(chip.x + chip.width).toBeLessThanOrEqual(input.x + 1);
-    expect(chip.x).toBeGreaterThanOrEqual(dialog.x);
-    expect(input.x + input.width).toBeLessThanOrEqual(dialog.x + dialog.width);
-
+    // The project answered, the defaults are one Enter away.
+    await page.keyboard.press("Enter");
+    await expect(ready(page)).toBeVisible();
+    await expect(chosen(page)).toHaveAttribute("data-kind", "ready");
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(ONE);
-    await expect(page.locator(".session.on")).toContainText("session 1");
+    await expect(onSession(page, 1)).toHaveCount(1);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await page.keyboard.type("x");
     await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
@@ -2545,11 +2575,10 @@ test.describe("a new session from the palette", () => {
 
   test("starts in another project that is typed", async ({ page }) => {
     await open(page, { open: [ONE, TWO], noWorkflows: true });
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session");
-    await page.keyboard.press("Enter");
+    await askNew(page);
     await page.keyboard.type("tw");
     await expect(entries(page)).toHaveCount(1);
+    await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(TWO);
@@ -2568,6 +2597,7 @@ test.describe("a new session from the palette", () => {
     const chord = (await entries(page).first().locator("kbd").textContent())!.trim();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("palette")).toHaveCount(0);
+    await expect(page.getByTestId("go-to")).toBeVisible();
     await expect(page.getByTestId("go-to").locator("kbd")).toHaveText(chord);
 
     await page.getByTestId("go-to").click();
@@ -2576,8 +2606,7 @@ test.describe("a new session from the palette", () => {
   });
 
   // The + beside it is the palette's New session: with two projects open
-  // it asks which, and starts in the one picked with the keyboard in the
-  // new agent.
+  // it asks which, then offers the defaults.
   test("asks which project from the sessions pane's +, and starts there", async ({ page }) => {
     await open(page, { open: [ONE, TWO] });
     await page.getByTestId("new-session").click();
@@ -2588,6 +2617,8 @@ test.describe("a new session from the palette", () => {
     await page.keyboard.type("tw");
     await expect(entries(page)).toHaveCount(1);
     await page.keyboard.press("Enter");
+    await expect(ready(page)).toBeVisible();
+    await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(TWO);
@@ -2597,53 +2628,56 @@ test.describe("a new session from the palette", () => {
     await expect.poll(() => writtenTo(page, "pty-1")).toBe("y");
   });
 
-  // With one project and one agent there is nothing to ask: the + starts
-  // the session at once, and the palette never shows.
-  test("starts at once from the sessions pane's + when there is nothing to ask", async ({ page }) => {
+  // With one project there is no project to ask: the + opens on the
+  // defaults, and nothing starts until the row is picked.
+  test("opens on the defaults from the sessions pane's + when there is no project to ask", async ({ page }) => {
     await open(page, { open: [ONE] });
-    await page.evaluate(() => {
-      const seen = window as unknown as { __paletteShown: boolean };
-      seen.__paletteShown = false;
-      new MutationObserver(() => {
-        const scrim = document.querySelector("[data-testid='palette-scrim']");
-        if (scrim !== null && !scrim.classList.contains("leaving")) seen.__paletteShown = true;
-      }).observe(document.body, { childList: true, subtree: true, attributes: true });
-    });
     await page.getByTestId("new-session").click();
+    await expect(ready(page)).toBeVisible();
+    await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "new");
+    expect(await spawnCount(page)).toBe(0);
+    await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(ONE);
     await expect(page.getByTestId("palette")).toHaveCount(0);
-    expect(await page.evaluate(() => (window as unknown as { __paletteShown: boolean }).__paletteShown)).toBe(false);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await page.keyboard.type("x");
     await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
   });
 
-  test("starts in the project on screen from its own command", async ({ page }) => {
+  test("opens on the defaults in the project on screen from its own command", async ({ page }) => {
     await open(page, { open: [ONE, TWO], noWorkflows: true });
     await page.keyboard.press(COMMANDS);
     await page.keyboard.type("new session in");
     await expect(entries(page)).toHaveCount(1);
     await expect(entries(page).first()).toContainText("New session in one");
     await page.keyboard.press("Enter");
+    await expect(ready(page)).toBeVisible();
+    expect(await spawnCount(page)).toBe(0);
+    await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(ONE);
   });
 
-  test("starts from go to with the modifier and Enter on a project", async ({ page }) => {
+  test("opens on the defaults from go to with the modifier and Enter on a project", async ({ page }) => {
     await open(page, { open: [ONE, TWO], noWorkflows: true });
     await page.keyboard.press(GOTO);
     await page.keyboard.type("tw");
     await expect(entries(page)).toHaveCount(1);
     await page.keyboard.press(`${MOD}+Enter`);
+    await expect(ready(page)).toBeVisible();
+    expect(await spawnCount(page)).toBe(0);
+    await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(TWO);
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect(page.locator(".project.on")).toContainText("two");
   });
 
-  test("starts from go to with the modifier and Enter on a session, in its project", async ({ page }) => {
+  test("opens on the defaults from go to with the modifier and Enter on a session, in its project", async ({
+    page,
+  }) => {
     await open(page, { open: [ONE, TWO], noWorkflows: true });
     await running(page);
     await page.keyboard.press(`${MOD}+Shift+P`);
@@ -2653,6 +2687,8 @@ test.describe("a new session from the palette", () => {
     await page.keyboard.type("session");
     await expect(entries(page).first()).toHaveAttribute("data-kind", "session");
     await page.keyboard.press(`${MOD}+Enter`);
+    await expect(ready(page)).toBeVisible();
+    await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(2);
     expect((await spawns(page))[1].project).toBe(ONE);
     await expect(rows(page)).toHaveCount(2);
@@ -2662,13 +2698,12 @@ test.describe("a new session from the palette", () => {
     page,
   }) => {
     await open(page, { open: [ONE, TWO], codex: "/usr/local/bin/codex", noWorkflows: true });
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session");
-    await page.keyboard.press("Enter");
+    await askNew(page);
     await page.keyboard.type("two");
     await page.keyboard.press("Enter");
-    await expect(page.getByTestId("palette")).toBeVisible();
-    await expect(chips(page)).toHaveText(["New session", "two"]);
+    await expect(ready(page)).toBeVisible();
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
+    await askChange(page);
     await expect(field(page)).toHaveAttribute("placeholder", "How should it run");
     await expect(entries(page)).toHaveCount(2);
     await expect(entries(page).first()).toContainText("Claude Code");
@@ -2679,13 +2714,14 @@ test.describe("a new session from the palette", () => {
     await expect(entries(page)).toHaveCount(0);
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Backspace");
-    await expect(chips(page)).toHaveCount(2);
     await expect(entries(page)).toHaveCount(2);
+    await expect(ready(page)).toHaveCount(0);
     await page.keyboard.press("Backspace");
-    await expect(chips(page)).toHaveText(["New session"]);
-    await expect(page.getByTestId("palette-group")).toHaveCount(0);
-    await expect(entries(page)).toHaveCount(2);
+    await expect(ready(page)).toBeVisible();
     await expect(field(page)).toBeFocused();
+    await page.keyboard.press("Backspace");
+    await expect(field(page)).toHaveAttribute("placeholder", "Which project");
+    await expect(entries(page)).toHaveCount(2);
     await page.keyboard.press("Backspace");
     await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "commands");
     await expect(page.getByTestId("palette-prefix")).toBeVisible();
@@ -2694,6 +2730,7 @@ test.describe("a new session from the palette", () => {
 
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
+    await askChange(page);
     await page.keyboard.press("ArrowDown");
     await expect(chosen(page)).toContainText("Codex");
     await page.keyboard.press("Enter");
@@ -2703,12 +2740,13 @@ test.describe("a new session from the palette", () => {
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   });
 
-  test("starts at once with one agent where no workflow was ever turned on, as before workflows", async ({ page }) => {
+  test("starts with one agent where no workflow was ever turned on, as before workflows", async ({ page }) => {
     // A fresh install: the shipped workflow is there, and nothing follows
     // it.
     await open(page, { open: [ONE] });
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session in");
+    await askNew(page, "new session in");
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
+    await expect(change(page)).toHaveCount(0);
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawnCount(page)).toBe(1);
@@ -2716,10 +2754,10 @@ test.describe("a new session from the palette", () => {
     expect((await spawns(page))[0].instructions).toBeUndefined();
   });
 
-  test("starts at once with one agent where only another project follows a workflow", async ({ page }) => {
+  test("starts with one agent where only another project follows a workflow", async ({ page }) => {
     await open(page, { open: [ONE], workflowElsewhere: true });
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session in");
+    await askNew(page, "new session in");
+    await expect(change(page)).toHaveCount(0);
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawnCount(page)).toBe(1);
@@ -2731,9 +2769,10 @@ test.describe("a new session from the palette", () => {
     page,
   }) => {
     await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true });
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session in");
-    await page.keyboard.press("Enter");
+    await askNew(page, "new session in");
+    // The project follows the workflow, so the defaults say so.
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Build and review");
+    await askChange(page);
     await expect(field(page)).toHaveAttribute("placeholder", "How should it run");
     await expect(page.getByTestId("palette-group")).toHaveText(["Workflows", "One agent, no workflow"]);
     await expect(entries(page)).toHaveCount(3);
@@ -2753,9 +2792,8 @@ test.describe("a new session from the palette", () => {
     expect((await spawns(page))[0].instructions).toContain('workflow "Build and review"');
 
     // Codex picked is Codex alone.
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session in");
-    await page.keyboard.press("Enter");
+    await askNew(page, "new session in");
+    await askChange(page);
     await page.keyboard.type("codex");
     await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(2);
@@ -2763,59 +2801,52 @@ test.describe("a new session from the palette", () => {
     expect((await spawns(page))[1].instructions).toBeUndefined();
   });
 
-  test("offers the project's workflow first in its own choice, as the palette does, and starts it", async ({
+  test("starts the project's workflow from the project's + on the defaults, and an agent from Change", async ({
     page,
   }) => {
     await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true });
-    await startHere(page);
-    const flow = page.getByTestId("workflow-option");
-    await expect(flow).toHaveCount(1);
-    await expect(flow).toContainText("Build and review");
-    await expect(flow).toContainText("default");
-    // It sits above the agents, with the cursor on it, as in the palette.
-    const options = page.locator("[data-testid='workflow-option'], [data-testid='agent-option']");
-    await expect(options).toHaveCount(3);
-    await expect(options.first()).toHaveAttribute("data-testid", "workflow-option");
-    const agentBox = (await page.getByTestId("agent-option").first().boundingBox())!;
-    expect((await flow.boundingBox())!.y).toBeLessThan(agentBox.y);
-    await expect(flow).toHaveClass(/cursor/);
+    await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Build and review");
     await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0]).toMatchObject({ agent: "claude-code", model: "fable" });
     expect((await spawns(page))[0].instructions).toContain('workflow "Build and review"');
 
-    // An agent picked from the same choice is that agent alone.
-    await startHere(page);
-    await page.locator('[data-testid="agent-option"][data-agent="codex"]').click();
+    // An agent picked from the same question is that agent alone.
+    await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+    await startWith(page, "Codex");
     await expect.poll(() => spawnCount(page)).toBe(2);
     expect((await spawns(page))[1].agent).toBe("codex");
     expect((await spawns(page))[1].instructions).toBeUndefined();
   });
 
-  test("marks a workflow the project chose as the project's workflow in its own choice", async ({ page }) => {
+  test("marks a workflow the project chose as the project's workflow", async ({ page }) => {
     await open(page, { open: [TWO], codex: "/usr/local/bin/codex", workflowElsewhere: true });
-    await startHere(page);
-    await expect(page.getByTestId("workflow-option")).toContainText("project's workflow");
+    await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+    await change(page).click();
+    await expect(entries(page).filter({ hasText: "project's workflow" })).toHaveCount(1);
   });
 
-  test("offers no workflow in a project's own choice where it follows none", async ({ page }) => {
+  test("offers no workflow where the project follows none", async ({ page }) => {
     await open(page, { open: [ONE], codex: "/usr/local/bin/codex", workflowElsewhere: true });
-    await startHere(page);
-    await expect(page.getByTestId("agent-option")).toHaveCount(2);
-    await expect(page.getByTestId("workflow-option")).toHaveCount(0);
+    await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+    await change(page).click();
+    await expect(entries(page)).toHaveCount(2);
+    await expect(paletteChoice(page, "Claude Code")).toBeVisible();
+    await expect(paletteChoice(page, "Codex")).toBeVisible();
+    await expect(entries(page).filter({ hasText: "Build and review" })).toHaveCount(0);
   });
 
-  test("puts the agent last started in the project under the cursor", async ({ page }) => {
+  test("puts the agent last started in the project under the defaults", async ({ page }) => {
     await open(page, { open: [ONE], codex: "/usr/local/bin/codex" });
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session in");
-    await page.keyboard.press("Enter");
+    await askNew(page, "new session in");
+    await askChange(page);
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(1);
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session in");
-    await page.keyboard.press("Enter");
+    await askNew(page, "new session in");
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Codex");
+    await askChange(page);
     await expect(chosen(page)).toContainText("Codex");
     await expect(chosen(page)).toContainText("last used");
   });
@@ -2823,28 +2854,21 @@ test.describe("a new session from the palette", () => {
   test("Escape closes it from any step and the keyboard goes back", async ({ page }) => {
     await open(page, { open: [ONE, TWO], codex: "/usr/local/bin/codex", noWorkflows: true });
     await startHere(page);
-    await page.getByTestId("agent-option").first().click();
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session");
+    await askNew(page);
     await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
-    await expect(chips(page)).toHaveCount(2);
+    await expect(ready(page)).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     expect(await spawnCount(page)).toBe(1);
 
     // The commands chord puts it away too, and go to switches it.
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session");
-    await page.keyboard.press("Enter");
+    await askNew(page);
     await page.keyboard.press(GOTO);
     await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "goto");
-    await expect(chips(page)).toHaveCount(0);
-    await page.keyboard.press(COMMANDS);
-    await page.keyboard.type("new session");
-    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("palette-prefix")).toHaveCount(0);
+    await askNew(page);
     await page.keyboard.press(COMMANDS);
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await page.keyboard.type("z");

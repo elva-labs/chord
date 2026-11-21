@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 import { longHistory } from "./longHistory";
 
 // A conversation resumed with the history of one a session kept for days,
@@ -194,6 +194,7 @@ test.describe("a conversation as long as a real one kept for days", () => {
   test("going to another session and back draws no row again and keeps its place", async ({ page }) => {
     await openHuge(page);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='conversation'][data-session='s2'] [data-testid='composer-input']")).toBeVisible();
     await countRows(page);
     const huge = page.locator("[data-row='session:s1'] [data-testid='session-row']");
@@ -214,6 +215,7 @@ test.describe("a conversation as long as a real one kept for days", () => {
   test("lays out none of what a conversation behind another holds", async ({ page }) => {
     await openHuge(page);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='conversation'][data-session='s2'] [data-testid='composer-input']")).toBeVisible();
     // Behind the new one, the long conversation takes no room in the
     // window's layout, however much it holds.
@@ -250,6 +252,7 @@ test.describe("a conversation as long as a real one kept for days", () => {
     await expect.poll(async () => Math.abs((await mark()) - (await mark()))).toBeLessThan(1);
     const before = await mark();
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='conversation'][data-session='s2']")).toHaveClass(/active/);
     await page.locator("[data-row='session:s1'] [data-testid='session-row']").click();
     await expect(page.locator(HUGE)).toHaveClass(/active/);
@@ -266,6 +269,7 @@ test.describe("a conversation as long as a real one kept for days", () => {
     for (let step = 0; step < 20 && (await fromFoot(page)) > 1; step++) await page.mouse.wheel(0, 1000);
     await expect.poll(() => fromFoot(page)).toBeLessThan(2);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='conversation'][data-session='s2']")).toHaveClass(/active/);
     // More than a few screens of it.
     for (let turn = 0; turn < 4; turn++)

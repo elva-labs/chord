@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { PROJECT, SETTINGS_FILE, installFakeCore } from "./fake";
+import { PROJECT, SETTINGS_FILE, installFakeCore, startNew } from "./fake";
 
 const MOD = "ControlOrMeta";
 const AGENT = "section[data-pane='agent']";
@@ -171,8 +171,10 @@ test("changes the terminal font, which the open terminals take at once, and keep
     });
   // A session, so there is a terminal to change under us.
   const terminal = async () => {
-    if ((await fontOf()) === null)
+    if ((await fontOf()) === null) {
       await page.getByTestId("new-session").click();
+      await startNew(page);
+    }
     await expect.poll(fontOf).not.toBeNull();
   };
 

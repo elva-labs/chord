@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * A background of the user's own is painted fixed to the window on each
@@ -52,7 +52,10 @@ for (const look of ["modern", "terminal"] as const) {
       },
     });
     await page.goto("/");
-    for (let i = 1; i <= 4; i++) await page.getByTestId("new-session").click();
+    for (let i = 1; i <= 4; i++) {
+      await page.getByTestId("new-session").click();
+      await startNew(page);
+    }
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(4);
     await expect(page.locator("html")).toHaveAttribute("data-cards", "");
 

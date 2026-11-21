@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // The slash menu of an integrated session's composer, against the fake
 // core's scripted session, whose agent lists Claude Code's kind of commands
@@ -31,6 +31,7 @@ async function openIntegrated(page: Page, options: { holdReady?: boolean; agent?
     );
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeVisible();
 }
 

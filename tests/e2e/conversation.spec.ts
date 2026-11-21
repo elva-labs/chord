@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { BUILD_AND_REVIEW, PROJECT, WITH_WORKFLOW, installFakeCore } from "./fake";
+import { BUILD_AND_REVIEW, PROJECT, WITH_WORKFLOW, installFakeCore, sessionRowOf, startNew, startIntegrated, startTerminal } from "./fake";
 
 // An integrated session as the user meets it: the conversation the agent
 // pane draws in place of a terminal, driven by the fake core's scripted
@@ -69,6 +69,7 @@ async function openIntegrated(page: Page, options: { untrusted?: boolean; defaul
     );
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
 }
 
 test.describe("an integrated session", () => {
@@ -79,7 +80,7 @@ test.describe("an integrated session", () => {
     await expect(page.getByTestId("thread-intro")).toContainText("A new Claude Code session in demo");
     await expect(page.getByTestId("branch-readout")).toHaveText("main");
     // The header holds the name and nothing the bar says.
-    await expect(page.locator(`${AGENT} > header .title`)).toHaveText("session 1");
+    await expect(page.locator(`${AGENT} > header .title`)).toHaveText("New session");
     await expect(page.locator(`${AGENT} > header`)).not.toContainText(/demo|main|idle/);
     await expect(page.getByTestId("session-row")).toHaveCount(1);
     const start = (await calls(page))[0];
@@ -165,6 +166,7 @@ test.describe("an integrated session", () => {
       await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], look } });
       await page.goto("/");
       await page.getByTestId("start-agent").click();
+      await startNew(page);
       await agent(
         page,
         `f.send("${H}", crypto.randomUUID(), "Can you check the tests?");
@@ -223,14 +225,14 @@ test.describe("an integrated session", () => {
     // the other way from the agent pane.
     await installFakeCore(page, { open: [PROJECT] });
     await page.goto("/");
-    await expect(page.getByTestId("start-other")).toHaveText("New session in Chord");
-    await page.getByTestId("start-other").click();
+    await startIntegrated(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     // Another session, in a terminal, which the fake names session-1.
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator(`${AGENT} .xterm`)).toBeVisible();
     // The newest row stands first; the integrated one is the older.
-    await page.getByTestId("session-row").filter({ hasText: "session 1" }).click();
+    await sessionRowOf(page, 1).click();
     await expect(page.getByTestId("conversation")).toBeVisible();
     await agent(
       page,
@@ -696,6 +698,7 @@ test("puts the keyboard in the composer of the session switched to by chord", as
   await page.getByTestId("composer-input").waitFor();
   await page.keyboard.type("typed in one");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation").nth(1)).toBeVisible();
   await page.keyboard.type("typed in two");
   await page.keyboard.press("Shift+ControlOrMeta+ArrowUp");
@@ -785,6 +788,7 @@ test.describe("a session of an agent shaped as Codex is", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
   }
 
@@ -937,6 +941,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     await page.goto("/");
     await expect(page.getByTestId("start-agent")).toHaveText("New session");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     await expect(page.locator(`${AGENT} .xterm`)).toHaveCount(0);
     // Before the first message the composer says the workflow, and the
@@ -975,6 +980,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     await installFakeCore(page, UNDER);
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     const input = page.getByTestId("composer-input");
     await expect(input).toBeEnabled();
     await input.fill("Fix the flaky cache test");
@@ -1013,8 +1019,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
   test("the agent pane offers a terminal session beside New session, alone", async ({ page }) => {
     await installFakeCore(page, UNDER);
     await page.goto("/");
-    await expect(page.getByTestId("start-other")).toHaveText("New session in a terminal");
-    await page.getByTestId("start-other").click();
+    await startTerminal(page);
     await expect(page.locator(`${AGENT} .xterm`)).toBeVisible();
     // Started the other way, it is a pick: it follows no workflow.
     await expect(page.getByTestId("workflow-tag")).toHaveCount(0);
@@ -1023,6 +1028,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     // New session is the workflow's orchestrator, integrated: the choice it
     // opens stands on the workflow.
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("conversation")).toBeVisible();
     await expect(page.getByTestId("workflow-chip")).toHaveText("Build and review");
@@ -1070,6 +1076,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     await installFakeCore(page, UNDER);
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("composer-input")).toBeEnabled();
     await page.getByTestId("composer-input").fill("Fix the flaky cache test");
     await page.keyboard.press("Enter");
@@ -1156,6 +1163,7 @@ test.describe("a Codex orchestrator, integrated", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     await expect(page.getByTestId("workflow-chip")).toHaveText("Build and review");
     const [first] = await calls(page);
@@ -1268,6 +1276,7 @@ test.describe("the model and the mode", () => {
     await installFakeCore(page, { open: [PROJECT], agents: ["codex"], integrable: ["codex"], settings: { integrated: ["codex"] } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("model-chip")).toHaveText("GPT-5-Codex");
     await expect(page.getByTestId("session-row")).toHaveAttribute("title", "GPT-5-Codex");
   });
@@ -1282,6 +1291,7 @@ test.describe("the model and the mode", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     expect((await calls(page))[0]).toMatchObject({ method: "start" });
     const chip = page.getByTestId("mode-chip");
     await expect(chip).toHaveText("Untrusted, workspace write");
@@ -1574,6 +1584,7 @@ test.describe("the conversation's text", () => {
           });
           await page.goto("/");
           await page.getByTestId("start-agent").click();
+          await startNew(page);
           await expect(page.getByTestId("composer-input")).toBeVisible();
           await agent(
             page,
@@ -1627,6 +1638,7 @@ test("draws its controls square in the terminal look and round in the modern one
     await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], look } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await page.getByTestId("composer-input").fill("x");
     const radius = async (testid: string) =>
       page.getByTestId(testid).evaluate((node) => parseFloat(getComputedStyle(node).borderTopLeftRadius));
@@ -1647,6 +1659,7 @@ test("takes up a session the core still runs when the window is reloaded", async
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] }, keepIntegrated: true });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await page.getByTestId("composer-input").fill("Run the tests");
   await page.keyboard.press("Enter");
   await agent(page, `f.startTurn("${H}"); f.emit("${H}", { type: "text", block: "b", parent: null, text: "Running them now", done: false }); const c = f.startTool("${H}", "Bash", { command: "npm test" }, { kind: "command" }); f.ask("${H}", "Bash", { command: "npm test" }, { call: c });`);
@@ -2151,7 +2164,7 @@ test("lays out the composer's bar in a narrow pane with nothing drawn over anoth
 test.describe("in the sessions pane, an integrated session", () => {
   test("has a row like any session: its dot and words, its time, unread when done, and go to", async ({ page }) => {
     await openIntegrated(page);
-    const own = page.getByTestId("session-row").filter({ hasText: "session 1" });
+    const own = sessionRowOf(page, 1);
     await expect(own.locator(".dot")).toHaveClass(/live/);
     await expect(own.locator(".state")).toHaveText("idle");
     await agent(page, `f.startTurn("${H}");`);
@@ -2172,10 +2185,9 @@ test.describe("in the sessions pane, an integrated session", () => {
     await expect(own.locator(".state")).toHaveText("waiting for you");
     await expect(own.getByTestId("session-when")).toHaveText("now");
 
-    // Go to finds it by its name and brings its conversation back.
+    // Go to puts the cursor on it, the first session not on screen, and brings its conversation back.
     await page.getByTestId("go-to").click();
-    await page.getByTestId("palette-field").fill("session 1");
-    await expect(page.getByTestId("palette-row").first()).toContainText("session 1");
+    await expect(page.locator("[data-testid='palette-row'][aria-selected='true']")).toHaveAttribute("data-kind", "session");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("conversation")).toBeVisible();
     await expect(own.locator(".dot")).not.toHaveClass(/unread/);
@@ -2198,6 +2210,7 @@ test.describe("in the sessions pane, an integrated session", () => {
     await page.goto("/");
     // The starter, a session of a second project's own.
     await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     await page.evaluate(
       (project) =>
@@ -2227,6 +2240,7 @@ test.describe("in the sessions pane, an integrated session", () => {
     await installFakeCore(page, { open: [PROJECT, OTHER], settings: { integrated: ["claude-code"] } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await agent(page, `f.turn("${H}", "Done.");`);
     // Another project on screen, and eight days with nothing done.
     await page.locator(`[data-row="project:${OTHER}"] .project-row`).click();
@@ -2235,7 +2249,7 @@ test.describe("in the sessions pane, an integrated session", () => {
     // Over while off screen, it waits to be read, and its end is something
     // done in the project; read, and eight days on, the project folds.
     await agent(page, `f.end("${H}");`);
-    const own = page.getByTestId("session-row").filter({ hasText: "session 1" });
+    const own = page.getByTestId("session-row").nth(0);
     await expect(own.locator(".dot")).toHaveClass(/unread/);
     await expect(page.getByTestId("inactive-fold")).toHaveCount(0);
     await own.click();
@@ -2397,6 +2411,7 @@ test("shows a message another session sent under that session, and never the wor
   await page.goto("/");
   // The starter, a session of a second project's own.
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   const conduct = (id: string, tool: string, args: Record<string, unknown>) =>
     page.evaluate(
@@ -2442,6 +2457,7 @@ test("gives an integrated starter what it has not heard with the user's message,
   await page.goto("/");
   // The starter, a session of a second project's own.
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   await page.evaluate(
     (project) =>
@@ -2490,6 +2506,7 @@ test("wakes an idle integrated starter with what a session it started said, as t
   await page.goto("/");
   // The starter, a session of a second project's own.
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   await page.evaluate(
     (project) =>
@@ -2522,10 +2539,9 @@ test("wakes an idle integrated starter with what a session it started said, as t
   await expect(page.getByTestId("starter-news")).toHaveCount(0);
   const woken = page.getByTestId("starter-woken");
   await expect(woken).toHaveText(`woken by ${name}`);
-  const starter = (await page.locator(".session.starter .label").textContent())!;
   await expect(woken).toHaveAttribute(
     "title",
-    `${starter} was idle, so the workbench sent it what happened: ${name} stopped.`,
+    `session 1 was idle, so the workbench sent it what happened: ${name} stopped.`,
   );
   // At the end of the starter's second line, where the model stands.
   const summary = (await page.getByTestId("orchestrator-summary").boundingBox())!;
@@ -2551,6 +2567,7 @@ test("draws the workbench's report on the left as a notice, naming a session the
   await installFakeCore(page, { open: [PROJECT, LEAD], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   const view = page.locator("[data-testid='conversation']:visible");
   await expect(view.getByTestId("composer-input")).toBeEnabled();
   const starter = (await view.getAttribute("data-session"))!;
@@ -2734,6 +2751,7 @@ test("shows the user's own words as theirs when another session sent the same wo
   await page.goto("/");
   // The starter, a session of a second project's own.
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   const conduct = (id: string, tool: string, args: Record<string, unknown>) =>
     page.evaluate(
@@ -2768,6 +2786,7 @@ test("writes out what an agent's name or line hides, wherever it is drawn", asyn
   await page.goto("/");
   // The starter, a session of a second project's own.
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   const conduct = (id: string, tool: string, args: Record<string, unknown>) =>
     page.evaluate(
@@ -2822,6 +2841,7 @@ test("does not call a session You, whatever the name it is started with", async 
   await page.goto("/");
   // The starter, a session of a second project's own.
   await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
   await page.evaluate(
     (project) =>
@@ -2848,6 +2868,7 @@ test.describe("after a reload, an orchestrated session", () => {
     await page.goto("/");
     // The starter, a session of a second project's own.
     await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     await page.evaluate(
       (project) =>
@@ -2885,7 +2906,7 @@ test.describe("after a reload, an orchestrated session", () => {
     await page.reload();
     const own = page.getByTestId("session-row").filter({ has: page.getByTestId("orchestrator-summary") });
     await expect(own).toHaveCount(1);
-    await expect(own.locator(".label")).toHaveText("session 1");
+    await expect(own.locator(".label")).toHaveText("New session");
     await own.click();
     // It is at rest itself, and the session it started is in its turn.
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "a session working");
@@ -3292,11 +3313,12 @@ test.describe("the conversation's width", () => {
     await page.setViewportSize({ width: 2400, height: 900 });
     await installFakeCore(page, { open: [PROJECT] });
     await page.goto("/");
-    await page.getByTestId("start-other").click();
+    await startIntegrated(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator(`${AGENT} .xterm`)).toBeVisible();
-    await page.getByTestId("session-row").filter({ hasText: "session 1" }).click();
+    await sessionRowOf(page, 1).click();
     await expect(page.getByTestId("conversation")).toBeVisible();
     const long = "word ".repeat(80).trim();
     await agent(

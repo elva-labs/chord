@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // The status bar by keyboard alone, in WebKit as well as Chromium: WebKit,
 // the app's webview on macOS, passes over a control on Tab unless it is
@@ -23,6 +23,7 @@ async function open(page: Page) {
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeFocused();
   await agent(
     page,

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, WITH_WORKFLOW, columnsAtRest, foldedWidth, installFakeCore } from "./fake";
+import { PROJECT, WITH_WORKFLOW, columnsAtRest, foldedWidth, installFakeCore, sessionRowOf, startNew } from "./fake";
 
 /**
  * Editor mode: the file tree and an editor in the middle, the agent on the
@@ -277,6 +277,7 @@ for (const linux of [false, true]) {
       if (linux) await asLinux(page);
       await open(page, 1728);
       await page.getByTestId("start-agent").click();
+      await startNew(page);
       await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     });
 
@@ -429,6 +430,7 @@ for (const linux of [false, true]) {
       await open(page, 1728);
       await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "editing");
       await page.getByTestId("start-agent").click();
+      await startNew(page);
       const cols = () =>
         page.evaluate(
           () =>
@@ -518,6 +520,7 @@ for (const linux of [false, true]) {
         await columnsAtRest(page);
       };
       await page.getByTestId("start-agent").click();
+      await startNew(page);
       const cols = () =>
         page.evaluate(
           () =>
@@ -611,18 +614,20 @@ test.describe("the editor and its tabs", () => {
 
   test("keeps each session's tabs", async ({ page }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await expect(tab(page, "README.md")).toBeVisible();
 
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     await expect(page.getByTestId("editor-tab")).toHaveCount(0);
     await treeRow(page, "Cargo.toml").click();
     await expect(tab(page, "Cargo.toml")).toBeVisible();
 
     // The pane lists sessions latest first.
-    await page.locator("[data-testid='session-row']").filter({ hasText: "session 1" }).click();
+    await sessionRowOf(page, 1).click();
     await expect(tab(page, "README.md")).toBeVisible();
     await expect(tab(page, "Cargo.toml")).toHaveCount(0);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "editing");
@@ -1098,6 +1103,7 @@ test.describe("questions before anything unsaved goes", () => {
 
   test("asks before a session with unsaved tabs is closed, in the sessions pane", async ({ page }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
@@ -1113,6 +1119,7 @@ test.describe("questions before anything unsaved goes", () => {
 
   test("asks before Close project in the project's menu, and Cancel keeps it", async ({ page }) => {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
@@ -1603,6 +1610,7 @@ test.describe("the session question in a peek", () => {
     await flip(page);
     await page.getByTestId("unfold-sessions").click();
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
@@ -1664,6 +1672,7 @@ test.describe("the session question from the keyboard", () => {
     await open(page, 1728);
     await flip(page);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
@@ -1695,6 +1704,7 @@ test.describe("the question's three buttons", () => {
     await open(page, 2000);
     await flip(page);
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
@@ -1751,6 +1761,7 @@ test.describe("the question's three buttons", () => {
       await expect(at.locator(AGENT)).toBeVisible();
       if ((await at.getByTestId("shell").getAttribute("data-mode")) !== "editing") await flip(at);
       await at.getByTestId("new-session").click();
+      await startNew(at);
       await expect(at.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
       await treeRow(at, "README.md").dblclick();
       await typeAtEnd(at, "mine");
@@ -1831,6 +1842,7 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     await expect(page.locator(AGENT)).toBeVisible();
     // A second project's own session 1, which starts a session 1 in demo.
     await page.locator(`${SESSIONS} [data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.evaluate(
       (project) =>
@@ -1845,7 +1857,7 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     );
     await page.getByTestId("conduct-allow").click();
     const started = page.locator(`${SESSIONS} .session.kid`);
-    await expect(started).toContainText("session 1");
+    await expect(started).toContainText("Bump the client");
     await expect(started).toContainText("demo");
 
     // Unsaved edits beside the started session, in editor mode.
@@ -1903,6 +1915,7 @@ async function openIntegrated(page: Page, width: number) {
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("conversation")).toBeVisible();
 }
 
@@ -2141,6 +2154,7 @@ for (const linux of [false, true]) {
           await page.setViewportSize({ width: 1440, height: 900 });
           await page.goto("/");
           await page.getByTestId("start-agent").click();
+          await startNew(page);
           if (integratedKind) {
             // An integrated orchestrator's header has the run's chip from
             // its first message on. The message's line is the row's own

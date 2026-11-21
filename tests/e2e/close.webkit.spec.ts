@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // Close closes what is in front, wherever the keyboard is: the dialog or
 // the palette, the shell in front with the keyboard in the terminal panel,
@@ -73,6 +73,7 @@ const closeName = (page: Page) =>
 /** Starts a session, with the keyboard in its terminal; its pty. */
 async function startSession(page: Page) {
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect.poll(() => holder(page)).toBe("Terminal input");
   return typeInto(page, "x");
 }

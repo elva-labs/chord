@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // A new session starts on the model, the effort and the mode the user last
 // chose for its agent, through a restart too.
@@ -36,6 +36,7 @@ test("a new conversation starts on the model and mode last chosen, after a resta
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(chip(page, "model")).toHaveText("Sonnet");
   await expect(chip(page, "mode")).toHaveCount(0);
   await pick(page, "model", "Haiku");
@@ -48,6 +49,7 @@ test("a new conversation starts on the model and mode last chosen, after a resta
     (window as unknown as { __integrated: { holdReady: boolean } }).__integrated.holdReady = true;
   });
   await page.getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(chip(page, "model")).toHaveText("Haiku");
   await expect(chip(page, "mode")).toHaveText("Accept edits");
   expect((await starts(page)).at(-1)!.options).toMatchObject({ model: "haiku", mode: "acceptEdits" });
@@ -55,6 +57,7 @@ test("a new conversation starts on the model and mode last chosen, after a resta
   // After a restart the third does too.
   await page.reload();
   await page.getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(chip(page, "model")).toHaveText("Haiku");
   await expect(chip(page, "mode")).toHaveText("Accept edits");
   expect((await starts(page)).at(-1)!.options).toMatchObject({ model: "haiku", mode: "acceptEdits" });
@@ -64,6 +67,7 @@ test("a new conversation starts on the model and mode last chosen, after a resta
   await pick(page, "model", "Default");
   await expect(chip(page, "mode")).toHaveText("Plan");
   await page.getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(chip(page, "model")).toHaveText("Sonnet");
   await expect(chip(page, "mode")).toHaveText("Accept edits");
   const last = (await starts(page)).at(-1)!.options!;
@@ -78,6 +82,7 @@ test("a model the account does not offer falls back to the default, and the chip
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   expect((await starts(page)).at(-1)!.options).toMatchObject({ model: "opus", mode: "acceptEdits" });
   await expect(chip(page, "model")).toHaveText("Default");
   await expect(page.getByTestId("thread")).toContainText("Opus is not offered here, so the session runs on Default.");
@@ -91,6 +96,7 @@ test("a terminal session is launched on the model and mode last chosen", async (
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect
     .poll(() =>
       page.evaluate(() => (window as unknown as { __spawns?: Record<string, unknown>[] }).__spawns?.at(-1) ?? null),

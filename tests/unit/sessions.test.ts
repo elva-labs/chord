@@ -16,7 +16,11 @@ import {
   historyFor,
   reopened,
   setPastSessions,
+  hasName,
   historyLabel,
+  rowName,
+  firstWords,
+  earlierLabel,
   loadHistory,
   loadHistories,
   loadMissingHistories,
@@ -527,6 +531,34 @@ describe("labels", () => {
     expect(label(session)).toBe("session 1");
   });
 
+  it("names a row by nothing rather than by a number or an id", () => {
+    expect(rowName(create(A))).toBeNull();
+    expect(rowName(create(A, "cccc3333-c207-4138-974b-8e1ef8cffd07"))).toBeNull();
+  });
+
+  it("names a row by the first words of its first message", () => {
+    const session = create(A, null, undefined, null, "\n  Fix the flaky login test\nthen the rest");
+    expect(rowName(session)).toBe("Fix the flaky login test");
+  });
+
+  it("names a row by its title before its first message", () => {
+    const session = byKey(create(A, null, undefined, null, "Fix the flaky login test").key)!;
+    session.title = "Login test";
+    expect(rowName(session)).toBe("Login test");
+  });
+
+  it("cuts a long first message to fit a row", () => {
+    const words = firstWords("a".repeat(80))!;
+    expect(words).toHaveLength(60);
+    expect(words.endsWith("…")).toBe(true);
+    expect(firstWords("  \n ")).toBeNull();
+    expect(firstWords(null)).toBeNull();
+  });
+
+  it("counts what the Earlier line holds", () => {
+    expect(earlierLabel(8)).toBe("Earlier · 8");
+  });
+
   it("reports liveness for the dot in the tree", () => {
     const session = live(A, "pty-1");
     expect(isLive(session)).toBe(true);
@@ -931,17 +963,15 @@ describe("history", () => {
 
   // The format is documented as internal and version-unstable, so a title that
   // could not be read falls back rather than showing an error.
-  it("falls back to recency when the title could not be read", () => {
-    const now = Date.now();
-    const label = historyLabel(
-      transcript("abc", null, Math.floor(now / 1000) - 7200),
-    );
-    expect(label).toContain("session from");
-    expect(label).toContain("2h ago");
+  it("reads as a new session when the title could not be read", () => {
+    const past = transcript("abc", null, Math.floor(Date.now() / 1000) - 7200);
+    expect(historyLabel(past)).toBe("New session");
+    expect(hasName(past)).toBe(false);
+    expect(hasName(transcript("abc", "Fix the build", 1000))).toBe(true);
   });
 
   it("treats an empty title as no title", () => {
-    expect(historyLabel(transcript("abc", "", 1000))).toContain("session from");
+    expect(historyLabel(transcript("abc", "", 1000))).toBe("New session");
   });
 });
 
@@ -2952,8 +2982,8 @@ describe("a name the agent or a caller gave", () => {
     row.title = "Workbench docs";
     expect(label(row)).toBe("Workbench docs");
     const past = { id: "abc12345-0000", title: "you", modified: 0 } as Transcript;
-    expect(historyLabel(past)).toBe("session from " + ago(0));
-    expect(historyLabel({ ...past, title: "Workbench" })).toBe("session from " + ago(0));
+    expect(historyLabel(past)).toBe("New session");
+    expect(historyLabel({ ...past, title: "Workbench" })).toBe("New session");
     // Nor is it a name a session can take.
     expect(nameTaken("Workbench")).toBe(true);
     expect(nameTaken("Workbench docs", row.key)).toBe(false);

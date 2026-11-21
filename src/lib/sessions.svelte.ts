@@ -1144,15 +1144,22 @@ export function outsideFor(
 
 /**
  * What a past session is called. The title comes from a format documented as
- * internal and version-unstable, so a missing one falls back to when it last
- * moved rather than to an error.
+ * internal and version-unstable, so a missing one reads "New session" rather
+ * than an error.
  */
 export function historyLabel(transcript: Transcript): string {
   const known = sessions.names[transcript.id];
   if (known !== undefined && !reservedName(known)) return shown(known);
   if (transcript.title !== null && transcript.title !== "" && !reservedName(transcript.title))
     return shown(transcript.title);
-  return `session from ${ago(transcript.modified)}`;
+  return "New session";
+}
+
+/** Whether a past session has a name of its own to be listed by. */
+export function hasName(transcript: Transcript): boolean {
+  const known = sessions.names[transcript.id];
+  if (known !== undefined && !reservedName(known)) return true;
+  return transcript.title !== null && transcript.title !== "" && !reservedName(transcript.title);
 }
 
 /** Coarse on purpose: the pane wants recency, not a timestamp. */
@@ -1180,15 +1187,10 @@ export function since(ms: number, now = Date.now()): string {
   return `${Math.floor(days / 365)}y`;
 }
 
-/** How the rows that fold away at the end of a project are counted on
-    the row that holds them: `8 more from this week`, by how long ago the
-    oldest of them changed. */
-export function moreLabel(count: number, oldest: number, now = Date.now()): string {
-  const days = (now - oldest) / 86_400_000;
-  if (days < 1) return `${count} more from today`;
-  if (days < 7) return `${count} more from this week`;
-  if (days < 30) return `${count} more from this month`;
-  return `${count} more`;
+/** The line that folds away the rows at the end of a project, with how
+    many it holds: `Earlier · 26`. */
+export function earlierLabel(count: number): string {
+  return `Earlier · ${count}`;
 }
 
 /** What a session's model is called on its row and tooltip, the row of
@@ -1297,6 +1299,25 @@ export function liveCount(project: string): number {
 export function label(session: Session): string {
   const name = knownName(session);
   return name === null ? `session ${session.ordinal}` : shown(name);
+}
+
+/** What a row reads as: its name, else the first words of the prompt it
+    started with. Null where neither says anything, for a row that reads
+    "New session"; a row never reads as its number. */
+export function rowName(session: Session): string | null {
+  const name = knownName(session);
+  if (name !== null) return shown(name);
+  return firstWords(session.prompt);
+}
+
+/** The first line of a message, cut to fit a row. Null for nothing. */
+export function firstWords(text: string | null): string | null {
+  const line = text
+    ?.split("\n")
+    .find((candidate) => candidate.trim() !== "")
+    ?.trim();
+  if (line === undefined) return null;
+  return shown(line.length > 60 ? `${line.slice(0, 59)}…` : line);
 }
 
 /** What a row is known by: its title, the name it was given, or for a

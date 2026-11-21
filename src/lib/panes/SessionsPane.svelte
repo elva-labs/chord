@@ -10,9 +10,9 @@
     editor,
     unsavedNames,
   } from "$lib/editor.svelte";
-  import { agentLabel, installed, isReady } from "$lib/agent.svelte";
-  import { accountLabel, accountOf, hasAccounts, names } from "$lib/accounts.svelte";
-  import type { AgentId, ProjectInfo } from "$lib/core";
+  import { agentLabel, isReady } from "$lib/agent.svelte";
+  import { accountLabel, accountOf, hasAccounts } from "$lib/accounts.svelte";
+  import type { ProjectInfo } from "$lib/core";
   import { busyGoing, closingAside, closingQuestion, type BusyShell, type Closed } from "$lib/leaving.svelte";
   import { closeOwner as closeShells } from "$lib/terminals.svelte";
   import {
@@ -31,6 +31,8 @@
     reopenOtherWay,
     historyFor,
     historyLabel,
+    hasName,
+    rowName,
     isLive,
     markRead,
     markUnread,
@@ -39,7 +41,7 @@
     loadHistory,
     loadMissingHistories,
     sessionModelName,
-    moreLabel,
+    earlierLabel,
     outsideFor,
     sessions,
     since,
@@ -98,13 +100,12 @@
   import { unfoldSessions } from "$lib/viewers.svelte";
   import { compact } from "$lib/compact.svelte";
   import { shown } from "$lib/unseen";
-  import { beginNew, closePalette, openCommands, openGoTo } from "$lib/palette.svelte";
+  import { openGoTo, openNew } from "$lib/palette.svelte";
   import { openSettings } from "$lib/settings.svelte";
   import { chordFor, describe } from "$lib/keys.svelte";
   import { tick, untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { rowFade, rowMove } from "$lib/motion";
-  import { overrideOf, workflowOf } from "$lib/workflows.svelte";
   import { linkOf } from "$lib/integrated.svelte";
   import type { SessionKind } from "$lib/sessionKind.svelte";
   import { subagentNote, subagentSaid, subagentWords, subagentsOf, type Subagent } from "$lib/subagents";
@@ -113,70 +114,10 @@
   import Icon from "$lib/components/conversation/Icon.svelte";
   import { markLabel, marksOf, shownMarks } from "$lib/pluginMarks.svelte";
 
-  /** Whether more than one agent is installed to choose between. */
-  let several = $derived(installed().length > 1);
-
-  /** Whether a new session has anything to choose: an agent, or an
-      account to run under. With neither it starts at once. */
-  let choosable = $derived(several || hasAccounts());
-
-  /** The project whose choice for a new session is open under its name. */
-  let choosing = $state<string | null>(null);
-
-  /** The account the open choice would start under: the project's own to
-      begin with, and whatever the control was switched to. */
-  let picked = $state<string | null>(null);
-
-  /** New session from a project's own button or menu: with nothing to
-      choose it starts; otherwise the choice opens under the project's
-      name, the cursor on the agent the project used last and the account
-      the project runs under. The project is drawn among the active ones
-      while the choice is open. Nothing else changes until the session
-      starts, which is when the project counts as used: the session on
-      screen stays, and none of the project's own is put on screen, since
-      a row left from the last quit starts once it is. */
+  /** New session from a project's own button or menu: the palette's new
+      session, on the line of the defaults Enter starts. */
   function offer(path: string) {
-    if (!startsIn(path)) return;
-    if (!choosable) {
-      startSession(path);
-      return;
-    }
-    choosing = path;
-    picked = accountOf(path);
-    cursor =
-      workflowOf(path) === null
-        ? `pick:${path}:${defaultAgent(path)}`
-        : `pick:${path}:${FOLLOW}`;
-  }
-
-  /** The row id of the project's workflow in the choice. */
-  const FOLLOW = "workflow";
-
-  /** How the project came to follow its workflow, as the palette says it. */
-  function followedBy(path: string): string {
-    return overrideOf(path) === undefined ? "default" : "project's workflow";
-  }
-
-  /** Starts a session on the workflow the project follows. */
-  function startFollowing(path: string) {
-    const workflow = workflowOf(path);
-    if (workflow === null) return;
-    choosing = null;
-    startSession(path, undefined, picked, workflow);
-  }
-
-  function startWith(path: string, agent: AgentId) {
-    choosing = null;
-    startSession(path, agent, picked);
-  }
-
-  /** The accounts the control offers, the agents' own first. */
-  let offered = $derived<(string | null)[]>([null, ...names()]);
-
-  /** Left and Right in the choice walk the accounts. */
-  function pickNext(step: number) {
-    const at = offered.indexOf(picked);
-    picked = offered[(at + step + offered.length) % offered.length] ?? null;
+    openNew(path);
   }
 
   /** The folds standing open, by the row id of the fold. A fold is where
@@ -270,7 +211,7 @@
   let split = $derived.by(() => {
     const byPath = new Map(workspace.open.map((project) => [project.path, project]));
     if (folder !== null && !byPath.has(folder.path)) byPath.set(folder.path, folder);
-    const { active, inactive } = splitProjects([...byPath.keys()], screenProject, layout.projectSort, now, choosing);
+    const { active, inactive } = splitProjects([...byPath.keys()], screenProject, layout.projectSort, now);
     const resorted = shownSort !== layout.projectSort;
     shownSort = layout.projectSort;
     const nextActive = resorted ? active : held(shownActive, active);
@@ -348,8 +289,7 @@
   }
 
   /** New session in a project's menu, an inactive project's as well: what
-      its header's + does, and the pane scrolls to the project, which is
-      among the active ones while a session is asked for in it. */
+      its header's + does, and the pane scrolls to the project. */
   function startIn(path: string) {
     offer(path);
     void reveal(path);
@@ -691,16 +631,11 @@
   }
 
   /** The button beside the go-to field: the palette's New session, which
-      asks which project when more than one is open, then whatever else
-      there is to choose. With nothing to ask, the session starts at once. */
-  async function newFromHead() {
+      asks which project when more than one is open, then shows the
+      defaults Enter starts. */
+  function newFromHead() {
     if (!isReady() || workspace.open.length === 0) return;
-    openCommands();
-    const outcome = beginNew(null);
-    if (outcome.type === "stay") return;
-    closePalette();
-    await tick();
-    if (outcome.type === "close") outcome.then();
+    openNew(null);
   }
 
   /** The sessions whose started sessions are folded into dots on their
@@ -885,14 +820,6 @@
 
   function toggle(id: string) {
     opened[id] = !opened[id];
-  }
-
-  /** Closes the choice, the cursor back on the project it opened under. */
-  function dismiss(): boolean {
-    if (choosing === null) return false;
-    cursor = `project:${choosing}`;
-    choosing = null;
-    return true;
   }
 
   /**
@@ -1094,7 +1021,6 @@
   function body(path: string): Row[] {
     const out: Row[] = [];
     const { entries, tail } = bodies.get(path) ?? NO_BODY;
-    out.push(...starting(path));
     const walkEntry = (entry: Entry) => {
       if (entry.kind === "past") {
         out.push({ id: entry.id, run: () => resume(path, entry.transcript) });
@@ -1109,32 +1035,14 @@
     };
     entries.forEach(walkEntry);
     const more = `more:${path}`;
+    const outside = screenProject === path ? outsideFor(path).length : 0;
     if (tail.length > 0) {
       out.push({ id: more, run: () => toggle(more) });
-      if (opened[more]) tail.forEach(walkEntry);
-    }
-    if (screenProject !== path) return out;
-    if (outsideFor(path).length > 0) {
-      out.push({ id: `earlier:${path}`, run: () => openResume(path) });
-    }
+      if (!opened[more]) return out;
+      tail.forEach(walkEntry);
+      if (outside > 0) out.push({ id: `earlier:${path}`, run: () => openResume(path) });
+    } else if (outside > 0) out.push({ id: more, run: () => openResume(path) });
     return out;
-  }
-
-  /** The rows a project offers for starting a session: the choice of agent
-      while it is open under its name, else none. */
-  function starting(path: string): Row[] {
-    if (!isReady() || !choosable || choosing !== path) return [];
-    const own: Row[] =
-      workflowOf(path) === null
-        ? []
-        : [{ id: `pick:${path}:${FOLLOW}`, run: () => startFollowing(path) }];
-    return [
-      ...own,
-      ...installed().map((agent) => ({
-        id: `pick:${path}:${agent}`,
-        run: () => startWith(path, agent),
-      })),
-    ];
   }
 
   let cursor = $state<string | null>(null);
@@ -1333,8 +1241,7 @@
         break;
       case "ArrowLeft":
       case "ArrowRight":
-        if (choosing !== null && hasAccounts()) pickNext(e.key === "ArrowLeft" ? -1 : 1);
-        else if (!onRail(e.key === "ArrowLeft")) return;
+        if (!onRail(e.key === "ArrowLeft")) return;
         break;
       case "Tab":
         // The keyboard leaving the pane takes an open menu with it. A peeked
@@ -1349,13 +1256,10 @@
         e.preventDefault();
         return;
       case "Escape":
-        // Closes the menu or an open choice of agent, then puts a peeked
-        // pane back, and goes no further: Escape elsewhere is the agent's,
-        // or closes the viewer.
+        // Closes the menu, then puts a peeked pane back, and goes no
+        // further: Escape elsewhere is the agent's, or closes the viewer.
         if (menuOpen) menuOpen = false;
-        else if (dismiss()) {
-          // The choice is gone; the pane stays.
-        } else if (layout.sessionsPeek) peekSessions(false);
+        else if (layout.sessionsPeek) peekSessions(false);
         else return;
         e.stopPropagation();
         break;
@@ -1579,7 +1483,6 @@
       sortOpen ||
       projectMenu !== null ||
       sessionMenu !== null ||
-      choosing !== null ||
       reopenQuestion !== null ||
       editor.closing !== null ||
       pressHeld ||
@@ -1704,9 +1607,8 @@
     folded || session.note !== null || kids.length > 0 || news.length > 0 || drawnSubs.length === 0
       ? null
       : subagentWords(drawnSubs)}
-  <!-- A row its agent's setting would move and has not: when it moves,
-       or why it stays, on its second line unless that says something of
-       the agent's, and then a word of it where the model stands. -->
+  <!-- A row its agent's setting would move and has not, and why, for a
+       screen reader: the setting itself says it to the eye. -->
   {@const stays = holdWords(session)}
   <!-- A row the usage limit cut short that goes on by itself: when, on
        its second line unless that says something of the agent's, and
@@ -1714,13 +1616,6 @@
   {@const resumes = resumesWords(session)}
   {@const resumesSaid =
     resumes !== null && !folded && session.note === null && kids.length === 0 && news.length === 0}
-  {@const staysSaid =
-    stays !== null &&
-    !resumesSaid &&
-    !folded &&
-    session.note === null &&
-    kids.length === 0 &&
-    news.length === 0}
   {@const line = folded
     ? startedWords(kids)
     : (session.note ??
@@ -1728,9 +1623,7 @@
         ? startedWords(kids)
         : resumesSaid
           ? resumes
-          : staysSaid
-            ? stays!.line
-            : subsSaid))}
+          : subsSaid))}
   {@const owned = session.note !== null && !folded}
   <!-- What plugins mark the session with, quietly on its second line
        before what stands at its end. -->
@@ -1758,13 +1651,14 @@
         class:working={conducting(session)}
         class:unread={session.unread}
         class:permission={session.needs === "permission"}
-        title={stateWord(session)}
+        title={stays === null ? stateWord(session) : `${stateWord(session)}, ${stays.line}`}
       ></span>
       <span class="first">
         <span
           class="label"
           class:strong={session.status !== "dormant"}
-          class:unread={session.unread || isAsking(session)}>{label(session)}</span
+          class:unread={session.unread || isAsking(session)}
+          class:unnamed={rowName(session) === null}>{rowName(session) ?? "New session"}</span
         >
         <span class="when" data-testid="session-when">{since(lastChanged(session), now)}</span>
       </span>
@@ -1784,15 +1678,11 @@
             class:shares={!folded && news.length === 0 && woken !== null}
             title={resumesSaid
               ? "Goes on by itself when the usage limit resets"
-              : staysSaid
-                ? stays!.full
-                : line}
+              : line}
             data-testid={owned
               ? "session-note"
               : resumesSaid
                 ? "session-resumes"
-                : staysSaid
-                ? "session-stays"
                 : subsSaid !== null
                   ? "subagent-summary"
                   : "orchestrator-summary"}>{line}</span
@@ -1851,8 +1741,6 @@
               title="Goes on by itself when the usage limit resets"
               data-testid="session-resumes">{resumes}</span
             >
-          {:else if stays !== null && !staysSaid && news.length === 0}
-            <span class="meta" title={stays.full} data-testid="session-stays-mark">{stays.short}</span>
           {:else if news.length === 0 && (session.runsOn ?? session.model) !== null}
             <span class="meta" data-testid="session-model">{sessionModelName(session)}</span>
           {/if}
@@ -1863,7 +1751,7 @@
       <span class="state told"
         >{stateWord(session)}{#if news.length > 0}, {newsWords(news)}{/if}{#if woken !== null}, woken by {wokenWords(
             woken,
-          ).name ?? wokenWords(woken).count}{/if}{#if stays !== null && !staysSaid}, {stays.line}{/if}{#each marks as mark (mark.plugin)}, {markLabel(
+          ).name ?? wokenWords(woken).count}{/if}{#if stays !== null}, {stays.line}{/if}{#each marks as mark (mark.plugin)}, {markLabel(
             mark,
           )}{/each}</span
       >
@@ -2039,10 +1927,12 @@
               class:working={conducting(kid)}
               class:unread={kid.unread}
               class:permission={kid.needs === "permission"}
-              title={stateWord(kid)}
+              title={kidStays === null ? stateWord(kid) : `${stateWord(kid)}, ${kidStays.line}`}
             ></span>
             <span class="fit">
-              <span class="label" class:unread={kid.unread || isAsking(kid)}>{label(kid)}</span>
+              <span class="label" class:unread={kid.unread || isAsking(kid)} class:unnamed={rowName(kid) === null}
+                >{rowName(kid) ?? "New session"}</span
+              >
               {#if otherAccount(kid)}<span
                   class="account"
                   title="Runs under the {accountLabel(kid.account)} account"
@@ -2072,9 +1962,6 @@
                 title="Goes on by itself when the usage limit resets"
                 data-testid="started-resumes">{resumesWords(kid)}</span
               >
-            {:else if kidStays !== null}
-              <!-- Not moved yet by its agent's setting, and why. -->
-              <span class="model" title={kidStays.full} data-testid="started-stays">{kidStays.short}</span>
             {:else if role !== null}
               <span class="model role" data-testid="started-role">{role}</span>
             {/if}
@@ -2110,11 +1997,11 @@
       tabindex="-1"
       onclick={() => resume(path, transcript)}
       disabled={!isReady()}
-      title={shown(transcript.title ?? transcript.id)}
+      title={historyLabel(transcript)}
       data-testid="past-session"
     >
       <span class="dot"></span>
-      <span class="label">{historyLabel(transcript)}</span>
+      <span class="label" class:unnamed={!hasName(transcript)}>{historyLabel(transcript)}</span>
       {#if transcript.cwd}<span class="tag where" title={transcript.cwd} data-testid="session-where"
           >{lastSegment(transcript.cwd)}</span
         >{/if}
@@ -2237,55 +2124,51 @@
 {#snippet projectBody(path: string)}
   {@const { entries, tail } = bodies.get(path) ?? NO_BODY}
   {@const open = opened[`more:${path}`] === true}
-  {@render newSession(path)}
   {#each entries as entry (entry.id)}
     <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
       {@render entryRows(path, entry)}
     </div>
   {/each}
-  {#if tail.length > 0}
+  <!-- One quiet line at the end counts what the project keeps out of
+       sight: the tail of its quiet rows, and under the project on screen
+       the sessions this window does not list. Open, the tail stands under
+       it, then one row that opens the dialog to resume the rest from. With
+       no tail the line opens that dialog itself. -->
+  {@const outside = screenProject === path ? outsideFor(path).length : 0}
+  {#if tail.length > 0 || outside > 0}
     <button
       class="fold tail"
       class:cursor={current === `more:${path}`}
       tabindex="-1"
-      onclick={() => toggle(`more:${path}`)}
-      aria-expanded={open}
+      onclick={() => (tail.length > 0 ? toggle(`more:${path}`) : openResume(path))}
+      aria-expanded={tail.length > 0 ? open : undefined}
       data-row="more:{path}"
-      data-testid="quiet-more"
+      data-testid="earlier-fold"
     >
-      {@render chevron(open)}
-      <span class="fold-text">{moreLabel(tail.length, Math.min(...tail.map((entry) => entry.at)), now)}</span>
+      {@render chevron(open && tail.length > 0)}
+      <span class="fold-text">{earlierLabel(tail.length + outside)}</span>
     </button>
-    {#if open}
+    {#if open && tail.length > 0}
       {#each tail as entry (entry.id)}
         <div class="row-slot" animate:flip={rowMove()} in:rowFade|local out:rowFade|local>
           {@render entryRows(path, entry)}
         </div>
       {/each}
-    {/if}
-  {/if}
-
-  {#if screenProject === path}
-    <!-- Every session the agents ran here and this window does not list,
-         from a plain terminal most of all: one row that counts them and
-         opens the dialog to resume from. It opens something else rather
-         than opening here, so it has a glyph of its own, not the chevron,
-         and ends in an ellipsis. -->
-    {#if outsideFor(path).length > 0}
-      {@const earlier = outsideFor(path).length}
-      <button
-        class="fold tail"
-        class:cursor={current === `earlier:${path}`}
-        tabindex="-1"
-        onclick={() => openResume(path)}
-        data-row="earlier:{path}"
-        data-testid="earlier-sessions"
-      >
-        <svg class="chev history" viewBox="0 0 16 16" aria-hidden="true"
-          ><path d="M2.8 8a5.2 5.2 0 1 0 1.5-3.7" /><path d="M2.6 2.6v2.6h2.6" /><path d="M8 5.2V8l1.9 1.2" /></svg
+      {#if outside > 0}
+        <button
+          class="fold tail"
+          class:cursor={current === `earlier:${path}`}
+          tabindex="-1"
+          onclick={() => openResume(path)}
+          data-row="earlier:{path}"
+          data-testid="earlier-sessions"
         >
-        <span class="fold-text">{earlier} earlier {earlier === 1 ? "session" : "sessions"}…</span>
-      </button>
+          <svg class="chev history" viewBox="0 0 16 16" aria-hidden="true"
+            ><path d="M2.8 8a5.2 5.2 0 1 0 1.5-3.7" /><path d="M2.6 2.6v2.6h2.6" /><path d="M8 5.2V8l1.9 1.2" /></svg
+          >
+          <span class="fold-text">{outside} not listed here…</span>
+        </button>
+      {/if}
     {/if}
   {/if}
 {/snippet}
@@ -2299,70 +2182,6 @@
     {@render rail(entry.session)}
   {:else}
     {@render pastRow(path, entry.transcript)}
-  {/if}
-{/snippet}
-
-<!-- With several agents, or accounts to run under, a new session opens
-     the choice under the project's name; with neither there is nothing to
-     choose and it starts. -->
-{#snippet newSession(path: string)}
-  {#if choosable && choosing === path}
-    <div class="choice" role="group" aria-label="Agent for the new session" data-testid="agent-choice">
-      <div class="choice-head">
-        <span>new session {hasAccounts() ? "as" : "with"}</span>
-        <button class="cancel" tabindex="-1" onclick={dismiss} aria-label="Cancel" data-testid="choice-cancel"
-          >Esc</button
-        >
-      </div>
-      <!-- The account comes before the agent: the control takes the row's
-           width under the head, and the agents follow under "with". -->
-      {#if hasAccounts()}
-        <div class="accounts" role="radiogroup" aria-label="Account for the new session" data-testid="account-choice">
-          {#each offered as account (account ?? "")}
-            <button
-              role="radio"
-              tabindex="-1"
-              aria-checked={picked === account}
-              class:on={picked === account}
-              onclick={() => (picked = account)}
-              data-testid="account-option"
-              data-account={account ?? ""}>{accountLabel(account)}</button
-            >
-          {/each}
-        </div>
-        <div class="choice-head"><span>with</span></div>
-      {/if}
-      {#if workflowOf(path) !== null}
-        <button
-          class="option"
-          class:cursor={current === `pick:${path}:${FOLLOW}`}
-          tabindex="-1"
-          onclick={() => startFollowing(path)}
-          data-row="pick:{path}:{FOLLOW}"
-          data-testid="workflow-option"
-          data-workflow={workflowOf(path)?.name}
-        >
-          <span class="mark">›</span>
-          <span class="label">{workflowOf(path)?.name}</span>
-          <span class="state">{followedBy(path)}</span>
-        </button>
-      {/if}
-      {#each installed() as id (id)}
-        <button
-          class="option"
-          class:cursor={current === `pick:${path}:${id}`}
-          tabindex="-1"
-          onclick={() => startWith(path, id)}
-          data-row="pick:{path}:{id}"
-          data-testid="agent-option"
-          data-agent={id}
-        >
-          <span class="mark">›</span>
-          <span class="label">{agentLabel(id)}</span>
-          {#if sessions.preferred[path] === id}<span class="state">last used</span>{/if}
-        </button>
-      {/each}
-    </div>
   {/if}
 {/snippet}
 
@@ -2548,7 +2367,7 @@
   <div class="head">
     <button class="go" class:cursor={current === "go"} tabindex="-1" onclick={openGoTo} data-row="go" data-testid="go-to">
       <svg class="glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.2" /><path d="m10.2 10.2 3 3" /></svg>
-      <span class="go-text">Go to session or project</span>
+      <span class="go-text">Go to a session or project</span>
       <kbd>{describe(chordFor("goto"))}</kbd>
     </button>
     <button
@@ -2739,7 +2558,6 @@
   .nav.folded .add-here,
   .nav.folded .empty,
   .nav.folded .inactive,
-  .nav.folded .choice,
   .nav.folded .cursor::before,
   .error-row.folded {
     visibility: hidden;
@@ -3440,6 +3258,12 @@
     color: var(--ink);
   }
 
+  /* A row nothing names yet reads "New session", quietly, on or off. */
+  .label.unnamed,
+  .session.on .label.unnamed {
+    color: var(--ink-3);
+  }
+
   .label,
   .note {
     min-width: 0;
@@ -3496,10 +3320,6 @@
     line-height: 1.4;
   }
 
-  .choice {
-    margin: 2px 0 10px;
-  }
-
   /* The account a project runs under, when it is not the agents' own. */
   .tag.account {
     color: var(--accent);
@@ -3508,98 +3328,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  /* The account the choice starts under, switched for this one session:
-     one segment per account, sharing the row's width. */
-  .accounts {
-    display: flex;
-    margin: 2px var(--row-pad-x) 4px var(--row-indent);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-tag);
-    overflow: hidden;
-  }
-
-  .accounts button {
-    flex: 1;
-    min-width: 0;
-    padding: 3px 6px;
-    border: 0;
-    border-right: 1px solid var(--rule);
-    background: none;
-    font-family: var(--chrome);
-    font-size: 10.5px;
-    letter-spacing: var(--label-track-fine);
-    color: var(--ink-3);
-    cursor: pointer;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .accounts button:hover {
-    color: var(--ink-2);
-  }
-
-  .accounts button:last-child {
-    border-right: 0;
-  }
-
-  .accounts button.on {
-    background: var(--accent-soft);
-    color: var(--accent);
-  }
-
-  .choice-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: 2px var(--row-pad-x) 2px var(--row-indent);
-    font-family: var(--chrome);
-    font-size: var(--label-size);
-    letter-spacing: 0.05em;
-    color: var(--ink-3);
-  }
-
-  .cancel {
-    padding: 0 5px;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-tag);
-    background: none;
-    font-family: var(--chrome);
-    font-size: 9.5px;
-    letter-spacing: var(--label-track-fine);
-    color: var(--ink-3);
-    cursor: pointer;
-  }
-
-  .cancel:hover {
-    color: var(--ink-2);
-  }
-
-  .option {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    width: 100%;
-    text-align: left;
-    padding: 3px var(--row-pad-x) 3px var(--row-indent);
-    border: 0;
-    border-radius: var(--radius);
-    background: none;
-    font-family: var(--chrome);
-    font-size: var(--row-size);
-    color: var(--ink-2);
-    cursor: pointer;
-  }
-
-  .option:hover {
-    color: var(--accent);
-  }
-
-  .mark {
-    flex: none;
-    color: var(--ink-3);
   }
 
   /* The dot says what is behind the row: green while a process runs, the

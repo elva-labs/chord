@@ -238,6 +238,9 @@ export const layout = $state({
   sessionsForced: false,
   changesForced: false,
   terminalForced: false,
+  /** Whether no project is open, which leaves the changes pane nothing to
+      show, so it stays away until one is. */
+  noProject: false,
   agentHidden: false,
   /** The agent pane on the right while editing, shown rather than put
       away by the right pane's toggle. Persisted. */
@@ -442,7 +445,7 @@ export function moving() {
     and reviewing, and always while editing, where it is the middle. */
 export function changesVisible() {
   if (layout.mode === "editing") return true;
-  return layout.changesChosen && !layout.changesForced;
+  return layout.changesChosen && !layout.changesForced && !layout.noProject;
 }
 
 /** The agent pane is shown: everywhere but reviewing in a narrow window,

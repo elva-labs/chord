@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // A new shell in the terminal panel by one chord, from anywhere in the
 // window: Cmd+T on macOS, Ctrl+Shift+T elsewhere, where Ctrl+T is the
@@ -63,6 +63,7 @@ async function typeInto(page: Page, text: string) {
 /** Starts a session, with the keyboard in its terminal; its pty. */
 async function startSession(page: Page) {
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect.poll(() => holder(page)).toBe("Terminal input");
   return typeInto(page, "x");
 }

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { installFakeCore } from "./fake";
+import { installFakeCore, startNew } from "./fake";
 
 /**
  * A project on another machine. The fake core plays two ways in: `lab`,
@@ -126,6 +126,7 @@ test.describe("a remote project", () => {
     await installFakeCore(page, { open: ["ssh://lab/home/ada/dev/demo"] });
     await page.goto("/");
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.locator(SESSIONS)).toContainText("running");
     await page.evaluate(() =>
       (

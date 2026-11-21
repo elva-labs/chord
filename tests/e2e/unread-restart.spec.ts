@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * A row unread when the window goes is unread when it comes back, with the
@@ -31,10 +31,12 @@ async function two(page: Page) {
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(ROW)).toHaveCount(1);
   await title(page, "Alpha");
   await expect(row(page, "Alpha")).toHaveCount(1);
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(ROW)).toHaveCount(2);
   await title(page, "Beta");
   await expect(row(page, "Beta")).toHaveCount(1);

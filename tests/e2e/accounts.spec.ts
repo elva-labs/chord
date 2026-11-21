@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { NO_WORKFLOW, PROJECT, SETTINGS_FILE, installFakeCore } from "./fake";
+import { NO_WORKFLOW, PROJECT, SETTINGS_FILE, installFakeCore, paletteChoice, startNew, startWith } from "./fake";
 
 const MOD = "ControlOrMeta";
 const AGENT = "section[data-pane='agent']";
@@ -143,48 +143,40 @@ test.describe("starting a session under an account", () => {
   }) => {
     await expect(page.getByTestId("project-account")).toHaveText("Work");
 
-    // With one agent on the machine the project's + still opens the choice,
-    // since there is an account to choose. It starts on the project's
-    // account, and the agent's directory reaches the spawn.
+    // The project's + asks in the palette, with the project's account as
+    // the default. It starts on that account, and the agent's directory
+    // reaches the spawn.
     await page.getByTestId("project-new-session").click();
-    const choice = page.getByTestId("account-choice");
-    await expect(choice).toBeVisible();
-    await expect(page.getByTestId("agent-option")).toHaveCount(1);
-    await expect(
-      choice.locator('[data-testid="account-option"][data-account="Work"]'),
-    ).toHaveAttribute("aria-checked", "true");
-    await page.getByTestId("agent-option").click();
+    await expect(page.locator("[data-testid='palette-row'][data-kind='ready'] [data-testid='palette-detail']")).toHaveText(
+      "Claude Code · Work",
+    );
+    await startNew(page);
     await expect.poll(() => spawns(page)).toHaveLength(1);
     expect((await spawns(page))[0].agent).toBe("claude-code");
     expect((await spawns(page))[0].configDir).toBe("~/.claude-work");
     await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
 
-    // Switched in the account control, for this one session only.
+    // Switched under Change, for this one session only.
     await page.getByTestId("project-new-session").click();
-    await page
-      .locator('[data-testid="account-option"][data-account=""]')
-      .click();
-    await page.getByTestId("agent-option").click();
+    await startWith(page, "Default");
     await expect.poll(() => spawns(page)).toHaveLength(2);
     expect((await spawns(page))[1].configDir).toBeUndefined();
     await expect(page.getByTestId("account-readout")).toHaveText("account: Default");
     await page.getByTestId("project-new-session").click();
-    await expect(
-      page.locator('[data-testid="account-option"][data-account="Work"]'),
-    ).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("[data-testid='palette-row'][data-kind='ready'] [data-testid='palette-detail']")).toHaveText(
+      "Claude Code · Work",
+    );
   });
 
   test("walks the accounts with the arrows", async ({ page }) => {
     await page.getByTestId("project-new-session").click();
-    await page.getByTestId("sessions-nav").focus();
-    await page.keyboard.press("ArrowLeft");
-    await expect(
-      page.locator('[data-testid="account-option"][data-account=""]'),
-    ).toHaveAttribute("aria-checked", "true");
-    await page.keyboard.press("ArrowRight");
-    await expect(
-      page.locator('[data-testid="account-option"][data-account="Work"]'),
-    ).toHaveAttribute("aria-checked", "true");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(paletteChoice(page, "Work")).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("ArrowUp");
+    await expect(paletteChoice(page, "Default")).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("ArrowDown");
+    await expect(paletteChoice(page, "Work")).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("Enter");
     await expect.poll(() => spawns(page)).toHaveLength(1);
     expect((await spawns(page))[0].configDir).toBe("~/.claude-work");
@@ -247,10 +239,16 @@ test.describe("a new session from the palette with accounts", () => {
     await page.keyboard.press("Enter");
   });
 
-  test("asks for the account after the project, with the project's own under the cursor", async ({
+  test("offers the project's own account first, and asks for the account under Change", async ({
     page,
   }) => {
     await expect(page.getByTestId("palette-chip")).toHaveText(["New session", "demo"]);
+    await expect(chosen(page)).toContainText("New session");
+    await expect(chosen(page).getByTestId("palette-detail")).toHaveText("Claude Code · Work");
+    await expect(page.getByTestId("palette-row")).toHaveText([/New session/, /Change/]);
+
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette-field")).toHaveAttribute(
       "placeholder",
       "Under which account",
@@ -267,12 +265,21 @@ test.describe("a new session from the palette with accounts", () => {
     await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
   });
 
+  test("starts on the project's account when Enter is pressed on New session", async ({ page }) => {
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("palette")).toHaveCount(0);
+    await expect.poll(() => spawns(page)).toHaveLength(1);
+    expect((await spawns(page))[0].configDir).toBe("~/.claude-work");
+  });
+
   test("steps back to the commands, as the one project is not asked", async ({ page }) => {
     await page.keyboard.press("Backspace");
     await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "commands");
   });
 
   test("starts under another account when the cursor is moved", async ({ page }) => {
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
     await page.keyboard.press("ArrowUp");
     await expect(chosen(page)).toContainText("Default");
     await page.keyboard.press("Enter");
@@ -332,6 +339,8 @@ test.describe("a session started by a session under another account", () => {
     // The user's own session, started under Work from the palette.
     await page.keyboard.press(`${MOD}+Shift+P`);
     await page.keyboard.type("new session in");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await page.keyboard.press("ArrowDown");
     await expect(
@@ -407,7 +416,7 @@ test.describe("a started session's row", () => {
     // A session of a second project's own, under the account that project
     // follows: session-1.
     await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
-    await page.getByTestId("agent-option").click();
+    await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   });
 

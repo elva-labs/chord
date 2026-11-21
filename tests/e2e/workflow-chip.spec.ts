@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { BUILD_AND_REVIEW, PROJECT, installFakeCore } from "./fake";
+import { BUILD_AND_REVIEW, PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * The workflow chip in the composer of a new conversation: it says the
@@ -39,8 +39,7 @@ async function open(page: Page, list: unknown[] = [BUILD_AND_REVIEW, PLAN_WORK_R
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
-  // With two agents, New session asks which.
-  if (extra.agents !== undefined) await page.getByTestId("start-agent-claude-code").click();
+  await startNew(page);
   await expect(page.getByTestId("model-chip")).toBeEnabled();
   if (bring && list.length > 0) await reveal(page);
 }
@@ -99,6 +98,7 @@ test("offers the shipped workflows on a fresh install, Direct among them", async
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("model-chip")).toBeEnabled();
   await reveal(page);
   await expect(chip(page)).toHaveText("No workflow");
@@ -134,6 +134,7 @@ test("picking a workflow makes the session its orchestrator, as New session unde
   });
   await direct.goto("/");
   await direct.getByTestId("start-agent").click();
+  await startNew(direct);
   await expect(direct.getByTestId("model-chip")).toBeVisible();
   const [made] = await starts(direct);
   await elsewhere.close();
@@ -349,6 +350,7 @@ test("shows no chip for a session in a terminal", async ({ page }) => {
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.locator(`${AGENT} .xterm`)).toBeVisible();
   await expect(chip(page)).toHaveCount(0);
 });
