@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import type { Command, Conversation, Entry, Message } from "$lib/conversation.svelte";
-  import { clock, commandEnd, drawnPart, lineCount, notRead, nowDoing, replyMarkdown, speaker, stamps, startedIds, tokens, toHear } from "$lib/thread";
+  import { clock, commandEnd, drawnPart, lineCount, notRead, nowDoing, replyMarkdown, speaker, startedIds, timeBreaks, tokens, toHear, exactTime, dayName } from "$lib/thread";
   import { reportsShown, spoken, wakeShown } from "$lib/instructions";
   import { sentParts, unsent } from "$lib/mention";
   import { mentionsOf } from "$lib/mentioned.svelte";
@@ -1119,34 +1119,32 @@
       before it is drawn yet, or nothing was found. */
   let beganAtTop = $derived(conversation.began !== null && conversation.began.after === null);
 
-  /** Every time the thread shows, as it writes it, by what it is shown
-      on: a message by its id, a command by its id, a run by its key, and
-      the line where this run began, which always names its day. */
-  let written = $derived.by(() => {
-    const keys: string[] = [];
-    const times: { at: number; day?: boolean }[] = [];
-    const add = (key: string, at: number | null, day = false) => {
-      if (at === null) return;
-      keys.push(key);
-      times.push({ at, day });
-    };
-    const began = conversation.began;
-    if (began !== null && began.after === null) add("began", began.at, true);
-    for (const entry of conversation.entries) {
-      if (entry.kind === "user") {
-        const said = conversation.messages[entry.message];
-        if (said !== undefined) add(`m:${said.id}`, said.at ?? timeOf(said.id));
-      } else if (entry.kind === "command") {
-        const command = conversation.commands[entry.command];
-        if (command !== undefined) add(`c:${command.id}`, command.at);
-      } else if (entry.kind === "agent" && visible(entry)) add(`e:${entry.key}`, entry.at);
-      if (began !== null && began.after === entry.key) add("began", began.at, true);
+  /** The line where this run began, which always names its day. */
+  let beganAt = $derived(
+    conversation.began === null ? "" : `${dayName(conversation.began.at)} ${clock(conversation.began.at)}`,
+  );
+
+  /** When each row was written. */
+  function writtenAt(entry: Entry): number | null {
+    if (entry.kind === "user") {
+      const said = conversation.messages[entry.message];
+      return said === undefined ? null : (said.at ?? timeOf(said.id));
     }
-    for (const item of conversation.below)
-      if (item.kind === "message") add(`m:${item.message.id}`, item.message.at ?? timeOf(item.message.id));
-      else add(`c:${item.command.id}`, item.command.at);
-    const shown = stamps(times);
-    return new Map(keys.map((key, at) => [key, shown[at]]));
+    if (entry.kind === "command") return conversation.commands[entry.command]?.at ?? null;
+    return entry.kind === "agent" ? entry.at : null;
+  }
+
+  /** The times set between the rows, by the row each stands before. The row
+      right under the line where this run began has none, since the line
+      says the time. */
+  let breaks = $derived.by(() => {
+    const set = timeBreaks(rows.map((entry) => ({ key: entry.key, at: writtenAt(entry) })));
+    const began = conversation.began;
+    if (began !== null) {
+      const at = began.after === null ? 0 : rows.findIndex((entry) => entry.key === began.after) + 1;
+      if (at < rows.length) set.delete(rows[at].key);
+    }
+    return set;
   });
 </script>
 
@@ -1220,6 +1218,12 @@
       {#if entry.key === markedKey}
         <div class="divider here" data-testid="back-here"><span>Back to here</span></div>
       {/if}
+      {#if breaks.has(entry.key)}
+        {@const when = writtenAt(entry)}
+        <div class="divider quiet" data-testid="time-divider">
+          <time class="num" datetime={when === null ? undefined : new Date(when).toISOString()} title={when === null ? undefined : exactTime(when)}>{breaks.get(entry.key)}</time>
+        </div>
+      {/if}
       {#if entry.kind === "user"}
         {@const said = message(entry.message)}
         {#if said !== null}
@@ -1230,9 +1234,8 @@
         {@const live = entry.key === liveKey}
         {@const doing = live ? nowDoing(conversation, entry.parts) : null}
         <article class="msg agent" data-testid="agent-run" data-turn={entry.turn} data-copy-host="message">
-          <header class="who">
+          <header class="who" title={entry.at === null ? undefined : exactTime(entry.at)}>
             <i class="mark"></i><b><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></b>
-            {#if entry.at !== null}<time class="num">{written.get(`e:${entry.key}`) ?? clock(entry.at)}</time>{/if}
             {#if entry.parts.some((part) => part.kind === "text" && part.text.trim() !== "")}
               <Copy label="Copy as Markdown" text={() => replyMarkdown(entry.parts)} host="message" place="end" testid="copy-reply" />
             {/if}
@@ -1315,7 +1318,7 @@
           : conversation.wentOn
             ? "Went on from its notes here"
             : "Resumed here"},
-        <time class="num">{written.get("began") ?? clock(conversation.began.at)}</time></span
+        <time class="num">{beganAt}</time></span
       >
     </div>
   {/if}
@@ -1347,7 +1350,7 @@
     data-from={from?.workbench ? "workbench" : from?.id}
     data-copy-host="message"
   >
-    <header class="who">
+    <header class="who" title={at === null ? undefined : exactTime(at)}>
       {#if from === null}
         {#if words.text !== ""}
           <Copy label="Copy" name="Copy the message" text={() => unsent(words.text, mentionsOf(said.id)).draft} host="message" testid="copy-message" />
@@ -1359,7 +1362,6 @@
             >Go to it</button
           >{/if}
       {/if}
-      {#if at !== null}<time class="num">{written.get(`m:${said.id}`) ?? clock(at)}</time>{/if}
       {#if from === null && said.placed && onGoBack !== null}
         <button
           class="goback"
@@ -1512,10 +1514,9 @@
     data-state={command.state}
     data-copy-host="message"
   >
-    <header class="who">
+    <header class="who" title={command.at === null ? undefined : exactTime(command.at)}>
       <Copy label="Copy" name="Copy the command" text={() => `!${command.text}`} host="message" testid="copy-command" />
       <b>You</b>
-      {#if command.at !== null}<time class="num">{written.get(`c:${command.id}`) ?? clock(command.at)}</time>{/if}
     </header>
     <div class="bubble">
       <p data-find={command.id} data-testid="command-line"><span class="bang">!</span><Plain text={command.text} /></p>
@@ -1812,7 +1813,6 @@
   }
 
   .who .go,
-  .who time,
   .who > span:first-child {
     flex: none;
     white-space: nowrap;
@@ -2029,6 +2029,19 @@
     flex: 1;
     height: 1px;
     background: var(--rule);
+  }
+
+  /* A time between entries after a quiet while: its words alone, with the
+     rules a step fainter than a note's. */
+  .divider.quiet {
+    gap: 12px;
+    margin-bottom: 6px;
+    color: var(--ink-3);
+  }
+
+  .divider.quiet::before,
+  .divider.quiet::after {
+    background: color-mix(in srgb, var(--rule) 55%, transparent);
   }
 
   /* While the list over the composer marks a message, the thread shows

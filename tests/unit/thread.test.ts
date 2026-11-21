@@ -11,7 +11,7 @@ import {
   held,
   locate,
   notRead,
-  stamps,
+  timeBreaks,
   choiceLabel,
   choiceMeans,
   choiceMeansIn,
@@ -1045,26 +1045,35 @@ describe("the times a thread shows", () => {
     expect(dayName(lastYear, now)).toContain("2025");
   });
 
-  it("writes the first time of each day with the day, and none when every time is today's", () => {
-    expect(stamps([{ at: at(4, 9) }, { at: at(4, 10) }], now)).toEqual([clock(at(4, 9)), clock(at(4, 10))]);
-    expect(stamps([{ at: at(2, 9) }, { at: at(2, 10) }, { at: at(4, 9) }, { at: at(4, 10) }], now)).toEqual([
-      `${weekday(at(2, 9))} ${clock(at(2, 9))}`,
-      clock(at(2, 10)),
-      `today ${clock(at(4, 9))}`,
-      clock(at(4, 10)),
-    ]);
+  it("sets a time before an entry that comes after a quiet while, and before none that follow closely", () => {
+    const min = (n: number) => at(4, 9) + n * 60_000;
+    const entries = [
+      { key: "a", at: min(0) },
+      { key: "b", at: min(2) },
+      { key: "c", at: min(4.9) },
+      { key: "d", at: min(30) },
+      { key: "e", at: min(31) },
+    ];
+    expect([...timeBreaks(entries, now)]).toEqual([["d", clock(min(30))]]);
   });
 
-  it("always names the day on a time marked with it, which then names that day for the rest", () => {
-    expect(stamps([{ at: at(2, 9) }, { at: at(4, 9), day: true }, { at: at(4, 10) }], now)).toEqual([
-      `${weekday(at(2, 9))} ${clock(at(2, 9))}`,
-      `today ${clock(at(4, 9))}`,
-      clock(at(4, 10)),
+  it("measures the quiet from the last entry with a time, and skips entries that have none", () => {
+    const base = at(4, 9);
+    const entries = [
+      { key: "a", at: base },
+      { key: "note", at: null },
+      { key: "b", at: base + 10 * 60_000 },
+    ];
+    expect([...timeBreaks(entries, now).keys()]).toEqual(["b"]);
+  });
+
+  it("names the day on a time that is not today's, and sets one before the first entry only then", () => {
+    expect([...timeBreaks([{ key: "a", at: at(4, 9) }, { key: "b", at: at(4, 9) + 60_000 }], now)]).toEqual([]);
+    expect([...timeBreaks([{ key: "a", at: at(2, 9) }, { key: "b", at: at(2, 9) + 60_000 }], now)]).toEqual([
+      ["a", `${weekday(at(2, 9))} ${clock(at(2, 9))}`],
     ]);
-    expect(stamps([{ at: at(4, 9), day: true }, { at: at(4, 10) }], now)).toEqual([
-      `today ${clock(at(4, 9))}`,
-      clock(at(4, 10)),
-    ]);
+    const across = timeBreaks([{ key: "a", at: at(3, 23) }, { key: "b", at: at(4, 0) + 60_000 }], now);
+    expect(across.get("b")).toBe(clock(at(4, 0) + 60_000));
   });
 });
 
