@@ -2370,6 +2370,26 @@ test.describe("the keyboard, when the dock goes by itself", () => {
     await page.getByTestId("work-line").last().click();
     await expect(page.getByTestId("step-status").last()).toHaveText("permission withdrawn");
   });
+
+  test("goes to the next ask's choices when another takes the place of the one it was on", async ({ page }) => {
+    await openIntegrated(page);
+    const first = await agent(
+      page,
+      `f.startTurn("${H}"); const r = f.ask("${H}", "commandExecution", { command: "ls" }); f.ask("${H}", "commandExecution", { command: "pwd" }); f.ask("${H}", "commandExecution", { command: "date" }); return r;`,
+    );
+    await page.getByTestId("composer-input").press("ArrowUp");
+    const allow = page.getByTestId("choice-allow");
+    await expect(allow).toBeFocused();
+    // Withdrawn, the next ask takes its place with the keyboard on it.
+    await agent(page, `f.expire("${H}", "${first}");`);
+    await expect(page.getByTestId("permission-dock")).toContainText("pwd");
+    await expect(allow).toBeFocused();
+    // Answered once it settles, the same.
+    await expect(allow).not.toHaveAttribute("aria-disabled", "true");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("permission-dock")).toContainText("date");
+    await expect(allow).toBeFocused();
+  });
 });
 
 test("shows a message another session sent under that session, and never the workbench's sentence as its words", async ({ page }) => {

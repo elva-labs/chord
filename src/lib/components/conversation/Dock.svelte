@@ -209,9 +209,10 @@
     focusPane("agent");
   }
 
-  // The dock going away by itself, a question that settled itself or a
-  // request the agent withdrew, gives the keyboard back as an answer does
-  // when the dock had it.
+  // An entry going by itself, a question that settled itself or a request
+  // the agent withdrew, moves the keyboard as an answer does when the dock
+  // had it: to the choices of the ask that takes its place, else back to
+  // the composer.
   let held = false;
   $effect.pre(() => {
     entry?.id;
