@@ -1183,7 +1183,7 @@ test.describe("working, and waiting for you", () => {
     await expect(named(page, "session 1").locator(".dot")).toHaveClass(/unread/);
     await expect
       .poll(() => page.evaluate(() => window.__fake.notified))
-      .toEqual([{ title: "one · New session", body: "Waiting for you" }]);
+      .toEqual([{ title: "one · New session, now", body: "Waiting for you" }]);
     // The chime is off until the user turns it on.
     expect(await page.evaluate(() => window.__fake.chimes)).toBe(0);
   });

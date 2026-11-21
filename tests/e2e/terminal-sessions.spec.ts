@@ -226,7 +226,7 @@ test("closes a session's shells with it, and asks first while one has something 
   // up in the sessions pane, in the words the window's own close uses.
   await closeSession(page, "session 2");
   const strip = page.getByTestId("close-owner");
-  await expect(strip).toContainText("Close New session with 1 busy shell running?");
+  await expect(strip).toContainText("Close New session, now with 1 busy shell running?");
   await expect(strip).toContainText("“npm run dev” is running in shell 1. Closing the session stops it.");
   await expect(page.getByTestId("close-owner-cancel")).toBeFocused();
   await page.getByTestId("close-owner-cancel").click();
