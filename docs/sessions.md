@@ -192,35 +192,36 @@ recent session, so that one starts too; asking for a new session in it does
 not, as the project's header describes above. A session closed by hand
 before the quit stays closed, and a session whose project did not open
 again is left out. A session another session started comes back under its
-starter, where it stood among the others, and a line sent to it, by the
-user or by its starter, starts it in its row. One the workbench had put
-away before the quit stays put away, one whose work was over at the quit is
-put away by the same rest as before it, and one the quit cut off at work
-stays until it is woken, closed or stopped; see
+starter, where it stood among the others, with the starter unfolded
+whatever it was at the quit, and a line sent to it, by the user or by its
+starter, starts it in its row. One the workbench had put away before the
+quit stays put away, one whose work was over at the quit is put away by
+the same rest as before it, and one the quit cut off at work stays until
+it is woken, closed or stopped; see
 [orchestrator](orchestrator.md#when-the-work-is-over). A session left open
 in the `orchestrator` folder of an earlier version comes back too, and
 lists that folder again; see [orchestrator](orchestrator.md).
 
-A row that was unread when the app quit comes back unread, with the line
-it had under its name, whether it went unread by itself or was marked by
-hand; a row that was read comes back read, and none of its lines is kept,
-so marking it unread then puts no line back. A mark made by hand comes
-back with its rule. This holds for a
-terminal and an in-Chord session, whether its agent is started again or
-the row is left as it was, and for a session another session started. A
-row that has not come back within a week, as when its project does not
-open again, is let go, and comes back read if it ever does. What waits is kept as
-it changes, not on the way out, so a crash keeps it as a quit does. It
-counts at once in the status bar, on the app's icon and for the shortcut to
-the next session that needs you, and coming back says nothing through the
-system: what was unread was news before the quit. What happens after it is
-news as it would have been before. The session the restore puts on screen
-is not read by being put there, nor by the window being looked at: unread,
-it waits as a mark made on screen does, until another session has been on
-screen and the user comes back to it, writes to it, or marks it read. A
-session that ended before the quit is not among the rows that come back,
-and its unread with it. A version that does not keep what waits, run in
-between, leaves the rows to come back read.
+A row that was unread when the app quit comes back unread, with the line it
+had under its name, whether it went unread by itself or was marked by hand;
+a row that was read comes back read, and none of its lines is kept, so
+marking it unread then puts no line back. A mark made by hand comes back
+with its rule. This holds for a terminal and an in-Chord session, whether
+its agent is started again or the row is left as it was, and for a session
+another session started. A row that has not come back within a week, as
+when its project does not open again, is let go, and comes back read if it
+ever does. What waits is kept as it changes, not on the way out, so a crash
+keeps it as a quit does. It counts at once in the status bar, on the app's
+icon and for the shortcut to the next session that needs you, and coming
+back says nothing through the system: what was unread was news before the
+quit. What happens after it is news as it would have been before. The
+session the restore puts on screen is not read by being put there, nor by
+the window being looked at: unread, it waits as a mark made on screen does,
+until another session has been on screen and the user comes back to it,
+writes to it, or marks it read. A session that ended before the quit is not
+among the rows that come back, and its unread with it, a session another
+session started as much as any other. A version that does not keep what
+waits, run in between, leaves the rows to come back read.
 
 The yellow is the terminal's, so a theme that sets its yellow sets this dot
 too. In the amber palette, whose accent is a yellow, it is a lemon instead,
