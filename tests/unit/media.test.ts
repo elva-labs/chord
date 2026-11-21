@@ -37,6 +37,10 @@ const project = vi.hoisted(() => ({
     "![shot](docs/shot.png?raw=1) ![again](docs/icon.png) ![spaced](docs/my%20icon.png) ![gone](docs/gone.png) ![said](docs/said.png)",
   ].join("\n"),
   reads: [] as { root: string; document: string; file: string }[],
+  /** Other documents by their path, and other images of the project by
+      their path in it: how large each is and how long its read takes. */
+  documents: new Map<string, string>(),
+  files: new Map<string, { size: number; wait: number }>(),
 }));
 
 vi.mock("$lib/core", () => ({
@@ -49,6 +53,8 @@ vi.mock("$lib/core", () => ({
       return null;
     },
     async readMedia(path: string) {
+      const written = project.documents.get(path);
+      if (written !== undefined) return { mime: "text/markdown", data: btoa(written), size: written.length };
       if (path.includes("missing")) throw new Error(`could not read ${path}`);
       if (path.endsWith("README.md"))
         return { mime: "text/markdown", data: btoa(project.readme), size: project.readme.length };
@@ -70,6 +76,11 @@ vi.mock("$lib/core", () => ({
     },
     async readDocumentImage(root: string, document: string, file: string) {
       project.reads.push({ root, document, file });
+      const sized = project.files.get(file);
+      if (sized !== undefined) {
+        await new Promise((done) => setTimeout(done, sized.wait));
+        return { mime: "image/png", data: "AAAA", size: sized.size };
+      }
       if (file === "docs/said.png") return { mime: "text/plain", data: "AAAA", size: 3 };
       if (file.endsWith("icon.png") || file === "docs/shot.png")
         return { mime: "image/png", data: "AAAA", size: 3 };
@@ -93,6 +104,9 @@ const request = (
 
 beforeEach(() => {
   localStorage.clear();
+  project.reads.length = 0;
+  project.documents.clear();
+  project.files.clear();
   resetMedia();
   resetGoingOn();
   resetHeld();
@@ -773,6 +787,14 @@ describe("the HTML a document may draw", () => {
     box.innerHTML = render(markdown);
     return box;
   };
+  /** A document of the project at /one loaded as the viewer loads it,
+      its images read from the project. */
+  const loaded = async (path: string) => {
+    const read = await load(path, "/one");
+    const box = document.createElement("div");
+    box.innerHTML = "html" in read ? read.html : "";
+    return box;
+  };
   const HERO = '<p align="center">\n  <img src="https://example.com/icon.png" width="128" height="128" alt="">\n</p>';
 
   it("draws a README's centred hero image at its width", () => {
@@ -957,23 +979,27 @@ describe("the HTML a document may draw", () => {
     expect(html.match(/<b>/g)).toHaveLength(100);
   });
 
-  it("draws an image of the document's project once it is read, and as its text before", () => {
-    const DATA = "data:image/png;base64,iVBORw0KGgo=";
+  it("draws an image of the project once it is read, every one of a source's too, and as its text before", async () => {
+    const DATA = "data:image/png;base64,AAAA";
     const markdown = [
       '<img src="docs/icon.png" width="128" height="128" alt="">',
       "",
       "![logo](docs/icon.png)",
       "",
-      '<picture><source media="(prefers-color-scheme: dark)" srcset="docs/dark.png 2x, docs/icon.png"><img src="docs/icon.png"></picture>',
+      '<picture><source media="(prefers-color-scheme: dark)" srcset="docs/dark.png 1x, docs/dark2.png 2x, docs/icon.png 3x"><img src="docs/icon.png"></picture>',
       "",
       "![other](docs/other.png)",
     ].join("\n");
-    const before = drawn(markdown);
-    expect(before.querySelector("img, source")).toBeNull();
-    const box = document.createElement("div");
-    box.innerHTML = render(markdown, new Map([["docs/icon.png", DATA], ["docs/dark.png", DATA]]));
+    expect(drawn(markdown).querySelector("img, source")).toBeNull();
+    project.documents.set("/one/docs.md", markdown);
+    project.files.set("docs/dark.png", { size: 3, wait: 0 });
+    project.files.set("docs/dark2.png", { size: 3, wait: 0 });
+    const box = await loaded("/one/docs.md");
+    expect(project.reads.map((read) => read.file).sort()).toEqual(
+      ["docs/dark.png", "docs/dark2.png", "docs/icon.png", "docs/other.png"],
+    );
     expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual([DATA, DATA, DATA]);
-    expect(box.querySelector("source")?.getAttribute("srcset")).toBe(`${DATA} 2x, ${DATA}`);
+    expect(box.querySelector("source")?.getAttribute("srcset")).toBe(`${DATA} 1x, ${DATA} 2x, ${DATA} 3x`);
     expect(box.textContent).toContain("other");
   });
 

@@ -444,10 +444,13 @@ const DEEPEST = 100;
 
 /** A `srcset` with every image in it one `image` allows, written anew as
     the browser reads it: each address, and after it a width or a density
-    if it has one. Null when an address or a descriptor is anything else. */
+    if it has one. Null when an address or a descriptor is anything else.
+    Every address is put to `image`, so each of the project's is read for
+    the document even when one before it is not there yet. */
 function sources(srcset: string): string | null {
   const space = (at: number) => /[\t\n\f\r ]/.test(srcset[at]);
   const candidates: string[] = [];
+  let refused = false;
   let at = 0;
   for (;;) {
     while (at < srcset.length && (space(at) || srcset[at] === ",")) at++;
@@ -466,10 +469,10 @@ function sources(srcset: string): string | null {
       at = stop + 1;
     }
     const src = image(url);
-    if (src === null || (descriptor !== "" && !/^\d+(?:\.\d+)?[wx]$/.test(descriptor))) return null;
-    candidates.push(descriptor === "" ? src : `${src} ${descriptor}`);
+    if (src === null || (descriptor !== "" && !/^\d+(?:\.\d+)?[wx]$/.test(descriptor))) refused = true;
+    else candidates.push(descriptor === "" ? src : `${src} ${descriptor}`);
   }
-  return candidates.length === 0 ? null : candidates.join(", ");
+  return refused || candidates.length === 0 ? null : candidates.join(", ");
 }
 
 /** The files of its project that a document's images are drawn from while
