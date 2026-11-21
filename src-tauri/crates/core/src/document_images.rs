@@ -18,7 +18,13 @@
 //! - the project is not the root of a disk, nor the home directory or a
 //!   folder above it, which would put the whole of a user's files in reach
 //!   of a document left there.
+//!
+//! The file read is the one checked: one put in its place in between, a
+//! pipe above all, is refused rather than read or waited on. A hard link
+//! in the project is read as the file it is, since nothing tells it from
+//! the file's other names, wherever they are.
 
+use std::fs::Metadata;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
@@ -65,15 +71,16 @@ fn project(root: &Path, home: Option<&Path>) -> Result<PathBuf, String> {
     Ok(project)
 }
 
-/// Where an image a document names resolves to, when the document may
-/// draw it. `root` is the project, `document` the document's path in it,
-/// and `file` the image's path relative to the document, decoded.
+/// Where an image a document names resolves to, and the file found there,
+/// when the document may draw it. `root` is the project, `document` the
+/// document's path in it, and `file` the image's path relative to the
+/// document, decoded.
 pub fn resolve(
     root: &Path,
     document: &str,
     file: &str,
     home: Option<&Path>,
-) -> Result<PathBuf, String> {
+) -> Result<(PathBuf, Metadata), String> {
     let wanted = names(file)?;
     let project = project(root, home)?;
     let at: Vec<&str> = document.split('/').collect();
@@ -118,10 +125,47 @@ pub fn resolve(
     if !media_type(&target).is_some_and(|mime| mime.starts_with("image/")) {
         return Err("is not an image".into());
     }
-    if !target.is_file() {
+    let found = std::fs::metadata(&target).map_err(|_| "is not there".to_string())?;
+    if !found.is_file() {
         return Err("is not a file".into());
     }
-    Ok(target)
+    Ok((target, found))
+}
+
+/// The file at `target`, opened only while it is still the regular file
+/// `checked` found there. It is opened without waiting, so a pipe in its
+/// place is refused at once rather than read once something writes to it.
+fn open(target: &Path, checked: &Metadata) -> Result<std::fs::File, String> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let handle = options
+        .open(target)
+        .map_err(|e| format!("could not be read: {e}"))?;
+    let opened = handle
+        .metadata()
+        .map_err(|e| format!("could not be read: {e}"))?;
+    if !opened.is_file() || !same_file(&opened, checked) {
+        return Err("changed while it was read".into());
+    }
+    Ok(handle)
+}
+
+#[cfg(unix)]
+fn same_file(a: &Metadata, b: &Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+/// Windows names a file's identity only in an unstable API, so there the
+/// handle is checked to be a regular file and no more.
+#[cfg(not(unix))]
+fn same_file(_: &Metadata, _: &Metadata) -> bool {
+    true
 }
 
 fn too_large(size: u64) -> String {
@@ -136,9 +180,9 @@ fn too_large(size: u64) -> String {
 /// may not draw it.
 pub fn read(root: &Path, document: &str, file: &str, home: Option<&Path>) -> Result<Media, String> {
     use base64::Engine;
-    let target = resolve(root, document, file, home)?;
+    let (target, checked) = resolve(root, document, file, home)?;
     let mime = media_type(&target).unwrap_or("application/octet-stream");
-    let handle = std::fs::File::open(&target).map_err(|e| format!("could not be read: {e}"))?;
+    let handle = open(&target, &checked)?;
     // Read no further than the cap, whatever the file's size says.
     let mut bytes = Vec::new();
     handle
@@ -314,6 +358,24 @@ mod tests {
             .unwrap_err()
             .contains("not in the project"));
         assert_eq!(read(&root, "README.md", "same.png", None).unwrap().size, 4);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_a_file_put_in_the_place_of_the_one_checked() {
+        let (dir, root) = project();
+        let (target, checked) = resolve(&root, "README.md", "docs/icon.png", None).unwrap();
+        std::fs::write(dir.join("other.png"), [1]).unwrap();
+        std::fs::rename(dir.join("other.png"), &target).unwrap();
+        assert!(open(&target, &checked)
+            .unwrap_err()
+            .contains("changed while it was read"));
+        std::fs::remove_file(&target).unwrap();
+        let pipe = std::ffi::CString::new(target.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(pipe.as_ptr(), 0o600) }, 0);
+        assert!(open(&target, &checked)
+            .unwrap_err()
+            .contains("changed while it was read"));
     }
 
     #[test]
