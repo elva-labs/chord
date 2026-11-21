@@ -1,11 +1,19 @@
 <script lang="ts">
-  import { hook } from "$lib/hook.svelte";
+  import { hook, setEverywhere } from "$lib/hook.svelte";
   import { dismissHooksNotice, hooksNoticeDue, retireHooksNotice } from "$lib/notice.svelte";
-  import { openSettings } from "$lib/settings.svelte";
+  import { hookedProjects } from "$lib/workspace.svelte";
+  import AskCard from "$lib/components/AskCard.svelte";
+  import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
+
+  /**
+   * The offer to turn agent hooks on, drawn as the asks are but without
+   * their ring: the app offers it, no agent asks. Turning them on here is
+   * the same as turning them on for every project in the settings.
+   */
 
   let due = $derived(hooksNoticeDue());
 
-  // Hooks turned on while the notice was up, from the settings it opened or
+  // Hooks turned on while the notice was up, from here, the settings or
   // anywhere else, is the notice taken.
   let shown = false;
   $effect(() => {
@@ -14,23 +22,33 @@
   $effect(() => {
     if (hook.everywhere && shown) retireHooksNotice();
   });
+
+  const choices: AskChoice[] = [
+    {
+      id: "on",
+      label: "Turn on",
+      testid: "hooks-notice-turn-on",
+      primary: true,
+      run: () => void setEverywhere(true, hookedProjects()),
+    },
+    { id: "later", label: "Not now", testid: "hooks-notice-dismiss", quiet: true, run: dismissHooksNotice },
+  ];
 </script>
 
 {#if due}
-  <div class="notice" role="status" data-testid="hooks-notice">
-    <p class="title">Let the agent talk to the workbench</p>
-    <p class="text">
-      Agent hooks tell the workbench when the agent works, waits or asks, and let it point at code
-      and show you images and documents.
-    </p>
-    <div class="actions">
-      <button class="go" onclick={() => openSettings("hooks")} data-testid="hooks-notice-settings"
-        >Open settings</button
-      >
-      <button class="later" onclick={dismissHooksNotice} data-testid="hooks-notice-dismiss"
-        >Not now</button
-      >
-    </div>
+  <div class="notice" data-card>
+    <AskCard
+      variant="offer"
+      role="status"
+      aria-labelledby="hooks-notice-what"
+      whatId="hooks-notice-what"
+      factId="hooks-notice-fact"
+      data-testid="hooks-notice"
+    >
+      {#snippet what()}<b>Let agents talk to Chord?</b>{/snippet}
+      {#snippet fact()}Shows when an agent works, waits or asks. In every project.{/snippet}
+      {#snippet actions()}<AskChoices {choices} describedby="hooks-notice-fact" />{/snippet}
+    </AskCard>
   </div>
 {/if}
 
@@ -42,66 +60,18 @@
     top: 12px;
     right: 12px;
     z-index: 2;
-    width: min(360px, calc(100% - 24px));
-    padding: 10px 12px 12px;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--surface-2);
-    color: var(--ink);
+    width: min(380px, calc(100% - 24px));
   }
 
-  /* Where the cards let a background through, the second surface is a
-     fill let through, laid over the card's paint so this still covers
-     what is under it. */
-  :global(:root[data-cards]) .notice {
-    background: linear-gradient(var(--surface-2), var(--surface-2)), var(--paint-surface);
+  .notice > :global(.ask-card) {
+    box-shadow:
+      inset 0 0 0 1px var(--rule-strong),
+      0 14px 34px -20px rgb(0 0 0 / 0.5);
   }
 
-  .title {
-    margin: 0 0 4px;
-    font-family: var(--chrome);
-    font-size: 10.5px;
-    letter-spacing: var(--label-track-tight);
-    text-transform: var(--label-case);
-    color: var(--accent);
-  }
-
-  .text {
-    margin: 0 0 10px;
-    font-size: 12.5px;
-    line-height: 1.5;
-    color: var(--ink-2);
-  }
-
-  .actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .actions button {
-    font-family: var(--chrome);
-    font-size: var(--btn-size);
-    font-weight: var(--btn-weight);
-    letter-spacing: var(--label-track-tight);
-    text-transform: var(--label-case);
-    border-radius: var(--radius);
-    padding: 4px 12px;
-    cursor: pointer;
-  }
-
-  .go {
-    border: 1px solid var(--accent);
-    background: var(--accent-soft);
-    color: var(--accent);
-  }
-
-  .later {
-    border: 1px solid var(--rule);
-    background: none;
-    color: var(--ink-3);
-  }
-
-  .later:hover {
-    color: var(--ink);
+  /* Where the cards let a background through, the offer is laid over the
+     card's paint so it still covers what is under it. */
+  :global(:root[data-cards]) .notice > :global(.ask-card) {
+    background: linear-gradient(var(--surface), var(--surface)), var(--paint-surface);
   }
 </style>

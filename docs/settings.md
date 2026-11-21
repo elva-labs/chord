@@ -291,8 +291,9 @@ agent hooks, chosen once for every project; each project you open follows
 it, and a project that should go the other way can say so under By project. The `orchestrator` folder is among those projects while the
 sessions pane lists it (see [orchestrator](orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
 choice existed starts with them off, and is told once, in a word over the
-agent pane, what turning them on gives; the word's link opens the settings
-at the Sessions tab. What each means for the changes pane and for a session's
+agent pane, what turning them on gives, in every project. Turn on there turns them on for
+every project, as this section's choice does; Not now puts the offer away
+for good. What each means for the changes pane and for a session's
 row is in [sessions](sessions.md); what the hooks write and where, and the
 tools they bring the agent, is in [hooks](hooks.md).
 
@@ -632,8 +633,13 @@ start of a session is asked about, the notifications and the chime are
 refused outright, as the user's to change. Compact mode is a matter of
 how the window looks, as the look is, and the agent may ask for it.
 
-A change that will do is put to the user over the agent pane: who is
-asking, the reason, and each setting from what it is to what it would be.
+A change that will do is put to the user over the window, where a
+session's question to start another stands when it is not docked (see
+[the orchestrator](orchestrator.md#what-the-user-is-asked)), and never in a
+dock. It waits while a question to start a session or for another round of
+review is up, docked or not, so only one question is up at a time. It says
+who is asking, the reason, and each setting from what it is to what it
+would be, with Allow and Don't allow.
 Nothing changes unless they allow it, and the agent waits for the answer,
 which says which it was. An agent gives up on a call after a while, Codex
 after a minute, so one the user has not answered within forty seconds is

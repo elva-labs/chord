@@ -16,6 +16,7 @@
   import { closeResume, resume } from "$lib/resume.svelte";
   import Palette from "$lib/components/Palette.svelte";
   import { closePalette, openCommands, openGoTo, palette } from "$lib/palette.svelte";
+  import AsksSaid from "$lib/components/AsksSaid.svelte";
   import ConductAsk from "$lib/components/ConductAsk.svelte";
   import LeaveAsk from "$lib/components/LeaveAsk.svelte";
   import RefusalBanner from "$lib/components/RefusalBanner.svelte";
@@ -1203,6 +1204,7 @@
   <ConductAsk />
 {/if}
 <SettingsAsk />
+<AsksSaid />
 <LeaveAsk />
 <RefusalBanner />
 <UserStyles />

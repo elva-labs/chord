@@ -489,7 +489,7 @@ test.describe("the conductor", () => {
 });
 
 test.describe("a start while the settings ask before every one", () => {
-  test("puts a start in the caller's own project to the user, with Allow once or No", async ({ page }) => {
+  test("puts a start in the caller's own project to the user, with Allow once or Don't allow", async ({ page }) => {
     await installFakeCore(page, { settings: { ...NO_WORKFLOW, askEveryStart: true } });
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
@@ -504,7 +504,7 @@ test.describe("a start while the settings ask before every one", () => {
     const ask = page.getByTestId("conduct-ask");
     await expect(ask).toBeVisible();
     await expect(ask).toContainText(PROJECT);
-    await expect(ask.getByTestId("conduct-once")).toHaveText("Allow once");
+    await expect(ask.getByTestId("conduct-once")).toHaveText("1Allow once");
     await expect(ask.getByTestId("conduct-allow")).toHaveCount(0);
     await ask.getByTestId("conduct-once").click();
     await expect(ask).toHaveCount(0);
@@ -1030,8 +1030,8 @@ test.describe("a round of review past the workflow's limit", () => {
     await expect(page.getByTestId("conduct-round")).toHaveText(
       "Review has run twice on Fix the cache, as many times as the workflow allows. Allow another round?",
     );
-    await expect(page.getByTestId("conduct-allow-round")).toHaveText("Allow one more round");
-    await expect(page.getByTestId("conduct-no")).toHaveText("Stop at the limit");
+    await expect(page.getByTestId("conduct-allow-round")).toHaveText("1Allow one more");
+    await expect(page.getByTestId("conduct-no")).toHaveText("2Stop here");
     await expect(ask).toContainText("Look once more");
     await expect(page.getByTestId("conduct-allow")).toHaveCount(0);
     await page.getByTestId("conduct-allow-round").click();

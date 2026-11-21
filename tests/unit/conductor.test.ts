@@ -5282,9 +5282,9 @@ describe("starting in a workflow's shape", () => {
       expect(conductor.asking?.round?.done).toBe(2);
       expect(conductor.asking?.project).toBe(C);
       const card = render(ConductAsk);
-      expect(card.getByTestId("conduct-ask").textContent?.replace(/\s+/g, " ").trim()).toContain(
-        `In ${C}. Under the Work account, not the project's own. Review has run twice on`,
-      );
+      const said = card.getByTestId("conduct-ask").textContent?.replace(/\s+/g, " ").trim();
+      expect(said).toContain("Review has run twice on");
+      expect(said).toContain(`In ${C}. Under the Work account, not the project's own.`);
       expect(card.getByTestId("conduct-account")).toHaveTextContent(
         "Under the Work account, not the project's own.",
       );
@@ -6044,7 +6044,7 @@ describe("an agent the workbench did not start", () => {
     expect(last().error).toBe("The user did not allow the session to be started.");
   });
 
-  it("says in the question only what is known of what asks, and offers Allow once and No only", async () => {
+  it("says in the question only what is known of what asks, and offers Allow once and Don't allow only", async () => {
     const asked = handle(outside("start", { project: B, prompt: "Fix it" }));
     const card = render(ConductAsk);
     const ask = card.getByTestId("conduct-ask");
@@ -6054,12 +6054,11 @@ describe("an agent the workbench did not start", () => {
       `It runs in ${A} and does not say which session it is: an agent run outside the workbench, or a session that left its name out. Each new session it asks for is put to you.`,
     );
     expect(ask).toHaveTextContent(`In ${B}.`);
-    expect(ask).toHaveAccessibleDescription(
-      expect.stringContaining("An unnamed agent wants to start a session It runs in"),
-    );
+    expect(ask).toHaveAccessibleName("An unnamed agent wants to start a session");
+    expect(ask).toHaveAccessibleDescription(expect.stringContaining(`It runs in ${A}`));
     expect(card.queryByTestId("conduct-allow")).toBeNull();
     expect(card.getByTestId("conduct-once")).toHaveTextContent("Allow once");
-    expect(card.getByTestId("conduct-no")).toHaveTextContent("No");
+    expect(card.getByTestId("conduct-no")).toHaveTextContent("Don't allow");
     refuse();
     flushSync();
     await asked;

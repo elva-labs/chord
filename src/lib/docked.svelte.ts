@@ -11,12 +11,13 @@ import { projectLabel } from "$lib/workspace.svelte";
  *
  * The session's own requests come first, in the order its agent asked:
  * its conversation is the one on screen, and its turn is the one they
- * hold. A round of review past its workflow's limit that the session asked
- * for follows them, while the session is on screen; elsewhere the round
- * is asked over the window. Then come the requests of the sessions it
- * started, in the order they asked: an integrated one's, answered here
- * exactly as in that session, and a terminal one's, which only that
- * session's terminal can answer, so it is shown with the way there.
+ * hold. A question the session put to the user, to start a session or for
+ * a round of review past its workflow's limit, follows them while the
+ * session is on screen; elsewhere it is asked over the window. Then come
+ * the requests of the sessions it started, in the order they asked: an
+ * integrated one's, answered here exactly as in that session, and a
+ * terminal one's, which only that session's terminal can answer, so it is
+ * shown with the way there.
  *
  * Nothing here answers anything or reaches an agent. What the dock does
  * with an entry is the user's click or key, and it goes to the session
@@ -38,15 +39,15 @@ export type Docked =
       at: number;
     }
   | { kind: "terminal"; id: string; key: string; own: false; at: number }
-  | { kind: "round"; id: string; key: string; own: true; ask: Ask; at: number };
+  | { kind: "conduct"; id: string; key: string; own: true; ask: Ask; at: number };
 
-/** The session whose dock holds the round of review past its limit that
-    waits on the user: its caller, while that is an integrated session on
-    screen with its dock drawn. Null while the question goes over the
-    window instead, or none waits. */
-export function roundDockedIn(): string | null {
+/** The session whose dock holds the question to start a session, or for a
+    round of review past its limit, that waits on the user: its caller,
+    while that is an integrated session on screen with its dock drawn. Null
+    while the question goes over the window instead, or none waits. */
+export function askDockedIn(): string | null {
   const ask = conductor.asking;
-  if (ask === null || ask.round === null) return null;
+  if (ask === null) return null;
   const row = byToken(ask.request.caller);
   if (row === null || row.kind !== "integrated" || row.status !== "running") return null;
   if (row.key !== sessions.active || !agentVisible()) return null;
@@ -66,8 +67,8 @@ export function dockedFor(key: string): Docked[] {
   for (const request of own?.open ?? [])
     out.push({ kind: "request", id: `${key}\n${request.request}`, key, own: true, request, conversation: own!, at: request.at ?? 0 });
   const ask = conductor.asking;
-  if (ask !== null && ask.round !== null && roundDockedIn() === key)
-    out.push({ kind: "round", id: `round\n${ask.request.id}`, key, own: true, ask, at: 0 });
+  if (ask !== null && askDockedIn() === key)
+    out.push({ kind: "conduct", id: `conduct\n${ask.request.id}`, key, own: true, ask, at: 0 });
   return [...out, ...theirs(session)];
 }
 

@@ -1247,6 +1247,8 @@
           {/if}
           {#if lastOfTurn.has(entry.key) && turn?.outcome === "interrupted"}
             <p class="outcome" data-testid="turn-outcome">Interrupted</p>
+          {:else if lastOfTurn.has(entry.key) && turn?.outcome === "failed" && turn.limit !== null}
+            <p class="outcome" data-testid="turn-outcome">Stopped at the usage limit</p>
           {:else if lastOfTurn.has(entry.key) && turn?.outcome === "failed"}
             <p class="outcome bad" data-testid="turn-outcome">
               The turn failed{#if turn.error}: <Plain text={turn.error} />{:else}.{/if}

@@ -106,11 +106,11 @@ test("an agent's theme is shown as swatches, and kept only when allowed", async 
   await expect.poll(() => answerTo(page, "t-1")).not.toBeNull();
   expect((await answerTo(page, "t-1"))!.error).toBeNull();
 
-  // The pane's corners follow the theme's shape.
+  // The bar's corners follow the theme's shape, rounder than its radius by as much as every ask's.
   const radius = await page
     .getByTestId("settings-undo")
     .evaluate((word) => getComputedStyle(word).borderTopLeftRadius);
-  expect(radius).toBe("10px");
+  expect(radius).toBe("15px");
 
   await page.getByTestId("settings-undo-button").click();
   await expect(page.locator("html")).not.toHaveAttribute("data-palette", /.+/);

@@ -222,7 +222,8 @@ test.describe("subagents on the rail", () => {
     expect(subDot.y).toBeGreaterThan(kidDot.y);
 
     const dock = shown(page).getByTestId("permission-dock");
-    await expect(dock).toContainText("The subagent for “Run the cache tests” in Fix the cache asks to run cargo test cache");
+    await expect(dock).toContainText("The subagent for “Run the cache tests” in Fix the cache wants to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("cargo test cache");
     await dock.getByTestId("dock-open").click();
     await expect(shown(page)).toHaveAttribute("data-session", /.+/);
     await expect(shown(page).locator(`[data-call="${call}"]`)).toHaveClass(/marked/);

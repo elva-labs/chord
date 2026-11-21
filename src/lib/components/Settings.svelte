@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
   import { coversBrowser } from "$lib/browser.svelte";
   import {
     ACTIONS,
@@ -224,20 +224,6 @@
     if (!fetched(source)) return null;
     return `${summary(plugin)} · ${stateLabel(plugin)}`;
   }
-
-  /** The row for agents talking to Chord, lit for a moment when the dialog
-      was opened to point at it. */
-  let live = $state<HTMLElement | null>(null);
-  let lit = $state(false);
-  onMount(() => {
-    if (settings.highlight !== "hooks") return;
-    settings.highlight = null;
-    show("sessions");
-    void tick().then(() => live?.scrollIntoView({ block: "center" }));
-    lit = true;
-    const timer = setTimeout(() => (lit = false), 2600);
-    return () => clearTimeout(timer);
-  });
 
   /** Whether the "More" fold of the appearance tab is open. */
   let moreOpen = $state(
@@ -643,7 +629,7 @@
             <p class="note quiet" data-testid="session-kind-when">
               A change moves the sessions already open too. Reopen, from a right click on it, moves it now.
             </p>
-            <div class="hooks" class:lit bind:this={live} data-testid="settings-live">
+            <div data-testid="settings-live">
               <UnreadEntries field="hooks" />
               <div class="row" data-testid="hooks-everywhere-row">
                 <span class="name"
@@ -1254,29 +1240,6 @@
     color: var(--heading-color);
   }
 
-
-  /* The row lights up when the dialog was opened to point at it. */
-  .hooks {
-    margin: 0 -10px;
-    padding: 0 10px;
-    border-radius: var(--radius);
-    outline: 1px solid transparent;
-    outline-offset: -1px;
-  }
-
-  .hooks.lit {
-    animation: lit 2.6s ease-out forwards;
-  }
-
-  @keyframes lit {
-    0%,
-    45% {
-      outline-color: var(--accent);
-    }
-    100% {
-      outline-color: transparent;
-    }
-  }
 
   /* A setting is its name and its control, with at most one short line
      under the name. */

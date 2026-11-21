@@ -7,9 +7,9 @@ every project, with a word for any project that should go the other way.
 Each project is brought to that choice as it is opened. A fresh install has
 them on; a setup from before the choice keeps them off until asked, since
 they write into the project's own agent configuration. Such a setup is
-told once, in a word over the agent pane, what turning them on gives; its
-link opens the settings at the section, and the word goes for good when it
-is dismissed or when hooks are turned on.
+told once, in an offer over the agent pane, what turning them on gives. Turn
+on there turns them on for every project, as the settings do; the offer goes
+for good on Not now or once hooks are turned on anywhere.
 
 The projects the window opens with are checked together: the machine here
 is asked once whether its daemon is in place, and each account's agent state

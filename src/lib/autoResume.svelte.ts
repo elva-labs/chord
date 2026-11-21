@@ -19,10 +19,14 @@
  * one that finished, one that failed otherwise, a week's limit and a
  * session waiting on an answer are left as they are. What is waited for is
  * held in the window alone, so quitting the app ends it, and so does the
- * run ending or a turn beginning. Turning the choice off, or moving the
- * conversation to an account with no session window, ends it for good:
- * turned on again, only a turn the limit cuts short after that is waited
- * for.
+ * run ending or a turn beginning. Turning the choice off on the composer,
+ * or moving the conversation to an account with no session window, ends
+ * it for good: turned on again there, only a turn the limit cuts short
+ * after that is waited for. The notice the conversation shows under the
+ * turn the limit cut short is the other way to choose: continuing from it
+ * turns the conversation's choice on and waits for that turn, and
+ * cancelling turns it off. Either is this conversation's alone, and the
+ * choice a new conversation takes stays as it was.
  *
  * At the time the window resets, and a minute for the server to agree,
  * the account's usage is read again. The conversation goes on only where
@@ -68,6 +72,9 @@ export const autoResume = $state({
   rows: {} as Record<string, boolean>,
   /** The turns the limit cut short that nothing has followed, by row key. */
   stopped: {} as Record<string, Stopped>,
+  /** When the session window resets, in milliseconds, for each row whose
+      last turn it cut short, waited for or not, until a turn begins. */
+  limited: {} as Record<string, number>,
 });
 
 /** The rows whose running turn is the one sent to go on. */
@@ -153,12 +160,21 @@ export function settle(key: string) {
     the next new conversation too. Turned off, what the conversation
     waited for is let go, and so is what the sessions it started did. */
 export function choose(key: string, on: boolean) {
-  autoResume.rows[key] = on;
-  if (!on) forget(key);
   if (autoResume.next !== on) {
     autoResume.next = on;
     persist({ autoResume: on });
   }
+  chooseHere(key, on);
+}
+
+/** The user chose on the notice of the turn the limit cut short: the
+    choice is this conversation's alone, and the next new conversation
+    still takes the last one made on a composer. Turned off, what the
+    conversation waited for is let go, and so is what the sessions it
+    started did. */
+export function chooseHere(key: string, on: boolean) {
+  autoResume.rows[key] = on;
+  if (!on) forget(key);
   look();
 }
 
@@ -198,17 +214,25 @@ function forget(key: string) {
  * The agent said the usage limit refused the turn that just ended:
  * `window` is the window used up and `resetsAt` when it starts over, in
  * seconds. Only the session window with a time is waited for, and only
- * where the choice is on as the turn ends. Where the turn was the one
+ * where the choice is on as the turn ends; where it is off, the turn is
+ * kept so its notice can still wait for it. Where the turn was the one
  * sent to go on, that was the one try.
  */
 export function limitEnded(key: string, window: string | null, resetsAt: number | null) {
   if (tried.delete(key)) {
+    delete autoResume.limited[key];
     forget(key);
     hands?.say(key, "The usage limit stopped it again. It does not go on by itself a second time.", true);
     return;
   }
   const session = byKey(key);
-  if (window !== "session" || resetsAt === null || session === null || !isOn(session)) {
+  if (window !== "session" || resetsAt === null || session === null) {
+    delete autoResume.limited[key];
+    forget(key);
+    return;
+  }
+  autoResume.limited[key] = resetsAt * 1000;
+  if (!isOn(session)) {
     forget(key);
     return;
   }
@@ -216,15 +240,32 @@ export function limitEnded(key: string, window: string | null, resetsAt: number 
   watch();
 }
 
+/** The user chose, on the notice of the turn the limit cut short, that
+    the conversation goes on when it resets: its own choice is turned on,
+    and that turn is waited for. False where there is no such turn to wait
+    for. */
+export function continueAfterLimit(key: string): boolean {
+  const at = autoResume.limited[key];
+  const session = byKey(key);
+  if (at === undefined || session === null || !offered(session) || followed(session) !== null) return false;
+  chooseHere(key, true);
+  autoResume.stopped[key] = { resetsAt: at, going: false };
+  watch();
+  look();
+  return true;
+}
+
 /** A turn began in the row's run, or ended some other way: nothing waits. */
 export function turnMoved(key: string, began: boolean) {
   if (!began) tried.delete(key);
+  delete autoResume.limited[key];
   forget(key);
 }
 
 /** The row's run ended, or the row is gone. */
 export function runOver(key: string) {
   tried.delete(key);
+  delete autoResume.limited[key];
   forget(key);
 }
 
@@ -324,6 +365,7 @@ export function resetAutoResume() {
   autoResume.next = false;
   for (const key of Object.keys(autoResume.rows)) delete autoResume.rows[key];
   for (const key of Object.keys(autoResume.stopped)) delete autoResume.stopped[key];
+  for (const key of Object.keys(autoResume.limited)) delete autoResume.limited[key];
   tried.clear();
   watch();
 }

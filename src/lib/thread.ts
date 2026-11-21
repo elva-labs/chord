@@ -815,9 +815,9 @@ export function choiceLabel(offer: PermissionOffer): string {
     case "allowAlways":
       return "Always allow";
     case "deny":
-      return "Deny";
+      return "Don't allow";
     case "cancel":
-      return "Deny and stop";
+      return "Don't allow, and stop";
   }
 }
 

@@ -164,8 +164,8 @@ after the session on screen, or to the first when the session on screen is
 not among them, and round to the first again after the last. A project
 with a session waiting is active by then, so the shortcut never has to look
 under the fold. When no other session needs you, the status bar says so.
-While a dialog or a question over the agent pane is up, the shortcut does
-nothing.
+While a dialog or an agent's question over the window is up, the shortcut
+does nothing.
 
 ## After a restart
 
@@ -793,16 +793,17 @@ a slice at a time, and typing never waits on it. The keys are in
 [focus](focus-model.md#a-session-in-chord).
 
 A permission the agent asks for docks over the composer rather than in the
-thread: who asks, the agent or one of its subagents, and what for, with the
-choices the core offers. It says the agent asks to run a command only for a
-call known to be one; otherwise it names the tool. A command of several
+thread, drawn as every ask is: who wants what on its first line, the agent
+or one of its subagents, the thing itself in a block of its own below, then
+numbered choices with the yes first. It says the agent wants to run a
+command only for a call known to be one; otherwise it names the tool. A command of several
 lines is shown whole from the start. A path is read against the folder the
 request runs in, and is taken as inside the project only when it plainly
 resolves into it: one that climbs out, or a folder the request runs in that
 is elsewhere, is marked outside, and one that starts at a home folder,
 names a variable or a glob is marked as not plainly in the project. The
-mark comes before the path, as in "asks to write a path outside the
-project: ~/.ssh/authorized_keys", so no path can push it out of sight.
+mark comes before the path, as in "a path outside the project:
+~/.ssh/authorized_keys", so no path can push it out of sight.
 Whenever any path of a request lies outside the project or not plainly in
 it, the line itself says so and how many, and those paths are listed before
 the description the agent wrote, which is cut like other long text. A link
@@ -823,21 +824,32 @@ names a user before its host, holds a backslash, or has a host that mixes
 scripts. The whole request, with the tool it names, is a fold away
 wherever the line does not say all of it. What the request holds scrolls
 between its line and its choices, which stay in sight whatever it holds.
-The first allows the call once and remembers
-nothing; the others allow it for the session or always, saying what each
-keeps, deny it, with words for the agent if the user wants, or deny it and
-stop the turn. A line under the choices says what the one in focus or under
-the pointer does. A question docks the same way with its options, answered by
+Allow once allows the call once and remembers
+nothing; Allow for this session keeps it for the session, and Don't allow
+refuses it, with words for the agent if the user wants. Always allow and
+Don't allow, and stop, which refuses it and stops the turn, wait behind
+More. The keys follow the order shown: 1 Allow once, 2 Allow for this
+session, 3 Don't allow, 4 Always allow and 5 Don't allow, and stop. A key
+for one behind More only opens More, leaving the keyboard where it was,
+and for half a second after the choices take no answer, so a key pressed
+again, held down or followed by Enter answers nothing; a held key answers
+once at most. More stays open where it was until it is pressed again. A
+line under the choices says what the one in focus or under the pointer
+does. A question docks the same way with its options, answered by
 picking one where one is all it takes, with room for the user's own words
 where it takes them; a secret answer is typed hidden. A
 permission the agent withdraws before it is answered says so on the step
 that asked for it, or where no step is known in a note that says what it
 was for, as a question that settles itself does. When the dock goes by
-itself while it has the keyboard, the keyboard goes back to the composer.
+itself while it has the keyboard, the keyboard goes back to the composer;
+where another ask takes the place of the one answered or gone, the
+keyboard goes to its choices. A screen reader is told of each new ask
+once, politely, by who asks and what for, whether it is docked or put
+over the window.
 
 The dock also holds the requests of the sessions this one started. One of
 them names the session that asks, after the step it was started for when
-it has one, as in "Work: Fix the cache asks to run cargo test", and a
+it has one, as in "Work: Fix the cache wants to run" over cargo test, and a
 subagent inside it by both, as in "The subagent for Check every link in Fix
 the broken links"; Open beside it goes to that session, whose own dock
 holds the same request, and for a subagent's request opens it at the call
@@ -845,7 +857,7 @@ that started the subagent, as its row on the rail does. A name longer
 than the line holds is cut wherever the dock says it, and the line says
 in the warning colour how many characters are cut. It is answered exactly as it is there, and every
 choice acts on that session: the line under the choices names it, what a
-choice keeps is that session's, and Deny and stop stops that session's
+choice keeps is that session's, and Don't allow, and stop stops that session's
 turn. A rule kept for good goes in the local settings of the folder that
 session works in, which every session there reads, so the line names the
 folder and says so, as in "in demo's uncommitted local settings, for every

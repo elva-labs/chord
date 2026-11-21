@@ -342,7 +342,7 @@ started from there and no others, with a cap of its own, and follows no
 workflow. Every session it asks to start is put to the user. The question
 says only what is known: an unnamed agent running in that directory is
 asking, one run outside the workbench or a session that left its name out.
-It offers Allow once or No: the workbench cannot tell which agent it is,
+It offers Allow once or Don't allow: the workbench cannot tell which agent it is,
 so no standing answer is used or given. A session started by another that
 calls with its token taken out of its environment is asked about each time
 in the same way. The sessions such an agent starts run under the
@@ -796,25 +796,31 @@ draw nothing and with a wide mark read as the plain one.
 
 The settings can put every start to the user instead, in the starter's own
 project too (see [settings](settings.md#sessions)). While they do, no
-answer stands: the question offers Allow once or No, as it does for an
+answer stands: the question offers Allow once or Don't allow, as it does for an
 agent the workbench did not start, and a standing answer given before is
 not used.
 
 The first time a session asks to start another anywhere else, the window
-puts the question up over the agent pane and holds the call while it is
-up, as under [a call that waits on the user](#a-call-that-waits-on-the-user):
-allow it from now on, allow this one, or refuse. A round of
+puts the question to the user and holds the call while it is up, as under
+[a call that waits on the user](#a-call-that-waits-on-the-user): Allow
+once, Allow its starts in this project, which lets the asking session
+start sessions there from now on without asking, or Don't allow.
+It docks over the caller's composer while the conversation of a caller
+that runs in Chord is on screen. Otherwise it stands over the window,
+centred above the composer and dock of the conversation on screen so that
+it covers neither, or low in the middle of the window while no conversation
+is on screen. A round of
 review past a workflow's limit is asked about every time, in the starter's
-own project too, however the project was allowed. It says the project the
-round runs in, then names the review and the work by the names the user
-sees, "Review has run twice on Fix the cache, as many times as the workflow
-allows. Allow another round?", with Allow one more round or Stop at the
-limit. For a caller that runs
+own project too, however the project was allowed. It says who wants another
+round of which review, then the project the round runs in, and names the
+work by the names the user sees, "Review has run twice on Fix the cache, as
+many times as the workflow allows. Allow another round?", with Allow one
+more or Stop here. For a caller that runs
 in Chord, the round docks over its composer while its conversation is on
 screen, with the same two choices taken as the dock takes any request (see
 [sessions](sessions.md#sessions-in-chord)), so it never covers the
-header that says where the run stands; anywhere else it is put over the
-agent pane as above, and it moves into the dock once the caller is on
+header that says where the run stands; anywhere else it stands over the
+window as above, and it moves into the dock once the caller is on
 screen. An allowed caller is
 remembered for that project and what the session ran on, for as long as the
 app runs: the account, and the agent too where the account keeps no
@@ -824,7 +830,7 @@ no directory for, is asked about again. A refusal is an answer the agent
 reads, not an error. Bringing back a session it already started is never
 asked about: the consent was given when the session was, and the resumed
 session is that one going on. A start an agent the workbench did not start
-asks for is asked about every time, with Allow once or No, as under [who is
+asks for is asked about every time, with Allow once or Don't allow, as under [who is
 calling](#who-is-calling).
 
 Once there are accounts to tell apart, the question names the account the
@@ -890,7 +896,7 @@ A call whose question was still in front of the user went with the window,
 and is told as not done; one the user had allowed that was still under way
 is told as perhaps done, with the `sessions` listing to see what runs.
 
-![The question over the agent pane: which session wants to start one, in which project, the prompt it would give, and Allow this session, Once or No.](orchestrator-ask.png)
+![The question over the window: which session wants to start one, in which project, the prompt it would give, and Allow once, Allow its starts in this project or Don't allow.](orchestrator-ask.png)
 
 ## In the panes
 
@@ -932,7 +938,7 @@ without saying done.
 While a round past the limit waits on the user the chip turns to the
 accent and says so, "Round 4 of 4 done, asks you", with the step of any
 piece still at work lit beside it. A piece the user stopped there, with
-Stop at the limit, reads "Stopped at round 4 of 4" in the chip's own ink,
+Stop here, reads "Stopped at round 4 of 4" in the chip's own ink,
 its review lit, until another round of it goes ahead. A screen reader hears
 the same, with each step done, skipped, now or to come; a step passed with
 nothing run for it, as when the orchestrator did it itself, is grey and

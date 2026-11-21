@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { conductor, resetConductor } from "$lib/conductor.svelte";
-import { dockedFor, roundDockedIn } from "$lib/docked.svelte";
+import { dockedFor, askDockedIn } from "$lib/docked.svelte";
 import { handleOf, launch, listenIntegrated, resetIntegrated } from "$lib/integrated.svelte";
 import { byKey, create, reset as resetSessions, sessions, started, type Session } from "$lib/sessions.svelte";
 import { applyDetect, resetAgent } from "$lib/agent.svelte";
@@ -159,7 +159,7 @@ describe("what a session's dock holds", () => {
     expect(dockedFor(cache.key)).toEqual([]);
   });
 
-  it("docks a round past the limit in its session only while that session is on screen", async () => {
+  it("docks a question from a session in that session only while it is on screen", async () => {
     const starter = await integrated("Fix the slow startup");
     sessions.active = null;
     conductor.asking = {
@@ -174,14 +174,18 @@ describe("what a session's dock holds", () => {
       named: null,
       once: false,
     };
-    expect(roundDockedIn()).toBeNull();
+    expect(askDockedIn()).toBeNull();
     expect(dockedFor(starter.key)).toEqual([]);
     sessions.active = starter.key;
-    expect(roundDockedIn()).toBe(starter.key);
-    expect(dockedFor(starter.key).map((entry) => entry.kind)).toEqual(["round"]);
-    // A consent question is never docked.
+    expect(askDockedIn()).toBe(starter.key);
+    expect(dockedFor(starter.key).map((entry) => entry.kind)).toEqual(["conduct"]);
+    // A question to start a session docks the same way.
     conductor.asking = { ...conductor.asking!, round: null };
-    expect(roundDockedIn()).toBeNull();
+    expect(askDockedIn()).toBe(starter.key);
+    expect(dockedFor(starter.key).map((entry) => entry.kind)).toEqual(["conduct"]);
+    // Off screen, it goes over the window.
+    sessions.active = null;
+    expect(askDockedIn()).toBeNull();
   });
 });
 
@@ -210,7 +214,8 @@ describe("the dock of a session that started others", () => {
       .join("")
       .replace(/\s+/g, " ")
       .trim();
-    return { step, rest };
+    const thing = screen.getByTestId(testid).querySelector("[data-testid='permission-object']")?.textContent ?? null;
+    return { step, rest: thing === null ? rest : `${rest} ${thing.replace(/\s+/g, " ").trim()}` };
   };
 
   it("names the asking session and its step, says the choice acts there, and answers its own request", async () => {
@@ -221,7 +226,7 @@ describe("the dock of a session that started others", () => {
       session: "Bash(cargo test:*) for the rest of this session",
     });
     flushSync();
-    expect(line("permission-dock")).toEqual({ step: "Work", rest: "Fix the cache asks to run cargo test --workspace" });
+    expect(line("permission-dock")).toEqual({ step: "Work", rest: "Fix the cache wants to run cargo test --workspace" });
     expect(screen.getByTestId("choice-means").textContent?.trim()).toBe(
       "Allows this call in Fix the cache and remembers nothing.",
     );
@@ -229,9 +234,16 @@ describe("the dock of a session that started others", () => {
     expect(screen.getByTestId("choice-means").textContent?.trim()).toBe(
       "Allows this call in Fix the cache and remembers Bash(cargo test:*) for the rest of that session.",
     );
+    // The answers that outlast the call wait behind More.
+    expect(screen.queryByTestId("choice-cancel")).toBeNull();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    await fireEvent.click(screen.getByTestId("choice-more"));
     await fireEvent.pointerEnter(screen.getByTestId("choice-cancel"));
     expect(screen.getByTestId("choice-means").textContent?.trim()).toBe("Refuses this call and stops Fix the cache's turn.");
     expect(screen.getByTestId("dock-open")).toHaveTextContent("Open");
+    vi.advanceTimersByTime(500);
+    flushSync();
+    vi.useRealTimers();
     await fireEvent.click(screen.getByTestId("choice-allow"));
     await settle();
     expect(answers()).toEqual([
@@ -261,7 +273,7 @@ describe("the dock of a session that started others", () => {
     flushSync();
     expect(line("permission-dock")).toEqual({
       step: "Work",
-      rest: "The subagent for “Check every link” in Fix the cache asks to use Bash to run lychee docs/",
+      rest: "The subagent for “Check every link” in Fix the cache wants to use Bash to run lychee docs/",
     });
     expect(screen.getByTestId("permission-dock")).toHaveAttribute(
       "aria-label",
@@ -279,7 +291,7 @@ describe("the dock of a session that started others", () => {
     command(handleOf(starter.key)!, "rm -rf build");
     flushSync();
     expect(screen.queryByTestId("dock-session")).toBeNull();
-    expect(screen.getByTestId("permission-dock")).toHaveTextContent("Claude asks to run rm -rf build");
+    expect(line("permission-dock").rest).toBe("Claude wants to run rm -rf build");
     expect(screen.getByTestId("dock-more")).toHaveTextContent("1 more waiting, from Fix the cache");
   });
 
@@ -299,7 +311,7 @@ describe("the dock of a session that started others", () => {
     expect(answers().map((call) => [call.id, (call as { request: string }).request])).toEqual([[handleOf(cache.key), theirs]]);
     flushSync();
     expect(screen.queryByTestId("dock-session")).toBeNull();
-    expect(screen.getByTestId("permission-dock")).toHaveTextContent("Claude asks to run rm -rf build");
+    expect(line("permission-dock").rest).toBe("Claude wants to run rm -rf build");
   });
 
   it("keeps the request shown while the keyboard is in the dock", async () => {
@@ -316,7 +328,7 @@ describe("the dock of a session that started others", () => {
     screen.getByTestId("choice-allow").blur();
     await settle();
     flushSync();
-    expect(screen.getByTestId("permission-dock")).toHaveTextContent("Claude asks to run rm -rf build");
+    expect(line("permission-dock").rest).toBe("Claude wants to run rm -rf build");
   });
 
   it("takes no answer for a moment from a request that took another's place", async () => {
@@ -345,7 +357,7 @@ describe("the dock of a session that started others", () => {
     // Withdrawn just as the user clicks: the next takes its place.
     fake.expire(handle, first);
     flushSync();
-    expect(screen.getByTestId("permission-dock")).toHaveTextContent("Claude asks to use Bash to run rm -rf /");
+    expect(line("permission-dock").rest).toBe("Claude wants to use Bash to run rm -rf /");
     expect(screen.getByTestId("choice-allow")).toHaveAttribute("aria-disabled", "true");
     await fireEvent.click(screen.getByTestId("choice-allow"));
     await fireEvent.keyDown(screen.getByTestId("choice-allow"), { key: "1" });
@@ -367,7 +379,8 @@ describe("the dock of a session that started others", () => {
     const dock = screen.getByTestId("permission-dock");
     expect(Array.from(screen.getByTestId("dock-session").textContent!)).toHaveLength(161);
     expect(dock.querySelector(".what [data-testid='permission-cut']")?.textContent?.trim()).toBe(`and ${left} more characters`);
-    expect(dock).toHaveTextContent("asks to run rm -rf ~/.ssh");
+    expect(dock.querySelector(".what")).toHaveTextContent("wants to run");
+    expect(screen.getByTestId("permission-object")).toHaveTextContent("rm -rf ~/.ssh");
     expect(screen.getByTestId("choice-means").textContent!.length).toBeLessThan(250);
     expect(dock.getAttribute("aria-label")!.length).toBeLessThan(200);
     expect(screen.getByTestId("choice-allow").getAttribute("title")!.length).toBeLessThan(250);
@@ -429,10 +442,51 @@ describe("the dock of a session that started others", () => {
     fake.startTurn(handleOf(cache.key)!);
     command(handleOf(cache.key)!, "cargo test", { always: "Bash(cargo test:*) in this project's uncommitted local settings" });
     flushSync();
+    await fireEvent.click(screen.getByTestId("choice-more"));
     await fireEvent.pointerEnter(screen.getByTestId("choice-allowAlways"));
     expect(screen.getByTestId("choice-means").textContent?.trim()).toBe(
       "Allows this call in Fix the cache and remembers Bash(cargo test:*) in one's uncommitted local settings, for every session in one.",
     );
+  });
+
+  it("keys the answers in the order shown, and a digit of one behind More only shows it", async () => {
+    const { cache } = await setup();
+    fake.startTurn(handleOf(cache.key)!);
+    command(handleOf(cache.key)!, "cargo test", {
+      session: "Bash(cargo test:*) for the rest of this session",
+      always: "Bash(cargo test:*) in this project's uncommitted local settings",
+    });
+    flushSync();
+    await settle();
+    const shown = [...screen.getByTestId("permission-dock").querySelectorAll("[data-choice]")].map((each) => each.textContent);
+    expect(shown).toEqual(["1Allow once", "2Allow for this session", "3Don't allow", "More"]);
+    const allow = screen.getByTestId("choice-allow");
+    allow.focus();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    await fireEvent.keyDown(allow, { key: "4" });
+    flushSync();
+    expect(answers()).toEqual([]);
+    // The keyboard stays where it was, and More stays open in its place.
+    expect(document.activeElement).toBe(allow);
+    expect(screen.getByTestId("choice-more")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("choice-cancel")).toHaveTextContent("5Don't allow, and stop");
+    expect(screen.getByTestId("choice-means").textContent?.trim()).toBe(
+      "Allows this call in Fix the cache and remembers nothing.",
+    );
+    // Pressed again, held, or followed by Enter while the row settles, it
+    // answers nothing.
+    expect(screen.getByTestId("choice-allowAlways")).toHaveAttribute("aria-disabled", "true");
+    await fireEvent.keyDown(allow, { key: "4" });
+    await fireEvent.keyDown(allow, { key: "5" });
+    await fireEvent.click(allow);
+    expect(answers()).toEqual([]);
+    vi.advanceTimersByTime(500);
+    flushSync();
+    expect(screen.getByTestId("choice-allowAlways")).not.toHaveAttribute("aria-disabled");
+    await fireEvent.keyDown(allow, { key: "4", repeat: true });
+    expect(answers()).toEqual([]);
+    await fireEvent.keyDown(allow, { key: "4" });
+    expect(answers()).toMatchObject([{ choice: "allowAlways" }]);
   });
 
   it("keeps the keyboard on a request whose answer is on its way", async () => {
@@ -462,7 +516,7 @@ describe("the dock of a session that started others", () => {
     links.needs = "permission";
     flushSync();
     const dock = screen.getByTestId("terminal-dock");
-    expect(line("terminal-dock")).toEqual({ step: null, rest: "Fix the links asks for a permission in its terminal" });
+    expect(line("terminal-dock")).toEqual({ step: null, rest: "Fix the links wants a permission in its terminal" });
     expect(dock.querySelectorAll("[data-choice]")).toHaveLength(1);
     expect(screen.getByTestId("dock-open-terminal")).toHaveTextContent("Open Fix the links");
     expect(dock).toHaveTextContent("It runs in a terminal, so it is answered there.");
@@ -479,7 +533,7 @@ describe("the dock of a session that started others", () => {
       { header: "Stage", question: "Which stage?", options: [{ label: "dev", description: "" }], multiple: false },
     ]);
     flushSync();
-    expect(line("question-dock")).toEqual({ step: "Work", rest: "Fix the cache asks you" });
+    expect(line("question-dock")).toEqual({ step: "Work", rest: "Fix the cache asks" });
     await fireEvent.click(screen.getByTestId("question-option"));
     await settle();
     expect(fake.calls.filter((call) => call.method === "reply")).toEqual([

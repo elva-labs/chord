@@ -39,6 +39,7 @@
   import Composer from "./Composer.svelte";
   import Dock from "./Dock.svelte";
   import FindBar from "./FindBar.svelte";
+  import LimitNotice from "./LimitNotice.svelte";
   import Icon from "./Icon.svelte";
   import Thread from "./Thread.svelte";
   import Plain from "./Plain.svelte";
@@ -413,7 +414,7 @@
       }}
       onRun={(command) => void run(session.key, command)}
     />
-    <div class="foot" style:--conv-width={width > 0 ? `${width}px` : null}>
+    <div class="foot" data-foot style:--conv-width={width > 0 ? `${width}px` : null}>
       {#if over}
         <div class="ended" data-testid="session-ended">
           <span class="why"><Plain text={why} /></span>
@@ -430,6 +431,7 @@
           {/if}
         </div>
       {:else}
+        <LimitNotice sessionKey={session.key} {conversation} />
         <Dock bind:this={dock} sessionKey={session.key} agent={name} {active} onAnswered={answered} />
         <Composer
           sessionKey={session.key}

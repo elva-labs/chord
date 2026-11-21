@@ -155,8 +155,8 @@ While the palette is up it has the keyboard and no other shortcut reaches past
 it, except that Settings opened from the app's menu puts the palette away
 first.
 
-While a dialog, or a question over the agent pane, is up, neither shortcut opens
-a palette and <kbd>Cmd</kbd><kbd>.</kbd> does nothing, so the keyboard stays
+While a dialog, or an agent's question over the window, is up, neither
+shortcut opens a palette and <kbd>Cmd</kbd><kbd>.</kbd> does nothing, so the keyboard stays
 where the dialog has it. A new shell, a new untitled file and the shortcut to
 the status bar do nothing either while a dialog or a question in a strip
 holds the keyboard.
@@ -210,12 +210,14 @@ So the window's close, by the shortcut, by Close Window on
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>W</kbd>, by the red button or by the
 controls the app draws, and the app's quit, ask first while a session runs,
 a shell has something running in it, by the rule above, or the editor
-holds unsaved edits. The question goes over the whole window. It says how
+holds unsaved edits. The question is a sheet in the middle of the whole
+window, holding the keyboard as a question in a strip does. It says how
 many sessions run and how many of them wait on you, what runs in each busy
 shell and, for one not on screen, the session or project it belongs to,
 that the sessions come back as rows next time to resume, and names
-every unsaved file, with Cancel holding the keyboard, so <kbd>Return</kbd>
-keeps everything. A row left from the last quit runs nothing and counts
+every unsaved file. Its answers are a row walked by the arrow keys, the
+way out to give first and Cancel last, and Cancel holds the keyboard, so
+<kbd>Return</kbd> keeps everything. A row left from the last quit runs nothing and counts
 for nothing, and a window with nothing running, idle shells included,
 closes without a question. There is no setting to turn
 the question off. How it is held for unsaved edits is in
@@ -307,9 +309,10 @@ control a stop as it is drawn, by one rule for the whole window:
   the last stop it comes round to the first. A question in a strip is one
   put in a pane before something is taken away, such as closing a tab with
   unsaved edits; it takes the keyboard when it opens, on Cancel, which is
-  drawn ringed however the question came up. The questions shown
-  over the agent pane, whether an agent may start a session or change a
-  setting, take neither the keyboard nor Tab: the keyboard stays with the
+  drawn ringed however the question came up. The questions an
+  agent puts, whether it may start a session or change a setting, over
+  the window or in the asking session's dock, take neither the
+  keyboard nor Tab: the keyboard stays with the
   agent, and their buttons are stops in reading order. A pane that is
   narrowed away, hidden, or under a dialog takes no Tab, and a peeked
   sessions pane goes back when Tab leaves it rather than let Tab reach the

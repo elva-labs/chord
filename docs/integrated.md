@@ -908,6 +908,15 @@ had, and says nothing of it.
 
 ### Going on after a limit
 
+A turn the account's usage limit refused ends calmly: the thread says
+"Stopped at the usage limit", and a line over the composer says the limit
+was reached and when it resets, until another turn begins. It never takes
+the keyboard. Where the conversation is offered going on by itself, the
+line has one button, Continue when it resets, which turns that choice on
+and waits for the reset; while it waits the line says when it goes on and
+the button is Cancel. Both are this conversation's choice alone: the one
+a new conversation takes stays as it was.
+
 A conversation whose turn the session window's limit cut short can go on
 by itself once that window starts over. It is the conversation's own
 choice, kept behind the composer's `+` chip together with the workflow's

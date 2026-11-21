@@ -4533,13 +4533,20 @@ export function refuse() {
   answerAsk("no");
 }
 
-/** Answers a round past a review's limit, for this one round or not,
-    when it is still the question on screen: an answer given to a question
-    that has gone reaches no other. True when it was answered. */
-export function answerRound(ask: Ask, allowed: boolean): boolean {
-  if (conductor.asking !== ask || ask.round === null) return false;
-  answerAsk(allowed ? "once" : "no");
+/** Answers this question when it is still the one on screen: an answer
+    given to a question that has gone reaches no other. True when it was
+    answered. */
+export function answerConduct(ask: Ask, choice: Choice): boolean {
+  if (conductor.asking !== ask) return false;
+  answerAsk(choice);
   return true;
+}
+
+/** Answers a round past a review's limit, for this one round or not,
+    when it is still the question on screen. True when it was answered. */
+export function answerRound(ask: Ask, allowed: boolean): boolean {
+  if (ask.round === null) return false;
+  return answerConduct(ask, allowed ? "once" : "no");
 }
 
 /** The projects a caller may start sessions in without being asked. */
