@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // Going back to an earlier message, and Up on a waiting one, in an
 // integrated session on the fake core. The handle of the first session the
@@ -27,6 +27,7 @@ async function open(page: Page, agentId: "claude-code" | "codex" = "claude-code"
   });
   await page.goto("/");
   await page.locator(`[data-row="project:${PROJECT}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeVisible();
 }
 

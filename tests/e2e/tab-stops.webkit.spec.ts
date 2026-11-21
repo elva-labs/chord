@@ -168,7 +168,6 @@ for (const platform of PLATFORMS)
       ...platform.menu,
       "sessions-nav",
       "Resize projects and sessions",
-      "start-other",
       "start-agent",
       "Resize changes",
       "toggle-right",
@@ -259,7 +258,7 @@ for (const platform of PLATFORMS)
     expect(await holder(page)).toBe("toggle-right");
     // The corner ends the agent's header now, and the window's own
     // controls moved with it, still after the switch.
-    expect(await walk(page, "Tab", 2)).toEqual(["mode-agent", platform.controls[0] ?? "start-other"]);
+    expect(await walk(page, "Tab", 2)).toEqual(["mode-agent", platform.controls[0] ?? "start-agent"]);
     expect(await walk(page, "Shift+Tab", 2)).toEqual(["mode-agent", "toggle-right"]);
     await page.keyboard.press("Enter");
     await expect(page.locator("section[data-pane='changes']")).toBeVisible();
@@ -353,7 +352,7 @@ test("rings a check box outside its box, checked or not, in both looks and theme
 
 test("walks a dialog's own buttons round its ends", async ({ page }) => {
   await open(page);
-  await page.getByTestId("earlier-sessions").click();
+  await page.getByTestId("earlier-fold").click();
   await expect(page.getByTestId("resume-filter")).toBeFocused();
   // The sessions are walked from the filter, so they are no stops.
   expect(await walk(page, "Tab", 2)).toEqual(["resume-close", "resume-filter"]);
@@ -398,7 +397,7 @@ for (const platform of PLATFORMS)
     expect(await walk(page, "Tab", 3)).toEqual(["Resize the file tree", "viewer-edit", "Close the viewer"]);
     // The menu button, where the app draws one, heads the folded column,
     // over the button the column is.
-    await page.getByTestId("start-other").focus();
+    await page.getByTestId("start-agent").focus();
     expect(await walk(page, "Shift+Tab", platform.menu.length + 1)).toEqual(["unfold-sessions", ...platform.menu]);
     if (platform.menu.length > 0) await page.keyboard.press("Tab");
     await expect(page.getByTestId("unfold-sessions")).toBeFocused();
@@ -446,7 +445,7 @@ test("walks the new shape at once, while its columns wait for frames", async ({ 
   await expect(page.getByTestId("viewer")).toBeVisible();
   expect(await column()).toBe(wide);
   await expect(page.getByTestId("shell")).toHaveAttribute("data-moving");
-  await page.getByTestId("start-other").focus();
+  await page.getByTestId("start-agent").focus();
   expect(await walk(page, "Shift+Tab", 1)).toEqual(["unfold-sessions"]);
   await frames("release");
   await expect.poll(column).toBe(await foldedWidth(page));
@@ -457,7 +456,7 @@ test("walks the new shape at once, while its columns wait for frames", async ({ 
   await page.getByLabel("Close the viewer").dispatchEvent("click");
   await expect(page.getByTestId("viewer")).toHaveCount(0);
   expect(await column()).toBe(await foldedWidth(page));
-  await page.getByTestId("start-other").focus();
+  await page.getByTestId("start-agent").focus();
   expect(await walk(page, "Shift+Tab", 2)).toEqual(["Resize projects and sessions", "sessions-nav"]);
   await frames("release");
   await expect.poll(column).toBe(wide);
@@ -692,7 +691,6 @@ for (const platform of PLATFORMS)
       "toggle-right",
       "mode-agent",
       ...platform.controls,
-      "start-other",
       "start-agent",
     ];
     expect(await walk(page, "Tab", round.length)).toEqual(round);

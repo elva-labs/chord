@@ -11,7 +11,7 @@
 import { untrack } from "svelte";
 import { core, type Process } from "$lib/core";
 import { changesVisible, layout } from "$lib/layout.svelte";
-import { activeSession, label as sessionLabel } from "$lib/sessions.svelte";
+import { activeSession, shownName } from "$lib/sessions.svelte";
 import { besideOf, label as shellLabel, ownerOnScreen, ownShells, withOwner } from "$lib/terminals.svelte";
 import { projectLabel } from "$lib/workspace.svelte";
 
@@ -37,7 +37,7 @@ export function owners(): { ptyId: string; owner: string }[] {
   const list: { ptyId: string; owner: string }[] = [];
   const session = activeSession();
   if (session !== null && session.ptyId !== null && session.status === "running") {
-    list.push({ ptyId: session.ptyId, owner: sessionLabel(session) });
+    list.push({ ptyId: session.ptyId, owner: shownName(session) });
   }
   for (const shell of ownShells()) {
     if (shell.ptyId !== null && shell.status === "running") {

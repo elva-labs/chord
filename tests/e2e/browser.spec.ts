@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, columnsAtRest, installFakeCore } from "./fake";
+import { PROJECT, columnsAtRest, installFakeCore, startNew } from "./fake";
 
 /** A second open project, which a session of the first is asked about
     before it starts one there. */
@@ -244,6 +244,7 @@ test("the palette hides the native view while it is up, and it comes back where 
 
 test("an orchestrator's question hides the native view until it is answered", async ({ page }) => {
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await showPage(page);
 
   await page.evaluate(

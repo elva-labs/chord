@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // The composer's effort chip, beside the model and the mode, and what a
 // slash command changes reaching the window: the row's name, the chips and
@@ -25,6 +25,7 @@ async function open(page: Page, codex = false) {
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeFocused();
 }
 
@@ -78,6 +79,7 @@ test("an effort picked is what the next new session starts on", async ({ page })
   await expect(chip(page, "effort")).toHaveText("Low effort");
   await agent(page, `f.holdReady = true;`);
   await page.getByTestId("project-new-session").click();
+  await startNew(page);
   // Shown from the first frame, before the agent has said what it takes.
   await expect(chip(page, "effort")).toHaveText("Low effort");
   expect((await calls(page)).filter((call) => call.method === "start").at(-1)!.options).toMatchObject({ effort: "low" });
@@ -89,7 +91,7 @@ test("leaves the row its plain name after a command, and follows what the comman
   await page.keyboard.type("/effort high");
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("user-message")).toContainText("/effort high");
-  await expect(row).toContainText("session 1");
+  await expect(row).toContainText("New session");
   // The agent reports the effort the command set.
   await agent(page, `f.emit("${H}", { type: "configured", model: "claude-sonnet-5-5", mode: "default", effort: "high", efforts: ["low", "medium", "high"] });`);
   await expect(chip(page, "effort")).toHaveText("High effort");

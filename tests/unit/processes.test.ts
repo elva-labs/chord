@@ -66,7 +66,7 @@ describe("what is looked under", () => {
   it("is the session on screen while it runs, and its running shells, by name", () => {
     const session = create("/one");
     started(session.key, "pty-1", "s1");
-    const other = create("/one");
+    const other = create("/one", null, undefined, null, "Fix the docs");
     started(other.key, "pty-2", "s2");
     select(session.key);
     const shell = createShell({ project: "/one", session: session.key });
@@ -79,13 +79,13 @@ describe("what is looked under", () => {
     // The project's own shell is listed beside either, named after the
     // project.
     expect(owners()).toEqual([
-      { ptyId: "pty-1", owner: "session 1" },
+      { ptyId: "pty-1", owner: "New session" },
       { ptyId: "pty-3", owner: "shell 1" },
       { ptyId: "pty-5", owner: "shell 1 of one" },
     ]);
     select(other.key);
     expect(owners()).toEqual([
-      { ptyId: "pty-2", owner: "session 2" },
+      { ptyId: "pty-2", owner: "Fix the docs" },
       { ptyId: "pty-4", owner: "shell 1" },
       { ptyId: "pty-5", owner: "shell 1 of one" },
     ]);
@@ -135,8 +135,8 @@ describe("the list", () => {
     ];
     await refresh();
     expect(processes.rows.map((row) => [row.pid, row.owner])).toEqual([
-      [10, "session 1"],
-      [11, "session 1"],
+      [10, "New session"],
+      [11, "New session"],
     ]);
   });
 

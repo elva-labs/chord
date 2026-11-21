@@ -3,7 +3,7 @@ import { untrack } from "svelte";
 import { core, type AgentId, type ProjectInfo, type Workflow } from "$lib/core";
 import { closeOwner } from "$lib/browser.svelte";
 import { lastSegment } from "$lib/paths";
-import { accountOf } from "$lib/accounts.svelte";
+import { accountToStart } from "$lib/accounts.svelte";
 import { focusPane } from "$lib/layout.svelte";
 import {
   activeSession,
@@ -245,14 +245,14 @@ export function goTo(key: string): boolean {
 /** Starts a session in a project, brought forward, and gives it the
     keyboard. A workflow named starts under it; an agent named, with no
     workflow, starts alone; with neither, the session runs the way a plain
-    new session does. The account is the one the project runs under unless
-    named. It runs the way the agent's setting says, unless started the other
+    new session does. The account is the one a new session in the project
+    starts under unless named. It runs the way the agent's setting says, unless started the other
     way. Starting one is the user using the project, so it counts as used.
     Nothing new starts in the orchestrator folder. */
 export function startSession(
   path: string,
   agent?: AgentId,
-  account: string | null = accountOf(path),
+  account: string | null = accountToStart(path),
   workflow?: Workflow | null,
   kind?: SessionKind,
 ) {

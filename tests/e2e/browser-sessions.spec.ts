@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew, sessionBox, sessionRowOf } from "./fake";
 
 /**
  * Browser tabs belong to the session that opened them: the fold, its count
@@ -12,10 +12,9 @@ const CHANGES = "section[data-pane='changes']";
 
 /** The row of the session with this name, wherever the order puts it: the
     latest change is on top. */
+/** A nameless row reads "New session", so "session N" is found by its number. */
 const named = (page: Page, name: string) =>
-  page
-    .locator("[data-testid='session-row']")
-    .filter({ has: page.locator(".label", { hasText: new RegExp(`^${name}$`) }) });
+  sessionRowOf(page, Number(name.replace("session ", "")));
 
 async function push(
   page: Page,
@@ -79,9 +78,11 @@ const allTabs = (page: Page) =>
 
 async function twoSessions(page: Page) {
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
-  await expect(page.locator(".session.on")).toContainText("session 2");
+  await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
 }
 
 /** Waits for the panes to stop moving: opening the browser eases the columns
@@ -131,11 +132,11 @@ test("a tab opened by hand stays with the session it was opened beside", async (
   await expect(page.getByTestId("browser-tab")).toHaveCount(1);
 
   await toSession1(page);
-  await expect(page.locator(".session.on")).toContainText("session 1");
+  await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("browser-fold")).toContainText("Browser (0)");
 
   await toSession2(page);
-  await expect(page.locator(".session.on")).toContainText("session 2");
+  await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("browser-fold")).toContainText("Browser (1)");
   await expect(page.getByTestId("browser-tab")).toHaveCount(1);
   await expect(page.getByTestId("browser-address")).toHaveValue(/example\.com/);
@@ -156,14 +157,14 @@ test("each session keeps its own tab in front", async ({ page }) => {
   await expect(field).toHaveValue(/example\.com/);
 
   await toSession1(page);
-  await expect(page.locator(".session.on")).toContainText("session 1");
+  await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
   await page.getByTestId("browser-fold").click();
   await openByHand(page, "example.net");
   await expect(page.getByTestId("browser-tab")).toHaveCount(1);
   await expect(field).toHaveValue(/example\.net/);
 
   await toSession2(page);
-  await expect(page.locator(".session.on")).toContainText("session 2");
+  await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("browser-tab")).toHaveCount(2);
   await expect(field).toHaveValue(/example\.com/);
   await expect(page.locator("[data-testid='browser-tab'].active")).toHaveAttribute("data-tab-id", "1");
@@ -177,7 +178,7 @@ test("a tab an agent opens for another session shows when the user switches to i
   await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
 
   await named(page, "session 1").click();
-  await expect(page.locator(".session.on")).toContainText("session 1");
+  await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
   await expect(page.getByTestId("browser-fold")).toContainText("Browser (1)");
   await expect(page.getByTestId("browser-tab")).toHaveCount(1);
@@ -190,7 +191,8 @@ test("with no session on screen the tab belongs to the project and shows there",
   // The sessions pane is folded while reviewing: focusing it brings it back.
   await page.keyboard.press("ControlOrMeta+1");
   await page.getByTestId("new-session").click();
-  await expect(page.locator(".session.on")).toContainText("session 1");
+  await startNew(page);
+  await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("browser-fold")).toContainText("Browser (0)");
 
   await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
@@ -203,7 +205,8 @@ test("with no session on screen the tab belongs to the project and shows there",
 test("closing a session closes its tabs, and no one else's", async ({ page }) => {
   await twoSessions(page);
   await page.getByTestId("new-session").click();
-  await expect(page.locator(".session.on")).toContainText("session 3");
+  await startNew(page);
+  await expect(sessionBox(page, 3)).toHaveClass(/\bon\b/);
   // Both open off screen, so the sessions pane stays in view.
   await ask(page, "c1", "browser_open", "session-1", { url: "http://localhost:3000" });
   await ask(page, "c2", "browser_open", "session-2", { url: "http://localhost:4000" });
@@ -239,6 +242,7 @@ test("the tools act within the calling session's own tabs", async ({ page }) => 
 
 test("a row carries one mark, the state dot, and says agent in its meta when an agent opened it", async ({ page }) => {
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator("[data-testid='session-row']")).toHaveCount(1);
   await ask(page, "m1", "browser_open", "session-1", { url: "http://localhost:3000" });
   await page.getByTestId("browser-fold").click();

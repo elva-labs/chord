@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, NO_WORKFLOW, WITH_WORKFLOW, installFakeCore } from "./fake";
+import { PROJECT, NO_WORKFLOW, WITH_WORKFLOW, installFakeCore, startNew, startWith } from "./fake";
 
 /**
  * One session directing another, driven by a fake core.
@@ -111,6 +111,7 @@ test.describe("the conductor", () => {
     await expect(page.locator(AGENT)).toBeVisible();
     // One session of the user's own, which is the caller below.
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(rows(page)).toHaveCount(1);
     await hooksSay(page);
   });
@@ -499,6 +500,7 @@ test.describe("a start while the settings ask before every one", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(rows(page)).toHaveCount(1);
     await push(page, {
       id: "c-own",
@@ -524,6 +526,7 @@ test.describe("what a starter is told", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(rows(page)).toHaveCount(1);
     await hooksSay(page);
   });
@@ -741,6 +744,7 @@ test.describe("a session that follows a workflow", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(rows(page)).toHaveCount(1);
     await hooksSay(page);
   });
@@ -915,6 +919,7 @@ test.describe("the workflow tag", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(rows(page)).toHaveCount(1);
     await hooksSay(page);
     const type = (selector: string) =>
@@ -1007,6 +1012,7 @@ test.describe("a round of review past the workflow's limit", () => {
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(rows(page)).toHaveCount(1);
     await hooksSay(page);
 
@@ -1076,8 +1082,7 @@ test.describe("a round of review past the workflow's limit", () => {
       .locator(`[data-row="project:${PROJECT}"]`)
       .getByTestId("project-new-session")
       .click();
-    await page.locator("[data-testid='account-option'][data-account='Work']").click();
-    await page.getByTestId("workflow-option").click();
+    await startWith(page, "Work", "Build and review");
     await expect(rows(page)).toHaveCount(1);
     await hooksSay(page);
 

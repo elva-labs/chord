@@ -634,6 +634,13 @@ function choose(label: string, alone = false) {
   return pickItem(item, alone);
 }
 
+/** Enter on the defaults' line, and what it closes on run. */
+function start() {
+  const outcome = choose("New session");
+  expect(outcome.type).toBe("close");
+  if (outcome.type === "close") outcome.then();
+}
+
 describe("how a new session runs", () => {
   const quick = () => ({
     ...defaultWorkflow(),
@@ -641,21 +648,23 @@ describe("how a new session runs", () => {
     steps: [defaultWorkflow().steps[0]],
   });
 
-  it("asks nothing more and starts the agent at once, with one agent and no workflow turned on", () => {
+  it("offers the defaults alone, with nothing to change, and starts on Enter with one agent and no workflow", () => {
     adoptWorkflows(undefined);
     expect(stepsLeft([{ kind: "project", path: A }])).toEqual([]);
-    const outcome = beginNew(A);
-    if (outcome.type === "close") outcome.then();
-    expect(outcome.type).toBe("close");
+    expect(beginNew(A)).toEqual({ type: "stay" });
+    const items = stepItems("");
+    expect(items.map((item) => item.label)).toEqual(["New session"]);
+    expect(items[0].kind === "ready" && items[0].detail).toBe("Claude Code");
+    start();
     expect(sessions.all[0]).toMatchObject({ project: A, agent: "claude-code", workflow: null, model: null });
   });
 
   it("asks nothing more in a project that follows no workflow, whatever another project chose", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: null, overrides: { "/elsewhere": "Build and review" } });
     expect(stepsLeft([{ kind: "project", path: A }])).toEqual([]);
-    const outcome = beginNew(A);
-    if (outcome.type === "close") outcome.then();
-    expect(outcome.type).toBe("close");
+    beginNew(A);
+    expect(stepItems("").map((item) => item.label)).toEqual(["New session"]);
+    start();
     expect(sessions.all[0]).toMatchObject({ project: A, agent: "claude-code", workflow: null });
     // Nor where the project chose none over the default.
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: { [A]: null } });
@@ -666,6 +675,9 @@ describe("how a new session runs", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
     expect(stepsLeft([{ kind: "project", path: A }])).toEqual(["agent"]);
     beginNew(A);
+    const [line] = stepItems("");
+    expect(line.kind === "ready" && line.detail).toBe("Build and review");
+    choose("Change");
     const items = stepItems("");
     expect(items.map((item) => [item.group, item.label])).toEqual([
       ["Workflows", "Build and review"],
@@ -685,6 +697,7 @@ describe("how a new session runs", () => {
   it("says whether the project chose its workflow or follows the default", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
     beginNew(A);
+    choose("Change");
     const ends = () => stepItems("").map((item) => (item.kind === "choice" ? item.end : null));
     expect(ends()).toEqual(["default", ""]);
     adoptWorkflows({ list: [defaultWorkflow()], default: null, overrides: { [A]: "Build and review" } });
@@ -694,6 +707,7 @@ describe("how a new session runs", () => {
   it("puts the project's workflow first, marked, with the cursor on it, and starts under it", () => {
     adoptWorkflows({ list: [quick(), defaultWorkflow()], default: null, overrides: { [A]: "Build and review" } });
     beginNew(A);
+    choose("Change");
     const items = stepItems("");
     expect(items.map((item) => item.label)).toEqual(["Build and review", "Quick fix", "Claude Code"]);
     expect(items.map((item) => (item.kind === "choice" ? item.end : null))).toEqual([
@@ -712,14 +726,17 @@ describe("how a new session runs", () => {
     agent.installed = ["claude-code", "codex"];
     adoptWorkflows({ list: [defaultWorkflow(), quick()], default: "Build and review", overrides: {} });
     beginNew(A);
+    choose("Change");
     let outcome = choose("Quick fix");
     if (outcome.type === "close") outcome.then();
     expect(sessions.all[0].workflow?.name).toBe("Quick fix");
     beginNew(A);
+    choose("Change");
     outcome = choose("Codex");
     if (outcome.type === "close") outcome.then();
     expect(sessions.all[1]).toMatchObject({ agent: "codex", workflow: null });
     beginNew(A);
+    choose("Change");
     outcome = choose("Claude Code");
     if (outcome.type === "close") outcome.then();
     expect(sessions.all[2]).toMatchObject({ agent: "claude-code", workflow: null, model: null });
@@ -771,9 +788,8 @@ describe("a new session", () => {
     expect(startingId()).toBeNull();
 
     openCommands();
-    const outcome = choose("New session in one");
-    expect(outcome.type).toBe("close");
-    if (outcome.type === "close") outcome.then();
+    expect(choose("New session in one")).toEqual({ type: "stay" });
+    start();
     expect(sessions.all.at(-1)?.project).toBe(A);
   });
 
@@ -796,12 +812,12 @@ describe("a new session", () => {
     resetFolder();
   });
 
-  it("starts in the project at once when there is nothing else to choose", () => {
+  it("starts in the project on Enter when there is nothing else to choose", () => {
     openCommands();
     choose("New session");
-    const outcome = choose("two");
-    expect(outcome.type).toBe("close");
-    if (outcome.type === "close") outcome.then();
+    expect(choose("two")).toEqual({ type: "stay" });
+    expect(palette.ready).toBe(true);
+    start();
     expect(spawned()).toHaveLength(1);
     expect(sessions.all[0]).toMatchObject({ project: B, agent: "claude-code", account: null });
     expect(workspace.active).toBe(B);
@@ -814,6 +830,10 @@ describe("a new session", () => {
     choose("New session");
     expect(choose("two")).toEqual({ type: "stay" });
     expect(palette.steps).toEqual([{ kind: "project", path: B }]);
+    // The project's account is the default, and Change offers the others.
+    const [line] = stepItems("");
+    expect(line.kind === "ready" && line.detail).toBe("Claude Code · Work");
+    choose("Change");
     expect(nextStep(palette.steps)).toBe("account");
     expect(stepItems("").map((item) => item.label)).toEqual(["Default", "Work"]);
     // The cursor begins on the account the project runs under.
@@ -838,6 +858,7 @@ describe("a new session", () => {
     sessions.preferred[A] = "codex";
     beginNew(A);
     expect(palette.steps).toEqual([{ kind: "project", path: A }]);
+    choose("Change");
     choose("Work");
     expect(palette.steps.map((step) => step.kind)).toEqual(["project", "account"]);
     expect(stepItems("").map((item) => item.label)).toEqual(["Claude Code", "Codex"]);
@@ -852,6 +873,7 @@ describe("a new session", () => {
     agent.installed = ["claude-code", "codex"];
     sessions.preferred[A] = "codex";
     beginNew(A);
+    choose("Change");
     const marks = stepItems("").map((item) => (item.kind === "choice" ? item.end : null));
     expect(marks).toEqual(["", "last used"]);
   });
@@ -868,9 +890,88 @@ describe("a new session", () => {
     expect(stepItems(palette.query).map((item) => item.label)).toEqual(["Codex"]);
   });
 
+  it("starts a project's next session under the account picked there last, unless the project names one", () => {
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    beginNew(A);
+    choose("Change");
+    const outcome = choose("Work");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, account: "Work" });
+    // The next one starts there under Work, marked as the one picked last.
+    beginNew(A);
+    const [line] = stepItems("");
+    expect(line.kind === "ready" && line.detail).toBe("Claude Code · Work");
+    choose("Change");
+    expect(startingId()).toBe("account:Work");
+    expect(stepItems("").map((item) => (item.kind === "choice" ? item.end : null))).toEqual(["", "last picked"]);
+    // The pick is the project's own, not every project's.
+    beginNew(B);
+    const [other] = stepItems("");
+    expect(other.kind === "ready" && other.detail).toBe("Claude Code · Default");
+    // A project's own word wins over the pick.
+    accounts.overrides = { [A]: null };
+    beginNew(A);
+    const [own] = stepItems("");
+    expect(own.kind === "ready" && own.detail).toBe("Claude Code · Default");
+  });
+
+  it("does not take the defaults' line as a pick", () => {
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    accounts.everywhere = "Work";
+    beginNew(A);
+    choose("New session");
+    expect(accounts.picked).toEqual({});
+  });
+
+  it("finds every choice the defaults stand for in what is typed on their line", () => {
+    agent.installed = ["claude-code", "codex"];
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    accounts.overrides = { [A]: "Work" };
+    beginNew(A);
+    setQuery("cod");
+    expect(palette.ready).toBe(true);
+    // Codex begins with it, so it comes before Claude Code and takes the cursor.
+    expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
+      ["Codex", "Which agent"],
+      ["Claude Code", "Which agent"],
+    ]);
+    setQuery("o");
+    expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
+      ["Claude Code", "Which agent"],
+      ["Codex", "Which agent"],
+      ["Work", "Under which account"],
+    ]);
+    // Enter starts the one found, with the other defaults as they were.
+    setQuery("cod");
+    const outcome = choose("Codex");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", account: "Work" });
+  });
+
+  it("starts the default agent under an account found on the defaults' line, and keeps the pick", () => {
+    agent.installed = ["claude-code", "codex"];
+    sessions.preferred[A] = "codex";
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    beginNew(A);
+    setQuery("wor");
+    const outcome = choose("Work");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", account: "Work" });
+    expect(accounts.picked).toEqual({ [A]: "Work" });
+  });
+
+  it("takes no text on the defaults' line when there is nothing to choose", () => {
+    beginNew(A);
+    expect(stepsLeft(palette.steps)).toEqual([]);
+    setQuery("hello");
+    expect(palette.query).toBe("");
+    expect(stepItems(palette.query).map((item) => item.kind)).toEqual(["ready"]);
+  });
+
   it("marks the account the project runs under as the project's", () => {
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     beginNew(A);
+    choose("Change");
     const marks = stepItems("").map((item) => (item.kind === "choice" ? item.end : null));
     expect(marks).toEqual(["this project's", ""]);
   });
@@ -891,16 +992,20 @@ describe("a new session", () => {
     expect(palette.query).toBe("");
   });
 
-  it("steps back by one answer, and from the first question to the commands", () => {
+  it("steps back by one answer, to the defaults, and from the first question to the commands", () => {
     agent.installed = ["claude-code", "codex"];
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     openCommands();
     choose("New session");
     choose("one");
+    choose("Change");
     choose("Work");
     expect(palette.steps).toHaveLength(2);
     stepBack();
     expect(palette.steps).toEqual([{ kind: "project", path: A }]);
+    expect(palette.ready).toBe(false);
+    stepBack();
+    expect(palette.ready).toBe(true);
     stepBack();
     expect(palette.steps).toEqual([]);
     expect(palette.mode).toBe("new");
@@ -911,9 +1016,8 @@ describe("a new session", () => {
   it("starts in the project on screen from its own command", () => {
     workspace.active = C;
     openCommands();
-    const outcome = choose("New session in three");
-    expect(outcome.type).toBe("close");
-    if (outcome.type === "close") outcome.then();
+    expect(choose("New session in three")).toEqual({ type: "stay" });
+    start();
     expect(sessions.all[0]).toMatchObject({ project: C });
   });
 
@@ -932,12 +1036,25 @@ describe("a new session", () => {
     expect(palette.steps).toEqual([{ kind: "project", path: C }]);
   });
 
-  it("starts at once with Cmd+Enter when the project is all it needs", () => {
+  it("steps back out of a new session Cmd+Enter began to go to, with what was typed there", () => {
+    agent.installed = ["claude-code", "codex"];
+    openGoTo();
+    setQuery("thr");
+    const project = paletteItems().find((item) => item.kind === "project" && item.path === C)!;
+    pickItem(project, true);
+    expect(palette).toMatchObject({ mode: "new", ready: true, query: "" });
+    choose("Change");
+    stepBack();
+    expect(palette.ready).toBe(true);
+    stepBack();
+    expect(palette).toMatchObject({ mode: "goto", query: "thr", steps: [], ready: false });
+  });
+
+  it("offers the defaults with Cmd+Enter when the project is all it needs", () => {
     openGoTo();
     const project = paletteItems().find((item) => item.kind === "project" && item.path === C)!;
-    const outcome = pickItem(project, true);
-    expect(outcome.type).toBe("close");
-    if (outcome.type === "close") outcome.then();
+    expect(pickItem(project, true)).toEqual({ type: "stay" });
+    start();
     expect(sessions.all.map((session) => session.project)).toEqual([C]);
   });
 

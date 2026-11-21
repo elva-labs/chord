@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // An integrated session by keyboard alone, in WebKit as well as Chromium:
 // WebKit, the app's webview on macOS, passes over a control on Tab unless
@@ -22,6 +22,7 @@ async function open(page: Page, options: { untrusted?: boolean } = {}) {
     );
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
 }
 
 const focused = (page: Page) =>

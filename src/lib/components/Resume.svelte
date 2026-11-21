@@ -5,8 +5,7 @@
   import { lastSegment } from "$lib/paths";
   import { returnFocus } from "$lib/layout.svelte";
   import { closeResume, offered, pickResume, resume } from "$lib/resume.svelte";
-  import { ago, historyLabel } from "$lib/sessions.svelte";
-  import { shown } from "$lib/unseen";
+  import { ago, hasName, historyLabel } from "$lib/sessions.svelte";
   import { workspace } from "$lib/workspace.svelte";
 
   /**
@@ -113,10 +112,10 @@
             aria-selected={index === cursor}
             tabindex="-1"
             onclick={() => pickResume(entry)}
-            title={shown(entry.title ?? entry.id)}
+            title={historyLabel(entry)}
             data-testid="resume-row"
           >
-            <span class="label">{historyLabel(entry)}</span>
+            <span class="label" class:unnamed={!hasName(entry)}>{historyLabel(entry)}</span>
             {#if entry.cwd}<span class="where" title={entry.cwd} data-testid="session-where">{lastSegment(entry.cwd)}</span>{/if}
             {#if entry.account !== null}<span class="where" title="account: {entry.account}" data-testid="resume-account">{entry.account}</span>{/if}
             {#if mixed}<span class="where" data-testid="resume-agent">{agentTag(entry.agent)}</span>{/if}
@@ -262,6 +261,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A session nothing names reads "New session", quietly. */
+  .label.unnamed {
+    color: var(--ink-3);
   }
 
   .where {

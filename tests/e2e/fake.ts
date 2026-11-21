@@ -104,6 +104,63 @@ export const SETTINGS_FILE = "fake.settings";
 /** Where the fake keeps the user's stylesheet the same way. */
 export const STYLES_FILE = "fake.userStyles";
 
+/** The container of the Nth session of a project, whatever it reads as,
+    by the number it carries for tests: a row with no name reads "New
+    session". The number counts within a project, so with two projects
+    open the project's path picks its section. The container carries the
+    `on` class. */
+export const sessionBox = (page: Page, number: number, project?: string) =>
+  (project === undefined
+    ? page
+    : page.getByTestId("project-section").filter({ has: page.locator(`[data-row='project:${project}']`) })
+  ).locator(`[data-row^='session:'][data-ordinal='${number}']`);
+
+/** The row button of the Nth session of a project. */
+export const sessionRowOf = (page: Page, number: number, project?: string) =>
+  sessionBox(page, number, project).getByTestId("session-row");
+
+/** Starts one session the other way from the defaults, alone, through the
+    palette's command for it: an integrated one where sessions run in a
+    terminal, a terminal one where they run integrated. */
+async function startTheOtherWay(page: Page, command: string) {
+  // The chord is heard once the app has mounted, so it is pressed until the
+  // palette is up on the command.
+  await expect(async () => {
+    if ((await page.getByTestId("palette").count()) === 0) await page.keyboard.press("ControlOrMeta+Shift+P");
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type(command);
+    await expect(page.getByTestId("palette-row").first()).toContainText(command, { timeout: 1000 });
+  }).toPass();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("palette")).toHaveCount(0);
+}
+export const startIntegrated = (page: Page) => startTheOtherWay(page, "New session in Chord");
+export const startTerminal = (page: Page) => startTheOtherWay(page, "New session in a terminal");
+
+/** Starts a session on the defaults a new session offers: asking for one
+    opens the palette on its "New session" row, and a click on the row starts
+    it. Call it right after the click that asks. */
+export async function startNew(page: Page) {
+  const row = page.locator("[data-testid='palette-row'][data-kind='ready']");
+  await row.click();
+  await expect(page.getByTestId("palette")).toHaveCount(0);
+}
+
+/** The row of a palette step that offers choices, by its label. */
+export const paletteChoice = (page: Page, label: string) =>
+  page
+    .locator("[data-testid='palette-row']")
+    .filter({ has: page.locator("[data-testid='palette-label']", { hasText: new RegExp(`^${label}$`) }) });
+
+/** Starts a session on answers other than the defaults: Change lists the
+    questions in steps, and each label is the row picked in turn, the last
+    one starting the session. Call it right after the click that asks. */
+export async function startWith(page: Page, ...labels: string[]) {
+  await page.locator("[data-testid='palette-row'][data-kind='change']").click();
+  for (const label of labels) await paletteChoice(page, label).click();
+  await expect(page.getByTestId("palette")).toHaveCount(0);
+}
+
 /** How wide the folded sessions column is where the page runs: wider on
     macOS, where it holds the window's buttons, and in each look its own. */
 export async function foldedWidth(page: Page): Promise<number> {

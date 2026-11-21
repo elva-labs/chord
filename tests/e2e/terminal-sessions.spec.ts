@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew, sessionBox, sessionRowOf } from "./fake";
 
 /**
  * Shells belong to the session they were opened beside: the panel lists,
@@ -20,9 +20,9 @@ const SESSION = "[data-testid='session-row']";
 /** Cmd on macOS, Ctrl elsewhere. */
 const MOD = "ControlOrMeta";
 
-/** The row of the session with this name, wherever the order puts it. */
+/** A nameless row reads "New session", so "session N" is found by its place: the Nth row. */
 const named = (page: Page, name: string) =>
-  page.locator(SESSION).filter({ has: page.locator(".label", { hasText: new RegExp(`^${name}$`) }) });
+  sessionRowOf(page, Number(name.replace("session ", "")));
 
 const writes = (page: Page) =>
   page.evaluate(() => ((window as unknown as { __written?: unknown[] }).__written ?? []).length);
@@ -61,9 +61,26 @@ function running(page: Page, pty: string, command: string) {
 
 async function twoSessions(page: Page) {
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(SESSION)).toHaveCount(2);
-  await expect(page.locator(".session.on")).toContainText("session 2");
+  await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
+}
+
+/** The Nth session started gets this title from its agent, as Claude Code
+    sets its terminal's title, which names its row. */
+function title(page: Page, number: number, name: string) {
+  return page.evaluate(
+    ({ number, name }) => {
+      const w = window as unknown as {
+        __spawns: { ptyId: string }[];
+        __say: (id: string, text: string) => void;
+      };
+      w.__say(w.__spawns[number - 1].ptyId, `\x1b]0;\u2733 ${name}\x07`);
+    },
+    { number, name },
+  );
 }
 
 /** Closes a session from its row's ×. */
@@ -80,9 +97,12 @@ test.beforeEach(async ({ page }) => {
 
 test("shows the shells of the session on screen, and keeps every shell as it was across a switch", async ({ page }) => {
   await twoSessions(page);
+  await title(page, 1, "alpha");
+  await title(page, 2, "beta");
+  await expect(sessionBox(page, 2).locator(".label").first()).toHaveText("beta");
   await page.keyboard.press(`${MOD}+j`);
   await expect(page.locator(ROW)).toHaveCount(1);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of session 2");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of beta");
   const two = await typeInto(page, "a");
   await page.locator(`${SLOT}.on`).evaluate((slot) => slot.setAttribute("data-kept", "two"));
   await page.getByTestId("new-terminal").click();
@@ -93,7 +113,7 @@ test("shows the shells of the session on screen, and keeps every shell as it was
   await named(page, "session 1").click();
   await expect(page.locator(TERMINAL)).toBeVisible();
   await expect(page.locator(ROW)).toHaveCount(0);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of session 1");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of alpha");
   await expect(page.getByTestId("terminal-status")).toContainText("No shell open for this session.");
   await expect(page.locator(SLOT)).toHaveCount(2);
   await page.getByTestId("start-terminal").click();
@@ -105,6 +125,7 @@ test("shows the shells of the session on screen, and keeps every shell as it was
   // Back on session 2: its shells, the one it had in front, the same
   // terminal it was, still at its pty.
   await named(page, "session 2").click();
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of beta");
   await expect(page.locator(ROW)).toHaveCount(2);
   await expect(page.locator(ROW).nth(1)).toHaveAttribute("aria-current", "true");
   await page.locator(ROW).first().click();
@@ -117,7 +138,7 @@ test("shows the shells of the session on screen, and keeps every shell as it was
   await expect(page.locator(ROW).nth(1)).toHaveAttribute("aria-current", "true");
   await page.keyboard.press(`Shift+${MOD}+ArrowDown`);
   await expect(page.locator(ROW).first()).toHaveAttribute("aria-current", "true");
-  await expect(page.locator(".session.on")).toContainText("session 2");
+  await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
 });
 
 test("keeps a shell opened with no session on screen in reach beside a session, at the foot", async ({ page }) => {
@@ -131,8 +152,9 @@ test("keeps a shell opened with no session on screen in reach beside a session, 
   // apart and under the project's name, and in front, so the dev server
   // is in sight; the fold lists it under the same name.
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(SESSION)).toHaveCount(1);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of session 1");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
   await expect(page.getByTestId("terminal-none")).toHaveText("None open.");
   const foot = page.getByTestId("terminal-project-shells");
   await expect(foot).toContainText("Shells of demo");
@@ -175,6 +197,7 @@ test("keeps a shell opened with no session on screen in reach beside a session, 
 
 test("starts the shell it opens with after a reload beside the session on screen", async ({ page }) => {
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(SESSION)).toHaveCount(1);
   await page.keyboard.press(`${MOD}+j`);
   await expect(page.locator(ROW)).toHaveCount(1);
@@ -182,8 +205,7 @@ test("starts the shell it opens with after a reload beside the session on screen
   await page.reload();
   await expect(page.locator(TERMINAL)).toBeVisible();
   await expect(page.locator(SESSION)).toHaveCount(1);
-  const name = await page.locator(".session.on .label").textContent();
-  await expect(page.getByTestId("terminal-owner")).toHaveText(`Shells of ${name}`);
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
   await expect(page.locator(ROW)).toHaveCount(1);
   await expect(page.locator(SLOT)).toHaveCount(1);
   await expect(page.locator(`${SLOT}.on`)).toBeVisible();
@@ -204,7 +226,7 @@ test("closes a session's shells with it, and asks first while one has something 
   // up in the sessions pane, in the words the window's own close uses.
   await closeSession(page, "session 2");
   const strip = page.getByTestId("close-owner");
-  await expect(strip).toContainText("Close session 2 with 1 busy shell running?");
+  await expect(strip).toContainText("Close New session, now with 1 busy shell running?");
   await expect(strip).toContainText("“npm run dev” is running in shell 1. Closing the session stops it.");
   await expect(page.getByTestId("close-owner-cancel")).toBeFocused();
   await page.getByTestId("close-owner-cancel").click();
@@ -236,6 +258,7 @@ test("asks before Close project while a shell that started in it is busy, naming
   const own = await typeInto(page, "a");
   await running(page, own, "npm run dev");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(SESSION)).toHaveCount(1);
   await page.getByTestId("new-terminal").click();
   const theirs = await typeInto(page, "b");
@@ -248,7 +271,7 @@ test("asks before Close project while a shell that started in it is busy, naming
   const strip = page.getByTestId("close-owner");
   await expect(strip).toContainText("Close demo with 2 busy shells running?");
   await expect(strip).toContainText(
-    "“npm run dev” is running in shell 1, and “make watch” in shell 1 of session 1. Closing the project stops them.",
+    "“npm run dev” is running in shell 1, and “make watch” in shell 1 of New session. Closing the project stops them.",
   );
   await page.keyboard.press("Escape");
   await expect(strip).toHaveCount(0);
@@ -271,7 +294,7 @@ test("lists in the processes fold what runs under the session on screen and its 
   const rows = page.getByTestId("process-row");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("node two.js");
-  await expect(rows.nth(0)).toContainText("session 2");
+  await expect(rows.nth(0)).toContainText("New session");
   await expect(rows.nth(1)).toContainText("npm run dev");
   await expect(rows.nth(1)).toContainText("shell 1");
   await expect(page.getByTestId("processes-fold")).toContainText("Processes (2)");
@@ -287,6 +310,7 @@ test("says whose processes an empty fold means", async ({ page }) => {
   await page.keyboard.press(`${MOD}+j`);
   await expect(page.getByTestId("processes-empty")).toHaveText("Nothing running in the project's shells.");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("processes-empty")).toHaveText(
     "Nothing running under this session, its shells or those of demo.",
   );

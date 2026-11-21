@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, WITH_WORKFLOW, backgroundAtRest, foldedWidth, installFakeCore } from "./fake";
+import { PROJECT, WITH_WORKFLOW, backgroundAtRest, foldedWidth, installFakeCore, startNew } from "./fake";
 
 /**
  * The frame every pane lives in: in the modern look the panes stand as
@@ -218,6 +218,7 @@ test.describe("a divider", () => {
     await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     const divider = await box(page, DIVIDER);
     const x = divider.x - 2;
@@ -298,6 +299,7 @@ test.describe("the folded sessions column", () => {
   test("on macOS holds the window's buttons on the ground with even room either side, and shows the start of each name", async ({ page }) => {
     await open(page, { platform: "MacIntel" });
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await page.keyboard.press("Meta+b");
     await expect.poll(async () => (await box(page, SESSIONS)).width).toBeCloseTo(86, 0);
     // The buttons stand 18 to 76 pixels in, on the header row's middle.
@@ -478,6 +480,7 @@ test("the peeked sessions pane stands over the agent's card as a sheet, with a s
 test("the headers' quiet text holds 4.5:1 on the light ground", async ({ page }) => {
   await open(page);
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   // A session in a worktree, which the changes header names.
   await page.evaluate((project) => {
@@ -552,6 +555,7 @@ test("the dock's round question stands inside the agent's card, clear of its cor
   (once.workflows.list[0].steps[1] as { limit: number }).limit = 1;
   await open(page, { settings: { integrated: ["claude-code"], ...once } });
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   const conversation = page.locator("[data-testid='conversation'].active");
   await expect(conversation.getByTestId("composer-input")).toBeEnabled();
   await conduct("c-start", { name: "Fix the cache", step: "Work" });
@@ -581,6 +585,7 @@ test("the dock's round question stands inside the agent's card, clear of its cor
 test("the conversation's find bar stands inside the agent's card, under its mark", async ({ page }) => {
   await open(page, { settings: { integrated: ["claude-code"] } });
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   const input = page.getByTestId("composer-input");
   await expect(input).toBeVisible();
   await input.fill("The cache is built again on every start.");

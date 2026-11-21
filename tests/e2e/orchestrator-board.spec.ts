@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * The changes pane, for a session that directs others.
@@ -202,6 +202,7 @@ async function begin(page: Page, workflow = false) {
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("file-tree")).toBeVisible();
 }
 
@@ -337,6 +338,7 @@ test.describe("the board for any session", () => {
     await installFakeCore(page, { settings: { integrated: ["claude-code"] } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.locator("[data-testid='conversation'].active").getByTestId("composer-input")).toBeEnabled();
     await page.evaluate(
       ({ project }) =>

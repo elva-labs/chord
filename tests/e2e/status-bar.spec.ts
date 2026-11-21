@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { PROJECT, WITH_WORKFLOW, NO_WORKFLOW, installFakeCore } from "./fake";
+import { PROJECT, WITH_WORKFLOW, NO_WORKFLOW, installFakeCore, sessionRowOf, startNew, startIntegrated } from "./fake";
 
 // The status bar at the window's foot: what the session on screen runs on,
 // and the allowance of the account it runs under, against the fake core's
@@ -57,6 +57,7 @@ async function open(page: Page, settings: Record<string, unknown> = {}, more: Re
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], ...settings }, ...more });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeFocused();
 }
 
@@ -138,8 +139,9 @@ test.describe("the session on screen", () => {
     await open(page);
     // A second session, which finishes while the first is on screen.
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect(page.getByTestId("session-row")).toHaveCount(2);
-    await page.getByTestId("session-row").filter({ hasText: "session 1" }).click();
+    await sessionRowOf(page, 1).click();
     await report(page, THREE);
     await agent(page, `f.turn("int-2", "Done.");`);
     await expect(page.getByTestId("waiting-readout")).toHaveText("1 waiting for you");
@@ -237,6 +239,7 @@ test.describe("the session on screen", () => {
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.getByTestId("composer-input")).toBeFocused();
     await report(page, [
       { kind: "session", percent: 23, resetsAt: HOUR + 35 * 60 },
@@ -300,6 +303,7 @@ test.describe("a terminal session", () => {
     await installFakeCore(page, { open: [PROJECT], settings: { accounts: WORK, ...WITH_WORKFLOW } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.locator("section[data-pane='agent'] .xterm")).toBeVisible();
     // The header names the model it was started on; the agent may have
     // changed it since, in its own terminal.
@@ -314,12 +318,12 @@ test.describe("a terminal session", () => {
   test("shows nothing of the model where it was started on the agent's own, and the limits another session on the account reported", async ({ page }) => {
     await installFakeCore(page, { open: [PROJECT], settings: { accounts: WORK, ...NO_WORKFLOW } });
     await page.goto("/");
-    await page.getByTestId("start-other").click();
+    await startIntegrated(page);
     await expect(page.getByTestId("conversation")).toBeVisible();
     await report(page, THREE);
     // Under the project's account, which the palette offers first.
     await page.getByTestId("new-session").click();
-    await page.keyboard.press("Enter");
+    await startNew(page);
     await expect(page.locator("section[data-pane='agent'] .xterm").first()).toBeVisible();
     await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveCount(0);
     await expect(page.getByTestId("session-settings")).toHaveCount(0);
@@ -354,6 +358,7 @@ test.describe("a terminal session", () => {
     await page.goto("/");
     await kept([11, 34], 3 * HOUR);
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.locator("section[data-pane='agent'] .xterm")).toBeVisible();
     // No session on the account is integrated, and its figures show.
     await expect(page.getByTestId("limit-figure")).toHaveText(["5h11%", "Week34%"]);
@@ -367,7 +372,7 @@ test.describe("a terminal session", () => {
     // the old.
     await kept([12, 35], 0);
     await page.getByTestId("new-session").click();
-    await page.keyboard.press("Enter");
+    await startNew(page);
     await expect(page.getByTestId("limit-figure")).toHaveText(["5h12%", "Week35%"]);
   });
 });
@@ -405,9 +410,9 @@ test.describe("a narrow window", () => {
     // A second session that finishes while the first is on screen, so
     // something waits for you.
     await page.getByTestId("new-session").click();
-    await page.keyboard.press("Enter");
+    await startNew(page);
     await expect(page.getByTestId("session-row")).toHaveCount(2);
-    await page.getByTestId("session-row").filter({ hasText: "session 1" }).click();
+    await sessionRowOf(page, 1).click();
     await agent(page, `f.turn("int-2", "Done."); f.configure("${H}", { effort: "high" });`);
     await expect(page.getByTestId("waiting-readout")).toHaveText("1 waiting for you");
     await report(page, [

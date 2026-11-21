@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * Switching how an agent's sessions run moves the sessions already open:
@@ -47,6 +47,7 @@ function row(page: Page, name: string) {
     answered, so it rests. */
 async function conversation(page: Page, handle: string, words: string) {
   await page.locator(`[data-row="project:${PROJECT}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(composer(page)).toBeVisible();
   await composer(page).fill(words);
   await page.keyboard.press("Enter");
@@ -111,7 +112,8 @@ test("moves a session at rest at once, one at work or asking once shown at rest,
   await row(page, "Asking").click();
   await page.getByTestId("question-option").first().click();
   await agent(page, `f.turn("int-3", "Went with dev.");`);
-  await expect(row(page, "Asking").getByTestId("session-stays")).toHaveText("Moves to a terminal next time");
+  await expect(row(page, "Asking").locator(".state.told")).toContainText("Moves to a terminal next time");
+  await expect(row(page, "Asking").locator(".dot")).toHaveAttribute("title", /, Moves to a terminal next time$/);
   expect((await spawns(page)).length).toBe(1);
   await expect(page.locator("[data-testid='conversation']:visible")).toBeVisible();
 
@@ -149,8 +151,7 @@ test("waits for a command in the background to end, saying so, or is reopened fr
 
   await switchTo(page, "terminal");
 
-  const stays = row(page, "Serving").getByTestId("session-stays");
-  await expect(stays).toHaveText("Moves to a terminal when npm run dev ends");
+  await expect(row(page, "Serving").locator(".state.told")).toContainText("Moves to a terminal when npm run dev ends");
   expect(await spawns(page)).toEqual([]);
   await expect(page.locator("[data-testid='conversation']:visible")).toBeVisible();
 
@@ -162,7 +163,7 @@ test("waits for a command in the background to end, saying so, or is reopened fr
   await strip.getByRole("button", { name: "Stop and reopen" }).click();
   await expect.poll(async () => (await spawns(page)).map((spawned) => spawned.session)).toEqual(["integrated-session-1"]);
   await expect(page.locator("[data-testid='conversation']:visible")).toHaveCount(0);
-  await expect(page.getByTestId("session-stays")).toHaveCount(0);
+  await expect(page.locator(".state.told", { hasText: "Moves to a terminal" })).toHaveCount(0);
 });
 
 // A core that holds a conversation at a point it went back to says so
@@ -210,6 +211,7 @@ test("moves a terminal session into a conversation that draws what it said befor
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect.poll(async () => (await spawns(page)).length).toBe(1);
   for (const kind of ["prompt", "stop"])
     await page.evaluate(

@@ -19,7 +19,7 @@
 import { untrack } from "svelte";
 import { core } from "$lib/core";
 import { anyUnsaved, editor, leaveRequested } from "$lib/editor.svelte";
-import { byKey as sessionByKey, groupOf, isLive, label as sessionLabel, sessions } from "$lib/sessions.svelte";
+import { byKey as sessionByKey, groupOf, isLive, sessions, shownName } from "$lib/sessions.svelte";
 import {
   belongsTo,
   forOwner,
@@ -77,7 +77,7 @@ function fromScreen(shell: Shell): string {
     it is the project's own, else with its session. */
 function inProject(shell: Shell): string {
   const session = shell.session === null ? null : sessionByKey(shell.session);
-  return session === null ? label(shell) : `${label(shell)} of ${sessionLabel(session)}`;
+  return session === null ? label(shell) : `${label(shell)} of ${shownName(session)}`;
 }
 
 /** Keeps the core told whether sessions run or shells are open. Runs in an

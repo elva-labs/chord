@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 /**
  * The renderer each terminal draws with as the cards' share moves: the GPU
@@ -65,6 +65,7 @@ test("swaps the terminals' renderer as the share is kept, not while it is picked
   test.skip(!(await gpuHere(page)), "WebGL here is a software rasteriser, which gets the DOM renderer alone");
   for (let i = 1; i <= 3; i++) {
     await page.getByTestId("new-session").click();
+    await startNew(page);
     await expect.poll(() => renderers(page).then((r) => r.gpu + r.dom)).toBe(i);
   }
   await expect.poll(() => renderers(page)).toEqual({ gpu: 3, dom: 0 });
@@ -109,6 +110,7 @@ test("draws with the DOM renderer when the GPU one cannot start", async ({ page 
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect.poll(() => renderers(page)).toEqual({ gpu: 0, dom: 1 });
   // The probe asked once, and the GPU renderer once more as it started.
   expect(await page.evaluate(() => (window as unknown as { __webgl2Asks: number }).__webgl2Asks)).toBeGreaterThanOrEqual(2);

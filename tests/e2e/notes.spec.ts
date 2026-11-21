@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew, sessionRowOf } from "./fake";
 
 /**
  * The notes a session keeps of its conversation are read from its row's
@@ -9,14 +9,20 @@ import { PROJECT, installFakeCore } from "./fake";
 
 const ROW = "[data-testid='session-row']";
 
-const row = (page: Page, name: string) => page.locator(ROW).filter({ hasText: name });
+/** A nameless row reads "New session", so "session N" is found by its number and any other row by its name. */
+const row = (page: Page, name: string) =>
+  /^session \d+$/.test(name)
+    ? sessionRowOf(page, Number(name.replace("session ", "")))
+    : page.locator(ROW).filter({ hasText: name });
 
 test("opens a session's notes in the viewer from its menu, offered only when it keeps some", async ({ page }) => {
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(row(page, "session 1")).toContainText("running");
   await page.getByTestId("new-session").click();
+  await startNew(page);
   await expect(page.locator(ROW)).toHaveCount(2);
 
   // None kept: the menu is as it was.

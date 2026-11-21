@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // Going back to an earlier message and Up on a waiting one, by the keys,
 // in WebKit, the app's own webview on macOS; and a conversation held where
@@ -25,6 +25,7 @@ async function open(page: Page) {
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.locator(`[data-row="project:${PROJECT}"]`).getByTestId("project-new-session").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeVisible();
 }
 

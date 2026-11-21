@@ -105,8 +105,8 @@ the keyboard in that session or, for a project with none, in the sessions
 pane. A sessions pane that is folded opens for that, or peeks over
 the agent while reviewing, so the viewer stays, and in a window too narrow for
 the pane, or in compact mode, it stays as the user set it and the keyboard
-goes to the agent pane's New session button. <kbd>Cmd</kbd><kbd>Enter</kbd> on either starts a session
-in that project, as below. A <kbd>&gt;</kbd> typed as the first character
+goes to the agent pane's New session button. <kbd>Cmd</kbd><kbd>Enter</kbd> on either asks for a new
+session in that project, on its line of defaults, as below. A <kbd>&gt;</kbd> typed as the first character
 switches to the commands, with the rest of what was typed. Go to lists no
 commands, except that once something is typed the command for the file in the
 viewer is listed when it matches, after the sessions and projects, or before
@@ -126,12 +126,23 @@ the next session that needs you, as <kbd>Cmd</kbd><kbd>.</kbd> does (see
 [sessions](sessions.md)). It shows how many are waiting, and with none it
 cannot be picked.
 
-**A new session** is asked for in the same field, a step at a time. First the
-project, unless only one is open: the one on screen above the others, then by
-when they were last used. While a session that another started in a
+**A new session** is asked for in the same field. It is the one way a session
+is started: the + in the sessions pane, a project's New session, the agent
+pane's button and the commands all open it here. First the project, unless
+it is known or only one is open: the one on screen above the others, then by
+when they were last used. With the project known, one line reads `New
+session` with what it starts on, such as `Claude Code · Work`, and
+<kbd>Enter</kbd> starts it: the project's account and its workflow, else the
+agent last started in it. Under it, where there is anything to choose,
+Change asks the rest a step at a time. Typing on the line lists everything
+Change would ask, narrowed by what is typed: the workflows and agents, then
+the accounts, each under its heading. <kbd>Enter</kbd> on one starts the
+session with that one answer changed, so `cod` and <kbd>Enter</kbd> start
+Codex under the account the line named. With nothing to choose, the line
+takes no text. While a session that another started in a
 different project is on screen, the project on screen is the starter's, as
 [sessions](sessions.md) describes, both here and for the command that starts
-a session in the project on screen. Then the account, when accounts are named in the
+a session in the project on screen. Change asks the account, when accounts are named in the
 [settings](settings.md#accounts), with the project's own under the cursor;
 then how it runs, when there is a workflow or more than one agent to pick
 between: the workflows under one heading, offered once a workflow has been
@@ -142,10 +153,11 @@ project's workflow, else on the agent last started in the project. A step
 with nothing to choose is not asked. Each
 answer stays in the field as a chip, and <kbd>Backspace</kbd> on an empty
 field takes the last one back, one step to a press however long the key is
-held; from the first step it returns to the commands with what was typed there
-still in the field. The last answer brings the project forward and starts the
-session the way a project's new-session button in the sessions pane does,
-and the keyboard goes to the new agent.
+held; with none taken it goes back to the line of defaults, and from that
+line to the project, or to the list the session was asked for from, go to
+or the commands, with what was typed there still in the field. The last answer, or Enter on the line, brings the project forward and starts the
+session, and the keyboard goes to the new agent. Backing out starts nothing and
+changes nothing.
 
 <kbd>Escape</kbd> puts the palette away from any step, and so does the shortcut
 of the list that is up: <kbd>Cmd</kbd><kbd>P</kbd> for go to,

@@ -5,7 +5,7 @@
   import { modelLabel } from "$lib/models";
   import { hostOf } from "$lib/remote.svelte";
   import { placeTextOf } from "$lib/conductor.svelte";
-  import { isLive, label, sessions, type Session } from "$lib/sessions.svelte";
+  import { isLive, sessions, shownName, type Session } from "$lib/sessions.svelte";
   import { conducting, stateWord } from "$lib/orchestrator.svelte";
   import { goTo } from "$lib/workspace.svelte";
 
@@ -47,7 +47,7 @@
           title={stateWord(session)}
         ></span>
         {#if stepped}<span class="step" data-testid="started-step">{at?.step ?? ""}</span>{/if}
-        <span class="name"><Plain text={label(session)} /></span>
+        <span class="name"><Plain text={shownName(session)} /></span>
         <span class="state" class:asking={session.needs === "permission"} data-testid="started-state">
           {at?.round == null ? "" : `${at.round}, `}{session.needs === "permission" ? "asking" : stateWord(session)}
         </span>

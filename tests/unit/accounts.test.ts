@@ -2,13 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   OWN_LABEL,
   accountOf,
+  accountToStart,
+  accounts,
   accountsSettings,
   addAccount,
   adoptAccounts,
   dirFor,
   dirsOf,
+  loadPicked,
   names,
   overrideOf,
+  pickAccount,
   removeAccount,
   reset,
   setEverywhere,
@@ -136,6 +140,48 @@ describe("which account a project runs under", () => {
       { claude: "~/.claude-lab", codex: "~/.codex-lab" },
       { claude: "~/.claude-work", codex: "~/.codex-work" },
     ]);
+  });
+});
+
+describe("which account a new session starts under", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    addAccount("Work", suggest("Work"));
+    addAccount("Lab", suggest("Lab"));
+  });
+
+  it("is the one picked there last where the project names none, else the project's", () => {
+    setEverywhere("Work");
+    expect(accountToStart(A)).toBe("Work");
+    pickAccount(A, "Lab");
+    expect(accountToStart(A)).toBe("Lab");
+    expect(accountToStart(B)).toBe("Work");
+    pickAccount(A, null);
+    expect(accountToStart(A)).toBeNull();
+    setOverride(A, "Work");
+    expect(accountToStart(A)).toBe("Work");
+  });
+
+  it("forgets a pick whose account is gone", () => {
+    pickAccount(A, "Lab");
+    removeAccount("Lab");
+    expect(accountToStart(A)).toBeNull();
+    pickAccount(B, "Nope");
+    expect(accounts.picked[B]).toBeUndefined();
+  });
+
+  it("keeps the picks between runs, dropping what does not read", () => {
+    pickAccount(A, "Lab");
+    pickAccount(B, null);
+    accounts.picked = {};
+    loadPicked();
+    expect(accounts.picked).toEqual({ [A]: "Lab", [B]: null });
+    localStorage.setItem("chord.pickedAccounts", JSON.stringify({ [A]: 3, [B]: "Work" }));
+    loadPicked();
+    expect(accounts.picked).toEqual({ [B]: "Work" });
+    localStorage.setItem("chord.pickedAccounts", "{");
+    loadPicked();
+    expect(accounts.picked).toEqual({ [B]: "Work" });
   });
 });
 

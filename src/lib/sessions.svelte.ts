@@ -10,7 +10,7 @@ import {
   type Workflow,
 } from "$lib/core";
 import { SvelteSet } from "svelte/reactivity";
-import { accountOf, dirFor, names } from "$lib/accounts.svelte";
+import { accountToStart, dirFor, loadPicked, names } from "$lib/accounts.svelte";
 import { CODEX_DEFAULT } from "$lib/models";
 import { catalogName } from "$lib/modelCatalog.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
@@ -51,7 +51,7 @@ import {
   superseded as wentOnFromIt,
   takeUp as takeUpAgain,
 } from "$lib/goingOn.svelte";
-import { GOING_ON_WAIT } from "$lib/instructions";
+import { GOING_ON_WAIT, spoken } from "$lib/instructions";
 
 /**
  * Every session this window has, live or finished.
@@ -667,6 +667,7 @@ export function adopt(project: string, id: string) {
     were called. A corrupt entry is not worth a broken pane: it reads as
     nothing remembered. */
 export function loadRemembered() {
+  loadPicked();
   try {
     const raw = localStorage.getItem(MINE_KEY);
     if (raw !== null) {
@@ -1143,15 +1144,22 @@ export function outsideFor(
 
 /**
  * What a past session is called. The title comes from a format documented as
- * internal and version-unstable, so a missing one falls back to when it last
- * moved rather than to an error.
+ * internal and version-unstable, so a missing one reads "New session" rather
+ * than an error.
  */
 export function historyLabel(transcript: Transcript): string {
   const known = sessions.names[transcript.id];
   if (known !== undefined && !reservedName(known)) return shown(known);
   if (transcript.title !== null && transcript.title !== "" && !reservedName(transcript.title))
     return shown(transcript.title);
-  return `session from ${ago(transcript.modified)}`;
+  return "New session";
+}
+
+/** Whether a past session has a name of its own to be listed by. */
+export function hasName(transcript: Transcript): boolean {
+  const known = sessions.names[transcript.id];
+  if (known !== undefined && !reservedName(known)) return true;
+  return transcript.title !== null && transcript.title !== "" && !reservedName(transcript.title);
 }
 
 /** Coarse on purpose: the pane wants recency, not a timestamp. */
@@ -1179,15 +1187,10 @@ export function since(ms: number, now = Date.now()): string {
   return `${Math.floor(days / 365)}y`;
 }
 
-/** How the rows that fold away at the end of a project are counted on
-    the row that holds them: `8 more from this week`, by how long ago the
-    oldest of them changed. */
-export function moreLabel(count: number, oldest: number, now = Date.now()): string {
-  const days = (now - oldest) / 86_400_000;
-  if (days < 1) return `${count} more from today`;
-  if (days < 7) return `${count} more from this week`;
-  if (days < 30) return `${count} more from this month`;
-  return `${count} more`;
+/** The line that folds away the rows at the end of a project, with how
+    many it holds: `Earlier · 26`. */
+export function earlierLabel(count: number): string {
+  return `Earlier · ${count}`;
 }
 
 /** What a session's model is called on its row and tooltip, the row of
@@ -1290,12 +1293,78 @@ export function liveCount(project: string): number {
   return forProject(project).filter(isLive).length;
 }
 
-/** A short label for the row: its name, or its number in the project. A
-    name is the agent's or a caller's text, so what it holds that cannot be
-    seen is written out. */
+/** A session as an agent addresses it: its name, or its number in the
+    project. A name is the agent's or a caller's text, so what it holds
+    that cannot be seen is written out. Never shown to the user, who reads
+    shownName. */
 export function label(session: Session): string {
   const name = knownName(session);
   return name === null ? `session ${session.ordinal}` : shown(name);
+}
+
+/** A session as the user reads it, in a row, a tooltip, a notice or a
+    dialog: what its row reads as, else "New session". */
+export function shownName(session: Session): string {
+  return rowName(session) ?? "New session";
+}
+
+/** A session as the user reads it where the text alone says who: an ask,
+    a notification, the question about closing it. Where another live
+    session in its project reads the same, the age its row shows follows,
+    "New session, 3m", so the words point at one row on screen. */
+export function toldName(session: Session, now = Date.now()): string {
+  const name = shownName(session);
+  return readsLikeAnother(session) ? `${name}, ${since(lastChanged(session), now)}` : name;
+}
+
+/** Whether another live session in the same project reads as this one. */
+export function readsLikeAnother(session: Session): boolean {
+  const name = shownName(session);
+  return sessions.all.some(
+    (other) =>
+      other.key !== session.key && other.project === session.project && isLive(other) && shownName(other) === name,
+  );
+}
+
+/** What a row reads as: its name, else the first words of the prompt it
+    started with, unless they read as the user, the workbench, an agent or
+    another live session's name. Null where nothing says anything, for a
+    row that reads "New session"; a row never reads as its number. */
+export function rowName(session: Session): string | null {
+  const name = knownName(session);
+  if (name !== null) return shown(name);
+  const words = promptWords(session);
+  return words === null || reservedName(words) || promptTaken(words, session.key) ? null : words;
+}
+
+/** Whether a prompt's first words read as the workbench, as an agent, or
+    as the title or given name of another live session than `except`. A
+    prompt is plain text, so its scripts are its own, and two sessions
+    started from one prompt both read its words. */
+function promptTaken(words: string, except: string): boolean {
+  if (readsAsWorkbench(words) || readsAsAgent(words)) return true;
+  const bare = bareName(words);
+  return sessions.all.some((session) => {
+    if (session.key === except || !isLive(session)) return false;
+    const name = knownName(session);
+    return name !== null && bareName(name) === bare;
+  });
+}
+
+/** The first words of the prompt a session started with, without the
+    workbench's sentence after them. Null for nothing. */
+function promptWords(session: Session): string | null {
+  return session.prompt === null ? null : firstWords(spoken(session.prompt).text);
+}
+
+/** The first line of a message, cut to fit a row. Null for nothing. */
+export function firstWords(text: string | null): string | null {
+  const line = text
+    ?.split("\n")
+    .find((candidate) => candidate.trim() !== "")
+    ?.trim();
+  if (line === undefined) return null;
+  return shown(line.length > 60 ? `${line.slice(0, 59)}…` : line);
 }
 
 /** What a row is known by: its title, the name it was given, or for a
@@ -1358,7 +1427,12 @@ export function nameTaken(name: string, except: string | null = null): boolean {
   if (mixesScripts(name) || readsAsWorkbench(name) || readsAsAgent(name)) return true;
   const bare = bareName(name);
   return sessions.all.some(
-    (session) => session.key !== except && isLive(session) && bareName(label(session)) === bare,
+    (session) =>
+      session.key !== except &&
+      isLive(session) &&
+      [label(session), knownName(session) === null ? promptWords(session) : null].some(
+        (taken) => taken !== null && bareName(taken) === bare,
+      ),
   );
 }
 
@@ -1569,7 +1643,7 @@ export function create(
   startIn: string | null = null,
   prompt: string | null = null,
   model: string | null = null,
-  account: string | null = accountOf(project),
+  account: string | null = accountToStart(project),
   workflow?: Workflow | null,
   kind?: SessionKind,
 ): Session {

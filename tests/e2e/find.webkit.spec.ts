@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // Find in an integrated session's conversation, in WebKit as well as
 // Chromium: the bar over the thread, the count, the marks painted over the
@@ -16,6 +16,7 @@ async function openIntegrated(page: Page, settings: Record<string, unknown> = {}
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], ...settings } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
+  await startNew(page);
   await expect(page.getByTestId("composer-input")).toBeVisible();
 }
 
@@ -298,6 +299,7 @@ test.describe("find in the conversation", () => {
     await installFakeCore(page, { open: [PROJECT] });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(page.locator("section[data-pane='agent'] .xterm")).toBeVisible();
     await page.locator("section[data-pane='agent'] .xterm textarea").focus();
     await findChord(page);

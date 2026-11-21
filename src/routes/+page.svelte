@@ -407,6 +407,11 @@
     });
   });
 
+  // The changes pane has nothing to show until a project is open.
+  $effect(() => {
+    layout.noProject = workspace.active === null;
+  });
+
   // The browser shows the tabs of the session on screen, or of the project
   // on screen with no session selected: the core is told whenever that
   // changes.
