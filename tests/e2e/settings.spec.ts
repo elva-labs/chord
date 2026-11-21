@@ -270,8 +270,8 @@ test("records a chord of one's own", async ({ page }) => {
   await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
 });
 
-// A setup from before hooks were a choice is told once that they are worth
-// turning on; the word links to the section and goes for good on dismissal.
+// A setup from before hooks were a choice is offered once to turn them on;
+// the offer turns them on in place and goes for good on Not now.
 test.describe("the hooks notice", () => {
   test.beforeEach(async ({ page }) => {
     // A setup from before the choice: the fake's workspace on record, hooks
