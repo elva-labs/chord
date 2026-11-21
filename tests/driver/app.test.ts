@@ -1379,15 +1379,23 @@ describe("the real app", () => {
         async () => (await driver.findElements(ready)).length > 0,
       );
       const chose = await scene();
-      // The defaults start on the project's account.
-      const detail = await driver
-        .findElement(ready)
-        .findElement(By.css("[data-testid='palette-detail']"))
-        .getText();
-      if (!detail.includes("Work"))
-        throw new Error(
-          `the defaults read ${detail}\nwith the tag: ${tagged}\nwith the palette: ${chose}\nnow: ${await scene()}`,
-        );
+      // The defaults start on the project's account. The line's words are
+      // read from the page, not as rendered: the palette fades in, and a
+      // fading row reads as no text to the driver.
+      const detail = () =>
+        driver.executeScript(
+          () =>
+            document.querySelector(
+              "[data-testid='palette-row'][data-kind='ready'] [data-testid='palette-detail']",
+            )?.textContent ?? "",
+        ) as Promise<string>;
+      await driver
+        .wait(async () => (await detail()).includes("Work"), 10_000)
+        .catch(async () => {
+          throw new Error(
+            `the defaults read ${await detail()}\nwith the tag: ${tagged}\nwith the palette: ${chose}\nnow: ${await scene()}`,
+          );
+        });
       await pickRow(driver, "Change");
       await pickRow(driver, "Work");
       await pickRow(driver, "Codex");
