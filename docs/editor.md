@@ -37,7 +37,7 @@ starts an [untitled file](#untitled-files).
 A plain editor: line numbers, the line the cursor is on, undo, find in the
 file, and code in colours by what each word is, and nothing that completes
 or checks. It is drawn in the terminal's [font](settings.md#font) and the
-look's colours, at a size of its own that the zoom chords step while it has
+look's colours, at a size of its own that the zoom shortcuts step while it has
 the keyboard, kept in the window's storage.
 
 A file's name says what it is written in, by its extension or by its whole
@@ -84,9 +84,9 @@ expression count. <kbd>Enter</kbd> goes to the next match,
 closes the bar. There is nothing to replace with. The matches are counted
 as the text is typed, and once typing pauses in a large file or in the file
 itself. Find goes to the pane that holds the keyboard: the editor's while
-the editor has it, and an integrated session's beside it while its
+the editor has it, and an in-Chord session's beside it while its
 composer or thread has it, which finds in the conversation; see
-[focus](focus-model.md#an-integrated-session).
+[focus](focus-model.md#a-session-in-chord).
 
 The foot has the line and column, what the file is written in by its name,
 and whether it is saved.
@@ -94,7 +94,7 @@ and whether it is saved.
 ## The views
 
 Edit, Diff when git changed the file, and Preview for Markdown, walked with
-the view chord; Preview is offered only for a file that has one. Diff and
+the view shortcut; Preview is offered only for a file that has one. Diff and
 Preview are read only and drawn as the viewer draws them, from the file on
 disk: with unsaved edits the foot says they show the saved version.
 
@@ -220,16 +220,16 @@ tab with the only copy of unsaved edits to the tabs shown next.
 ## The File menu
 
 On macOS a File menu holds New File, New File in Tree, New Shell, Save and
-Close, each showing and answering the chord its action has in the
-[chord table](focus-model.md): move a chord there and the menu's moves with
+Close, each showing and answering the shortcut its action has in the
+[shortcut table](focus-model.md): move a shortcut there and the menu's moves with
 it. New File starts an [untitled file](#untitled-files), and New File in
 Tree names one in the tree first. Save is greyed out outside editor mode,
 or without a file in front to save, and the new files and New Shell without
-a project. Close closes what is in front, as its chord does, and is named
+a project. Close closes what is in front, as its shortcut does, and is named
 for it: Close Tab, Close Shell, Close Viewer or Close Window; see
 [focus](focus-model.md#closing-what-is-in-front). Close Window in the Window
 menu is on <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>W</kbd> and asks first the same
-way, and Settings shows the chord the table gives it; when the table gives
+way, and Settings shows the shortcut the table gives it; when the table gives
 Shift+Cmd+W to an action, Close Window shows no chord. On Windows and Linux
 the menu button at the top left holds the same five items, named the same.
 

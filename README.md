@@ -66,7 +66,7 @@ state at a glance, and projects on other machines over ssh.
   through the panes if you like, and the terminal's font and the
   interface's chosen apart. See [settings](docs/settings.md).
 - **Keyboard first.** The agent owns the keyboard. The app claims a few
-  modifier chords, all of them yours to change. One goes to any session or
+  modifier shortcuts, all of them yours to change. One goes to any session or
   project, another runs any command or starts a session. See
   [focus](docs/focus-model.md).
 
@@ -132,7 +132,7 @@ npm run test:driver   # the real binary, driven over WebDriver
   shrinks, what moves when a pane goes, the tree and what sits under it, the
   terminal panel, the window's chrome, zoom.
 - [Sessions](docs/sessions.md): what a session is, what its row says,
-  active and inactive projects and the chord to the next session that needs
+  active and inactive projects and the shortcut to the next session that needs
   you, past sessions, and how the changes pane keeps up.
 - [Focus](docs/focus-model.md): who owns the keyboard, and the two palettes.
 - [Settings](docs/settings.md): the seven tabs, the appearance and the look,
@@ -147,7 +147,7 @@ npm run test:driver   # the real binary, driven over WebDriver
 - [Plugins](docs/plugins.md): where they come from, the sources offered out
   of the box, what one may add to the workbench, and how one is written.
 - [Agents](docs/adapters.md): Claude Code and Codex CLI, and how they differ.
-- [Integrated sessions](docs/integrated.md): an agent driven in messages
+- [Sessions in Chord](docs/integrated.md): an agent driven in messages
   rather than in a terminal, and the events it gives the window.
 - [Remote](docs/remote.md): projects on other machines.
 - [Platforms](docs/platforms.md): what differs on each.

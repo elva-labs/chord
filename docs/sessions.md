@@ -1,15 +1,15 @@
 # Sessions
 
 A session is one agent process in one project. In a terminal session it runs
-in a pty of its own with its own terminal and scrollback; an integrated
+in a pty of its own with its own terminal and scrollback; an in-Chord
 session has no terminal, and the window draws its conversation instead, as
-[integrated sessions](#integrated-sessions) describes. A project holds as
+[sessions in Chord](#sessions-in-chord) describes. A project holds as
 many as you start, several
 projects can be open at once, and switching between any of them stops
 nothing. The sessions you are not looking at are hidden rather than
 unmounted. A terminal session is hidden in a way that keeps its box in
 layout, so a background session's pty is never resized and never reflows.
-An integrated session's conversation is taken out of layout while it is
+An in-Chord session's conversation is taken out of layout while it is
 not in front, so a window holding many costs no more to lay out than one
 holding the conversation on screen; it comes back where it was left, and
 at its foot if it was following it. Each
@@ -36,7 +36,7 @@ The pane's title row carries two small buttons at its end: the order the
 projects are listed in, and a menu with Open project, Open remote project,
 for a folder on another machine, and Settings; see [remote](remote.md).
 Under it sits a
-field, `Go to session or project` with the chord of go to, which opens
+field, `Go to session or project` with the shortcut of go to, which opens
 [go to](focus-model.md#the-palettes), and beside it a button in the accent
 that asks for a new session in the palette, which project first when more
 than one is open, as the palette's New session does. With no project open,
@@ -129,7 +129,7 @@ The order of the projects is the user's own: the order button on the title
 row is a menu of two, Last used, the latest first, which is where every
 setup starts, or Name. Last used is when the user last opened the project or
 brought it forward, or started or picked a session in it, from the pane, the
-palette or the chord that goes to the next session needing them; for a
+palette or the shortcut that goes to the next session needing them; for a
 project with no such record, when one of its own transcripts was last
 written. The window putting a project in front as it opens, and an agent
 asking to show something in one, is not the user using it. What the agents do keeps a project out of
@@ -144,7 +144,7 @@ While the pointer is over the pane, or the keyboard is walking its rows,
 the order holds still: what is under the pointer or the cursor stays where
 it is, rows still come and go, and the order settles once both have
 stopped. The keyboard holds it once it moves the cursor or arrives by the
-pane's chord, and until it leaves the pane; a click that only leaves the
+pane's shortcut, and until it leaves the pane; a click that only leaves the
 keyboard in the pane does not, so the order settles as the pointer leaves.
 A change of sort applies at once.
 
@@ -159,12 +159,12 @@ drawn.
 puts the keyboard in it. A session needs you when it is asking for a
 permission, or when it stopped, ended or rang while nobody was looking.
 They are taken in order: those asking for a permission first, and within
-each kind the one that has waited longest first. The chord goes to the one
+each kind the one that has waited longest first. The shortcut goes to the one
 after the session on screen, or to the first when the session on screen is
 not among them, and round to the first again after the last. A project
-with a session waiting is active by then, so the chord never has to look
+with a session waiting is active by then, so the shortcut never has to look
 under the fold. When no other session needs you, the status bar says so.
-While a dialog or a question over the agent pane is up, the chord does
+While a dialog or a question over the agent pane is up, the shortcut does
 nothing.
 
 ## After a restart
@@ -202,13 +202,13 @@ it had under its name, whether it went unread by itself or was marked by
 hand; a row that was read comes back read, and none of its lines is kept,
 so marking it unread then puts no line back. A mark made by hand comes
 back with its rule. This holds for a
-terminal and an integrated session, whether its agent is started again or
+terminal and an in-Chord session, whether its agent is started again or
 the row is left as it was, and for a session another session started, which
 comes back unread when its starter brings it back. A row that has not come
 back within a week, as when its project does not open again or its starter
 is not resumed, is let go, and comes back read if it ever does. What waits is kept as
 it changes, not on the way out, so a crash keeps it as a quit does. It
-counts at once in the status bar, on the app's icon and for the chord to
+counts at once in the status bar, on the app's icon and for the shortcut to
 the next session that needs you, and coming back says nothing through the
 system: what was unread was news before the quit. What happens after it is
 news as it would have been before. The session the restore puts on screen
@@ -312,7 +312,7 @@ it goes unread: a notification with the project, the session and what it
 waits on, the line the agent left when there is one, and a chime if that is
 turned on. A question that waits on the user says so the same way, once for
 each question, when it comes while the window is in the background: an
-integrated session's permission or question, one asked by a session another
+in-Chord session's permission or question, one asked by a session another
 started included, the workbench's question when a session wants to start
 another, and an agent's change to the settings. The notification names the
 project and the session that asks, and says what for in a line, with no
@@ -351,7 +351,7 @@ it. The row is then drawn as one that went unread by itself: the accent
 dot, the stronger name, and under the name the line it last showed, the
 agent's own line or the first line of what it last said, for as long as
 no new turn has begun since. It counts wherever unread sessions count,
-the status bar, the app's icon, the chord to the next session that needs
+the status bar, the app's icon, the shortcut to the next session that needs
 you and keeping its project active, and nothing is said through the
 system, since the user did it.
 
@@ -413,7 +413,7 @@ see [orchestrator](orchestrator.md#when-it-is-idle).
 
 ## Subagents on the rail
 
-An integrated Claude Code session's subagents hang under its row while they
+An in-Chord Claude Code session's subagents hang under its row while they
 run, one line each and a little smaller than a session's, on a rail from
 the session's dot: a dot for its state, the agent's glyph, what it was
 asked to do, its kind while it runs (Explore, Plan, general) or else
@@ -527,7 +527,7 @@ on begins with its briefing and its own title is no name. A row nothing
 names is `session N`, never its id.
 
 A name the user gives a session through the agent's own rename command is
-the row's name at once and from then on. An integrated session hears it
+the row's name at once and from then on. An in-Chord session hears it
 from the agent; for a Claude Code terminal session the transcript records
 it, and the end of the transcript is read as the session's working folder
 is, every couple of seconds while it is on screen. A title the agent sets
@@ -550,13 +550,13 @@ are the ones to review. Switching to another session switches back. This
 relies on the agent changing its process directory when it enters a
 worktree.
 
-## Integrated sessions
+## Sessions in Chord
 
 How an agent's sessions run is a setting per agent, a terminal to begin
 with; see [settings](settings.md#sessions). Switching it moves the
 sessions already open, as [when the setting is
 switched](#when-the-setting-is-switched) describes. An agent runs
-integrated only where the core says it can drive it in messages, and the
+in Chord only where the core says it can drive it in messages, and the
 rest run in a terminal. A session under a
 [workflow](orchestrator.md#following-a-workflow) runs the way the setting
 of its orchestrator's agent says, as any session does, and is told the
@@ -568,8 +568,8 @@ session on screen, from the agent pane beside its New session button.
 Started the other way, a session is a pick, as an agent picked is, and
 runs alone whatever the project follows. The + and
 New session start the agent's own way, or the project's workflow, so
-nothing is asked of someone who never changes it. An integrated session is
-driven through the core in messages, as [integrated](integrated.md)
+nothing is asked of someone who never changes it. An in-Chord session is
+driven through the core in messages, as [sessions in Chord](integrated.md)
 describes, and is a row like any other: it is listed, stopped with its ×,
 brought back after a restart and resumed the same way.
 
@@ -580,7 +580,7 @@ Mark as read on a row that is unread, as described under
 [what a row says](#what-a-row-says); Stop, or Close for a
 row with nothing running; and for a session whose agent runs both ways and
 whose conversation's id is known, Reopen as a conversation for a terminal
-session and Reopen in a terminal for an integrated one. Reopening stops the
+session and Reopen in a terminal for an in-Chord one. Reopening stops the
 session and, once its process has ended, resumes the same conversation the
 other way in the same row, with its name, its token, its place, its shells
 and the sessions it started, so the tools of the session and those of a
@@ -618,7 +618,7 @@ reopened. A mode chosen on the chip while the session is being reopened
 is the one it goes on in.
 
 The session starts in the mode the agent resumes it in that way, as for
-any resume, except that a conversation whose last run was integrated goes
+any resume, except that a conversation whose last run was in Chord goes
 on in a terminal in the mode it ran in there, which the agent's own record
 does not hold, so a terminal never starts looser than the mode last chosen
 on the chip. Bypassing permissions, or a mode a session cannot switch to,
@@ -632,7 +632,7 @@ dot and the row's words decide it the same way, from the session's own events: a
 turn that only waits on the sessions it started is working, and a session
 at rest while sessions it started work reads `a session working` or `2
 sessions working`, with its dot breathing. At rest, a session reads `idle`
-where the app knows its turn ended, an integrated one or a terminal one
+where the app knows its turn ended, an in-Chord one or a terminal one
 whose hooks report its turns, and `running` where its activity is
 guessed. A session another session
 started is named by the name its start gave, cut to 60 characters, or by
@@ -789,7 +789,7 @@ While the conversation changes, a reply streaming among it, the count
 stays right and the current match stays on what holds it; words that had
 no match go to the first one that comes. A long conversation is counted
 a slice at a time, and typing never waits on it. The keys are in
-[focus](focus-model.md#an-integrated-session).
+[focus](focus-model.md#a-session-in-chord).
 
 A permission the agent asks for docks over the composer rather than in the
 thread: who asks, the agent or one of its subagents, and what for, with the
@@ -899,7 +899,7 @@ the project has a git repository. It shows the model the
 session runs on, which a click changes, and a new session the user starts
 shows from its first frame the model, the mode and the effort last chosen
 for its agent, which it starts on, as
-[integrated](integrated.md#what-a-new-session-starts-on) describes: the agent's default is named once
+[sessions in Chord](integrated.md#what-a-new-session-starts-on) describes: the agent's default is named once
 the agent has said which model that is, and a model chosen during a turn is
 said to be used from the next. A session that follows a workflow shows its
 orchestrator's model and holds it, saying the workflow sets it, and so does
@@ -907,7 +907,7 @@ the status bar. Both name the model the run says it is on, and the
 workflow's own name for it until the run has said. It shows the mode the
 session runs in, as the agent says it does, which a click changes at once
 among the modes the agent offers. A session starts in the mode a terminal
-session would, as [integrated](integrated.md#the-mode-a-session-starts-in)
+session would, as [sessions in Chord](integrated.md#the-mode-a-session-starts-in)
 describes: for a new session the one last chosen for its agent, else the
 one the user's own agent settings name, and for a session that starts again
 or is resumed, the one it last ran in. A mode from those
@@ -932,7 +932,7 @@ being compacted it says it waits for that; Send now is not offered then.
 A message another session sent can be sent now but not taken back. From
 the composer, Cmd+Enter sends them now, with what is written when the
 agent is at work, and Cmd+Shift+Enter takes the newest of the user's own
-back (Ctrl off macOS), as its hint says; a chord the user has given to an
+back (Ctrl off macOS), as its hint says; a shortcut the user has given to an
 action of the keymap is not named. Both are on the thread's arrow walk
 too. Up in the empty composer takes the newest back as well, where nothing
 is docked, with the caret at the start of its words, and Up again, while
@@ -945,7 +945,7 @@ reaches it, and a lone digit
 sent then goes only on a second Enter, so it is not sent as a message by surprise. A message that was not delivered, refused
 by the agent or never sent, can be put back in the composer. What is being
 written stays with its session while another is on screen. The keys are in
-[focus](focus-model.md#an-integrated-session).
+[focus](focus-model.md#a-session-in-chord).
 
 A new session, until its first message, also shows the
 [workflow](orchestrator.md#following-a-workflow) it follows in a chip
@@ -1040,7 +1040,7 @@ A `!` typed as the first thing in the composer makes what follows a
 command for the shell, which the empty composer's hint names. The field
 turns to the shell's type with the `!` in the accent, the folder it runs
 in stands where the context share was, files cannot be attached, and Enter
-runs it in that folder, as [integrated](integrated.md#commands-the-user-runs)
+runs it in that folder, as [sessions in Chord](integrated.md#commands-the-user-runs)
 describes; before the agent is ready the composer says it runs once it
 is. What it prints goes to the agent as context for the next message,
 with no turn of its own. The thread shows it as the user's, the `!` and the
@@ -1064,7 +1064,7 @@ runs it again. Prose, the user's messages, the agent's thinking and plan,
 a tool's output and a subagent's words get no mark.
 
 A session at rest goes back to before one of the user's own messages, as
-[integrated](integrated.md#going-back) describes. Esc twice within a
+[sessions in Chord](integrated.md#going-back) describes. Esc twice within a
 moment in its empty composer, or Go back to an earlier message in the
 palette, opens a list over the composer of the user's own messages the
 agent keeps, oldest first, with the newest marked; a first Esc says what a
@@ -1126,7 +1126,7 @@ session that ended or could not start says why, and Resume starts it again
 on the same conversation, the thread drawn so far staying above what comes,
 with a quiet line saying when it resumed.
 
-An integrated session opened from the past sessions, brought back after
+An in-Chord session opened from the past sessions, brought back after
 a restart, or moved from a terminal by the setting or by Reopen, draws its
 earlier messages above what this run says, in the same look: Claude
 Code's read from its transcript, and Codex's from its thread, through
@@ -1146,7 +1146,7 @@ that holds no message of a session that was spoken to is said to be so in
 the same way. The line stays above whatever the session says after it.
 A session nothing was said in, resumed after it ended, has nothing to
 read, and says nothing of earlier messages.
-[Integrated sessions](integrated.md#history) has what is read and how.
+[Sessions in Chord](integrated.md#history) has what is read and how.
 
 The line reads `Resumed here, today 09:40`, naming the day when it is
 another. The first time shown on each day names its day too, as `Thu 18:02`,
@@ -1155,7 +1155,7 @@ unless every time shown is today's.
 A window reloaded while the core still runs a session takes it up where it
 is: its earlier messages read again, its open requests and waiting messages,
 its own name, who sent each message and when, and the line where a resumed
-run began. That holds for an orchestrator's sessions and for an integrated
+run began. That holds for an orchestrator's sessions and for an in-Chord
 session another session started, which comes back under its starter, as
 after a restart, when it waits to be resumed like any other.
 
@@ -1233,7 +1233,7 @@ pasted path and shows an image file as an attachment, so a screenshot
 dragged in arrives the way it would in a plain terminal. The webview never
 sees the drag: the window takes it and reports paths with a position, and
 the terminal under a drag shows an accent inset while it lasts. Dropped on
-an integrated session, an image goes with the next message and any other
+an in-Chord session, an image goes with the next message and any other
 file is its path in the text.
 
 ## Notes
@@ -1290,7 +1290,7 @@ there, not by the turns it went back on. The same rule holds for the
 user's own sessions, the one on screen included, and for sessions another
 started. A conversation that goes on by itself once a usage limit resets
 goes on from its notes whatever its size and rest, as
-[integrated](integrated.md#going-on-after-a-limit) describes.
+[sessions in Chord](integrated.md#going-on-after-a-limit) describes.
 
 Going on, the row starts a fresh conversation of the agent's, with the
 same row, name and token, so the notes and everything the workbench

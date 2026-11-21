@@ -11,7 +11,7 @@ The agent takes whatever the side panes do not.
 **Reviewing** is the changes pane grown into a file viewer, with the sessions
 pane folded. Inside the pane the tree keeps the left column and the
 content takes the rest. You enter it by opening a file or with
-<kbd>Cmd</kbd><kbd>D</kbd>, and leave it with <kbd>Esc</kbd>, the same chord,
+<kbd>Cmd</kbd><kbd>D</kbd>, and leave it with <kbd>Esc</kbd>, the same shortcut,
 or the control in the viewer's bar.
 
 **Editing** is the window's other mode: the file tree and a text editor
@@ -154,7 +154,7 @@ and its words stand in the middle of that band. In the terminal look, and
 where the system asks for more contrast, the bar is a row of its own under
 its rule, and its words stand in the middle of that row.
 
-For an integrated session the model and the effort are what the agent last
+For an in-Chord session the model and the effort are what the agent last
 said it runs on. Each opens a small menu of the choices the agent offers,
 the same menu the composer's chip for it opens, and a choice there changes
 the session as it does from the composer. A model the agent offers with no
@@ -170,7 +170,7 @@ text: `5h 11%  Week 34%  Fable 52%` for the five hour window, the week, and
 the week for one model. Only the windows the account has are drawn. The
 figures belong to the account on its machine and are read there, as
 [account limits](integrated.md#account-limits) describes, so a terminal
-session and an integrated one on the same account show the same figures,
+session and an in-Chord one on the same account show the same figures,
 and the newest wins whoever read them. A share is rounded, and reads 100%
 only when the window is used up.
 
@@ -280,7 +280,7 @@ agent pane, with the column, the viewer and the agent exactly where they
 were and nothing resized. Every row is where it stands in the column, so
 the dots do not move and the names appear beside them. Picking a session
 puts the pane back; so does the pointer leaving it, <kbd>Esc</kbd>,
-<kbd>Tab</kbd>, or the chord again, and the keyboard then returns to the
+<kbd>Tab</kbd>, or the shortcut again, and the keyboard then returns to the
 viewer. A pane peeked
 from the keyboard stays while the pointer wanders.
 
@@ -320,9 +320,9 @@ the pointer has been away from it for a little under
 half a second it slides back out, and so it does at once on a press
 anywhere outside it. While a menu of its own is open, the new-session
 choice stands under a project, a question is up in it, a press that began
-in it is held, or the keyboard came to it by its chord or walks its rows,
+in it is held, or the keyboard came to it by its shortcut or walks its rows,
 it stays wherever the pointer goes. A question in it goes with it: the
-chord, <kbd>Cmd</kbd><kbd>B</kbd> or another session coming on screen
+shortcut, <kbd>Cmd</kbd><kbd>B</kbd> or another session coming on screen
 puts the pane away and the question with it, as Cancel would, so nothing
 is closed or reopened and nothing waits out of sight. The same holds for
 the peeked pane and the fold. The pointer that left the window by the
@@ -331,10 +331,10 @@ panes draw, the focused card's mark included, and under a question asked
 over the agent. The slide is the panes'
 own motion, and none where the system asks for reduced motion.
 
-<kbd>Cmd</kbd><kbd>1</kbd>, or whatever chord the focus on the sessions
+<kbd>Cmd</kbd><kbd>1</kbd>, or whatever shortcut the focus on the sessions
 pane is bound to, slides it in with the keyboard in it, on the session on
 screen; <kbd>Cmd</kbd><kbd>B</kbd> does the same. <kbd>Esc</kbd> or the
-chord again sends it back and gives the keyboard to the pane that had it.
+shortcut again sends it back and gives the keyboard to the pane that had it.
 Picking a session sends it back with the keyboard in that session's
 agent, as a pick does anywhere; picking a project sends it back with the
 keyboard where it was. Going to a session or project from the palette
@@ -450,7 +450,7 @@ front. Beside a session, the project's own shells stay listed at the foot,
 under a line naming the project, so a dev server started before the first
 session is never out of sight: they can be picked and closed like any
 other, the session's own come first, and stepping through the shells by
-chord stays among the session's own. A session with none of its own shows
+shortcut stays among the session's own. A session with none of its own shows
 the project's newest in front, with None open under its line. Switching
 session or project switches the list and kills nothing, and every shell
 comes back as it was left, scrollback and all. Opening the panel with no
@@ -475,7 +475,7 @@ The + at the head of the list is New shell: another shell for whoever is on
 screen, in a group of its own, with the keyboard in it.
 <kbd>Cmd</kbd><kbd>T</kbd> does the same from anywhere in the window,
 <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd> on Windows and Linux, and opens
-the panel for it when it is closed; the + names the chord the table gives
+the panel for it when it is closed; the + names the shortcut the table gives
 it. A row's × closes its shell, and
 <kbd>Cmd</kbd><kbd>W</kbd> closes the shell in front while the panel has the
 keyboard. A shell with something still running in it asks first, as
@@ -540,7 +540,7 @@ panel's shell when the panel has the keyboard, and the agent on screen
 otherwise. On a keyboard where = needs Shift, or where + has a key of its
 own, <kbd>Cmd</kbd> with either zooms in as well.
 
-While the editor has the keyboard the same chords step its text, over the
+While the editor has the keyboard the same shortcuts step its text, over the
 same range, and its size is kept in the window's storage.
 
 Each terminal has its own size. A larger size fits fewer rows and columns,
@@ -566,7 +566,7 @@ leaves it; Enter searches at once, or opens the first match in files mode;
 Down steps into what was found.
 
 Scope, view and reload sit in the menu at the field's end, each with its
-chord beside it. <kbd>Cmd</kbd><kbd>F</kbd> puts the keyboard in the field
+shortcut beside it. <kbd>Cmd</kbd><kbd>F</kbd> puts the keyboard in the field
 in files mode when the changes pane has focus, and
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>F</kbd> in lines mode from anywhere,
 opening the pane if it was closed.
@@ -662,7 +662,7 @@ A Markdown document opens on it when it has no diff, and a rendered view
 chosen on one Markdown file carries to the next. For HTML, Mermaid and SVG
 the rendered view lasts only for the file it was chosen on: any other file
 opens on its source, and so does the same file when it is opened again. The
-view chord walks the views a file has, round and round, and the command
+view shortcut walks the views a file has, round and round, and the command
 palette has Preview file and Show source for the file open in the viewer.
 Editor mode has its own tabs, and the commands are not offered there. An image or a
 PDF git calls binary is shown as the picture it is, read where it is and
