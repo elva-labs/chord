@@ -2169,6 +2169,13 @@ struct SessionFiles {
 /// The first prompt as it goes on the command line: as given, or, where it
 /// goes through the command interpreter and would not arrive as given, a
 /// line naming the file of the session's own it is written to.
+///
+/// A conversation begun with such a line records the line, not the words,
+/// and the file is gone once the session ends. Should it go on from its
+/// notes later, its briefing quotes the line as how it began. That is
+/// accepted: only a long or unsafe first prompt through a `.cmd` shim on
+/// Windows begins so, and the notes and last exchanges still carry the
+/// work.
 fn first_prompt(
     prompt: Option<&str>,
     through_cmd: bool,
