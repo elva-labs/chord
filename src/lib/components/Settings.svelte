@@ -243,6 +243,10 @@
   let moreOpen = $state(
     Object.keys(theme.backgrounds ?? {}).length > 0 || userStyles.on || userStyles.problem !== null,
   );
+  /** How many things inside the fold are in use. */
+  let moreSet = $derived(
+    Object.keys(theme.backgrounds ?? {}).length + (userStyles.on ? 1 : 0) + (userStyles.problem !== null ? 1 : 0),
+  );
 
   /** The projects the hooks answer covers: the open ones, and the
       orchestrator folder while the sessions pane lists it. */
@@ -315,7 +319,6 @@
     if (accountOverridden > 0) accountOverridesOpen = true;
   });
 
-  /** What a row says of where an account keeps each agent. */
   /** What new sessions of an agent start on, as its row says it. */
   function chosenLine(agent: AgentId): string {
     const kept = chosenFor(agent);
@@ -577,6 +580,7 @@
           >
             <span class="chevron">{moreOpen ? "▾" : "▸"}</span>
             More
+            {#if !moreOpen && moreSet > 0}<span class="count">, {moreSet} set</span>{/if}
           </button>
           {#if moreOpen}
             <UnreadEntries field="backgrounds" />
@@ -631,7 +635,7 @@
                       >
                     </div>
                   {:else}
-                    <span class="value" data-testid="session-kind-only">In a terminal</span>
+                    <span class="value fixed" title="Runs only in a terminal" data-testid="session-kind-only">In a terminal</span>
                   {/if}
                 </div>
               {/each}
@@ -639,14 +643,16 @@
             <div class="hooks" class:lit bind:this={live} data-testid="settings-live">
               <UnreadEntries field="hooks" />
               <div class="row" data-testid="hooks-everywhere-row">
-                <span class="name" id="hooks-label"
-                  >Let agents talk to Chord<small>Shows when an agent works, waits or asks.</small></span
+                <span class="name"
+                  ><span id="hooks-label">Let agents talk to Chord</span
+                  ><small id="hooks-hint">Shows when an agent works, waits or asks.</small></span
                 >
                 <Switch
                   on={hook.everywhere}
                   onchange={setHooksEverywhere}
                   disabled={hook.busy}
                   labelledby="hooks-label"
+                  describedby="hooks-hint"
                   testid="hooks-everywhere"
                 />
               </div>
@@ -1322,6 +1328,15 @@
     font-size: 12px;
     color: var(--ink-3);
     text-align: right;
+  }
+
+  .value.fixed {
+    font-style: italic;
+    opacity: 0.8;
+  }
+
+  .count {
+    color: var(--ink-3);
   }
 
   .pick {

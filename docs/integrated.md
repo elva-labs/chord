@@ -226,7 +226,7 @@ session.
 
 ## What a new session starts on
 
-A new session the user starts, integrated or in a terminal, starts on the
+A new session the user starts, in Chord or in a terminal, starts on the
 model, the effort and the permission mode the user last chose for its
 agent, each where one is kept, and otherwise on the agent's own default
 for it. An in-Chord session is started with all three, and its chips

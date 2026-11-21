@@ -285,15 +285,15 @@ export function describeSettings(): string {
     "",
     `appearance: ${theme.choice} (one of ${names(APPEARANCES)})`,
     `look: ${theme.look} (one of ${names(LOOKS)})`,
-    `compact: ${compact.on} (true or false): compact mode, where the sessions pane leaves the layout and slides in over the other panes when the pointer reaches the window's left edge or its chord is pressed`,
+    `compact: ${compact.on} (true or false): compact mode, where the sessions pane leaves the layout and slides in over the other panes when the pointer reaches the window's left edge or its shortcut is pressed`,
     `palette: ${theme.palette} (one of ${names(palettes())})`,
     `background: ${backgroundOf(theme.palette)} (kept with the palette in use; settings_change's background argument sets it, null takes it away)`,
     describeCards(),
     `terminalFont: ${theme.mono} (one of ${names(TERMINAL_FONTS)})`,
     `interfaceFont: ${theme.sans} (one of ${names(INTERFACE_FONTS)})`,
-    `keyPreset: ${keys.preset} (one of ${Object.keys(PRESETS).join(", ")}; custom once a chord differs from both)`,
+    `keyPreset: ${keys.preset} (one of ${Object.keys(PRESETS).join(", ")}; custom once a shortcut differs from both)`,
     "",
-    "keys, by action: the chord, then what the action does. The platform modifier, Cmd on macOS and Ctrl elsewhere, is part of every chord and is not written. c and r without shift stay with the agent.",
+    "keys, by action: the shortcut, then what the action does. The platform modifier, Cmd on macOS and Ctrl elsewhere, is part of every shortcut and is not written. c and r without shift stay with the agent.",
     ...ACTIONS.map(
       ({ key, label }) => `  ${key}: ${chordText(keys.bindings[key])}  (${label})`,
     ),
@@ -479,7 +479,7 @@ export function plan(args: Record<string, unknown>): {
     }
     if (chords !== undefined) {
       if (typeof chords !== "object" || chords === null || Array.isArray(chords)) {
-        throw new Error("keys is an object of chords by action, such as {\"review\": \"shift+d\"}.");
+        throw new Error("keys is an object of shortcuts by action, such as {\"review\": \"shift+d\"}.");
       }
       for (const [action, text] of Object.entries(chords)) {
         if (!ACTIONS.some((info) => info.key === action)) {
@@ -488,7 +488,7 @@ export function plan(args: Record<string, unknown>): {
         const chord = typeof text === "string" ? parseChord(text) : null;
         if (chord === null) {
           throw new Error(
-            `${JSON.stringify(text)} is not a chord for ${action}. A chord is its key, with shift and alt before it when wanted: k, shift+k, alt+shift+down.`,
+            `${JSON.stringify(text)} is not a shortcut for ${action}. A shortcut is its key, with shift and alt before it when wanted: k, shift+k, alt+shift+down.`,
           );
         }
         table[action as ActionKey] = chord;

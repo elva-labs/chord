@@ -188,9 +188,9 @@ describe("plan", () => {
 
   it("refuses an action that does not exist or a chord that does not read", () => {
     expect(() => plan({ keys: { launch: "k" } })).toThrow(/no action called launch/);
-    expect(() => plan({ keys: { review: "hyper+k" } })).toThrow(/not a chord/);
-    expect(() => plan({ keys: { review: 7 } })).toThrow(/not a chord/);
-    expect(() => plan({ keys: "shift+k" })).toThrow(/object of chords/);
+    expect(() => plan({ keys: { review: "hyper+k" } })).toThrow(/not a shortcut/);
+    expect(() => plan({ keys: { review: 7 } })).toThrow(/not a shortcut/);
+    expect(() => plan({ keys: "shift+k" })).toThrow(/object of shortcuts/);
     expect(() => plan({ keyPreset: "emacs" })).toThrow(/keyPreset is one of default, vim/);
   });
 });

@@ -9,6 +9,7 @@
     onchange,
     label,
     labelledby,
+    describedby,
     disabled = false,
     testid,
   }: {
@@ -16,6 +17,7 @@
     onchange: (next: boolean) => void;
     label?: string;
     labelledby?: string;
+    describedby?: string;
     disabled?: boolean;
     testid?: string;
   } = $props();
@@ -29,6 +31,7 @@
   aria-checked={on}
   aria-label={label}
   aria-labelledby={labelledby}
+  aria-describedby={describedby}
   {disabled}
   onclick={() => onchange(!on)}
   data-testid={testid}><span class="knob"></span></button
