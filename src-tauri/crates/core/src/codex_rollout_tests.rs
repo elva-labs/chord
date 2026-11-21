@@ -33,6 +33,14 @@ fn settings(seconds: u64) -> String {
     )
 }
 
+fn event(seconds: u64, kind: &str, message: &str) -> String {
+    line(
+        seconds,
+        "event_msg",
+        json!({ "type": kind, "message": message }),
+    )
+}
+
 fn count(seconds: u64, usage: Value) -> String {
     line(
         seconds,
@@ -327,6 +335,43 @@ fn a_rollout_written_before_items_is_read_from_its_events() {
             Quoted {
                 user: false,
                 text: "old answer".into()
+            },
+        ]
+    );
+    assert_eq!(first_said(&path).as_deref(), Some("old ask"));
+}
+
+#[test]
+fn a_thread_begun_with_events_and_resumed_with_items_is_read_from_both() {
+    let home = Scratch::new("rollout-events-then-items");
+    let path = rollout(
+        &home,
+        &[
+            event(0, "user_message", "old ask"),
+            event(1, "agent_message", "old answer"),
+            user(600, "new ask"),
+            agent(601, "new answer"),
+            event(601, "agent_message", "new answer"),
+        ],
+    );
+    assert_eq!(
+        last_said(&path, 3),
+        vec![
+            Quoted {
+                user: true,
+                text: "old ask".into()
+            },
+            Quoted {
+                user: false,
+                text: "old answer".into()
+            },
+            Quoted {
+                user: true,
+                text: "new ask".into()
+            },
+            Quoted {
+                user: false,
+                text: "new answer".into()
             },
         ]
     );

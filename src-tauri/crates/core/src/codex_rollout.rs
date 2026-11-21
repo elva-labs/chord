@@ -160,11 +160,13 @@ fn said_in(entry: &Value, events: bool) -> Option<Quoted> {
     (!text.trim().is_empty()).then_some(Quoted { user, text })
 }
 
-/// The messages of a stretch of the rollout, as items where it holds any
-/// and as events otherwise.
+/// The messages of a stretch of the rollout: as events up to its first
+/// item, and as items from there on, where Codex may write a message as
+/// both. A thread begun under a Codex that wrote events and resumed under
+/// one that writes items is read whole so.
 fn said(rollout: &Path, span: Span) -> Vec<Quoted> {
-    let mut items = Vec::new();
-    let mut events = Vec::new();
+    let mut said = Vec::new();
+    let mut items = false;
     lines(rollout, Some(span), |bytes| {
         if !found(bytes, b"\"event_msg\"") {
             return;
@@ -172,14 +174,10 @@ fn said(rollout: &Path, span: Span) -> Vec<Quoted> {
         let Ok(entry) = serde_json::from_slice::<Value>(bytes) else {
             return;
         };
-        items.extend(said_in(&entry, false));
-        events.extend(said_in(&entry, true));
+        items = items || entry["payload"]["type"] == "item_completed";
+        said.extend(said_in(&entry, !items));
     });
-    if items.is_empty() {
-        events
-    } else {
-        items
-    }
+    said
 }
 
 /// The last `most` messages of the user's, each with the agent's words
