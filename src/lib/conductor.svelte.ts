@@ -2560,13 +2560,16 @@ function describe(session: Session): string {
   parts.push(stateWords(session));
   // A row with nothing running behind it is resumed in place, and one left
   // from before a restart by a line as well.
-  if (session.status === "dormant") parts.push("a line you send it resumes it");
+  if (session.status === "dormant") parts.push(lineBack(session.id!));
   else if (!isLive(session)) parts.push(`resume it with start, naming session ${idText(session.id!)}`);
   if (untold(session)) parts.push("not reported to you yet");
   const line = quotedLine(session.note);
   if (line !== null) parts.push(`last line: ${line}`);
   return parts.join("  ");
 }
+
+/** A listing's way back for a session a line resumes. */
+const lineBack = (id: string) => `a line you send it resumes it, as start naming session ${idText(id)} does`;
 
 /** A remembered session that is not open as a row, in the same words. */
 function describeGone(owner: string, entry: Started): string {
@@ -2579,7 +2582,7 @@ function describeGone(owner: string, entry: Started): string {
   if (at !== null) parts.push(placeText(at));
   parts.push(
     goneState(entry),
-    backOnALine(entry) ? "a line you send it resumes it" : `resume it with start, naming session ${idText(entry.id)}`,
+    backOnALine(entry) ? lineBack(entry.id) : `resume it with start, naming session ${idText(entry.id)}`,
   );
   return parts.join("  ");
 }
@@ -3451,7 +3454,7 @@ const comingBack = new Map<string, Promise<Answered>>();
 /** Resumes a session the caller started that has no row, or a row left
     from before a restart, with a line the caller sent it as what it goes
     on with, as a start naming it would. */
-async function bringBack(request: Placed, entry: Started, line: string): Promise<Answered> {
+async function bringBack(request: Placed, entry: Gone, line: string): Promise<Answered> {
   const why = goneWhy(entry);
   const resuming = resumeSession(
     { ...request, tool: "start", arguments: { session: entry.id, prompt: line } },
@@ -3518,7 +3521,7 @@ async function sendText(request: Placed): Promise<Answered> {
   if (!mine(request, session)) return notMine(id);
   // A row left from before a restart has nothing running behind it: the
   // line starts it in its row.
-  const left = session.status === "dormant" && session.id !== null ? remembered(callerOf(request), session.id) : null;
+  const left = leftBehind(session);
   if (left !== null) return bringBack(request, left, line);
   // A session being reopened the other way takes the line once its next
   // run is up, the way it then runs.
@@ -3735,7 +3738,7 @@ async function waitFor(request: Placed): Promise<Answered> {
       return entry === null ? refused(`The workbench has no session ${id}.`) : said(notRunning(entry));
     }
     if (!mine(request, session)) return notMine(id);
-    const left = session.status === "dormant" && session.id !== null ? remembered(callerOf(request), session.id) : null;
+    const left = leftBehind(session);
     if (left !== null) return said(notRunning(left));
     watched = [session];
   }
@@ -3918,7 +3921,7 @@ function readSession(request: Placed): Answered {
   if (!mine(request, session)) return notMine(id);
   // A row left from before a restart has nothing on screen and no turn in
   // this window to read.
-  const left = session.status === "dormant" && session.id !== null ? remembered(callerOf(request), session.id) : null;
+  const left = leftBehind(session);
   if (left !== null) return said(notRunning(left));
   const lines = number(request, "lines", LINES, LINES_MAX);
   // An integrated session has no screen: what its agent last said and did
@@ -4065,9 +4068,20 @@ function stateWords(session: Session): string {
   return state;
 }
 
+/** What is told of a session that is not running: its id, and why its
+    row went if it did. */
+type Gone = Pick<Started, "id" | "left">;
+
+/** A row left from before a restart, as a call naming it is told of it:
+    not run since the restart, and back on a line. The row says so, whatever
+    the caller's list holds. Null for any other row. */
+function leftBehind(session: Session): Gone | null {
+  return session.status === "dormant" && session.id !== null ? { id: session.id } : null;
+}
+
 /** Why a session a caller started has no row: the user closed it, it
     ended, or it has not run since the workbench was restarted. */
-function goneWhy(entry: Started): string {
+function goneWhy(entry: Gone): string {
   if (entry.left === "closed") return "the user closed it";
   if (entry.left === "ended") return "it ended";
   if (entry.left === "done") return "the workbench put it away once its work was over";
@@ -4077,10 +4091,10 @@ function goneWhy(entry: Started): string {
 /** Whether a line the caller sends a session that has no row resumes it:
     one the workbench put away, or one not run since a restart. One the
     user closed or that ended is resumed only by a start that names it. */
-const backOnALine = (entry: Started) => entry.left !== "closed" && entry.left !== "ended";
+const backOnALine = (entry: Gone) => entry.left !== "closed" && entry.left !== "ended";
 
 /** How a session the caller started that has no row comes back. */
-function wayBack(entry: Started): string {
+function wayBack(entry: Gone): string {
   const id = idText(entry.id);
   return backOnALine(entry)
     ? `A line you send it resumes it, as start naming session ${id} does.`
@@ -4089,7 +4103,7 @@ function wayBack(entry: Started): string {
 
 /** What a call naming a session the caller started, which has no row, is
     answered: it is not running, why, and how to bring it back. */
-function notRunning(entry: Started): string {
+function notRunning(entry: Gone): string {
   return `Session ${idText(entry.id)} is not running: ${goneWhy(entry)}. ${wayBack(entry)}`;
 }
 

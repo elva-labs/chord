@@ -646,7 +646,7 @@ test.describe("what a starter is told", () => {
 
     await push(page, { id: "l-1", tool: "sessions", session: "session-1" });
     expect((await answered(page, "l-1")).content).toMatch(
-      /^session-2 .* put away by the workbench once its work was over {2}a line you send it resumes it$/,
+      /^session-2 .* put away by the workbench once its work was over {2}a line you send it resumes it, as start naming session session-2 does$/,
     );
     await push(page, {
       id: "t-1",

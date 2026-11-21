@@ -3802,7 +3802,7 @@ describe("what a caller started, between runs", () => {
     restarted();
     await handle(call("sessions", {}, { session: "caller-1" }));
     expect(last().content).toBe(
-      `sid-1  ${BOUNDED}  ${A}  claude-code  not running since the workbench was restarted  a line you send it resumes it`,
+      `sid-1  ${BOUNDED}  ${A}  claude-code  not running since the workbench was restarted  a line you send it resumes it, as start naming session sid-1 does`,
     );
   });
 
