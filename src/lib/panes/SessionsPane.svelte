@@ -840,7 +840,6 @@
       { id: "go", run: openGoTo },
       { id: "new", run: newFromHead },
     ];
-    if (workspace.open.length === 0) out.push({ id: "open", run: () => void pick() });
     for (const project of split.active) {
       const path = project.path;
       out.push({ id: `project:${path}`, run: () => pickProject(path) });
@@ -2387,20 +2386,6 @@
     >
   </div>
   <div class="tree">
-    {#if workspace.open.length === 0}
-      <div class="empty" data-testid="no-project">
-        <p>Open a folder to work in. A session starts there, and the changes pane watches it.</p>
-        <button
-          class="open-first"
-          class:cursor={current === "open"}
-          tabindex="-1"
-          onclick={() => void pick()}
-          disabled={workspace.opening}
-          data-row="open"
-          data-testid="open-first-project">Open project…</button
-        >
-      </div>
-    {/if}
       {#each split.active as project (project.path)}
         <section class="proj" data-testid="project-section">
           {@render projectRow(project)}
@@ -2560,7 +2545,6 @@
   .nav.folded .flag,
   .nav.folded .fold,
   .nav.folded .add-here,
-  .nav.folded .empty,
   .nav.folded .inactive,
   .nav.folded .cursor::before,
   .error-row.folded {
@@ -3922,31 +3906,6 @@
     font-size: var(--fold-size);
   }
 
-  .open-first {
-    margin: 0 var(--pane-pad);
-    padding: 4px 9px;
-    border: 1px solid var(--accent);
-    border-radius: var(--radius);
-    background: var(--accent-soft);
-    font-family: var(--chrome);
-    font-size: var(--btn-size);
-    font-weight: var(--btn-weight);
-    letter-spacing: var(--label-track-tight);
-    text-transform: var(--label-case);
-    color: var(--accent);
-    cursor: pointer;
-  }
-
-  .open-first.cursor {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
-
-  .nav:focus-within .open-first.cursor::before {
-    content: none;
-  }
-
-  .empty p,
   .error {
     margin: 0;
     padding: 12px var(--pane-pad);

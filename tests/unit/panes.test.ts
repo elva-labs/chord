@@ -253,10 +253,10 @@ describe("Pane shell", () => {
 });
 
 describe("SessionsPane", () => {
-  it("asks for a project when none is open", () => {
+  it("lists nothing when no project is open, leaving the opening to the agent pane", () => {
     render(SessionsPane);
-    expect(screen.getByTestId("no-project")).toBeInTheDocument();
-    expect(screen.getByTestId("open-first-project")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("project-section")).toHaveLength(0);
+    expect(screen.queryByText(/Open/)).toBeNull();
   });
 
   it("lists open projects with their sessions", () => {

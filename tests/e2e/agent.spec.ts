@@ -504,7 +504,10 @@ test.describe("with no project", () => {
     await expect(page.getByTestId("agent-status")).toContainText(
       "Open a project",
     );
-    await expect(page.getByTestId("no-project")).toBeVisible();
+    // The agent pane's button is the one way to open one; the sessions pane
+    // lists nothing.
+    await expect(page.getByTestId("empty-open")).toHaveCount(1);
+    await expect(page.locator(`${SESSIONS} .tree`)).toBeEmpty();
     await page.waitForTimeout(300);
     expect(await spawnCount(page)).toBe(0);
   });

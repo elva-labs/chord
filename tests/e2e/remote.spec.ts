@@ -102,7 +102,7 @@ test.describe("a remote project", () => {
   }) => {
     await installFakeCore(page, { open: [] });
     await page.goto("/");
-    await expect(page.getByTestId("open-first-project")).toBeVisible();
+    await expect(page.getByTestId("empty-open")).toBeVisible();
     await page.keyboard.press("ControlOrMeta+1");
     await page.keyboard.press("Home");
     await expect(page.getByTestId("project-sort")).toHaveClass(/cursor/);

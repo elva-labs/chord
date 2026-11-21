@@ -39,8 +39,8 @@ Under it sits a
 field, `Go to a session or project` with the shortcut of go to, which opens
 [go to](focus-model.md#the-palettes), and beside it a button in the accent
 that opens the palette's New session, which asks for the project first when
-more than one is open. With no project open, the pane says so and offers
-Open project there as well.
+more than one is open. With no project open, the pane lists nothing: the
+agent pane's Open project is the one way in.
 
 Each project starts with a header: its name, the account it runs under as a
 tag when that is not the agents' own, and a button that starts a session in
