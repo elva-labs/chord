@@ -61,7 +61,7 @@ macro_rules! turn_in_a_conversation {
 /// description.
 macro_rules! instructions_rest {
     () => {
-        "When the user asks where something is, or you point them at a place in a file, call the show tool with the file and lines, once, for the answer. When you point them at what changed in a file, call the diff tool with it. When the user asks to see an image, a diagram or a rendering, or you made an image, PDF, Markdown, HTML or Mermaid file for them, call the present tool with the files, in one call. When the user says this, here or that without naming a file, call the selection tool first. The user runs a shell command themselves by typing `! <command>` as their message, and its output then comes to you as context; when you want them to run something themselves, a login or something that needs their approval, write it as `! <command>` in a code span or on a code block line of its own. Keep notes with the note tool as you work: a brief of what is being built, kept current, and a short note whenever something settles; never a key, token, password or personal data. When the user refers to something you have no context for, read the matching notes with the notes tool before asking or guessing. When the user asks to see a page or a web app, open it with browser_open; after changing one, reload it and check browser_console and browser_snapshot rather than asking the user what they see. Change the workbench's own look, colours, fonts or key chords with settings_change, theme_save or styles_write only when the user asks for it. "
+        "When the user asks where something is, or you point them at a place in a file, call the show tool with the file and lines as well as saying it in words, once per answer. When you point them at what changed in a file, call the diff tool with it. When the user asks to see an image, a diagram or a rendering, or you made an image, PDF, Markdown, HTML or Mermaid file for them, call the present tool with the files, in one call. When the user says this, here or that without naming a file, call the selection tool first. When you want the user to run something themselves, a login or something that needs their approval, write it as `! <command>` in a code span or on a code block line of its own: typed as their message, it runs and its output comes to you; for a dev server or a watch they asked for, use the terminal tool. Keep notes with the note tool as you work, so the conversation can go on from them later: a brief of what is being built, kept current, and a short note whenever something settles; never a key, token, password or personal data. When the user refers to something you have no context for, read the matching notes with the notes tool before asking or guessing. When the user asks to see a page or a web app, open it with browser_open; after changing one, reload it and check browser_console and browser_snapshot rather than asking the user what they see. Change the workbench's own look, colours, fonts or key chords with settings_change, theme_save or styles_write only when the user asks for it. "
     };
 }
 
@@ -86,7 +86,7 @@ macro_rules! sessions_when_woken {
 /// How a woken session is told to answer the user while its sessions run.
 macro_rules! woken_started {
     () => {
-        "Once you have started sessions of your own, keep calling wait until all of them are done, and hand the turn back while any is running only when you need the user or they wrote to you: answer them as the turn's final message"
+        "Once you have started sessions of your own, keep calling wait until all of them are done, and hand the turn back while any is running only when you need the user or the user wrote to you: answer or ask them in the turn's final message"
     };
 }
 
@@ -935,7 +935,7 @@ pub fn start_tool() -> Value {
 pub fn send_tool() -> Value {
     json!({
         "name": "send",
-        "description": "Sends a line to a session you started, as though the user had typed it, resuming it if it was put away: the answer to a question it asked, or a correction to the task it has. A new task is a new session, started with start, not a line to one that did other work, which would carry the whole of that work's conversation into it. Call wait afterwards to hear what it does next. When you follow a workflow, a session started for a step stays on the model it was given, so a line that changes its model is refused, and a line to a review that has finished its round asks it for another look, which counts as another round of that piece. A round past the review's limit is put to the user: if they have not answered within a moment, the answer says the line waits on them and has not been sent, and wait tells you how it went; do not send it again meanwhile.",
+        "description": "Sends a line to a session you started, as though the user had typed it, resuming it if it was put away: the answer to a question it asked, or a correction to the task it has, never a request to say more: read gives its closing report. A new task is a new session, started with start, not a line to one that did other work, which would carry the whole of that work's conversation into it. Call wait afterwards to hear what it does next. When you follow a workflow, a session started for a step stays on the model it was given, so a line that changes its model is refused, and a line to a review that has finished its round asks it for another look, which counts as another round of that piece. A round past the review's limit is put to the user: if they have not answered within a moment, the answer says the line waits on them and has not been sent, and wait tells you how it went; do not send it again meanwhile.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -993,7 +993,7 @@ pub fn wait_tool_for(woken: bool) -> Value {
 pub fn read_tool() -> Value {
     json!({
         "name": "read",
-        "description": "What a session you started has on its screen, the last lines of its terminal as the user sees them, oldest first, boxes and spinners and all. Use it to catch up on a session before answering for it or telling the user how it went, and to read its closing report when its last line is not enough, rather than sending it a line asking for more.",
+        "description": "What a session you started has on its screen, the last lines of its terminal as the user sees them, oldest first, boxes and spinners and all. Use it to catch up on a session before answering for it or telling the user how it went, and to read its closing report when its last line is not enough.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -2226,10 +2226,12 @@ mod tests {
             ORCHESTRATOR_WOKEN_INSTRUCTIONS,
             ORCHESTRATOR_CONVERSATION_INSTRUCTIONS,
         ] {
-            assert!(told.contains("by typing `! <command>` as their message, and its output then comes to you as context"));
             assert!(told.contains(
-                "write it as `! <command>` in a code span or on a code block line of its own"
+                "write it as `! <command>` in a code span or on a code block line of its own: typed as their message, it runs and its output comes to you"
             ));
+            assert!(
+                told.contains("for a dev server or a watch they asked for, use the terminal tool")
+            );
         }
     }
 
@@ -2270,13 +2272,13 @@ mod tests {
             assert!(told.contains("the workbench writes to you when one of your sessions stops or asks, in a message that begins From the workbench, not the user"));
         }
         for told in [WOKEN_INSTRUCTIONS, ORCHESTRATOR_WOKEN_INSTRUCTIONS] {
-            assert!(told.contains("or they wrote to you: answer them as the turn's final message, with notify just before it, and end the turn there rather than calling wait after it."));
+            assert!(told.contains("or the user wrote to you: answer or ask them in the turn's final message, with notify just before it, and end the turn there rather than calling wait after it."));
         }
         for told in [
             CONVERSATION_INSTRUCTIONS,
             ORCHESTRATOR_CONVERSATION_INSTRUCTIONS,
         ] {
-            assert!(told.contains("or they wrote to you: answer them as the turn's final message and end the turn there rather than calling wait after it."));
+            assert!(told.contains("or the user wrote to you: answer or ask them in the turn's final message and end the turn there rather than calling wait after it."));
         }
         // Where it cannot, the agent answers the user and waits on, and is
         // not promised a message that never comes.
@@ -2286,7 +2288,7 @@ mod tests {
             assert!(!told.contains("end the turn there rather than calling wait"));
             assert!(!told
                 .contains("the workbench writes to you when one of your sessions stops or asks"));
-            assert!(!told.contains("or they wrote to you"));
+            assert!(!told.contains("or the user wrote to you"));
         }
         for told in [
             INSTRUCTIONS,
@@ -2620,23 +2622,17 @@ mod tests {
     fn every_variant_of_the_instructions_fits_what_claude_code_keeps() {
         const KEPT: usize = 4096;
         const ROOM: usize = 512;
-        for (name, told) in [
-            ("general", INSTRUCTIONS),
-            ("woken", WOKEN_INSTRUCTIONS),
-            ("conversation", CONVERSATION_INSTRUCTIONS),
-            ("orchestrator", ORCHESTRATOR_INSTRUCTIONS),
-            ("orchestrator woken", ORCHESTRATOR_WOKEN_INSTRUCTIONS),
-            (
-                "orchestrator conversation",
-                ORCHESTRATOR_CONVERSATION_INSTRUCTIONS,
-            ),
-        ] {
-            let length = told.encode_utf16().count();
-            assert!(
-                length <= KEPT - ROOM,
-                "the {name} instructions are {length} long, past {}",
-                KEPT - ROOM
-            );
+        for role in [None, Some(crate::adapter::ORCHESTRATOR_ROLE)] {
+            for view in [None, Some(crate::adapter::CONVERSATION_VIEW)] {
+                for wake in [None, Some(crate::adapter::WAKES)] {
+                    let length = instructions_for(role, view, wake).encode_utf16().count();
+                    assert!(
+                        length <= KEPT - ROOM,
+                        "the instructions for {role:?} {view:?} {wake:?} are {length} long, past {}",
+                        KEPT - ROOM
+                    );
+                }
+            }
         }
     }
 

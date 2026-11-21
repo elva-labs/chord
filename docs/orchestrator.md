@@ -27,10 +27,11 @@ never through its own subagents, and name the step in each start. A session
 that follows no workflow is told none of this.
 
 The rest is said where it is needed, in the descriptions of the tools,
-which every session that has them reads: `wait` says to wait on sessions
-rather than ask after them in a loop, `start` to put the user's whole task
-in the prompt and none of the caller's own housekeeping, `read` to read a
-session's closing report rather than ask it to say more, and `stop` and
+which a session reads when it takes the tool up: `wait` says to wait on
+sessions rather than ask after them in a loop, `start` to put the user's
+whole task in the prompt and none of the caller's own housekeeping, `send`
+and `read` to read a session's closing report rather than ask it to say
+more, and `stop` and
 `sessions` that the workbench puts away a session once its work is over,
 as [when the work is over](#when-the-work-is-over) describes, so a session
 is stopped only when its work is not wanted. Every session, an
