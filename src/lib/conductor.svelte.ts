@@ -93,6 +93,7 @@ import type { AgentId, ReviewStep, Workflow, WorkflowStep, WorkStep } from "$lib
 import { CODEX_DEFAULT } from "$lib/models";
 import { hostOf } from "$lib/remote.svelte";
 import { forgetNotes } from "$lib/notes";
+import { moveStartedFold } from "$lib/startedFolds.svelte";
 import { onWentOn, wentOn, wentOnFrom } from "$lib/goingOn.svelte";
 import { instructionLines, modelText } from "$lib/workflowInstructions";
 import { stepFacts } from "$lib/workflows.svelte";
@@ -4337,6 +4338,7 @@ onForgotten((tokens, project) => {
 // conversation keeps its place on its starter's list and in its workflow
 // under the fresh conversation's id, and the old id still names it.
 onWentOn((from, to) => {
+  moveStartedFold(from, to);
   let started = false;
   for (const list of Object.values(conductor.started))
     for (const entry of list)
