@@ -1,7 +1,8 @@
 import { flushSync } from "svelte";
 import type { SpawnOptions } from "$lib/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { conductor, resetConductor } from "$lib/conductor.svelte";
+import { conductor, loadStarted, resetConductor } from "$lib/conductor.svelte";
+import { childrenOf } from "$lib/orchestrator.svelte";
 import { reopen } from "$lib/reopen.svelte";
 import { attention, resetAttention } from "$lib/attention.svelte";
 import {
@@ -54,17 +55,18 @@ const repo = (path: string) => ({ path, name: path, repository: path, isGit: tru
 let stops: (() => void)[] = [];
 const told: string[] = [];
 
-/** The window as it opens: what was remembered is read, the record is
-    followed, and the sessions that were open come back. */
-function open() {
+/** The window as it opens with these projects: what was remembered is
+    read, the record is followed, and the sessions that were open come back. */
+function open(projects = [A, B]) {
   resetWorkflows();
   resetSessions();
   resetWorkspace();
   resetConductor();
   resetAttention();
-  workspace.open.push(repo(A), repo(B));
+  workspace.open.push(...projects.map(repo));
   workspace.active = A;
   loadRemembered();
+  loadStarted();
   stops.push(followWaiting());
   stops.push(reopen());
   told.length = 0;
@@ -166,38 +168,65 @@ describe("a row unread at the quit", () => {
     expect(row("conv").note).toBe("Tests green.");
   });
 
-  it("waits for a session another started until its starter brings it back", () => {
+  it("comes back unread with its line for a session another started, under its starter, through every restart", () => {
     const caller = live(A, "caller");
     const child = live(B, "child");
-    conductor.startedBy[child.key] = "caller";
+    conductor.started[caller.token] = [
+      { id: "child", project: B, worktree: null, agent: "claude-code", name: "Fix it" },
+    ];
+    localStorage.setItem("chord.started", JSON.stringify(conductor.started));
+    conductor.startedBy[child.key] = caller.token;
     select(caller.key);
     exact("child", "permission");
+    noted(child.key, "Fixed it, over to you.");
     expect(child.unread).toBe(true);
+    expect(child.note).toBe("Fixed it, over to you.");
 
-    restart();
-    expect(sessions.all.some((session) => session.id === "child")).toBe(false);
+    for (let again = 0; again < 2; again++) {
+      restart();
+      const back = row("child");
+      expect(back.status).toBe("dormant");
+      expect(back.unread).toBe(true);
+      expect(back.note).toBe("Fixed it, over to you.");
+      expect(childrenOf(row("caller"))).toEqual([back]);
+      expect(told).toEqual([]);
+    }
+  });
+
+  it("waits for a row whose project does not open again, for the session resumed by hand", () => {
+    const away = live(B, "away");
+    live(A, "one");
+    noted(away.key, "Over to you.");
+    quit();
+    open([A]);
+    expect(waitingRecord().away).toBeDefined();
     // Kept through another start meanwhile.
-    restart();
-    const resumed = create(B, "child");
+    quit();
+    open([A]);
+
+    quit();
+    open();
+    expect(sessions.all.some((session) => session.id === "away")).toBe(false);
+    const resumed = create(B, "away");
     expect(resumed.unread).toBe(true);
+    expect(resumed.note).toBe("Over to you.");
   });
 
   it("lets go of a row that has not come back for a week", () => {
-    const caller = live(A, "caller");
-    const child = live(B, "child");
-    conductor.startedBy[child.key] = "caller";
-    select(caller.key);
-    exact("child", "permission");
-    restart();
-    expect(waitingRecord().child).toBeDefined();
+    const away = live(B, "away");
+    live(A, "one");
+    noted(away.key, "Over to you.");
+    quit();
+    open([A]);
+    expect(waitingRecord().away).toBeDefined();
 
     quit();
     const kept = JSON.parse(localStorage.getItem("chord.waiting")!);
-    kept.child.seen = Date.now() - WAITING_FOR - 1;
+    kept.away.seen = Date.now() - WAITING_FOR - 1;
     localStorage.setItem("chord.waiting", JSON.stringify(kept));
     open();
-    expect(waitingRecord().child).toBeUndefined();
-    expect(create(B, "child").unread).toBe(false);
+    expect(waitingRecord().away).toBeUndefined();
+    expect(create(B, "away").unread).toBe(false);
   });
 
   it("announces news after the restart as it would have before", () => {

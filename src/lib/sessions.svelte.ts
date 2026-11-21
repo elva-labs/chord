@@ -285,8 +285,7 @@ export interface KeptWaiting {
 const WAITING_KEPT = 200;
 
 /** How long a record waits for its row to come back: a project that does
-    not open again, or a session another started whose starter is not
-    resumed, takes its rows' records with it after this. */
+    not open again takes its rows' records with it after this. */
 export const WAITING_FOR = 7 * 24 * 60 * 60 * 1000;
 
 /** What is kept of the workflow a session follows: the workflow as its
@@ -1993,8 +1992,8 @@ function added(session: Session): Session {
 }
 
 /** What waited on the user in rows of the last run that have not come back
-    yet, by the session's id: a project still on its way, or a session
-    another started that its starter has not resumed. */
+    yet, by the session's id: a project still on its way, or one that did
+    not open again and whose session may still be resumed by hand. */
 const waitingBack = new Map<string, KeptWaiting>();
 
 /** Bumped when a mark changes, which the record follows. */
