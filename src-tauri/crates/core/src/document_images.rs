@@ -84,10 +84,13 @@ pub fn resolve(
     {
         return Err("is not drawn: the document is not in the project".into());
     }
-    let document = std::fs::canonicalize(at.iter().fold(project.clone(), |path, name| path.join(name)))
-        .ok()
-        .filter(|document| document.starts_with(&project) && document.is_file())
-        .ok_or("is not drawn: the document is not in the project")?;
+    let document = std::fs::canonicalize(
+        at.iter()
+            .fold(project.clone(), |path, name| path.join(name)),
+    )
+    .ok()
+    .filter(|document| document.starts_with(&project) && document.is_file())
+    .ok_or("is not drawn: the document is not in the project")?;
     let folder = document
         .parent()
         .ok_or("is not drawn: the document has no folder")?;
@@ -131,12 +134,7 @@ fn too_large(size: u64) -> String {
 
 /// An image a document names, encoded, with its type, or why the document
 /// may not draw it.
-pub fn read(
-    root: &Path,
-    document: &str,
-    file: &str,
-    home: Option<&Path>,
-) -> Result<Media, String> {
+pub fn read(root: &Path, document: &str, file: &str, home: Option<&Path>) -> Result<Media, String> {
     use base64::Engine;
     let target = resolve(root, document, file, home)?;
     let mime = media_type(&target).unwrap_or("application/octet-stream");
@@ -191,7 +189,11 @@ mod tests {
     #[test]
     fn refuses_a_path_that_leaves_the_project_or_names_another_place() {
         let (dir, root) = project();
-        for file in ["../secret.png", "docs/../../secret.png", "docs/guide/../../../secret.png"] {
+        for file in [
+            "../secret.png",
+            "docs/../../secret.png",
+            "docs/guide/../../../secret.png",
+        ] {
             let why = read(&root, "README.md", file, None).unwrap_err();
             assert!(why.contains("outside the project"), "{file}: {why}");
         }
@@ -221,7 +223,14 @@ mod tests {
     fn draws_nothing_for_a_document_outside_the_project_or_with_no_path() {
         let (dir, root) = project();
         std::fs::write(dir.join("loose.md"), "![](project/docs/icon.png)").unwrap();
-        for document in ["../loose.md", "", "/README.md", "docs", "gone.md", "./README.md"] {
+        for document in [
+            "../loose.md",
+            "",
+            "/README.md",
+            "docs",
+            "gone.md",
+            "./README.md",
+        ] {
             let why = read(&root, document, "docs/icon.png", None).unwrap_err();
             assert!(why.contains("not in the project"), "{document}: {why}");
         }
@@ -233,7 +242,12 @@ mod tests {
         std::fs::create_dir_all(root.join(".git")).unwrap();
         std::fs::write(root.join(".git/logo.png"), [1]).unwrap();
         std::fs::write(root.join(".env.png"), [1]).unwrap();
-        for file in [".git/logo.png", ".env.png", "docs/.hidden.png", "docs/guide/../../.env.png"] {
+        for file in [
+            ".git/logo.png",
+            ".env.png",
+            "docs/.hidden.png",
+            "docs/guide/../../.env.png",
+        ] {
             let why = read(&root, "README.md", file, None).unwrap_err();
             assert!(why.contains("hidden"), "{file}: {why}");
         }
@@ -242,7 +256,13 @@ mod tests {
         std::fs::create_dir_all(tree.join("docs")).unwrap();
         std::fs::write(tree.join("README.md"), "").unwrap();
         std::fs::write(tree.join("docs/icon.png"), [7]).unwrap();
-        let drawn = read(&root, ".claude/worktrees/one/README.md", "docs/icon.png", None).unwrap();
+        let drawn = read(
+            &root,
+            ".claude/worktrees/one/README.md",
+            "docs/icon.png",
+            None,
+        )
+        .unwrap();
         assert_eq!(drawn.size, 1);
     }
 
@@ -305,6 +325,12 @@ mod tests {
         assert!(read(&root, "README.md", "docs/icon.png", Some(&below))
             .unwrap_err()
             .contains("home directory"));
-        assert!(read(&root, "README.md", "docs/icon.png", Some(&dir.join("elsewhere"))).is_ok());
+        assert!(read(
+            &root,
+            "README.md",
+            "docs/icon.png",
+            Some(&dir.join("elsewhere"))
+        )
+        .is_ok());
     }
 }
