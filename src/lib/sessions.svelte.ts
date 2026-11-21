@@ -1310,15 +1310,28 @@ export function shownName(session: Session): string {
 }
 
 /** What a row reads as: its name, else the first words of the prompt it
-    started with, held to the rules a name is: words that read as another
-    live session's, the user's, the workbench's or an agent's are no name.
-    Null where nothing says anything, for a row that reads "New session"; a
-    row never reads as its number. */
+    started with, unless they read as the user, the workbench, an agent or
+    another live session's name. Null where nothing says anything, for a
+    row that reads "New session"; a row never reads as its number. */
 export function rowName(session: Session): string | null {
   const name = knownName(session);
   if (name !== null) return shown(name);
   const words = promptWords(session);
-  return words === null || reservedName(words) || nameTaken(words, session.key) ? null : words;
+  return words === null || reservedName(words) || promptTaken(words, session.key) ? null : words;
+}
+
+/** Whether a prompt's first words read as the workbench, as an agent, or
+    as the title or given name of another live session than `except`. A
+    prompt is plain text, so its scripts are its own, and two sessions
+    started from one prompt both read its words. */
+function promptTaken(words: string, except: string): boolean {
+  if (readsAsWorkbench(words) || readsAsAgent(words)) return true;
+  const bare = bareName(words);
+  return sessions.all.some((session) => {
+    if (session.key === except || !isLive(session)) return false;
+    const name = knownName(session);
+    return name !== null && bareName(name) === bare;
+  });
 }
 
 /** The first words of the prompt a session started with, without the

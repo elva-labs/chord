@@ -3001,6 +3001,31 @@ describe("a name the agent or a caller gave", () => {
     expect(shownName(copy)).toBe("New session");
     const own = create("/p", null, undefined, null, "Tidy the docs");
     expect(shownName(own)).toBe("Tidy the docs");
+    const agent = create("/p", null, undefined, null, "Codex");
+    expect(shownName(agent)).toBe("New session");
+  });
+  it("reads a prompt's words whatever scripts they mix", () => {
+    const mixed = create("/p", null, undefined, null, "Fix 日本語 parser");
+    expect(shownName(mixed)).toBe("Fix 日本語 parser");
+    const cyrillic = create("/p", null, undefined, null, "Добавь Dark mode");
+    expect(shownName(cyrillic)).toBe("Добавь Dark mode");
+  });
+  it("reads the same prompt's words on two live sessions started from it", () => {
+    const one = create("/p", null, undefined, null, "Bump the client");
+    started(one.key, "pty-one", "sid-one");
+    const two = create("/p", null, undefined, null, "Bump the client");
+    started(two.key, "pty-two", "sid-two");
+    expect(shownName(one)).toBe("Bump the client");
+    expect(shownName(two)).toBe("Bump the client");
+  });
+  it("holds a prompt only to live sessions' names, not a finished one's", () => {
+    const done = create("/p");
+    started(done.key, "pty-done", "sid-done");
+    done.title = "Fix it";
+    const copy = create("/p", null, undefined, null, "Fix it");
+    expect(shownName(copy)).toBe("New session");
+    ended({ id: "pty-done", code: 0, clean: true });
+    expect(shownName(copy)).toBe("Fix it");
   });
   it("reads a started session's prompt without the workbench's sentence after it", () => {
     const kid = create("/p", null, undefined, null, `Bump the client ${OUTCOME_ASK_TERMINAL}`);
