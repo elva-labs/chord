@@ -31,7 +31,7 @@
   let busy = $derived(ask === null ? null : runningQuestion(ask.leave, live, leaving.busy));
   /** How many files have edits not yet saved, the count and its noun kept
       together on one line. */
-  let files = $derived(names.length === 1 ? "1 file has" : `${names.length} files have`);
+  let files = $derived(names.length === 1 ? "1\u00a0file has" : `${names.length}\u00a0files have`);
   let quit = $derived(ask?.leave === "quit");
 
   let question = $derived(
@@ -104,6 +104,7 @@
 </script>
 
 {#if ask !== null && (names.length > 0 || busy !== null)}
+  <div class="scrim" aria-hidden="true" data-testid="leave-scrim"></div>
   <div class="leave" data-card use:coversBrowser use:heard={ask.generation} use:cancelFirst data-testid="leave-ask">
     <AskCard
       variant="sheet"
@@ -137,6 +138,15 @@
 
   .leave > :global(.ask-card) {
     outline: none;
+  }
+
+  /* A faint veil over the window takes the clicks meant for what is under
+     the sheet, so the sheet reads as the one thing to answer. */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
   }
 
   /* Where the cards let a background through, the sheet is laid over the
