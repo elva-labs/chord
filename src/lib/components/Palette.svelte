@@ -92,9 +92,11 @@
   /** The list as runs of rows under one heading, each with the place its
       first row holds in the list. A new session's step is one list, which
       its field already names, so it has no heading, except how it runs when
-      it offers workflows as well as agents. */
+      it offers workflows as well as agents, and what typing on the
+      defaults' line finds, which answers more than one question. */
   const headed = $derived(
     palette.mode !== "new" ||
+      palette.ready ||
       (items.some((item) => item.group === WORKFLOWS) && items.some((item) => item.group === ALONE)),
   );
   const sections = $derived.by(() => {

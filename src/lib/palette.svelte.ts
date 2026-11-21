@@ -263,16 +263,15 @@ export function resetPalette() {
 }
 
 /** The field changed. A `>` first in go to leaves it for commands, with
-    the rest of what was typed. Typing on a new session's defaults narrows
-    the choices they stand for, where there are any. */
+    the rest of what was typed. A new session's defaults with nothing to
+    choose take no text. */
 export function setQuery(text: string) {
   if (palette.mode === "goto" && text.startsWith(">")) {
     palette.mode = "commands";
     palette.query = text.slice(1);
     return;
   }
-  if (palette.mode === "new" && palette.ready && text !== "" && stepsLeft(palette.steps).length > 0)
-    palette.ready = false;
+  if (palette.mode === "new" && palette.ready && stepsLeft(palette.steps).length === 0) return;
   palette.query = text;
 }
 
@@ -656,7 +655,31 @@ function readyItems(path: string): PaletteItem[] {
   return steps.length > 1 ? [ready, change] : [ready];
 }
 
-/** What the question being asked offers, narrowed by what is typed. */
+export const AGENTS = "Which agent";
+
+/** Everything Change would ask about a project's new session, narrowed by
+    what is typed: how it runs, then the account, each under its heading,
+    and in each the names the text begins first. */
+function readySearch(project: string, query: string): PaletteItem[] {
+  const left = stepsLeft([{ kind: "project", path: project }]);
+  const how = left.includes("agent") ? runSections(project) : [];
+  const alone = how.length === 1 && how[0].title === ALONE;
+  const groups = [
+    ...how.map((section) =>
+      section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: AGENTS } : item)),
+    ),
+    left.includes("account") ? accountChoices(project) : [],
+  ];
+  const typed = query.trim().toLowerCase();
+  const begins = (item: PaletteItem) => item.label.toLowerCase().startsWith(typed);
+  return groups.flatMap((items) => {
+    const found = items.filter((item) => matches(item.label, query));
+    return [...found.filter(begins), ...found.filter((item) => !begins(item))];
+  });
+}
+
+/** What the question being asked offers, narrowed by what is typed. On a
+    new session's defaults, what is typed narrows everything they stand for. */
 export function stepItems(
   query: string,
   steps: Step[] = palette.steps,
@@ -665,7 +688,8 @@ export function stepItems(
   const project = projectOfSteps(steps);
   if (asking !== "project" && (project === null || !isOpen(project)))
     return [];
-  if (palette.ready && project !== null) return readyItems(project);
+  if (palette.ready && project !== null)
+    return query.trim() === "" ? readyItems(project) : readySearch(project, query);
   const all =
     asking === "project"
       ? projectChoices()
@@ -844,8 +868,17 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
           else void tick().then(keyboardToSessions);
         },
       };
-    case "choice":
-      return answer([...palette.steps, item.step]);
+    case "choice": {
+      if (!palette.ready) return answer([...palette.steps, item.step]);
+      // Found from the defaults' line: the defaults with this one answer
+      // changed.
+      const path = projectOfSteps(palette.steps);
+      if (path === null) return { type: "stay" };
+      const kin = (step: Step) =>
+        item.step.kind === "account" ? step.kind === "account" : step.kind === "agent" || step.kind === "workflow";
+      const steps = defaultsFor(path).map((step) => (kin(step) ? item.step : step));
+      return { type: "close", then: () => startOn(steps, item.step.kind === "account") };
+    }
     case "ready": {
       const steps = item.steps;
       return { type: "close", then: () => startOn(steps, false) };

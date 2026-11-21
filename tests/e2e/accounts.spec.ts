@@ -295,6 +295,30 @@ test.describe("a new session from the palette with accounts", () => {
   });
 });
 
+test.describe("typing on a new session's line with accounts named", () => {
+  test("finds the agent typed and starts it under the project's account", async ({ page }) => {
+    await installFakeCore(page, {
+      open: [PROJECT],
+      agents: ["claude-code", "codex"],
+      settings: { accounts: WORK, ...NO_WORKFLOW },
+    });
+    await page.goto("/");
+    await expect(page.locator(AGENT)).toBeVisible();
+    await page.keyboard.press(`${MOD}+Shift+P`);
+    await page.keyboard.type("new session in");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("cod");
+    await expect(page.getByTestId("palette-row").first()).toContainText("Codex");
+    await expect(page.getByTestId("palette-row").first()).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("palette-group").first()).toHaveText("Which agent");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("palette")).toHaveCount(0);
+    await expect.poll(() => spawns(page)).toHaveLength(1);
+    expect((await spawns(page))[0].agent).toBe("codex");
+    await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
+  });
+});
+
 test.describe("a new session in a project that names no account", () => {
   const COMMANDS = `${MOD}+Shift+P`;
   const chosen = (page: Page) =>

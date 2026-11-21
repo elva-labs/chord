@@ -134,8 +134,12 @@ when they were last used. With the project known, one line reads `New
 session` with what it starts on, such as `Claude Code · Work`, and
 <kbd>Enter</kbd> starts it: the project's account and its workflow, else the
 agent last started in it. Under it, where there is anything to choose,
-Change asks the rest a step at a time, and typing on the line does the
-same, narrowed by what is typed. While a session that another started in a
+Change asks the rest a step at a time. Typing on the line lists everything
+Change would ask, narrowed by what is typed: the workflows and agents, then
+the accounts, each under its heading. <kbd>Enter</kbd> on one starts the
+session with that one answer changed, so `cod` and <kbd>Enter</kbd> start
+Codex under the account the line named. With nothing to choose, the line
+takes no text. While a session that another started in a
 different project is on screen, the project on screen is the starter's, as
 [sessions](sessions.md) describes, both here and for the command that starts
 a session in the project on screen. Change asks the account, when accounts are named in the

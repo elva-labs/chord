@@ -923,6 +923,51 @@ describe("a new session", () => {
     expect(accounts.picked).toEqual({});
   });
 
+  it("finds every choice the defaults stand for in what is typed on their line", () => {
+    agent.installed = ["claude-code", "codex"];
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    accounts.overrides = { [A]: "Work" };
+    beginNew(A);
+    setQuery("cod");
+    expect(palette.ready).toBe(true);
+    // Codex begins with it, so it comes before Claude Code and takes the cursor.
+    expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
+      ["Codex", "Which agent"],
+      ["Claude Code", "Which agent"],
+    ]);
+    setQuery("o");
+    expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
+      ["Claude Code", "Which agent"],
+      ["Codex", "Which agent"],
+      ["Work", "Under which account"],
+    ]);
+    // Enter starts the one found, with the other defaults as they were.
+    setQuery("cod");
+    const outcome = choose("Codex");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", account: "Work" });
+  });
+
+  it("starts the default agent under an account found on the defaults' line, and keeps the pick", () => {
+    agent.installed = ["claude-code", "codex"];
+    sessions.preferred[A] = "codex";
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    beginNew(A);
+    setQuery("wor");
+    const outcome = choose("Work");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", account: "Work" });
+    expect(accounts.picked).toEqual({ [A]: "Work" });
+  });
+
+  it("takes no text on the defaults' line when there is nothing to choose", () => {
+    beginNew(A);
+    expect(stepsLeft(palette.steps)).toEqual([]);
+    setQuery("hello");
+    expect(palette.query).toBe("");
+    expect(stepItems(palette.query).map((item) => item.kind)).toEqual(["ready"]);
+  });
+
   it("marks the account the project runs under as the project's", () => {
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     beginNew(A);
