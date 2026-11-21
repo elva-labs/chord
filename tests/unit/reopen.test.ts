@@ -1,8 +1,8 @@
 import { flushSync } from "svelte";
 import type { SpawnOptions } from "$lib/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { conductor, PUT_AWAY_AFTER, resetConductor, startedFor, watchStops } from "$lib/conductor.svelte";
-import { linkFor } from "$lib/integrated.svelte";
+import { conductor, PUT_AWAY_AFTER, resetConductor, startedFor, unheard, watchStops } from "$lib/conductor.svelte";
+import { childrenOf } from "$lib/orchestrator.svelte";
 import { reopen, settleWhen, startup } from "$lib/reopen.svelte";
 import {
   activeSession,
@@ -139,13 +139,13 @@ describe("keeping the record", () => {
     expect(record().open).toEqual([]);
   });
 
-  it("leaves out a terminal session another session started", () => {
+  it("keeps a terminal session another session started, as any other", () => {
     stop = reopen();
     live(A, "caller");
     const child = live(B, "child");
     conductor.startedBy[child.key] = "caller";
     flushSync();
-    expect(record().open.map((entry) => entry.id)).toEqual(["caller"]);
+    expect(record().open.map((entry) => entry.id)).toEqual(["caller", "child"]);
   });
 
   it("keeps an integrated session another session started, which the core goes on running", () => {
@@ -261,26 +261,44 @@ describe("coming back", () => {
     expect(forProject(A).map((session) => session.madeTree)).toEqual([true, false]);
   });
 
-  it("puts away a session another started without starting it, and keeps it on its starter's list", async () => {
+  it("brings back each session another started under its starter, where it stood, without starting it", async () => {
     const kid = { id: "kid", project: B, worktree: null, agent: "claude-code" as const, name: "Fix it" };
-    conductor.started.lead = [kid, { ...kid, id: "shown" }, { ...kid, id: "taken" }];
+    conductor.started.lead = [kid, { ...kid, id: "chat" }, { ...kid, id: "taken" }];
+    let asked = false;
+    snapshots.answer = () => {
+      asked = true;
+      return Promise.reject(new Error("no such session"));
+    };
     onRecord(
       [
         entry(A, "lead"),
-        { ...entry(B, "kid"), kind: "integrated" },
-        { ...entry(B, "shown"), kind: "integrated" },
+        entry(B, "kid"),
+        { ...entry(B, "chat"), kind: "integrated" },
         { ...entry(B, "taken"), kind: "integrated", handle: "h-taken" },
       ],
-      "shown",
+      "lead",
     );
-    stop = reopen();
-    // A run the core no longer has is only known once it is asked for.
-    await vi.waitFor(() => expect(forProject(B).map((session) => session.id)).toEqual(["shown"]));
-    expect(forProject(A).map((session) => session.id)).toEqual(["lead"]);
-    expect(spawned.map((options) => options.session)).not.toContain("kid");
-    expect(spawned.map((options) => options.session)).not.toContain("taken");
-    expect(conductor.started.lead.map((entry) => entry.id)).toEqual(["kid", "shown", "taken"]);
-    expect(conductor.started.lead.every((entry) => entry.left === undefined)).toBe(true);
+    const unwatch = watchStops();
+    try {
+      stop = reopen();
+      // A run the core no longer has leaves its row as any other.
+      await vi.waitFor(() => expect(asked).toBe(true));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      flushSync();
+      const [lead] = forProject(A);
+      const kids = forProject(B);
+      expect(kids.map((session) => session.id)).toEqual(["kid", "chat", "taken"]);
+      expect(childrenOf(lead)).toEqual(kids);
+      for (const session of kids) expect(session.status).toBe("dormant");
+      vi.useFakeTimers();
+      await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER * 2);
+      expect(forProject(B)).toEqual(kids);
+      for (const id of ["kid", "chat", "taken"]) expect(spawned.map((options) => options.session)).not.toContain(id);
+      expect(conductor.started.lead.every((entry) => entry.left === undefined)).toBe(true);
+    } finally {
+      unwatch();
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the row of a session another started while the core could not say whether it still runs it", async () => {
@@ -298,50 +316,37 @@ describe("coming back", () => {
     expect(forProject(B)[0].status).toBe("dormant");
   });
 
-  it("keeps the row of a session another started that comes back unread or with a draft, and puts it away once seen", async () => {
-    const kid = { id: "kid", project: B, worktree: null, agent: "claude-code" as const, name: "Fix it" };
-    conductor.started.lead = [kid, { ...kid, id: "drafted" }];
-    let gone: (error: Error) => void = () => {};
-    snapshots.answer = () => new Promise((_, reject) => (gone = reject));
+  it("brings back unread a session another started that was, which its starter hears nothing of until it runs", async () => {
+    conductor.started.lead = [{ id: "kid", project: B, worktree: null, agent: "claude-code", name: "Fix it" }];
     localStorage.setItem(
       "chord.waiting",
       JSON.stringify({ kid: { unread: true, note: "Fixed it", notice: null, at: Date.now() } }),
     );
     localStorage.setItem(
       KEY,
-      JSON.stringify({
-        open: [entry(A, "lead"), { ...entry(B, "kid"), kind: "integrated" }, { ...entry(B, "drafted"), kind: "integrated", handle: "h-drafted" }],
-        active: "lead",
-        waiting: true,
-      }),
+      JSON.stringify({ open: [entry(A, "lead"), entry(B, "kid")], active: "lead", waiting: true }),
     );
     loadRemembered();
     const unwatch = watchStops();
+    vi.useFakeTimers();
     try {
       stop = reopen();
-      const drafted = forProject(B).find((session) => session.id === "drafted")!;
-      // The user writes in the row while the core is asked about it.
-      linkFor(drafted.key).draft = "and the docs";
-      gone(new Error("no such session"));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      const [lead] = forProject(A);
+      const [kid] = forProject(B);
+      expect(kid.unread).toBe(true);
+      expect(kid.note).toBe("Fixed it");
+      // The starter runs again, and is at rest.
+      wake(lead.key);
+      started(lead.key, "pty-lead", "lead");
       flushSync();
-      const kidRow = forProject(B).find((session) => session.id === "kid")!;
-      expect(kidRow.unread).toBe(true);
-      expect(forProject(B).map((session) => session.id)).toEqual(["kid", "drafted"]);
-      vi.useFakeTimers();
+      expect(childrenOf(lead)).toEqual([kid]);
+      expect(unheard(lead)).toEqual([]);
+      // Seen, it stays as any row from before the restart does.
+      kid.unread = false;
+      flushSync();
       await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER * 2);
-      expect(forProject(B).map((session) => session.id)).toEqual(["kid", "drafted"]);
-      // Seen, and the draft sent away: each goes once it has stayed so.
-      kidRow.unread = false;
-      linkFor(drafted.key).draft = "";
-      flushSync();
-      await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER - 1000);
-      expect(forProject(B)).toHaveLength(2);
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(forProject(B)).toHaveLength(0);
-      expect(spawned.map((options) => options.session)).not.toContain("kid");
-      expect(spawned.map((options) => options.session)).not.toContain("drafted");
-      expect(conductor.started.lead.map((entry) => entry.id)).toEqual(["kid", "drafted"]);
+      expect(forProject(B)).toEqual([kid]);
+      expect(kid.status).toBe("dormant");
     } finally {
       unwatch();
       vi.useRealTimers();

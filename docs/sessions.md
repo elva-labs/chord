@@ -190,10 +190,12 @@ starts at once, through the agent's resume command, and each of the others
 starts when it is selected. Bringing a project forward selects its most
 recent session, so that one starts too; asking for a new session in it does
 not, as the project's header describes above. A session closed by hand
-before the quit stays closed, a session whose project did not open again is
-left out, and a session another session started stays with its starter,
-which brings it back when it is wanted, rather than coming back as a row;
-see [orchestrator](orchestrator.md#when-the-work-is-over). A session left open in the `orchestrator`
+before the quit stays closed, and a session whose project did not open
+again is left out. A session another session started comes back under its
+starter, where it stood among the others, and a line sent to it, by the
+user or by its starter, starts it in its row; one the workbench had put
+away before the quit stays put away, see
+[orchestrator](orchestrator.md#when-the-work-is-over). A session left open in the `orchestrator`
 folder of an earlier version comes back too, and lists that folder again;
 see [orchestrator](orchestrator.md).
 
@@ -203,10 +205,9 @@ hand; a row that was read comes back read, and none of its lines is kept,
 so marking it unread then puts no line back. A mark made by hand comes
 back with its rule. This holds for a
 terminal and an in-Chord session, whether its agent is started again or
-the row is left as it was, and for a session another session started, which
-comes back unread when its starter brings it back. A row that has not come
-back within a week, as when its project does not open again or its starter
-is not resumed, is let go, and comes back read if it ever does. What waits is kept as
+the row is left as it was, and for a session another session started. A
+row that has not come back within a week, as when its project does not
+open again, is let go, and comes back read if it ever does. What waits is kept as
 it changes, not on the way out, so a crash keeps it as a quit does. It
 counts at once in the status bar, on the app's icon and for the shortcut to
 the next session that needs you, and coming back says nothing through the

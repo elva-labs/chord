@@ -1,7 +1,7 @@
 import type { AgentId } from "$lib/core";
 import type { SessionKind } from "$lib/sessionKind.svelte";
 import { pendingMove, recordMove } from "$lib/sessionMoves.svelte";
-import { carryOver, putAwayLeft, startedFor } from "$lib/conductor.svelte";
+import { carryOver } from "$lib/conductor.svelte";
 import { handleOf, reattach } from "$lib/integrated.svelte";
 import {
   activeSession,
@@ -26,16 +26,10 @@ import {
  * kept current as rows come and go. A row closed by hand leaves it; a quit
  * leaves it as it was. On the next start each comes back as a dormant row
  * in its project, and only the one on screen starts: the rest start when
- * they are selected. A terminal session another session started is not on
- * record: it is the caller's to bring back, and the caller's list offers
- * it. An integrated one is, as any other is: the core goes on running it
- * through a reload, and a window that dropped its row would leave an agent
- * running that no row shows. It comes back under the session that started
- * it, which the caller's own record still says. After a restart there is
- * nothing to take up, and its row is put away without being started, as
- * the caller's list offers it, unless it was the one on screen. One that
- * comes back unread, or with words of the user's in it, stays until the
- * user has seen it.
+ * they are selected. A session another session started is on record as
+ * any other is, and comes back under the session that started it, which
+ * the caller's own record still says, where it stood among the others: a
+ * line from the user or from its starter starts it in its row.
  *
  * A row comes back unread if it was unread at the quit, with the line under
  * its name, as the sessions keep it by id; the one the restore puts on
@@ -96,8 +90,7 @@ function onRecord(session: Session): boolean {
     session.id !== null &&
     (session.status === "dormant" ||
       session.status === "starting" ||
-      session.status === "running") &&
-    (session.kind === "integrated" || startedFor(session.key) === null)
+      session.status === "running")
   );
 }
 
@@ -217,15 +210,9 @@ export function reopen(
     if (entry.moves !== undefined) recordMove(row.key, entry.moves);
     // A window reloaded while the core still runs the session takes it up
     // where it is; after a restart there is nothing to take up, and the
-    // row waits to be resumed like any other, but for a session another
-    // started, whose starter brings it back when it is wanted. One the core
-    // could not be asked about may still run, and keeps its row.
-    const theirs = startedFor(row.key) !== null && entry.id !== active;
+    // row waits to be resumed like any other.
     if (row.kind === "integrated" && entry.handle)
-      void reattach(row.key, entry.handle, entry.spoken ?? true).then((how) => {
-        if (how === "gone" && theirs) putAwayLeft(row.key);
-      });
-    else if (theirs) putAwayLeft(row.key);
+      void reattach(row.key, entry.handle, entry.spoken ?? true);
   };
   // The session on screen at the quit, when its project is the one in front
   // and nothing else is on screen; otherwise the project's most recent, as

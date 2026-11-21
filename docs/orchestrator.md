@@ -285,13 +285,14 @@ goes on with. A wait over all of the starter's sessions passes over one
 put away while it waits, and once every session it watched has been put
 away it answers that none is running.
 
-After a restart, a row of a session another session started that the core
-no longer runs is put away the same way, without being started, unless it
-was the session on screen at the quit. One that comes back unread, or that
-the user writes in before the core has answered, stays until the user has
-seen it, and goes five minutes after. A row whose core could not be asked,
-which may still run it, is kept. Its starter's list says it has not run
-since the workbench was restarted, and a line sent to it resumes it.
+After a restart, a session another session started comes back under its
+starter as every row open at the quit does, where it stood among the
+others and with nothing running behind it (see
+[sessions](sessions.md#after-a-restart)). Its work is not over while
+nothing runs, so it is not put away, and its starter hears nothing of it
+until it runs again. Its starter's list says it has not run since the
+workbench was restarted, and a line sent to it, by the user or by its
+starter, resumes it in its row, as a start naming it does.
 
 ## Who is calling
 
@@ -667,9 +668,9 @@ resumed keeps its token, so the sessions it started are still its own: the
 ones still running answer to its tools as before, and a row with one of its
 ids, resumed from the pane by hand, hangs under it all the same. When the
 app itself was closed, the orchestrator comes back with the other sessions
-that were open, and the sessions it started do not. `sessions` then lists
-them as not running since the workbench was restarted, after the running
-ones; one whose row the user closed is listed as closed by the user, one
+that were open, and the sessions it started come back under it, not
+running. `sessions` then lists them as not running since the workbench was
+restarted, after the running ones; one whose row the user closed is listed as closed by the user, one
 whose row had ended as ended, and one the workbench put away as put away,
 before a restart and after it, until a
 row of it is up again, however it came back: by `start`, by hand from the

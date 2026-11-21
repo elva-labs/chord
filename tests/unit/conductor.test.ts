@@ -6480,6 +6480,53 @@ describe("a session the user closed or the app lost", () => {
     expect(last().content).toContain("claude-code  waiting");
   });
 
+  // After a restart the rows of the sessions it started are back, not
+  // running, each where it stood: a line or a start resumes one in its row.
+  it("resumes a row left from before a restart in its place, on a line or a start", async () => {
+    await startOne();
+    await startAllowed(call("start", { project: A, prompt: "Bump deps" }, as), "pty-2", "sid-2");
+    restarted();
+    const first = reopened(A, "sid-1", "claude-code", null, null, null);
+    const second = reopened(A, "sid-2", "claude-code", null, null, null);
+    const caller = byToken(callerKey("caller-1"))!;
+    flushSync();
+    expect(startedBy(caller.token)).toEqual([first, second]);
+    // Nothing of it is news to its starter while it has not run.
+    expect(unheard(caller)).toEqual([]);
+
+    await handle(call("sessions", {}, as));
+    const listed = last().content!.split("\n");
+    expect(listed[0]).toContain("sid-1");
+    expect(listed[0]).toContain("not running since the workbench was restarted  a line you send it resumes it");
+    await handle(call("read", { session: "sid-1" }, as));
+    expect(last().content).toBe(
+      "Session sid-1 is not running: it has not run since the workbench was restarted. A line you send it resumes it, as start naming session sid-1 does.",
+    );
+    await handle(call("wait", { session: "sid-1" }, as));
+    expect(last().content).toContain("it has not run since the workbench was restarted");
+
+    const sending = handle(call("send", { session: "sid-1", text: "Go on with the test" }, as));
+    await settle();
+    expect(first.status).toBe("starting");
+    expect(first.prompt).toContain("Go on with the test");
+    started(first.key, "pty-9", "sid-1");
+    flushSync();
+    await sending;
+    expect(last().error).toBeNull();
+    expect(last().content).toContain("Your line resumed it.");
+
+    const starting = handle(call("start", { session: "sid-2", prompt: "Go on with the deps" }, as));
+    await settle();
+    expect(second.status).toBe("starting");
+    started(second.key, "pty-10", "sid-2");
+    flushSync();
+    await starting;
+    expect(last().content).toContain("Resumed session sid-2");
+    // The same rows, in the same order, under the same starter.
+    expect(forProject(A)).toEqual([first, second]);
+    expect(startedBy(caller.token)).toEqual([first, second]);
+  });
+
   // A name a start gave is the session's until its agent gives one, after
   // a restart as before it.
   it("keeps the name a start gave across a restart and a resume by id", async () => {
