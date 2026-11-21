@@ -979,3 +979,66 @@ describe("an orchestrator that runs integrated", () => {
   });
 });
 
+
+describe("a start that is refused", () => {
+  const added: string[] = [];
+  const removed: string[] = [];
+
+  beforeEach(() => {
+    added.length = 0;
+    removed.length = 0;
+    const core = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    core.worktreeAdd = async (project: string, name: string) => {
+      const path = `${project}/.worktrees/${name}`;
+      added.push(path);
+      return path;
+    };
+    core.worktrees = async () =>
+      added
+        .filter((path) => !removed.includes(path))
+        .map((path) => ({ path, name: path.split("/").at(-1)!, branch: "b", merged: true, dirty: false }));
+    core.worktreeRemove = async (_project: string, name: string) => {
+      removed.push(added.find((path) => path.endsWith(`/${name}`))!);
+    };
+    setKind("claude-code", "integrated");
+  });
+
+  it("leaves no worktree, row, entry or news behind when the folder is not trusted", async () => {
+    fake.untrusted.add(`${A}/.worktrees/fix-it`);
+    const starter = callerToken();
+    const request = call("start", { project: A, prompt: "Fix it", name: "Fix it", worktree: true });
+    const answering = handle(request);
+    await settle();
+    if (conductor.asking !== null) allow();
+    await settle();
+    const row = forProject(A).at(-1)!;
+    await launch(row.key);
+    flushSync();
+    await answering;
+    expect(answerTo(request)?.error).toContain("The folder is not trusted yet");
+    expect(added).toEqual([`${A}/.worktrees/fix-it`]);
+    expect(removed).toEqual(added);
+    expect(forProject(A)).toEqual([]);
+    expect(conductor.trees[starter] ?? []).toEqual([]);
+    expect(Object.keys(conductor.startedBy)).toEqual([]);
+    expect(unheard(sessions.all.find((row) => row.token === starter)!)).toEqual([]);
+    const listed = call("sessions");
+    await handle(listed);
+    expect(answerTo(listed)?.content ?? "").not.toContain("Fix it");
+  });
+
+  it("makes nothing when the user says no", async () => {
+    const starter = callerToken();
+    const request = call("start", { project: A, prompt: "Fix it", name: "Fix it", worktree: true });
+    const answering = handle(request);
+    await settle();
+    expect(conductor.asking).not.toBeNull();
+    refuse();
+    await answering;
+    expect(answerTo(request)?.error).toContain("The user did not allow the session to be started");
+    expect(added).toEqual([]);
+    expect(forProject(A)).toEqual([]);
+    expect(conductor.trees[starter] ?? []).toEqual([]);
+    expect(Object.keys(conductor.startedBy)).toEqual([]);
+  });
+});

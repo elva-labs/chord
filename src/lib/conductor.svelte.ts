@@ -2842,11 +2842,12 @@ async function startFitted(
   const id = await idFor(session.key);
   if (id === null) {
     const row = byKey(session.key);
-    return refused(
-      row === null
-        ? "The session was closed before it started."
-        : statusMessage(row),
-    );
+    const reason =
+      row === null ? "The session was closed before it started." : statusMessage(row);
+    // A start that failed leaves nothing behind. One still starting when
+    // the wait ran out may yet come up, and keeps what it made.
+    if (row === null || row.status !== "starting") await undoStart(session.key, project, startIn);
+    return refused(reason);
   }
   const row = byKey(session.key);
   if (row !== null) logUsage(row, "start", { starter: caller, modelBelow: below !== null });
@@ -2894,6 +2895,25 @@ async function startFitted(
   return said(
     `Started session ${idText(id)} for ${placeText(at)} in ${where}${underWords(named)}. It has the prompt.${runsOn}${begins}${notCalled} ${KEEP_WAITING}`,
   );
+}
+
+/** Takes back what a start that never came up made: its row, the row's
+    place with its starter, and the worktree made for it, with its branch.
+    A worktree the core will not part with stays, and the starter's list of
+    trees keeps it. */
+async function undoStart(key: string, project: string, tree: string | null) {
+  delete conductor.startedBy[key];
+  delete conductor.places[key];
+  close(key);
+  if (tree === null) return;
+  try {
+    const made = (await core().worktrees(project)).find((candidate) => candidate.path === tree);
+    if (made === undefined) return;
+    await core().worktreeRemove(project, made.name, dirsOf());
+  } catch {
+    return;
+  }
+  treeRemoved(project, tree);
 }
 
 /** Claude's models, most capable first, by the family a model's name
