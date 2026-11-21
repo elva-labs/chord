@@ -84,6 +84,9 @@ function offenders(page: Page): Promise<string[]> {
       "img, video, embed, iframe, object, picture",
       "[data-testid='media-page']",
       "[data-testid='background-pad']",
+      // A switch's knob, a small solid disc that has to read against both its
+      // track states.
+      "[role='switch'] .knob",
       // The terminal's input, which is never drawn.
       ".xterm-helper-textarea",
     ].join(", ");

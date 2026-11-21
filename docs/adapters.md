@@ -2,7 +2,7 @@
 
 The workbench drives two agents, both full-screen TUIs in a pty: Claude Code
 and Codex CLI. Either can also run as an
-[integrated session](integrated.md), driven in messages with the
+[session in Chord](integrated.md), driven in messages with the
 conversation drawn by the window: Claude Code in print mode with JSON
 lines, Codex through its app-server. The differences between them sit behind
 one seam; everything above it sees a session with an agent id, a project,
@@ -18,7 +18,7 @@ and an id to resume by.
 | Earlier messages | Read from the session's transcript                              | Read through its own app-server, from the thread's turns and items |
 | Account       | `CLAUDE_CONFIG_DIR`, its configuration directory                   | `CODEX_HOME`, its home                                   |
 | Session name  | The terminal title, stripped of the glyph and the agent's own name | The thread's name, else its title, else the first prompt |
-| Workflow      | `--append-system-prompt-file`, `--disallowedTools`                 | `-c developer_instructions=…`, `-c features.multi_agent=false`, `-c features.multi_agent_v2.disable_native_tools=true`; integrated, the same in the thread's start |
+| Workflow      | `--append-system-prompt-file`, `--disallowedTools`                 | `-c developer_instructions=…`, `-c features.multi_agent=false`, `-c features.multi_agent_v2.disable_native_tools=true`; in Chord, the same in the thread's start |
 
 ## Accounts
 
@@ -50,7 +50,7 @@ server is named whole on its command line, its command, its arguments and
 those three variables to pass on, with the time a call of its tools may take:
 the longest a wait sits, half an hour, and a minute more, where Codex's own
 is a minute and would cut a wait short and leave its answer unread. An
-integrated Codex session's thread gives the server the same time. A Codex
+in-Chord Codex session's thread gives the server the same time. A Codex
 session started outside the workbench keeps whatever its configuration
 says, a minute unless the user set `tool_timeout_sec`. Named for a workflow where no
 configuration names it, it is given the approvals the
@@ -76,19 +76,19 @@ start](orchestrator.md#who-is-calling). A session under a workflow could
 then direct nothing, so one on a Codex older than 0.47.0 is refused in a
 terminal, saying to update; the version is what `codex --version` prints,
 and a Codex whose version cannot be read is started all the same. An
-integrated Codex session gives the server the two variables' values in the
+in-Chord Codex session gives the server the two variables' values in the
 thread's own configuration rather than their names, and runs only on a
 Codex far newer than that, so it needs no such check.
 
 ## Under a workflow
 
 A session that follows a workflow is told the workflow's instructions on
-every start and every resume, in a terminal or integrated alike. Claude
+every start and every resume, in a terminal or in Chord alike. Claude
 Code adds them to its own system prompt, reading them from a file the
 workbench writes for the session, with the same flags either way; Codex
 takes them as developer instructions, the nearest setting it has. In a
 terminal Codex has no setting that reads them from a file, so they go on
-its command line; integrated, they go in the message that starts or
+its command line; in Chord, they go in the message that starts or
 resumes its thread. The file is made new for each session, readable by
 its owner alone, and removed when the session's process ends. Each
 workbench process keeps its sessions' files in a folder of its own, beside
@@ -106,7 +106,7 @@ it had one, is started with that record turned off, so it reads what it is
 told now.
 
 Codex keeps what a thread began with. Resumed, in a terminal or
-integrated, it reads the instructions its first turn was given, whatever
+in Chord, it reads the instructions its first turn was given, whatever
 it is told now, and its subagent tools stay as they were then: a thread
 started under a workflow that took them away is without them for good,
 and one resumed under a changed workflow does not read the change.
@@ -136,15 +136,15 @@ about live updates. In a terminal, where the agent's configuration for the
 directory does not already point at the tool server, the server is named
 when the session starts: to Claude Code in a configuration file of the
 session's own, to Codex as one of its servers on the command line. An
-integrated session is given the server whatever its configuration says, as
-[integrated sessions](integrated.md) describes. A machine with no tool
+in-Chord session is given the server whatever its configuration says, as
+[sessions in Chord](integrated.md) describes. A machine with no tool
 server does not start a session under a workflow, and says why.
 
 On Windows an agent installed as a script runs through the command
 interpreter, which ends a command at its first line break. Claude Code's
 command line holds only file names there. Codex would lose all but the
 first line of the instructions, so a Codex session under a workflow is
-refused in a terminal on Windows, saying so, and runs integrated, where
+refused in a terminal on Windows, saying so, and runs in Chord, where
 nothing of the workflow is on its command line. A session with no workflow
 starts as the table above says. The interpreter also takes the first and
 the last quote off a line with more than two, which cuts short a script
@@ -178,7 +178,7 @@ project since the spawn, and reports it: every half second for as long as the se
 Codex records the thread when the first prompt is sent, which may be a while
 after the spawn. Until then the row has no id and no name: it cannot be
 resumed and is not yet the app's own. A Codex row also polls the
-index every couple of seconds for its name. An integrated Codex session
+index every couple of seconds for its name. An in-Chord Codex session
 needs no watching: its thread's id comes with the session's ready event.
 
 ## What is quarantined
@@ -189,8 +189,8 @@ is an empty answer: a
 project with no history, never a pane that will not open. Codex leaves an
 old index behind when its schema moves; the newest is read.
 
-The protocols the integrated sessions speak move with the agents' versions
-too, and are read the same way, as [integrated sessions](integrated.md)
+The protocols the in-Chord sessions speak move with the agents' versions
+too, and are read the same way, as [sessions in Chord](integrated.md)
 describes, and so is what a past conversation said, which
 [history](integrated.md#history) describes for each agent. Codex
 generates its app-server's protocol from its own code for each version,

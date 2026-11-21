@@ -86,12 +86,12 @@ test.describe("the tabs", () => {
     await page.keyboard.press(`${MOD}+,`);
     await page.getByTestId("settings-tab-appearance").click();
     await page.keyboard.press("ArrowDown");
-    await current("live");
+    await current("sessions");
     await expect(page.getByTestId("settings-live")).toBeVisible();
     await page.keyboard.press("ArrowRight");
-    await current("sessions");
+    await current("workflows");
     await page.keyboard.press("ArrowUp");
-    await current("live");
+    await current("sessions");
     await page.keyboard.press("ArrowLeft");
     await current("appearance");
     // The tab it reaches has the keyboard, so the next arrow moves from there.
@@ -298,7 +298,7 @@ test.describe("the hooks notice", () => {
     await expect(notice).toContainText("Let the agent talk to the workbench");
     await page.getByTestId("hooks-notice-settings").click();
     await expect(page.getByTestId("settings")).toBeVisible();
-    await expect(page.getByTestId("settings-tab-live")).toHaveAttribute(
+    await expect(page.getByTestId("settings-tab-sessions")).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -321,7 +321,7 @@ test.describe("the hooks notice", () => {
   test("goes when hooks are turned on, and stays gone", async ({ page }) => {
     // The word lands on the tab the section is in, so the choice is there.
     await page.getByTestId("hooks-notice-settings").click();
-    await page.getByTestId("hooks-everywhere-on").click();
+    await page.getByTestId("hooks-everywhere").click();
     await expect(page.getByTestId("hooks-notice")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await page.reload();
@@ -386,7 +386,7 @@ test.describe("plugins", () => {
     );
 
     // On asks once, and says what it means.
-    await row.getByTestId("plugin-on").click();
+    await row.getByTestId("plugin").click();
     await expect(source.getByTestId("plugin-ask")).toContainText(
       "runs node with your privileges",
     );
@@ -395,13 +395,13 @@ test.describe("plugins", () => {
     );
     await page.getByTestId("plugin-cancel").click();
     await expect(source.getByTestId("plugin-ask")).toHaveCount(0);
-    await expect(row.getByTestId("plugin-on")).toHaveAttribute(
+    await expect(row.getByTestId("plugin")).toHaveAttribute(
       "aria-checked",
       "false",
     );
-    await row.getByTestId("plugin-on").click();
+    await row.getByTestId("plugin").click();
     await page.getByTestId("plugin-agree").click();
-    await expect(row.getByTestId("plugin-on")).toHaveAttribute(
+    await expect(row.getByTestId("plugin")).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -443,11 +443,11 @@ test.describe("plugins", () => {
     );
 
     // Off, then on again: no question the second time.
-    await row.getByTestId("plugin-off").click();
+    await row.getByTestId("plugin").click();
     await expect(source.getByTestId("plugin-state")).toContainText("off");
-    await row.getByTestId("plugin-on").click();
+    await row.getByTestId("plugin").click();
     await expect(source.getByTestId("plugin-ask")).toHaveCount(0);
-    await expect(row.getByTestId("plugin-on")).toHaveAttribute(
+    await expect(row.getByTestId("plugin")).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -487,7 +487,7 @@ test.describe("plugins", () => {
     await expect(known.getByTestId("plugin-state")).toHaveCount(0);
     await expect(known.getByTestId("plugin-check")).toHaveCount(0);
     await expect(known.getByTestId("plugin-remove")).toHaveCount(0);
-    await expect(known.getByTestId("plugin-on").first()).toHaveAttribute(
+    await expect(known.getByTestId("plugin").first()).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -506,7 +506,7 @@ test.describe("plugins", () => {
       '[data-testid="plugin-source"][data-source="known-elva-labs"]',
     );
     const todos = known.locator('[data-testid="plugin-row"][data-plugin=todos]');
-    await todos.getByTestId("plugin-on").click();
+    await todos.getByTestId("plugin").click();
 
     // The question names where the plugin comes from and what it is for,
     // and is asked once: agreeing fetches the source and turns it on.
@@ -522,7 +522,7 @@ test.describe("plugins", () => {
     await expect(known).toContainText("0123456");
     await expect(known.getByTestId("plugin-check")).toBeVisible();
     await expect(known.getByTestId("plugin-remove")).toBeVisible();
-    await expect(todos.getByTestId("plugin-on")).toHaveAttribute(
+    await expect(todos.getByTestId("plugin")).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -570,11 +570,11 @@ test("turns the notifications and the chime on and off, and keeps them", async (
 
   await page.keyboard.press(`${MOD}+,`);
   await page.getByTestId("settings-tab-notifications").click();
-  await expect(page.getByTestId("notifications-on")).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByTestId("chime-off")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("notifications")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("chime")).toHaveAttribute("aria-checked", "false");
 
-  await page.getByTestId("chime-on").click();
-  await page.getByTestId("notifications-off").click();
+  await page.getByTestId("chime").click();
+  await page.getByTestId("notifications").click();
   await expect.poll(file).toMatchObject({ notifications: false, chime: true });
   // Turning it on lets the user hear what they chose.
   expect(await chimes()).toBe(1);
@@ -583,8 +583,8 @@ test("turns the notifications and the chime on and off, and keeps them", async (
   await expect(page.locator(AGENT)).toBeVisible();
   await page.keyboard.press(`${MOD}+,`);
   await page.getByTestId("settings-tab-notifications").click();
-  await expect(page.getByTestId("notifications-off")).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByTestId("chime-on")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("notifications")).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByTestId("chime")).toHaveAttribute("aria-checked", "true");
 });
 
 test("asks before every start only once turned on, and keeps it", async ({ page }) => {
@@ -685,11 +685,11 @@ test.describe("what the file holds that is not used", () => {
     await expect(entries.nth(1)).toContainText(
       "The span a project stays active in the file is not used: it is fortnight",
     );
-    const heading = page.getByRole("heading", { name: "Inactive projects" });
+    const heading = page.getByRole("heading", { name: "Past sessions" });
     const box = await heading.boundingBox();
     const notice = await entries.nth(1).boundingBox();
     expect(notice!.y).toBeGreaterThan(box!.y);
-    expect(notice!.y).toBeLessThan((await page.getByTestId("inactive-after-day").boundingBox())!.y);
+    expect(notice!.y).toBeLessThan((await page.getByTestId("inactive-after").boundingBox())!.y);
   });
 
   test("is named on the keys tab with the rule it breaks", async ({ page }) => {

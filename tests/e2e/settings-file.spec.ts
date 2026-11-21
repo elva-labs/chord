@@ -100,8 +100,8 @@ test("writes a choice made in the settings to the machine's file", async ({
     .poll(async () => (await file(page)).keys["focus.sessions"])
     .toEqual({ key: "h", shift: false, alt: false });
 
-  await page.getByTestId("settings-tab-live").click();
-  await page.getByTestId("hooks-everywhere-off").click();
+  await page.getByTestId("settings-tab-sessions").click();
+  await page.getByTestId("hooks-everywhere").click();
   await expect.poll(async () => (await file(page)).hooks.everywhere).toBe(false);
 });
 

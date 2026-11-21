@@ -228,7 +228,7 @@
     {:else}
       {#if other !== null && firstAgent !== null}
         <button class="quiet" onclick={() => startOther(other!)} data-testid="start-other"
-          >{other === "integrated" ? "New integrated session" : "New session in a terminal"}</button
+          >{other === "integrated" ? "New session in Chord" : "New session in a terminal"}</button
         >
       {/if}
       <button onclick={startAnother} data-testid="start-agent">New session</button>

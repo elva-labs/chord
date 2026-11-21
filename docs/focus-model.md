@@ -9,13 +9,13 @@ it can. The middle pane is a real TUI, not a text field. Claude Code binds
 <kbd>Shift+Tab</kbd>, and a shortcut that silently eats one of them turns
 into a bug report about the agent.
 
-This holds for a terminal session. An integrated session has no terminal:
+This holds for a terminal session. An in-Chord session has no terminal:
 the pane is the app's own conversation, and what it takes from the keyboard
-is under [an integrated session](#an-integrated-session).
+is under [a session in Chord](#a-session-in-chord).
 
 ## What the app claims
 
-Only <kbd>Cmd</kbd> chords (<kbd>Ctrl</kbd> on Windows and Linux). The
+Only <kbd>Cmd</kbd> shortcuts (<kbd>Ctrl</kbd> on Windows and Linux). The
 default preset:
 
 | Keys                                                                    | Does                                                        |
@@ -32,7 +32,7 @@ default preset:
 | <kbd>Cmd</kbd><kbd>D</kbd>                                              | Open or close the file viewer, in agent mode                |
 | <kbd>Cmd</kbd><kbd>E</kbd>                                              | Diff, whole file or rendered; in the editor, Edit, Diff or Preview |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>A</kbd>                              | Changed files or all files                                  |
-| <kbd>Cmd</kbd><kbd>F</kbd>                                              | Filter files, when a list pane has focus; find in the file, when the editor has it; find in the conversation, in an integrated session's pane |
+| <kbd>Cmd</kbd><kbd>F</kbd>                                              | Filter files, when a list pane has focus; find in the file, when the editor has it; find in the conversation, in an in-Chord session's pane |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>F</kbd>                              | Search in files                                             |
 | <kbd>Cmd</kbd><kbd>N</kbd>                                              | A new untitled file in the editor, from either mode         |
 | <kbd>Alt</kbd><kbd>Cmd</kbd><kbd>N</kbd>                                | A new file in the tree, in editor mode                      |
@@ -44,27 +44,27 @@ default preset:
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>                              | Open the command palette                                    |
 | <kbd>Cmd</kbd><kbd>,</kbd>                                              | Open the settings                                           |
 
-Two chords differ on Windows and Linux, where <kbd>Ctrl</kbd><kbd>T</kbd> is
+Two shortcuts differ on Windows and Linux, where <kbd>Ctrl</kbd><kbd>T</kbd> is
 the process's in a terminal: a new shell is
 <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd> there, as in a terminal
 emulator, and cycling the theme is
-<kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd>. A stored table with no chord
+<kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd>. A stored table with no shortcut
 for a new shell and the theme on <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd>
 is read with the theme on <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd> and the
 new shell on <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd>.
 
-Unbound <kbd>Cmd</kbd> chords pass through rather than being swallowed.
+Unbound <kbd>Cmd</kbd> shortcuts pass through rather than being swallowed.
 
-## The chords are the user's
+## The shortcuts are the user's
 
 Settings, from the native menu or <kbd>Cmd</kbd><kbd>,</kbd>, holds the whole
-table: pick a preset, or click a chord and press a new one. The keys are one
+table: pick a preset, or click a shortcut and press a new one. The keys are one
 tab of it; the appearance and the look, the fonts and the colours, live
 updates and plugins are the others, in [settings](settings.md). The one rule
-that does not move is the modifier: every chord carries <kbd>Cmd</kbd>
+that does not move is the modifier: every shortcut carries <kbd>Cmd</kbd>
 (<kbd>Ctrl</kbd> elsewhere), because the keys without it belong to whatever
 terminal has focus, and <kbd>Ctrl+C</kbd> and <kbd>Ctrl+R</kbd> are refused
-outright since on Windows and Linux they are the agent's. A chord another
+outright since on Windows and Linux they are the agent's. A shortcut another
 action holds is refused with the name of that action.
 
 The **Vim** preset lays movement between panes on <kbd>h</kbd>, <kbd>j</kbd>,
@@ -74,10 +74,10 @@ panel toggles on <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>J</kbd>, and sessions
 step on <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>N</kbd> and <kbd>P</kbd>. The command
 palette opens on <kbd>Cmd</kbd><kbd>;</kbd> there, since
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd> steps sessions. Going to a session
-or project stays on <kbd>Cmd</kbd><kbd>P</kbd>, and the editor's chords,
+or project stays on <kbd>Cmd</kbd><kbd>P</kbd>, and the editor's shortcuts,
 close, a new shell's and the status bar's are the default's.
 
-A chord with <kbd>Alt</kbd> is read from the key's place on the keyboard,
+A shortcut with <kbd>Alt</kbd> is read from the key's place on the keyboard,
 since on macOS <kbd>Option</kbd> turns a letter into another character.
 
 ## The palettes
@@ -117,11 +117,11 @@ the list holds one row, Open project. The footer names only what the list on
 screen can do.
 
 **Commands** open on <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd> and list every
-action the keys can do, each with its chord, and the ones that have none: new
+action the keys can do, each with its shortcut, and the ones that have none: new
 session, new session in the project on screen, open project and open remote
 project, and Preview file or Show source for the file in the viewer when it
-is Markdown, HTML, Mermaid or SVG (the commands have no chord). Picking an
-action does what its chord does. The first entry goes to
+is Markdown, HTML, Mermaid or SVG (the commands have no shortcut). Picking an
+action does what its shortcut does. The first entry goes to
 the next session that needs you, as <kbd>Cmd</kbd><kbd>.</kbd> does (see
 [sessions](sessions.md)). It shows how many are waiting, and with none it
 cannot be picked.
@@ -147,17 +147,17 @@ still in the field. The last answer brings the project forward and starts the
 session the way a project's new-session button in the sessions pane does,
 and the keyboard goes to the new agent.
 
-<kbd>Escape</kbd> puts the palette away from any step, and so does the chord
+<kbd>Escape</kbd> puts the palette away from any step, and so does the shortcut
 of the list that is up: <kbd>Cmd</kbd><kbd>P</kbd> for go to,
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd> for the commands and a new session.
-The other chord switches to its list. The keyboard goes back where it was.
-While the palette is up it has the keyboard and no other chord reaches past
+The other shortcut switches to its list. The keyboard goes back where it was.
+While the palette is up it has the keyboard and no other shortcut reaches past
 it, except that Settings opened from the app's menu puts the palette away
 first.
 
-While a dialog, or a question over the agent pane, is up, neither chord opens
+While a dialog, or a question over the agent pane, is up, neither shortcut opens
 a palette and <kbd>Cmd</kbd><kbd>.</kbd> does nothing, so the keyboard stays
-where the dialog has it. A new shell, a new untitled file and the chord to
+where the dialog has it. A new shell, a new untitled file and the shortcut to
 the status bar do nothing either while a dialog or a question in a strip
 holds the keyboard.
 Answering the question gives the keyboard back to
@@ -181,17 +181,17 @@ and never more than that. It closes the first of these that holds:
 - otherwise the window.
 
 It never closes a session: a session is closed from its row, which says
-what goes with it. Close in the File menu does the same as the chord, and
+what goes with it. Close in the File menu does the same as the shortcut, and
 is named for what it would close: Close Tab, Close Shell, Close Viewer or
 Close Window.
 
 A shell at an idle prompt closes at once. One with something still running
-in it, a dev server say, comes to the front and asks first, by the chord,
+in it, a dev server say, comes to the front and asks first, by the shortcut,
 its row's <kbd>Delete</kbd> or its ×: the question names what runs and
 holds the keyboard on Cancel, <kbd>Escape</kbd> cancels, and either answer
 gives the keyboard back where it was, the shell or its row. The question
 goes, closing nothing, when the panel is hidden or the session or project
-on screen changes, and the chord pressed again while the keyboard is
+on screen changes, and the shortcut pressed again while the keyboard is
 elsewhere puts it back on Cancel. What a shell's prompt keeps running for
 itself, such as a git status daemon, does not count, and a shell started
 inside the shell counts for what it runs.
@@ -206,7 +206,7 @@ question adds a line about the busy shells. Idle shells go without a
 question.
 
 Closing the window ends the app, and every session and shell running in it.
-So the window's close, by the chord, by Close Window on
+So the window's close, by the shortcut, by Close Window on
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>W</kbd>, by the red button or by the
 controls the app draws, and the app's quit, ask first while a session runs,
 a shell has something running in it, by the rule above, or the editor
@@ -221,10 +221,10 @@ closes without a question. There is no setting to turn
 the question off. How it is held for unsaved edits is in
 [the editor](editor.md#nothing-unsaved-goes-unasked).
 
-On Windows and Linux the chord is <kbd>Ctrl</kbd><kbd>W</kbd> outside a
+On Windows and Linux the shortcut is <kbd>Ctrl</kbd><kbd>W</kbd> outside a
 terminal, which keeps it, since it deletes a word there;
 <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>W</kbd> closes from anywhere, a terminal
-included, as in a terminal emulator. A close chord moved in the settings
+included, as in a terminal emulator. A close shortcut moved in the settings
 takes its Shift form with it, unless another action holds that. On macOS
 a terminal keeps <kbd>Ctrl</kbd><kbd>W</kbd> and
 <kbd>Cmd</kbd><kbd>W</kbd> is the app's from everywhere.
@@ -236,14 +236,14 @@ a terminal keeps <kbd>Ctrl</kbd><kbd>W</kbd> and
   switch. Pane focus moves on <kbd>Cmd</kbd><kbd>1/2/3/4</kbd> or a click.
   Outside a terminal Tab walks the controls, as
   [Tab and the controls](#tab-and-the-controls) says.
-- **<kbd>Ctrl</kbd> chords belong to the agent** on macOS, where the app
+- **<kbd>Ctrl</kbd> shortcuts belong to the agent** on macOS, where the app
   modifier is <kbd>Cmd</kbd>. On Windows and Linux the modifier is
-  <kbd>Ctrl</kbd>, so the bound chords are taken from the terminal there,
+  <kbd>Ctrl</kbd>, so the bound shortcuts are taken from the terminal there,
   and <kbd>Ctrl+C</kbd> and <kbd>Ctrl+R</kbd> are never among them, nor
   <kbd>Ctrl+W</kbd>, which closes only outside a terminal.
 - **<kbd>Esc</kbd> belongs to whichever terminal has focus.** The agent needs
   it, and so does a shell in the panel, and the editor keeps its own. An
-  integrated session's composer takes it to stop a running turn. A pane that
+  in-Chord session's composer takes it to stop a running turn. A pane that
   owns focus may use it: the file viewer closes on it and leaves the keyboard
   in the tree, and a list pane hands the keyboard back to the agent, or in
   editor mode to the editor. This is the one key whose meaning
@@ -253,7 +253,7 @@ a terminal keeps <kbd>Ctrl</kbd><kbd>W</kbd> and
   is open, Esc puts it away wherever the keyboard is and reaches nothing
   else, since a click does not move the keyboard on every platform and the
   key that closes a popover must never also stop the agent's turn. With no popover open, Esc is the
-  terminal's or the composer's again. Find in an integrated session's
+  terminal's or the composer's again. Find in an in-Chord session's
   conversation is put away the same way from its thread and its composer,
   before the composer would stop a turn with it.
 - **A pane that goes away does not keep the keyboard.** When the window
@@ -264,7 +264,7 @@ a terminal keeps <kbd>Ctrl</kbd><kbd>W</kbd> and
 - **<kbd>Shift</kbd><kbd>Enter</kbd> is a new line in the agent pane.** The
   terminal would send the same carriage return as for <kbd>Enter</kbd>, so
   the app sends Meta+Enter, which Claude Code takes as a newline. A shell in
-  the panel gets the plain return, and an integrated session's composer
+  the panel gets the plain return, and an in-Chord session's composer
   breaks the line.
 - **A click in a terminal is the program's.** Links open on
   <kbd>Cmd</kbd>+click (<kbd>Ctrl</kbd> elsewhere), bare URLs and links the
@@ -324,11 +324,11 @@ the rule without any work of its own. A list that walks its own items, as
 the sessions pane and the conversation's dock do, keeps the stops it gives
 them.
 
-## An integrated session
+## A session in Chord
 
-The agent pane of an integrated session is a composer, a thread and, while
+The agent pane of an in-Chord session is a composer, a thread and, while
 the agent waits on the user, a dock between them; see
-[sessions](sessions.md#integrated-sessions). Focusing the pane by key, or
+[sessions](sessions.md#sessions-in-chord). Focusing the pane by key, or
 the session coming on screen in it, puts the keyboard in its composer,
 unless another control of that same session has it, or a control of the
 pane's own, such as the workflow tag or a run's chip in its header, as
@@ -363,7 +363,7 @@ reached.
 | <kbd>↑</kbd> <kbd>↓</kbd> in the thread | Moves through its folds, steps, links and Copy buttons, and the Send now and Take back of the messages that wait; <kbd>Home</kbd> and <kbd>End</kbd> go to the first and the last of the whole conversation, the last being under what waits, the thread following its foot again after <kbd>End</kbd>, and <kbd>Esc</kbd> goes back to the composer, once find is closed |
 | <kbd>Cmd</kbd><kbd>F</kbd> | Opens find over the thread with the keyboard in its field; with find open, selects the words in it |
 | <kbd>Enter</kbd> / <kbd>Shift</kbd><kbd>Enter</kbd> in find | The next match, or the one before, coming round at the ends |
-| <kbd>Cmd</kbd><kbd>G</kbd> / <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>G</kbd> | The same, from anywhere in the session's pane while find is open, unless an action holds the chord |
+| <kbd>Cmd</kbd><kbd>G</kbd> / <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>G</kbd> | The same, from anywhere in the session's pane while find is open, unless an action holds the shortcut |
 | <kbd>Esc</kbd> in find | Closes it and gives the keyboard back where it was; it stops nothing |
 | <kbd>Esc</kbd> while find is open | In the thread, or in the composer with no menu open, closes find and stops nothing; the next <kbd>Esc</kbd> does what it does there |
 
@@ -413,7 +413,7 @@ composer, as from the thread, and answers nothing. The model's menu
 opens from its button and is walked with the arrows, <kbd>Enter</kbd>
 picking and <kbd>Esc</kbd> closing it. The choice under the pointer takes
 the keyboard, so the pointer and the arrows move one mark, and the keyboard
-going anywhere else, by a chord or a press, puts the menu away and stays
+going anywhere else, by a shortcut or a press, puts the menu away and stays
 where it went.
 
 The slash menu and the files menu never take the keyboard: the composer
@@ -425,8 +425,8 @@ method makes one, goes to the composition. While the agent is still
 starting, <kbd>Enter</kbd> sends nothing, so a command is not sent as text
 before the agent can take it.
 
-Every chord the app claims works from the composer as from anywhere else.
-Find goes to the pane that holds the keyboard: from an integrated
+Every shortcut the app claims works from the composer as from anywhere else.
+Find goes to the pane that holds the keyboard: from an in-Chord
 session's composer, thread or dock it finds in the conversation, from the
 editor in the file, and from a list pane it filters the files, in editor
 mode as in agent mode, where the editor and the conversation stand side
@@ -446,11 +446,11 @@ once it settles, once for each change, and the field names it.
 A page shown in the embedded browser is a native view of its own, not part
 of the app's page, and once a person clicks into it the keyboard is the
 page's: every key reaches it, the same as a real browser tab. The app takes
-back only what it always takes back, Escape and its own chords, and lets
+back only what it always takes back, Escape and its own shortcuts, and lets
 the rest through untouched, Cmd+C and Cmd+V among them. Clicking into a
 page counts as focusing the changes pane, since that is where the tab
 lives, but it does not pull the keyboard there the way pressing
-Cmd+3 would: the page keeps it until Escape or a chord takes it back. Linux
+Cmd+3 would: the page keeps it until Escape or a shortcut takes it back. Linux
 does the same with Ctrl in Cmd's place; on Windows a page keeps every key.
 
 ## Focus follows the pointer down, not the hover
@@ -510,27 +510,27 @@ editor, or the tree with nothing open, and pressed again from the editor it
 goes to the tree, and from the tree back to the editor. In the Vim preset
 the same holds for <kbd>h</kbd>, <kbd>k</kbd>, <kbd>l</kbd> and <kbd>j</kbd>.
 
-The view chord walks the tab's views, Edit, Diff and Preview. The viewer's
-chord, <kbd>Cmd</kbd><kbd>D</kbd>, does nothing for the app in editor mode;
+The view shortcut walks the tab's views, Edit, Diff and Preview. The viewer's
+shortcut, <kbd>Cmd</kbd><kbd>D</kbd>, does nothing for the app in editor mode;
 the viewer's Edit button and the switch are the ways between the modes.
 
 The editor is a text field of the app's own, and while it has the keyboard
 it keeps what a text field needs. <kbd>Esc</kbd> is its: it closes find and
-drops extra cursors, and the keyboard stays. Every chord on an arrow key is
+drops extra cursors, and the keyboard stays. Every shortcut on an arrow key is
 its too, moving or selecting, so <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>↓</kbd>
 selects to the end of the file there rather than stepping sessions, and
 <kbd>Cmd</kbd><kbd>D</kbd> selects the next occurrence of what is selected.
-<kbd>Tab</kbd> indents. The other chords are the app's as anywhere, and
+<kbd>Tab</kbd> indents. The other shortcuts are the app's as anywhere, and
 <kbd>Cmd</kbd><kbd>F</kbd> finds in the file there, and in the
-conversation from an integrated session beside it, as
-[an integrated session](#an-integrated-session) says.
+conversation from an in-Chord session beside it, as
+[a session in Chord](#a-session-in-chord) says.
 
 Save works from anywhere in editor mode but a terminal: from the tree as
-well as the editor, and from an integrated session's composer, which is a
-text field with no use for it. A terminal keeps its chord, since on Windows
-and Linux <kbd>Ctrl</kbd><kbd>S</kbd> is the process's. On macOS a chord the
+well as the editor, and from an in-Chord session's composer, which is a
+text field with no use for it. A terminal keeps its shortcut, since on Windows
+and Linux <kbd>Ctrl</kbd><kbd>S</kbd> is the process's. On macOS a shortcut the
 page lets through reaches the [File menu](editor.md#the-file-menu), whose
-items carry the same chords, so <kbd>Cmd</kbd><kbd>S</kbd> saves from a
+items carry the same shortcuts, so <kbd>Cmd</kbd><kbd>S</kbd> saves from a
 terminal too. With the keyboard in a browser tab's page, Save is the app's
 only in editor mode; outside it it reaches the menu as from anywhere else.
 Close closes the tab in front from anywhere in editor mode, as
@@ -540,10 +540,10 @@ A new untitled file, <kbd>Cmd</kbd><kbd>N</kbd>, is the app's in either
 mode and from anywhere on macOS, a terminal included, since a terminal has
 no use for Cmd. On Windows and Linux a terminal keeps
 <kbd>Ctrl</kbd><kbd>N</kbd>, the shell's next line of history, and the
-chord is the app's everywhere else: the editor, the tree, the lists and an
-integrated session's composer.
+shortcut is the app's everywhere else: the editor, the tree, the lists and an
+in-Chord session's composer.
 
-<kbd>Esc</kbd> in the tree, the sessions pane or an integrated session's
+<kbd>Esc</kbd> in the tree, the sessions pane or an in-Chord session's
 composer with no turn running hands the keyboard back to the editor, where
 typing resumes in this mode, and
 puts away what the agent presented in the editor's place. Opening a file from
@@ -568,9 +568,9 @@ under the pointer taking the keyboard as the composer's do, and the popover
 takes the keyboard itself. <kbd>Escape</kbd>, a pick, or a press elsewhere
 puts either away, and the keyboard goes back where it was before it opened,
 the composer or a terminal included; so do <kbd>Enter</kbd> and
-<kbd>Space</kbd> in the popover, as on its control. A chord that moves the
+<kbd>Space</kbd> in the popover, as on its control. A shortcut that moves the
 keyboard elsewhere, such as one to another pane, puts either away and
-leaves the keyboard where the chord sent it. A change of the window's size
+leaves the keyboard where the shortcut sent it. A change of the window's size
 leaves either open, above its control. <kbd>Tab</kbd> from a menu goes on
 to the next control of the bar, and from the popover stops on the
 allowance. The three are stops of their own, WebKit included, and open on

@@ -198,7 +198,7 @@ still opens its tabs there, in the window in front of the user, so
 
 macOS has all of it. On Linux a tab opens, navigates and closes through
 WebKitGTK, sits over the viewer the same way, greys its buttons the same
-way, and gives Escape and the app's chords back. On Windows a tab opens,
+way, and gives Escape and the app's shortcuts back. On Windows a tab opens,
 navigates and closes through WebView2, its back and forward buttons stay
 usable whether or not there is somewhere to go, and a page keeps every key
 typed into it. On both, the tools that read or drive a page, the script,

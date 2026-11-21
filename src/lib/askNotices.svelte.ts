@@ -167,7 +167,7 @@ function kinds(ask: SettingsAsk): string {
 }
 
 function kindOf(field: string): string {
-  if (field === "keyPreset" || field.startsWith("keys")) return "the key chords";
+  if (field === "keyPreset" || field.startsWith("keys")) return "the shortcuts";
   if (field.startsWith("workflow") || field === "defaultWorkflow") return "the workflows";
   if (field === "userStyles" || field === "css") return "the stylesheet";
   return "the look";

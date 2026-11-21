@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 
 /** The dialog, on the tab that holds what the test is about. */
-async function open(tab: "appearance" | "live" | "plugins" | "keys") {
+async function open(tab: "appearance" | "sessions" | "plugins" | "keys") {
   render(Settings);
   await fireEvent.click(screen.getByTestId(`settings-tab-${tab}`));
 }
@@ -64,12 +64,9 @@ describe("the settings", () => {
     workspace.open.push(repo("/repo", "repo"), repo("/other", "other"));
     workspace.active = "/repo";
 
-    await open("live");
-    const everywhere = within(screen.getByTestId("hooks-everywhere"));
-    expect(everywhere.getByTestId("hooks-everywhere-off")).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    await open("sessions");
+    const everywhere = screen.getByTestId("hooks-everywhere");
+    expect(everywhere).toHaveAttribute("aria-checked", "false");
     // The overrides are folded away until one is in use.
     const overrides = screen.getByTestId("hooks-overrides");
     expect(overrides).toHaveAttribute("aria-expanded", "false");
@@ -84,13 +81,10 @@ describe("the settings", () => {
     );
 
     // The answer for all, applied to both open projects at once.
-    await fireEvent.click(everywhere.getByTestId("hooks-everywhere-on"));
+    await fireEvent.click(everywhere);
     await waitFor(() => expect(fake.hooks["/repo"]).toBe(true));
     await waitFor(() => expect(fake.hooks["/other"]).toBe(true));
-    expect(everywhere.getByTestId("hooks-everywhere-on")).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    expect(everywhere).toHaveAttribute("aria-checked", "true");
 
     // One project says otherwise; the other is untouched.
     await fireEvent.click(first.getByTestId("hooks-off"));
@@ -111,7 +105,7 @@ describe("the settings", () => {
   it("shows the overrides open when a project has one", async () => {
     workspace.open.push(repo("/repo", "repo"));
     hook.overrides["/repo"] = false;
-    await open("live");
+    await open("sessions");
     const overrides = screen.getByTestId("hooks-overrides");
     expect(overrides).toHaveAttribute("aria-expanded", "true");
     expect(overrides).toHaveTextContent("(1)");
@@ -120,9 +114,8 @@ describe("the settings", () => {
     ).toHaveAttribute("aria-checked", "true");
   });
 
-  it("says so when there is no project to choose for", async () => {
-    await open("live");
-    expect(screen.getByTestId("hooks-none")).toBeInTheDocument();
+  it("shows no per-project choice when there is no project", async () => {
+    await open("sessions");
     expect(screen.queryByTestId("hooks-row")).toBeNull();
     expect(screen.queryByTestId("hooks-overrides")).toBeNull();
     expect(screen.getByTestId("hooks-everywhere")).toBeInTheDocument();

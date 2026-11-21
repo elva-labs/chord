@@ -189,7 +189,7 @@ shell command themselves by sending `!` and the command, whose output then
 comes to the agent as context, and that a command the agent wants the
 user to run, such as a login, is written as `! ` and the command in a code
 span or on a code block line of its own. A conversation offers such a
-line a run mark, as [sessions](sessions.md#integrated-sessions) describes;
+line a run mark, as [sessions](sessions.md#sessions-in-chord) describes;
 in a terminal, Claude Code's own `!` runs it.
 
 ![The agent answers where the retry delay is set and opens the file at the lines, with its note above them; the user selects three other lines, asks about them, and the agent reads the selection back before explaining.](tools-show.gif)
@@ -354,7 +354,7 @@ script in its page. See
 [browser](browser.md).
 
 Four more read and change the workbench's own settings, the appearance,
-look, palette and its background, fonts, chords and workflows, save a theme of the user's own and write
+look, palette and its background, fonts, shortcuts and workflows, save a theme of the user's own and write
 the user's own stylesheet, for when the user asks an agent for that: every
 change is put to the user first. See [settings](settings.md).
 

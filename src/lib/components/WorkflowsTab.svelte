@@ -12,6 +12,7 @@
    * said, and the window shows what is kept.
    */
   import { tick } from "svelte";
+  import Switch from "$lib/components/Switch.svelte";
   import UnreadEntries from "$lib/components/UnreadEntries.svelte";
   import type { WorkflowStep } from "$lib/core";
   import { instructionLines } from "$lib/workflowInstructions";
@@ -267,22 +268,22 @@
 
 {#snippet more()}
   {#if current !== undefined}
-    <label class="own" data-testid="workflow-start-only-row">
-      <input
-        type="checkbox"
-        checked={startsOnly(current)}
-        onchange={(event) => (problem = setStartOnly(current.name, event.currentTarget.checked))}
-        data-testid="workflow-start-only"
+    <div class="own" data-testid="workflow-start-only-row">
+      <Switch
+        on={startsOnly(current)}
+        onchange={(next) => (problem = setStartOnly(current.name, next))}
+        labelledby="workflow-start-only-label"
+        testid="workflow-start-only"
       />
       <span>
-        <span class="own-label">Hand out work only as sessions you can see</span>
+        <span id="workflow-start-only-label" class="own-label">Hand out work only as sessions you can see</span>
         <small>
           {startsOnly(current)
-            ? "The orchestrator's own ways to hand work to agents you cannot see are taken away, so every piece it hands out is a session you can see. Workers and reviewers keep their subagents, which show under them on the rail when they run as integrated Claude Code sessions."
+            ? "The orchestrator's own ways to hand work to agents you cannot see are taken away, so every piece it hands out is a session you can see. Workers and reviewers keep their subagents, which show under them on the rail when they run in Chord."
             : "The orchestrator keeps its own subagents, whose work does not show as sessions."}
         </small>
       </span>
-    </label>
+    </div>
   {/if}
 
   <details class="told" data-testid="workflow-told">
@@ -333,7 +334,6 @@
 
 <section class="tab" data-testid="settings-workflows">
   <div class="top">
-    <h3>Workflows</h3>
     <p class="note">
       A workflow says which model a session starts on, and which models it may hand work and review to.
     </p>
@@ -443,16 +443,12 @@
     </div>
 
     <div class="foot">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={isDefault}
-        aria-labelledby="workflow-default-label"
-        class="switch"
-        class:on={isDefault}
-        onclick={switchDefault}
-        data-testid="workflow-default"><span class="knob"></span></button
-      >
+      <Switch
+        on={isDefault}
+        onchange={switchDefault}
+        labelledby="workflow-default-label"
+        testid="workflow-default"
+      />
       <span id="workflow-default-label" class="switch-label">Use for new sessions</span>
       <small data-testid="workflow-default-line">{defaultLine}</small>
       <button
@@ -492,16 +488,6 @@
   .foot,
   .confirm {
     flex: none;
-  }
-
-  h3 {
-    margin: 0 0 6px;
-    font-family: var(--chrome);
-    font-size: var(--heading-size);
-    letter-spacing: var(--label-track);
-    text-transform: var(--label-case);
-    font-weight: var(--heading-weight);
-    color: var(--heading-color);
   }
 
   .note {
@@ -578,8 +564,7 @@
   .chip:focus-visible,
   .tool:focus-visible,
   .delete:focus-visible,
-  .fold:focus-visible,
-  .switch:focus-visible {
+  .fold:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
@@ -791,17 +776,12 @@
     margin-top: 4px;
   }
 
-  /* Whether the orchestrator keeps its own subagents: a box and two lines. */
+  /* Whether the orchestrator keeps its own subagents: a switch and two lines. */
   .own {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: flex-start;
     margin: 0 0 12px;
-    cursor: pointer;
-  }
-  .own input {
-    margin: 2px 0 0;
-    accent-color: var(--accent);
   }
   .own > span {
     display: flex;
@@ -903,37 +883,6 @@
   .drop:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-  }
-
-  .switch {
-    position: relative;
-    flex: none;
-    width: 30px;
-    height: 18px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: var(--rule-strong);
-    cursor: pointer;
-  }
-
-  .switch.on {
-    background: var(--accent);
-  }
-
-  .knob {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--surface);
-    transition: transform 0.12s;
-  }
-
-  .switch.on .knob {
-    transform: translateX(12px);
   }
 
   .fold {

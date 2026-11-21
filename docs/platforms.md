@@ -32,7 +32,7 @@ tier needs the WebKitGTK WebDriver package and `tauri-driver`. The window is
 undecorated and the app draws its own controls. A process's working
 directory comes from procfs. A browser tab opens, navigates and closes
 through WebKitGTK, in a layer the app lays over its own page, and gives
-Escape and the app's chords back, but the tools that read or drive its page
+Escape and the app's shortcuts back, but the tools that read or drive its page
 are not supported there. A notification is shown and left: a click on it
 does what the desktop does, and the app does not take it away.
 

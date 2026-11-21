@@ -275,18 +275,14 @@ test("walks the settings, every section and its controls, and never leaves them"
     "settings-tab-appearance",
     "theme-system",
     "look-modern",
-    "compact-off",
+    "palette-teal",
+    "compact",
     "mono-system",
     "sans-system",
-    "palette-teal",
-    "background-pad",
-    "background-add",
-    "harmony-single",
-    "ready-none",
-    "styles-off",
+    "appearance-more",
   ];
   expect(await walk(page, "Tab", appearance.length + 1)).toEqual([...appearance, "settings-close"]);
-  expect(await walk(page, "Shift+Tab", 2)).toEqual(["styles-off", "ready-none"]);
+  expect(await walk(page, "Shift+Tab", 2)).toEqual(["appearance-more", "sans-system"]);
 
   // A radio group is one stop: the arrows walk it, and Space picks.
   await page.getByTestId("theme-system").focus();
@@ -299,15 +295,14 @@ test("walks the settings, every section and its controls, and never leaves them"
 
   // The tabs are one stop, on the one shown; the arrows show the next.
   await page.getByTestId("settings-tab-appearance").focus();
-  expect(await walk(page, "ArrowDown", 1)).toEqual(["settings-tab-live"]);
-  expect(await walk(page, "Tab", 2)).toEqual(["hooks-everywhere-off", "hooks-overrides"]);
+  expect(await walk(page, "ArrowDown", 1)).toEqual(["settings-tab-sessions"]);
   for (const [tab, first] of [
     ["sessions", "session-kind-terminal"],
     ["workflows", "workflow-chip"],
     ["accounts", "account-add-open"],
-    ["plugins", "plugin-off"],
+    ["plugins", "plugin"],
     ["keys", "preset-default"],
-    ["notifications", "notifications-on"],
+    ["notifications", "notifications"],
   ] as const) {
     await page.getByTestId(`settings-tab-${tab}`).focus();
     await page.keyboard.press("Enter");
@@ -315,7 +310,7 @@ test("walks the settings, every section and its controls, and never leaves them"
     // The workflows are one stop, and New workflow one after them.
     if (tab === "workflows") expect(await walk(page, "Tab", 1)).toEqual(["workflow-new"]);
   }
-  expect(await walk(page, "Tab", 2)).toEqual(["chime-off", "settings-close"]);
+  expect(await walk(page, "Tab", 2)).toEqual(["chime", "settings-close"]);
   // Enter on a button presses it.
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("settings")).toHaveCount(0);

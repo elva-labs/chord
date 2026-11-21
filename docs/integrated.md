@@ -1,11 +1,11 @@
-# Integrated sessions
+# Sessions in Chord
 
-An integrated session is an agent run as a process the core talks to in
+An in-Chord session is an agent run as a process the core talks to in
 messages, with no terminal. The window draws the conversation from what
 the agent says, and sends it what the user types. The agent's own binary
 does the work, so its login, settings, hooks, skills, plugins, MCP servers
 and instructions all apply as they do in its terminal interface, and the
-transcript it writes is the same one: a session started integrated resumes
+transcript it writes is the same one: a session started in Chord resumes
 in a terminal, and the other way round.
 
 Claude Code and Codex are the agents driven this way. The commands and
@@ -153,7 +153,7 @@ A session starts in the mode a terminal session of its agent would start
 in, chosen by the agent from the user's own settings, and the window shows
 the mode the agent says it runs in. The workbench names a mode at the start
 in four cases only. A session that starts again, or a conversation resumed
-or reopened integrated, names the mode it last ran in integrated, which the
+or reopened in Chord, names the mode it last ran in in Chord, which the
 window keeps for each conversation; one reopened before anything was said
 in it starts afresh, in the mode kept for the conversation it leaves. A
 Claude Code conversation resumed with no such mode names the one its transcript last records, the way Claude
@@ -226,10 +226,10 @@ session.
 
 ## What a new session starts on
 
-A new session the user starts, integrated or in a terminal, starts on the
+A new session the user starts, in Chord or in a terminal, starts on the
 model, the effort and the permission mode the user last chose for its
 agent, each where one is kept, and otherwise on the agent's own default
-for it. An integrated session is started with all three, and its chips
+for it. An in-Chord session is started with all three, and its chips
 show them from the first frame, until the agent says what it runs on. A
 terminal session is started with the model and the mode, on the flags its
 start already takes for them; a terminal takes no effort from the
@@ -556,7 +556,7 @@ file's content and hunks, and a turn's diff, each with a flag that says it
 was cut short. Streamed pieces of one call's input or output stop past a
 limit; the whole that follows is cut down the same way.
 
-The workbench's hooks fire for an integrated session too, so the session
+The workbench's hooks fire for an in-Chord session too, so the session
 events the hooks send arrive beside these. A window drawing the session
 takes its state from these events and leaves the hooks' alone, so that it
 does not tell the user twice.
@@ -823,8 +823,8 @@ host on its id.
 An account's usage is metered over spans of time, called limit windows
 here: a session window of five hours, the week over every model, and for
 some plans the week for one model alone. The agent knows how much of each
-the account has used. An integrated session asks it as it goes, and for
-an account with no integrated session running, or one between turns, the
+the account has used. An in-Chord session asks it as it goes, and for
+an account with no in-Chord session running, or one between turns, the
 workbench starts the agent to ask it, as [reading the limits with no
 session](#reading-the-limits-with-no-session) describes. Only the agent's
 own binary asks its provider: the workbench passes no token or key and
@@ -900,7 +900,7 @@ window has that one, and its chip says so.
 The chip is there only for a Claude Code conversation whose account's
 figures hold a session window. An account metered some other way has no
 such window and is offered nothing. Codex and terminal sessions are not offered it: only a Claude
-Code conversation goes on from its notes, and only an integrated session
+Code conversation goes on from its notes, and only an in-Chord session
 says for certain what ended its turn.
 
 Only the agent's own word is taken that the limit ended a turn. Claude
@@ -965,14 +965,14 @@ With each question the window says whether a session of the account
 worked since its figures were read: one is at work now, or was seen at
 work after the read. The core reads an account only when a read is due:
 when the newest full read of its limits, the core's own or one an
-integrated session's agent answered, is five minutes old where a session
+in-Chord session's agent answered, is five minutes old where a session
 worked since, or half an hour old where none did. A question can also
 name a time that figures read before say nothing of, as the wait for a
 limit to reset does, and a read is then due where the newest is older
 than that time. An account nobody here
 worked on can only have moved through its use elsewhere, on another
 machine or the web, and its figures show their age while they wait. What
-an integrated session reports counts
+an in-Chord session reports counts
 on its way to the window, so an account whose session keeps reading is
 not read again while its reports keep coming. A read of an account already
 under way is not doubled, and one read runs at a time on a machine, so a
@@ -1047,7 +1047,7 @@ has said it started is left running, and one it has not yet said it
 started ends with the turn. Codex ends the commands left running itself
 when its stdin closes, so a stopped session takes them with it, but a
 Codex that is killed outright, or that dies, leaves them running. Every
-integrated session is stopped when the app exits, and when the daemon's
+in-Chord session is stopped when the app exits, and when the daemon's
 stdin ends on another machine. A connection to another machine that goes
 away ends its sessions for the window, once each, with an error saying
 why. The tool server's configuration for a Claude Code session, and a
@@ -1188,7 +1188,7 @@ why. Reading needs no login.
 
 ## Drawing a conversation
 
-What a window that draws an integrated session can rely on, and what it
+What a window that draws an in-Chord session can rely on, and what it
 has to do itself:
 
 - **Order.** A session's events come in order. The first ones can arrive
@@ -1267,16 +1267,16 @@ has to do itself:
 - **Content.** Images in a tool's result and a command's output kept apart
   from its errors or its exit code arrive as plain text. Long content is
   cut down and flagged.
-- **Hooks.** The workbench's hooks still fire for an integrated session.
+- **Hooks.** The workbench's hooks still fire for an in-Chord session.
   Its state comes from these events, and the hooks' are left alone.
 - **The sessions pane and the tools.** The browser tools and the
   orchestrator's waits act only for a session the window shows as a
-  running row whose token the call names, so an integrated session needs
+  running row whose token the call names, so an in-Chord session needs
   such a row for its agent's tools to work. The orchestrator's send
-  reaches an integrated session as a message, and its read answers with
+  reaches an in-Chord session as a message, and its read answers with
   what the agent last said and did. A message the user sends a session
   that started others can carry the workbench's note on them ahead of the
   user's words, which the window shows apart; see
   [orchestrator](orchestrator.md#when-the-user-writes-to-it).
-  Past sessions are listed from the transcripts, integrated ones among
+  Past sessions are listed from the transcripts, in-Chord ones among
   them.

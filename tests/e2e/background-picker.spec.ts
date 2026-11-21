@@ -21,6 +21,8 @@ async function open(page: Page, settings: Record<string, unknown> = {}) {
   await page.goto("/");
   await expect(page.locator("section[data-pane='agent']")).toBeVisible();
   await page.keyboard.press(`${MOD}+,`);
+  const more = page.getByTestId("appearance-more");
+  if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
   await expect(page.getByTestId("background-picker")).toBeVisible();
   await page.getByTestId("background-pad").scrollIntoViewIfNeeded();
 }

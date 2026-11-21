@@ -4,17 +4,27 @@ Settings open from the native menu, or with <kbd>Cmd</kbd><kbd>,</kbd>
 (<kbd>Ctrl</kbd> on Windows and Linux), over the workbench. A choice applies
 at once.
 
-The settings are in eight tabs down the left. Appearance carries the
-appearance, theme, compact mode, font, colour, background and custom styles sections; live updates,
-sessions, workflows, accounts, plugins, keys and notifications each carry
-the section of that name. Opening the settings again lands on the tab last used, for as long as
+The settings are in seven tabs down the left. Appearance carries the
+appearance, theme, compact mode, font, colour, background and custom styles sections; sessions,
+workflows, accounts, plugins, keys and notifications each carry
+the section of that name, and sessions carries live updates too. Opening the settings again lands on the tab last used, for as long as
 the window is open. The dialog follows the look the panes are drawn in. It
-has one size for every tab, so nothing moves when the tab changes, and a tab
-that needs less width keeps its content at the width it reads at.
+has one size for every tab, so nothing moves when the tab changes, and the
+content of each sits in a column at the width it reads at, in the middle.
+
+Every setting is its name, its control and at most one short line; what a
+setting does is described here. Every choice between on and off is a
+switch. A row that has been changed from what it started as shows Reset,
+and a row that has not shows nothing. The close button at the top right,
+or <kbd>Esc</kbd>, closes the dialog.
 
 ![The settings over the workbench: the four tabs down the left, and the Appearance tab with its appearance, theme, font and colour choices.](settings.png)
 
 ## Appearance
+
+The tab shows mode, theme, colour, compact mode and the two fonts. The
+background and custom styles sit behind More, which opens by itself when
+either is in use.
 
 System, light or dark. System follows the desktop and changes with it.
 
@@ -38,9 +48,9 @@ each card and box, and a line in each divider inside a pane.
 
 On or off, off to begin with. On, the projects and sessions pane leaves
 the layout and slides in over the other panes from the window's left
-edge, when the pointer reaches it or the chord that goes to the pane is
+edge, when the pointer reaches it or the shortcut that goes to the pane is
 pressed; [layout](layout.md#compact-mode) describes it. The section names
-that chord as it is bound.
+that shortcut as it is bound.
 
 ## Font
 
@@ -275,37 +285,37 @@ among them. Class names are the app's own and change without notice.
 
 ## Live updates
 
-Watcher only, or agent hooks, chosen once for every project; each project
-you open follows it, and a project that should go the other way can say so
-under it. The `orchestrator` folder is among those projects while the
+Shown in the Sessions tab as Let agents talk to Chord, with the line
+Shows when an agent works, waits or asks. Off is the watcher only, on is
+agent hooks, chosen once for every project; each project you open follows
+it, and a project that should go the other way can say so under By project. The `orchestrator` folder is among those projects while the
 sessions pane lists it (see [orchestrator](orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
 choice existed starts with them off, and is told once, in a word over the
 agent pane, what turning them on gives; the word's link opens the settings
-at this section. What each means for the changes pane and for a session's
+at the Sessions tab. What each means for the changes pane and for a session's
 row is in [sessions](sessions.md); what the hooks write and where, and the
 tools they bring the agent, is in [hooks](hooks.md).
 
 ## Sessions
 
 How each agent's sessions run: in a terminal, the agent's own interface,
-or integrated, the conversation drawn by the window, a terminal to begin
+or in Chord, the conversation drawn by the window, a terminal to begin
 with. An agent the core says it can drive in messages offers the choice,
 and the tab says an agent that runs only in a terminal does. A session
 that follows a workflow runs the way its orchestrator's agent is set, as
 any other does. A change moves the sessions already open as well, each
 once it is at rest and opened, as [sessions](sessions.md#when-the-setting-is-switched)
-describes, and the tab says so under the choice, with how to move one that
-says on its row that it waits or stays. A single new session can be
+describes, and the tab says so under the choice. A single new session can be
 started the other way from a project's ⋯ menu, the palette or the agent
-pane. What an integrated session is like is in
-[sessions](sessions.md#integrated-sessions), and the mode it starts in,
+pane. What an in-Chord session is like is in
+[sessions](sessions.md#sessions-in-chord), and the mode it starts in,
 which is the one the agent's own settings name as for a terminal session,
-in [integrated](integrated.md#the-mode-a-session-starts-in). It is the
+in [sessions in Chord](integrated.md#the-mode-a-session-starts-in). It is the
 user's to change, and an agent's settings tools refuse it.
 
 What a new session starts on, for each agent: the model, the effort and
 the mode the user last chose for it, as
-[integrated](integrated.md#what-a-new-session-starts-on) describes, or the
+[sessions in Chord](integrated.md#what-a-new-session-starts-on) describes, or the
 agent's own defaults where nothing is kept. Each agent's line says what
 it keeps, and Use defaults beside it lets go of all three. Choosing the
 agent's own default model on a chip lets go of the model alone. The
@@ -313,7 +323,7 @@ choices are kept by the window as the user makes them, and an agent's
 settings tools refuse them. Whether a Claude Code conversation goes on by
 itself once a usage limit resets is kept the same way, from the chip on a
 conversation's composer, as
-[integrated](integrated.md#going-on-after-a-limit) describes; a file from
+[sessions in Chord](integrated.md#going-on-after-a-limit) describes; a file from
 before has none, which reads as off.
 
 Whether you are asked before every session another session starts. Off to
@@ -435,7 +445,7 @@ session under a workflow starts on the workflow's orchestrator, its agent
 and its model, told the workflow's instructions, and keeps the workflow as
 it was for as long as it runs, whatever changes in the settings. Resumed,
 it takes the workflow of the same name as the settings have it then; an
-integrated one the window takes up again after a reload, its agent still
+in-Chord one the window takes up again after a reload, its agent still
 running, goes on with the copy its run was started on. Where
 that workflow was deleted it follows the copy it kept, which its header
 says; where that copy no longer reads either, the session does not start,
@@ -588,8 +598,10 @@ checking and updating do is in [plugins](plugins.md).
 
 ## Keys
 
-The whole chord table, with two presets and room for your own. What the app
-may claim and why is in [focus](focus-model.md).
+The whole shortcut table, with two presets and room for your own. A shortcut
+that differs from its preset shows Reset beside it, and Reset all shortcuts at
+the end of the tab puts the default preset back. What the app may claim and why
+is in [focus](focus-model.md).
 
 ## Notifications
 
@@ -606,13 +618,13 @@ the settings.
 An agent can read the settings and ask to change them, with two tools the
 workbench offers it alongside the others in [hooks](hooks.md). They are for
 when the user asks the agent for a change to the workbench itself, a darker
-appearance or a chord of their own, and the agent is told so.
+appearance or a shortcut of their own, and the agent is told so.
 
-Reading answers at once, with every setting, what it takes, and the chord
+Reading answers at once, with every setting, what it takes, and the shortcut
 of every action. A change names only what should change, and the agent may
 give a reason in the user's terms. It is checked whole before the user
 sees it: a value a setting does not take, an action that does not exist, a
-chord two actions would share or one the agent's terminal needs, and the
+shortcut two actions would share or one the agent's terminal needs, and the
 agent is told why without the user being troubled. The agent hooks, the
 plugins, the accounts, which workflow a project follows, how long past
 sessions stay listed, how long a project stays active, whether every
@@ -683,7 +695,7 @@ on, whichever machine the agent runs on.
 
 ## Where they are kept
 
-The appearance, the look, compact mode, the palette, the fonts, the chords, the answer
+The appearance, the look, compact mode, the palette, the fonts, the shortcuts, the answer
 on hooks, the accounts, the workflows and the projects' choices among them,
 how long past sessions stay listed, how long a project stays active, what
 new sessions start on, the notifications, your own themes, the backgrounds and the cards' shares are kept for the machine, in `settings.json` under `~/.chord`, and every
@@ -696,7 +708,7 @@ keeps it as written until that setting is chosen. A field that is not a
 setting at all is kept in the file as written and not shown.
 
 The keys, the hooks, the accounts, the themes, the backgrounds, the cards' shares and the workflows are read one
-entry at a time. An entry that does not read, a chord that is not a key, a
+entry at a time. An entry that does not read, a shortcut that is not a key, a
 choice that is neither on nor off, an account with a directory that is not a
 path, a theme with a colour that is not hex, a background with a colour past the
 rim of the pad, a workflow that breaks a rule, is
@@ -706,8 +718,8 @@ belongs to. A choice that names such an entry is kept with it: the palette
 naming a theme that is not used, or the account every project uses naming an
 account that is not used. The window shows the default in its place, and the
 file keeps the choice until another is made. The tab of the setting says
-which entry is not used and the rule it breaks: the keys tab for a chord, live
-updates for a hook choice, accounts for an account, the colour section of
+which entry is not used and the rule it breaks: the keys tab for a shortcut, sessions
+for a hook choice, accounts for an account, the colour section of
 appearance for a theme or the palette, and its background section for a
 background. A value that is not used is named in
 the section of its setting. Workflows say so in their own tab, as

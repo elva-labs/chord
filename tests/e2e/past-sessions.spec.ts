@@ -43,8 +43,8 @@ test("lists every past session of its own until a span is chosen", async ({ page
 
   await page.keyboard.press(`${MOD}+,`);
   await page.getByTestId("settings-tab-sessions").click();
-  await expect(page.getByTestId("past-sessions-forever")).toHaveAttribute("aria-checked", "true");
-  await page.getByTestId("past-sessions-week").click();
+  await expect(page.getByTestId("past-sessions")).toHaveValue("forever");
+  await page.getByTestId("past-sessions").selectOption("week");
   await expect.poll(async () => (await file(page)).pastSessions).toBe("week");
   await page.keyboard.press("Escape");
 
@@ -55,7 +55,8 @@ test("lists every past session of its own until a span is chosen", async ({ page
   await expect(page.getByTestId("earlier-sessions")).toContainText("1");
 
   await page.keyboard.press(`${MOD}+,`);
-  await page.getByTestId("past-sessions-month").click();
+  await page.getByTestId("settings-tab-sessions").click();
+  await page.getByTestId("past-sessions").selectOption("month");
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("past-session")).toHaveCount(2);
 });

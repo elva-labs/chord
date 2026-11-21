@@ -1,7 +1,7 @@
 # The orchestrator
 
 An orchestrator is a session that starts and steers other sessions. It is a
-session like any other, in a terminal or integrated, in any project, and
+session like any other, in a terminal or in Chord, in any project, and
 you talk to it the way you talk to any agent. Every session has a set of
 tools for the sessions around it: it can see the open projects, start a
 session in one of them with a prompt, send a running session a line, wait
@@ -90,11 +90,11 @@ though never one that begins with `!` (see [what the user is
 asked](#what-the-user-is-asked)). A long line goes in as a paste when the
 session's terminal has asked for paste, and in small pieces a moment apart
 when it has not, so the agent takes it whole either way. Its Enter follows
-on its own, later the longer the line is. A session that runs integrated
+on its own, later the longer the line is. A session that runs in Chord
 is sent the text as a message, whole, as the user's own is, and one sent
 while it works waits for its turn. A session being reopened the other way,
 by the user or by the setting of how its agent's sessions run (see
-[sessions](sessions.md#integrated-sessions)), takes the line once its next
+[sessions](sessions.md#sessions-in-chord)), takes the line once its next
 run is up, the way that run takes one; one not up within half a minute is
 refused, saying to send again in a moment.
 `wait` sits until a session stops working, asks for permission or ends, or
@@ -156,7 +156,7 @@ because the user interrupted it or the agent itself is gone, ends without
 telling anything; what the user's message says instead is under [when the
 user writes to it](#when-the-user-writes-to-it). `read` answers with the
 last lines on a session's screen, as you would see them, whether or not it
-has ever been on screen; for an integrated session, which has no screen,
+has ever been on screen; for an in-Chord session, which has no screen,
 with what its agent last said and did, a line for each step, and what it is
 doing or waiting for now; each message in it, and each that waits for the
 turn, is said to be the user's or the session's that sent it. A message one
@@ -182,16 +182,16 @@ it. Those are matched against the sessions the caller started and no
 others: a start of an id that fits more than one of them is refused with
 the ids it fits, and one that fits none is refused as an id the workbench
 does not know, so it never reaches a session the caller did not start.
-A session `start` starts runs in a terminal or integrated as the
+A session `start` starts runs in a terminal or in Chord as the
 agent's own setting says, and every tool acts on it either way; what an
-integrated session cannot do when it is not running, such as take a
+in-Chord session cannot do when it is not running, such as take a
 message, the answer says, with the way to start it again.
 A start can carry a name for the work, which the
 session's row and its worktree take; a name the project already has is
 numbered rather than refused, so the same work twice is fix-it and fix-it-2.
 The row takes the name cut to 60 characters, and not at all when it would
 pass for the user, the workbench, an agent or another session (see
-[sessions](sessions.md#integrated-sessions)); the answer says which, with
+[sessions](sessions.md#sessions-in-chord)); the answer says which, with
 the name in quotes as every answer gives a name (see [when the user writes
 to it](#when-the-user-writes-to-it)). The name is kept with what the caller
 started, and stays the session's across a close, a resume by its id, a
@@ -299,7 +299,7 @@ Every session the workbench starts is given a token as it starts, chosen by
 the workbench, in its environment as `CHORD_SESSION`. The agent passes
 its environment on to the tool server and its hooks, so every call they
 make carries the token, for Claude Code and Codex alike, in a terminal or
-integrated, here or on another machine. A Codex session carries it from its
+in Chord, here or on another machine. A Codex session carries it from its
 first call, before Codex has told the workbench its own id. The starter is
 the session whose token the call carries, and two sessions in one directory
 are two starters, each with its own sessions, its own standing answers and
@@ -414,7 +414,7 @@ learned yet is taken at its token's word. A call from an agent the
 workbench did not start gets nothing. Codex asks the user, once in each
 project, to trust a hook that is new or changed before it runs it.
 
-A session that runs integrated is sent the user's message by the window,
+A session that runs in Chord is sent the user's message by the window,
 which puts the note in ahead of the words and shows it in the thread
 folded under them as Reports from the workbench, each session by the
 name its row has. The note counts as telling once the agent takes the
@@ -482,9 +482,9 @@ the starter's wake for it as above, counted from the reload.
 
 Idle means all of these at once. The starter is running, and its agent
 ended its last turn itself, as its hooks say for a session in a terminal
-and its own events for an integrated one. It is not being reopened the
+and its own events for an in-Chord one. It is not being reopened the
 other way: the run that goes on is woken once it is up. It holds no wait,
-and asks for nothing. The user is not writing to it: an integrated starter's composer
+and asks for nothing. The user is not writing to it: an in-Chord starter's composer
 holds no words or images and no message of the user's waits for the agent;
 a starter in a terminal has had no key of the user's since its agent last
 took a line in, as its prompt hook says, or since Ctrl+C emptied its line,
@@ -508,7 +508,7 @@ into each other. A session in a terminal without hooks says nothing of how
 its turns end, and is never woken; the row and the next wait still say
 what it has not heard.
 
-The message is the workbench's, never the user's. An integrated starter is
+The message is the workbench's, never the user's. An in-Chord starter is
 sent it as the workbench's own message, which its thread shows on the left
 as a notice under From Workbench, each session by the name the user knows
 it by, kept once its row has gone. A starter in a terminal
@@ -556,15 +556,15 @@ an agent, in the agent pane, in a project's new-session row or in the
 palette, starts that agent alone. Picking a workflow, in the palette or in
 the choice a project's new-session row opens, starts its orchestrator, on the workflow's agent and model, and a plain new
 session where there was nothing to pick follows the project's workflow, as
-[settings](settings.md#workflows) describes. A new integrated session can
+[settings](settings.md#workflows) describes. A new in-Chord session can
 also be given a workflow, or none, in its composer until its first message,
 which starts it again as that workflow's orchestrator or as the agent alone;
-[sessions](sessions.md#integrated-sessions) says how. A workflow whose
+[sessions](sessions.md#sessions-in-chord) says how. A workflow whose
 orchestrator runs on an agent that is not installed is refused on the row,
 and so is a session under a workflow on a machine with no tool server to
 give it the `start` tool.
 
-An orchestrator runs in a terminal or integrated, as its agent is set, and
+An orchestrator runs in a terminal or in Chord, as its agent is set, and
 is held to its workflow the same way in either. It is told the workflow's
 instructions and, unless the workflow says otherwise, has its agent's own
 ways of handing work to agents the user cannot see taken away, so every
@@ -729,19 +729,19 @@ not, is not asked about when the session would run on the starter's agent
 and under the starter's account, and the workbench knows the starter's
 mode. The session begins in the starter's permission mode, so it begins in
 no more than its starter: the workbench names that mode when it starts the
-session, integrated or in a terminal, as it names a kept mode on a resume,
+session, in Chord or in a terminal, as it names a kept mode on a resume,
 whatever the settings of the session's account would choose, and the
 answer to the starter says it, as "It begins in Plan mode." Narrowing the
 starter later does not reach the sessions it started. A mode the
 workbench starts no session in gives the nearest one below it, Auto for
 Bypass permissions. A session whose agent does not take the mode it is
-given, as Auto where its account or model has none, runs integrated in the
+given, as Auto where its account or model has none, runs in Chord in the
 nearest narrower mode its agent offers, said in a notice; in a terminal it
 runs in the one its agent falls back to, which the window cannot change.
 What the settings files allow still applies before anything is asked, as
 for any session.
 
-The workbench knows the starter's mode for an integrated session, as its
+The workbench knows the starter's mode for an in-Chord session, as its
 agent says it now, and for a Claude Code session in a terminal, as its
 hooks last said it. Claude Code's hooks say it as each turn begins, before
 the agent sees the prompt, so with hooks on it is known before any call
@@ -810,9 +810,9 @@ round runs in, then names the review and the work by the names the user
 sees, "Review has run twice on Fix the cache, as many times as the workflow
 allows. Allow another round?", with Allow one more round or Stop at the
 limit. For a caller that runs
-integrated, the round docks over its composer while its conversation is on
+in Chord, the round docks over its composer while its conversation is on
 screen, with the same two choices taken as the dock takes any request (see
-[sessions](sessions.md#integrated-sessions)), so it never covers the
+[sessions](sessions.md#sessions-in-chord)), so it never covers the
 header that says where the run stands; anywhere else it is put over the
 agent pane as above, and it moves into the dock once the caller is on
 screen. An allowed caller is
@@ -896,12 +896,12 @@ is told as perhaps done, with the `sessions` listing to see what runs.
 
 The agent pane's header says where a session stands in its workflow,
 right after the title and in the header's own type, the same for a session
-in a terminal and an integrated one.
+in a terminal and an in-Chord one.
 
 For the session that follows the workflow it is a chip: a pip for each step
 in order, grey once the run has passed it, in the accent where the run
 stands and empty for a step to come, and the words for where it stands.
-The chip says what the workbench knows and no more. An integrated session
+The chip says what the workbench knows and no more. An in-Chord session
 shows it from its first message on; before that its composer names the
 workflow, which can still be changed there.
 
@@ -995,15 +995,15 @@ first, then the model is left out and the project with it, then the
 account, and the name is cut last; the time, the step and asking always
 stand. The line speaks
 up in the accent, `asking` where the model stands, when the session needs
-a permission, which only you can grant. A starter that runs integrated
+a permission, which only you can grant. A starter that runs in Chord
 also holds that request in its dock, to be answered there for that session,
 or for one in a terminal with the way to it (see
-[sessions](sessions.md#integrated-sessions)). Everything else they wait on, the
+[sessions](sessions.md#sessions-in-chord)). Everything else they wait on, the
 starter hears, so the place to go is still the starter and not the
 session it started. A session whose starter the window no longer has
 stands in its own project like any other.
 
-In an integrated session's thread, the sessions a turn started stand as
+In an in-Chord session's thread, the sessions a turn started stand as
 rows under it: the state dot, the step it was started for, the name, its
 round of the most and what it is doing, "round 2 of 4, working", the model,
 and Open, which goes to it.
@@ -1052,7 +1052,7 @@ written out, cut to what the row holds, and under it its step and round
 where it runs for one, in the words of the run's chip and the rail, the
 project when it is not its starter's, its worktree, what it is doing and
 how long since that changed. The row's own buttons send it a line, typed
-into its terminal or sent as your message to an integrated session, or
+into its terminal or sent as your message to an in-Chord session, or
 stop it, and a click or Enter goes to it. Under the rows, each project you
 allowed it to start in has a × to take that back, and the worktrees its
 own starts made and left behind are counted, with Clean up; a worktree another

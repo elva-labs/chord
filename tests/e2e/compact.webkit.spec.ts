@@ -242,7 +242,7 @@ test("keeps the setting across a reload, and leaves the fold and the width as th
   await expect.poll(async () => (await boxOf(page, pane)).width).toBeLessThan(100);
 
   await page.keyboard.press(`${MOD}+,`);
-  await page.getByTestId("compact-on").click();
+  await page.getByTestId("compact").click();
   await page.keyboard.press("Escape");
   await slidOut(page);
   await expect
@@ -255,8 +255,8 @@ test("keeps the setting across a reload, and leaves the fold and the width as th
   expect((await boxOf(page, AGENT)).x).toBeLessThanOrEqual(10);
 
   await page.keyboard.press(`${MOD}+,`);
-  await expect(page.getByTestId("compact-on")).toHaveAttribute("aria-checked", "true");
-  await page.getByTestId("compact-off").click();
+  await expect(page.getByTestId("compact")).toHaveAttribute("aria-checked", "true");
+  await page.getByTestId("compact").click();
   await page.keyboard.press("Escape");
   // Still folded, and open again at the width it had.
   await expect.poll(async () => (await boxOf(page, pane)).width).toBeLessThan(100);
@@ -450,7 +450,7 @@ for (const look of ["modern", "terminal"] as const)
     await page.keyboard.press(`${CMD}+b`);
 
     await page.keyboard.press(`${CMD}+,`);
-    await page.getByTestId("compact-on").click();
+    await page.getByTestId("compact").click();
     await page.keyboard.press("Escape");
     await slidOut(page);
     await clear("compact, hidden");

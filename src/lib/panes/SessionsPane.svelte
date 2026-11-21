@@ -432,7 +432,7 @@
         : [
             {
               id: "project-menu-other",
-              label: other === "integrated" ? "New integrated session" : "New session in a terminal",
+              label: other === "integrated" ? "New session in Chord" : "New session in a terminal",
               disabled: !isReady(),
               run: () => {
                 startSession(path, agent, accountOf(path), null, other);
