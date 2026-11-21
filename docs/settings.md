@@ -41,7 +41,7 @@ Let agents talk to Chord, in the Sessions tab. Off, the app learns what an agent
 - **Run**, for each agent: In Chord, a conversation the window draws, or In a terminal, the agent's own interface. In a terminal to begin with. [Sessions](sessions.md#sessions-in-chord) says what the difference is.
 - **Start on**, for each agent: the model, effort and mode you last chose for it. Use defaults puts back the agent's own.
 - **Ask before a session starts another**: Outside its project to begin with, so a session may start one in its own project without asking. Every time puts every start to you.
-- **Keep listed**: how long past sessions stay listed, forever, 30 days, 7 days or 1 day. Older ones are still there to resume behind the row of earlier sessions.
+- **Keep listed**: how long past sessions stay listed, forever, 30 days, 7 days or 1 day. Older ones are still there to resume behind the project's Earlier line.
 - **Fold inactive projects after**: 1 day, 7 days, 30 days or never, 7 days to begin with.
 
 See [sessions](reference/settings.md#sessions).

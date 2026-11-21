@@ -4,7 +4,7 @@ The window has three panes: projects and sessions on the left, the agent in the 
 
 ## The three shapes
 
-- **Working**: the three panes. The agent takes whatever room the side panes leave.
+- **Working**: the three panes. The agent takes whatever room the side panes leave. With no project open the changes pane stays away, and the agent pane says `Open a project to start.` over Open project. With a project and no session on screen, it offers New session.
 - **Reviewing**: the changes pane grows into a file viewer and the sessions pane folds. Open a file or press <kbd>Cmd</kbd><kbd>D</kbd> to enter it, and <kbd>Esc</kbd> to leave.
 - **Editing**: the file tree and an editor take the middle, and the agent moves to the right pane, still running. Switch with Agent and Editor in the top right corner, or <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>E</kbd>.
 

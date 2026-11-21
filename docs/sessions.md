@@ -4,7 +4,8 @@ A session is one agent at work in one project. Open a folder as a project and st
 
 ## Starting and closing
 
-- Start a session from the project's header or from the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project.
+- Every new session starts in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. A project's New session and the + open it there with the project chosen. One line says what the session starts on, such as `Claude Code · Work`, and <kbd>Enter</kbd> starts it. Change picks another agent, account or workflow.
+- <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project.
 - New session in Chord or New session in a terminal, in the project's ⋯ menu and the palette, starts one the other way from the setting.
 - The × on a live row stops the session and keeps it in the project's past sessions. Closing a project stops everything running in it.
 - Closing asks first when it would lose unsaved edits or stop a shell that is still running something.
@@ -31,7 +32,7 @@ A project you have not used for a week folds under Inactive at the foot of the p
 
 ## Past sessions
 
-Under the live sessions sit the ones you ran in the project lately. Click one to resume it. Older sessions, including ones run from a plain terminal, wait behind a row such as "33 earlier sessions…", which opens a searchable list. See [past sessions](reference/sessions.md#past-sessions).
+Under the live sessions sit the ones you ran in the project lately. Click one to resume it. Once a project has more than three rows with nothing running, the rest fold into a quiet line at its end, such as `Earlier · 8`, which counts the older sessions too, including ones run from a plain terminal. Opened, it shows the folded rows and a row that opens a searchable list of the older ones. See [past sessions](reference/sessions.md#past-sessions).
 
 When the app starts again, the sessions that were open come back as yellow rows, and the one on screen resumes. A session another session started comes back under its starter, and a line sent to it starts it. See [after a restart](reference/sessions.md#after-a-restart).
 
@@ -55,7 +56,7 @@ A Claude Code session in Chord shows its subagents under its row while they run,
 
 ## Names
 
-A row is `session N` until the agent names it, and a name you give it through the agent's rename command stays. See [names](reference/sessions.md#names).
+A row reads `New session` until something names it: the agent's title, a name you give it through the agent's rename command, or the first words of your first message. See [names](reference/sessions.md#names).
 
 ## Accounts
 
