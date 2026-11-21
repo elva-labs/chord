@@ -17,7 +17,8 @@
 //! - the image is one by its extension, and at most [`MEDIA_CAP`];
 //! - the project is not the root of a disk, nor the home directory or a
 //!   folder above it, which would put the whole of a user's files in reach
-//!   of a document left there.
+//!   of a document left there; when the home directory is not known, no
+//!   project is drawn from.
 //!
 //! The file read is the one checked: one put in its place in between, a
 //! pipe above all, is refused rather than read or waited on. A hard link
@@ -55,14 +56,14 @@ fn names(path: &str) -> Result<Vec<&str>, String> {
 }
 
 /// The project as it resolves, unless it is a root or holds the home
-/// directory.
+/// directory, or the home directory is not known.
 fn project(root: &Path, home: Option<&Path>) -> Result<PathBuf, String> {
+    let home =
+        home.ok_or("is not drawn: the home directory is not known, so no project is drawn from")?;
+    let home = std::fs::canonicalize(home).unwrap_or_else(|_| home.to_path_buf());
     let project = std::fs::canonicalize(root)
         .map_err(|e| format!("is not drawn: the project could not be read ({e})"))?;
-    let holds_home = home
-        .and_then(|home| std::fs::canonicalize(home).ok())
-        .is_some_and(|home| home.starts_with(&project));
-    if project.parent().is_none() || holds_home {
+    if project.parent().is_none() || home.starts_with(&project) {
         return Err(
             "is not drawn: the project holds the home directory or is a root, so a document there draws nothing from it"
                 .into(),
@@ -205,6 +206,11 @@ mod tests {
     use super::*;
     use crate::scratch::Scratch;
 
+    /// A home directory none of the projects here holds.
+    fn elsewhere() -> Option<&'static Path> {
+        Some(Path::new("/nowhere-home"))
+    }
+
     /// A project with a README at its top, a guide in a folder under it,
     /// the README's icon, and a secret beside the project.
     fn project() -> (Scratch, PathBuf) {
@@ -221,13 +227,19 @@ mod tests {
     #[test]
     fn reads_an_image_beside_under_or_above_the_document_in_the_project() {
         let (_dir, root) = project();
-        let icon = read(&root, "README.md", "docs/icon.png", None).unwrap();
+        let icon = read(&root, "README.md", "docs/icon.png", elsewhere()).unwrap();
         assert_eq!(icon.mime, "image/png");
         assert_eq!(icon.data, "iVBORw==");
         assert_eq!(icon.size, 4);
-        assert!(read(&root, "README.md", "./docs/icon.png", None).is_ok());
-        assert!(read(&root, "docs/guide/use.md", "../icon.png", None).is_ok());
-        assert!(read(&root, "docs/guide/use.md", "../../docs/./icon.png", None).is_ok());
+        assert!(read(&root, "README.md", "./docs/icon.png", elsewhere()).is_ok());
+        assert!(read(&root, "docs/guide/use.md", "../icon.png", elsewhere()).is_ok());
+        assert!(read(
+            &root,
+            "docs/guide/use.md",
+            "../../docs/./icon.png",
+            elsewhere()
+        )
+        .is_ok());
     }
 
     #[test]
@@ -238,11 +250,11 @@ mod tests {
             "docs/../../secret.png",
             "docs/guide/../../../secret.png",
         ] {
-            let why = read(&root, "README.md", file, None).unwrap_err();
+            let why = read(&root, "README.md", file, elsewhere()).unwrap_err();
             assert!(why.contains("outside the project"), "{file}: {why}");
         }
         let absolute = dir.join("secret.png").to_string_lossy().to_string();
-        assert!(read(&root, "README.md", &absolute, None)
+        assert!(read(&root, "README.md", &absolute, elsewhere())
             .unwrap_err()
             .contains("not a path inside"));
         for file in [
@@ -254,11 +266,11 @@ mod tests {
             "docs/icon.png\0",
             "docs//icon.png",
         ] {
-            let why = read(&root, "README.md", file, None).unwrap_err();
+            let why = read(&root, "README.md", file, elsewhere()).unwrap_err();
             assert!(why.contains("not a plain relative path"), "{file}: {why}");
         }
-        assert!(read(&root, "README.md", "", None).is_err());
-        assert!(read(&root, "README.md", "~/secret.png", None)
+        assert!(read(&root, "README.md", "", elsewhere()).is_err());
+        assert!(read(&root, "README.md", "~/secret.png", elsewhere())
             .unwrap_err()
             .contains("not there"));
     }
@@ -275,7 +287,7 @@ mod tests {
             "gone.md",
             "./README.md",
         ] {
-            let why = read(&root, document, "docs/icon.png", None).unwrap_err();
+            let why = read(&root, document, "docs/icon.png", elsewhere()).unwrap_err();
             assert!(why.contains("not in the project"), "{document}: {why}");
         }
     }
@@ -292,7 +304,7 @@ mod tests {
             "docs/.hidden.png",
             "docs/guide/../../.env.png",
         ] {
-            let why = read(&root, "README.md", file, None).unwrap_err();
+            let why = read(&root, "README.md", file, elsewhere()).unwrap_err();
             assert!(why.contains("hidden"), "{file}: {why}");
         }
         // A worktree in a hidden folder of the project draws its own images.
@@ -304,7 +316,7 @@ mod tests {
             &root,
             ".claude/worktrees/one/README.md",
             "docs/icon.png",
-            None,
+            elsewhere(),
         )
         .unwrap();
         assert_eq!(drawn.size, 1);
@@ -318,18 +330,18 @@ mod tests {
         std::fs::write(root.join("report.pdf"), "%PDF").unwrap();
         std::fs::create_dir_all(root.join("dir.png")).unwrap();
         for file in ["notes.txt", "id_rsa", "report.pdf", "README.md"] {
-            let why = read(&root, "README.md", file, None).unwrap_err();
+            let why = read(&root, "README.md", file, elsewhere()).unwrap_err();
             assert!(why.contains("not an image"), "{file}: {why}");
         }
-        assert!(read(&root, "README.md", "dir.png", None)
+        assert!(read(&root, "README.md", "dir.png", elsewhere())
             .unwrap_err()
             .contains("not a file"));
-        assert!(read(&root, "README.md", "gone.png", None)
+        assert!(read(&root, "README.md", "gone.png", elsewhere())
             .unwrap_err()
             .contains("not there"));
         let big = std::fs::File::create(root.join("big.png")).unwrap();
         big.set_len(MEDIA_CAP + 1).unwrap();
-        assert!(read(&root, "README.md", "big.png", None)
+        assert!(read(&root, "README.md", "big.png", elsewhere())
             .unwrap_err()
             .contains("more than the 8 MB"));
     }
@@ -345,26 +357,31 @@ mod tests {
         std::fs::write(root.join(".cache/k.png"), [9]).unwrap();
         std::os::unix::fs::symlink(root.join(".cache/k.png"), root.join("k.png")).unwrap();
         std::os::unix::fs::symlink(dir.join("secret.png"), root.join("docs/inside.md")).unwrap();
-        assert!(read(&root, "README.md", "out.png", None)
+        assert!(read(&root, "README.md", "out.png", elsewhere())
             .unwrap_err()
             .contains("outside the project"));
-        assert!(read(&root, "README.md", "up/secret.png", None)
+        assert!(read(&root, "README.md", "up/secret.png", elsewhere())
             .unwrap_err()
             .contains("outside the project"));
-        assert!(read(&root, "README.md", "k.png", None)
+        assert!(read(&root, "README.md", "k.png", elsewhere())
             .unwrap_err()
             .contains("hidden"));
-        assert!(read(&root, "docs/inside.md", "icon.png", None)
+        assert!(read(&root, "docs/inside.md", "icon.png", elsewhere())
             .unwrap_err()
             .contains("not in the project"));
-        assert_eq!(read(&root, "README.md", "same.png", None).unwrap().size, 4);
+        assert_eq!(
+            read(&root, "README.md", "same.png", elsewhere())
+                .unwrap()
+                .size,
+            4
+        );
     }
 
     #[cfg(unix)]
     #[test]
     fn refuses_a_file_put_in_the_place_of_the_one_checked() {
         let (dir, root) = project();
-        let (target, checked) = resolve(&root, "README.md", "docs/icon.png", None).unwrap();
+        let (target, checked) = resolve(&root, "README.md", "docs/icon.png", elsewhere()).unwrap();
         std::fs::write(dir.join("other.png"), [1]).unwrap();
         std::fs::rename(dir.join("other.png"), &target).unwrap();
         assert!(open(&target, &checked)
@@ -379,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn draws_nothing_for_a_project_that_is_the_home_directory_or_above_it() {
+    fn draws_nothing_for_a_project_holding_the_home_directory_or_when_it_is_not_known() {
         let (dir, root) = project();
         let why = read(&root, "README.md", "docs/icon.png", Some(&root)).unwrap_err();
         assert!(why.contains("home directory"), "{why}");
@@ -394,5 +411,8 @@ mod tests {
             Some(&dir.join("elsewhere"))
         )
         .is_ok());
+        assert!(read(&root, "README.md", "docs/icon.png", None)
+            .unwrap_err()
+            .contains("home directory is not known"));
     }
 }
