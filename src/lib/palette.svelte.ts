@@ -19,9 +19,11 @@ import {
 } from "$lib/layout.svelte";
 import {
   accountLabel,
-  accountOf,
+  accountToStart,
   hasAccounts,
   names,
+  lastPicked,
+  pickAccount,
 } from "$lib/accounts.svelte";
 import { agentLabel, installed, isReady } from "$lib/agent.svelte";
 import type { AgentId } from "$lib/core";
@@ -593,11 +595,14 @@ function projectChoices(): PaletteItem[] {
   }));
 }
 
-/** The accounts a new session can run under, the agents' own first. */
+/** The accounts a new session can run under, the agents' own first. The
+    one it starts under unless another is picked says why: it is the
+    project's, or the one picked there last. */
 function accountChoices(project: string): PaletteItem[] {
   if (!isOpen(project)) return [];
   const group = "Under which account";
-  const own = accountOf(project);
+  const own = accountToStart(project);
+  const why = lastPicked(project) === undefined ? "this project's" : "last picked";
   return [null, ...names()].map((account): PaletteItem => ({
     kind: "choice",
     id: `account:${account ?? ""}`,
@@ -605,17 +610,18 @@ function accountChoices(project: string): PaletteItem[] {
     group,
     step: { kind: "account", account },
     detail: "",
-    end: account === own ? "this project's" : "",
+    end: account === own ? why : "",
   }));
 }
 
 /** The answers a new session in a project starts on when none is changed:
-    the project, then for each question it would ask, the account the project
-    runs under and the workflow it follows, else the agent it used last. */
+    the project, then for each question it would ask, the account a new
+    session there starts under and the workflow it follows, else the agent
+    it used last. */
 export function defaultsFor(path: string): Step[] {
   const steps: Step[] = [{ kind: "project", path }];
   for (const kind of stepsLeft(steps)) {
-    if (kind === "account") steps.push({ kind, account: accountOf(path) });
+    if (kind === "account") steps.push({ kind, account: accountToStart(path) });
     else if (kind === "agent") {
       const own = workflowOf(path);
       steps.push(own === null ? { kind, agent: defaultAgent(path) } : { kind: "workflow", workflow: own.name });
@@ -704,7 +710,7 @@ export function startingId(): string | null {
   const project = projectOfSteps(palette.steps);
   if (project === null) return null;
   const asking = nextStep(palette.steps);
-  if (asking === "account") return `account:${accountOf(project) ?? ""}`;
+  if (asking === "account") return `account:${accountToStart(project) ?? ""}`;
   if (asking === "agent") {
     const own = workflowOf(project);
     return own === null ? `agent:${defaultAgent(project)}` : `workflow:${own.name}`;
@@ -718,13 +724,16 @@ function isOpen(path: string): boolean {
 }
 
 /** Starts a session on the answers given: under the workflow picked, or
-    the agent picked alone. The project's account stands in for a question
-    that was not asked, and a session not asked how to run runs as a plain
-    new one does. A project that has closed meanwhile gets none. */
-function startOn(steps: Step[]) {
+    the agent picked alone. The project's default account stands in for a
+    question that was not asked, and a session not asked how to run runs as
+    a plain new one does. An account the user picked is the project's
+    default from then on, where the project names none of its own. A
+    project that has closed meanwhile gets none. */
+function startOn(steps: Step[], picked: boolean) {
   const path = projectOfSteps(steps);
   if (path === null || !isOpen(path)) return;
   const account = steps.find((step) => step.kind === "account");
+  if (picked && account !== undefined) pickAccount(path, account.account);
   const agent = steps.find((step) => step.kind === "agent");
   const workflow = steps.find((step) => step.kind === "workflow");
   startSession(
@@ -740,7 +749,7 @@ function startOn(steps: Step[]) {
 function answer(steps: Step[]): Outcome {
   const ready = steps.length === 1 && steps[0].kind === "project";
   if (!ready && nextStep(steps) === null)
-    return { type: "close", then: () => startOn(steps) };
+    return { type: "close", then: () => startOn(steps, true) };
   palette.mode = "new";
   palette.steps = steps;
   palette.ready = ready;
@@ -839,7 +848,7 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       return answer([...palette.steps, item.step]);
     case "ready": {
       const steps = item.steps;
-      return { type: "close", then: () => startOn(steps) };
+      return { type: "close", then: () => startOn(steps, false) };
     }
     case "change":
       palette.ready = false;
@@ -859,7 +868,7 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
           const agent = defaultAgent(here);
           const kind = otherWay(here);
           if (kind === null) return { type: "stay" };
-          return { type: "close", then: () => startSession(here, agent, accountOf(here), null, kind) };
+          return { type: "close", then: () => startSession(here, agent, accountToStart(here), null, kind) };
         }
         case "open":
           return { type: "close", then: () => void pick() };

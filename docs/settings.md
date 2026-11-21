@@ -574,8 +574,10 @@ and skills most of all, is copied or linked in by hand.
 
 Under the list, Which account is chosen the way live updates are: one
 account for every project, and a fold of project overrides where a project
-can name an account of its own, or Default, whatever the rest. A session
-runs under its project's account unless another is chosen for it. Under an
+can name an account of its own, or Default, whatever the rest. A new
+session runs under its project's account, unless another is picked for it;
+in a project that names none, the account last picked there is the one a
+new session starts under, as [sessions](sessions.md#accounts) describes. Under an
 account it starts with the agent's directory set to the account's, its
 past sessions are read from there, and the tools the hooks bring are
 registered there too, as [hooks](hooks.md) describes; an account with no

@@ -286,6 +286,46 @@ test.describe("a new session from the palette with accounts", () => {
     await expect.poll(() => spawns(page)).toHaveLength(1);
     expect((await spawns(page))[0].configDir).toBeUndefined();
     await expect(page.getByTestId("account-readout")).toHaveText("account: Default");
+
+    // The project names Work, so the next one starts under Work again.
+    await page.keyboard.press(COMMANDS);
+    await page.keyboard.type("new session in");
+    await page.keyboard.press("Enter");
+    await expect(chosen(page).getByTestId("palette-detail")).toHaveText("Claude Code · Work");
+  });
+});
+
+test.describe("a new session in a project that names no account", () => {
+  const COMMANDS = `${MOD}+Shift+P`;
+  const chosen = (page: Page) =>
+    page.locator("[data-testid='palette-row'][aria-selected='true']");
+  const newSession = async (page: Page) => {
+    await page.keyboard.press(COMMANDS);
+    await page.keyboard.type("new session in");
+    await page.keyboard.press("Enter");
+  };
+
+  test("starts under the account picked there last", async ({ page }) => {
+    await installFakeCore(page, {
+      open: [PROJECT],
+      settings: { accounts: { ...WORK, everywhere: "Work", overrides: {} }, ...NO_WORKFLOW },
+    });
+    await page.goto("/");
+    await expect(page.locator(AGENT)).toBeVisible();
+    await newSession(page);
+    await expect(chosen(page).getByTestId("palette-detail")).toHaveText("Claude Code · Work");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("ArrowUp");
+    await expect(chosen(page)).toContainText("Default");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => spawns(page)).toHaveLength(1);
+
+    await newSession(page);
+    await expect(chosen(page).getByTestId("palette-detail")).toHaveText("Claude Code · Default");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => spawns(page)).toHaveLength(2);
+    expect((await spawns(page))[1].configDir).toBeUndefined();
   });
 });
 

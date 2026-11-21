@@ -890,6 +890,39 @@ describe("a new session", () => {
     expect(stepItems(palette.query).map((item) => item.label)).toEqual(["Codex"]);
   });
 
+  it("starts a project's next session under the account picked there last, unless the project names one", () => {
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    beginNew(A);
+    choose("Change");
+    const outcome = choose("Work");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, account: "Work" });
+    // The next one starts there under Work, marked as the one picked last.
+    beginNew(A);
+    const [line] = stepItems("");
+    expect(line.kind === "ready" && line.detail).toBe("Claude Code · Work");
+    choose("Change");
+    expect(startingId()).toBe("account:Work");
+    expect(stepItems("").map((item) => (item.kind === "choice" ? item.end : null))).toEqual(["", "last picked"]);
+    // The pick is the project's own, not every project's.
+    beginNew(B);
+    const [other] = stepItems("");
+    expect(other.kind === "ready" && other.detail).toBe("Claude Code · Default");
+    // A project's own word wins over the pick.
+    accounts.overrides = { [A]: null };
+    beginNew(A);
+    const [own] = stepItems("");
+    expect(own.kind === "ready" && own.detail).toBe("Claude Code · Default");
+  });
+
+  it("does not take the defaults' line as a pick", () => {
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    accounts.everywhere = "Work";
+    beginNew(A);
+    choose("New session");
+    expect(accounts.picked).toEqual({});
+  });
+
   it("marks the account the project runs under as the project's", () => {
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     beginNew(A);

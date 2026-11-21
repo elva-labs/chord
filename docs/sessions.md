@@ -485,14 +485,14 @@ window does not follow, so a Codex session shows none either.
 
 With accounts named in the [settings](settings.md#accounts), a project
 runs under one of them, and its header carries the account's name as a tag
-when that is not the agents' own. A new session then opens the choice
-whether or not there is more than one agent, and the choice asks
-for the account first: under `new session as`, the accounts share a row
-across the column with the project's own marked, and the agents follow
-under `with`, even when there is only one. The session starts under the
-account marked; a click on another, or Left and Right at the keyboard,
-switches it for this one session, and the next choice starts on the
-project's account again. A session another session starts runs under
+when that is not the agents' own. A new session's line in the palette
+then names the account it starts under, and Change asks for the account
+first, under `Under which account`, before the agent. A project that
+names an account of its own in the settings starts every new session under
+it. A project that names none starts one under the account last picked
+for a new session there, marked `last picked`, and until one is picked,
+under the account for every project, marked `this project's`. A pick is
+kept for the project only, and between runs. A session another session starts runs under
 the account the start names, else under the starter's when that was
 chosen for the starter, else under its project's, as the
 [orchestrator](orchestrator.md#the-tools) describes; its row under the

@@ -11,7 +11,7 @@
     unsavedNames,
   } from "$lib/editor.svelte";
   import { agentLabel, isReady } from "$lib/agent.svelte";
-  import { accountLabel, accountOf, hasAccounts } from "$lib/accounts.svelte";
+  import { accountLabel, accountOf, accountToStart, hasAccounts } from "$lib/accounts.svelte";
   import type { ProjectInfo } from "$lib/core";
   import { busyGoing, closingAside, closingQuestion, type BusyShell, type Closed } from "$lib/leaving.svelte";
   import { closeOwner as closeShells } from "$lib/terminals.svelte";
@@ -375,7 +375,7 @@
               label: other === "integrated" ? "New session in Chord" : "New session in a terminal",
               disabled: !isReady(),
               run: () => {
-                startSession(path, agent, accountOf(path), null, other);
+                startSession(path, agent, accountToStart(path), null, other);
                 void reveal(path);
               },
             },

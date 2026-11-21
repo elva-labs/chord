@@ -10,7 +10,7 @@ import {
   type Workflow,
 } from "$lib/core";
 import { SvelteSet } from "svelte/reactivity";
-import { accountOf, dirFor, names } from "$lib/accounts.svelte";
+import { accountToStart, dirFor, loadPicked, names } from "$lib/accounts.svelte";
 import { CODEX_DEFAULT } from "$lib/models";
 import { catalogName } from "$lib/modelCatalog.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
@@ -668,6 +668,7 @@ export function adopt(project: string, id: string) {
     were called. A corrupt entry is not worth a broken pane: it reads as
     nothing remembered. */
 export function loadRemembered() {
+  loadPicked();
   try {
     const raw = localStorage.getItem(MINE_KEY);
     if (raw !== null) {
@@ -1591,7 +1592,7 @@ export function create(
   startIn: string | null = null,
   prompt: string | null = null,
   model: string | null = null,
-  account: string | null = accountOf(project),
+  account: string | null = accountToStart(project),
   workflow?: Workflow | null,
   kind?: SessionKind,
 ): Session {
