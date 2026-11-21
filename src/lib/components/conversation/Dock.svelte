@@ -2,12 +2,11 @@
   import { onDestroy, tick, untrack } from "svelte";
   import type { Request } from "$lib/conversation.svelte";
   import type { IntegratedEventBody, PermissionOffer } from "$lib/core";
-  import { accountWords, answerRound, roundQuestion, type Ask } from "$lib/conductor.svelte";
   import { askerOf, dockedFor, folderOf, type Docked } from "$lib/docked.svelte";
   import { answer, reply } from "$lib/integrated.svelte";
   import { focusPane } from "$lib/layout.svelte";
   import { showCall } from "$lib/callShown.svelte";
-  import { goTo, projectLabel } from "$lib/workspace.svelte";
+  import { goTo } from "$lib/workspace.svelte";
   import {
     address,
     asks,
@@ -20,6 +19,9 @@
     shown as markers,
     type Piece,
   } from "$lib/thread";
+  import AskCard from "$lib/components/AskCard.svelte";
+  import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
+  import ConductCard from "$lib/components/ConductCard.svelte";
   import Icon from "./Icon.svelte";
   import Plain from "./Plain.svelte";
 
@@ -31,17 +33,19 @@
    * hidden. The session's own come first, then those of the sessions it
    * started, each named by its session and answered as it would be there,
    * with the way to it; a session that runs in a terminal is answered
-   * there, so its request offers only the way. A round of review past the
-   * workflow's limit that this session asked for docks with its own. One
-   * at a time: while the user is at the dock the one shown stays until it
+   * there, so its request offers only the way. A question this session
+   * put to the user, to start a session or for a round of review past the
+   * workflow's limit, docks with its own. One at a time: while the user is at the dock the one shown stays until it
    * is answered or goes, whatever comes in meanwhile, and one that takes
    * the place of another takes no answer for a moment, so nothing meant
    * for the last one answers it.
    *
-   * The choices are one stop for the keyboard: the arrows move between
-   * them, a digit picks one, and the first is the one that remembers
-   * nothing. The dock never takes the keyboard by itself, so nothing typed
-   * for something else answers it; Up from an empty composer reaches it.
+   * Each is drawn as every ask is. The choices are one stop for the
+   * keyboard: the arrows move between them, a digit picks one, and the
+   * first is the one that remembers nothing. A permission's answers that
+   * stand from now on, or stop the turn, wait behind More. The dock never
+   * takes the keyboard by itself, so nothing typed for something else
+   * answers it; Up from an empty composer reaches it.
    */
   interface Props {
     sessionKey: string;
@@ -235,7 +239,7 @@
 
   /** The choice the help line speaks of: the one with the keyboard or the
       pointer, else the first. */
-  let pointed = $state(0);
+  let pointed = $state<string | null>(null);
   /** Deny was picked, and waits for the user's words to go with it. */
   let denying = $state<PermissionOffer | null>(null);
   let words = $state("");
@@ -251,7 +255,7 @@
     showChange = false;
     showWhole = false;
     showLong = false;
-    pointed = 0;
+    pointed = null;
     denying = null;
     words = "";
     picked = [];
@@ -282,41 +286,33 @@
     onAnswered?.();
   }
 
-  /** The round past the limit, allowed this once or not. */
-  function round(ask: Ask, allowed: boolean) {
-    if (!armed) return;
-    if (answerRound(ask, allowed)) onAnswered?.();
+  /** The answers that stand from now on, or stop the turn: behind More,
+      so the first row holds only what answers this one call. */
+  const BEHIND = new Set<string>(["allowAlways", "cancel"]);
+
+  /** A permission's answers as the dock shows them: those of this call
+      first, keyed in the order shown, and the rest behind More, keyed on
+      after them. */
+  function offered(asked: Permission): AskChoice[] {
+    const front = asked.choices.filter((offer) => !BEHIND.has(offer.choice));
+    const hide = front.length > 0;
+    const back = hide ? asked.choices.filter((offer) => BEHIND.has(offer.choice)) : [];
+    return [...(hide ? front : asked.choices), ...back].map((offer, at) => ({
+      id: offer.choice,
+      label: choiceLabel(offer),
+      testid: `choice-${offer.choice}`,
+      key: at < 9 ? at + 1 : null,
+      primary: at === 0,
+      more: hide && BEHIND.has(offer.choice),
+      title: means(offer),
+      run: () => choose(offer),
+    }));
   }
 
-  function onRoundKey(e: KeyboardEvent, ask: Ask) {
-    if (/^[12]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      round(ask, e.key === "1");
-      return;
-    }
-    onChoicesKey(e, []);
-  }
-
-  function onChoicesKey(e: KeyboardEvent, offers: PermissionOffer[]) {
-    const buttons = [...(dock?.querySelectorAll<HTMLButtonElement>("[data-choice]") ?? [])];
-    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    let next: number | null = null;
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (at + 1) % buttons.length;
-    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (at - 1 + buttons.length) % buttons.length;
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = buttons.length - 1;
-    else if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      const offer = offers[Number(e.key) - 1];
-      if (offer !== undefined) {
-        e.preventDefault();
-        choose(offer);
-      }
-      return;
-    }
-    if (next === null) return;
-    e.preventDefault();
-    pointed = next;
-    buttons[next]?.focus();
+  /** What More shows. */
+  function behindSaid(choices: AskChoice[]): string {
+    const back = choices.filter((choice) => choice.more).map((choice) => choice.label);
+    return `Shows ${back.length === 1 ? "one more answer" : `${back.length} more answers`}: ${back.join("; ")}.`;
   }
 
   function onWordsKey(e: KeyboardEvent) {
@@ -493,6 +489,27 @@
     return out;
   }
 
+  /** A question's answers: sending what is picked or typed, where it is
+      not answered by picking, and leaving it unanswered. */
+  function replies(questions: Question["questions"]): AskChoice[] {
+    const typed = !direct(questions) || (own[0] ?? "").trim() !== "";
+    return [
+      ...(typed
+        ? [
+            {
+              id: "send",
+              label: "Send",
+              testid: "question-send",
+              primary: true,
+              disabled: answers(questions) === null,
+              run: () => send(questions),
+            },
+          ]
+        : []),
+      { id: "skip", label: "Skip", testid: "question-decline", quiet: true, run: decline },
+    ];
+  }
+
   function send(questions: Question["questions"]) {
     if (entry === null || request === null || request.answering || !armed) return;
     const given = answers(questions);
@@ -556,110 +573,105 @@
   {#if entry.kind === "terminal"}
     <!-- A started session in a terminal: only its terminal answers it, so
          the dock offers the way there, and lets go once it stops asking. -->
-    <div
-      class="dock"
-      bind:this={dock}
+    {#snippet terminalLine()}{@render asking(null)} wants a permission in its terminal{/snippet}
+    {#snippet terminalWay()}
+      <AskChoices
+        choices={[{ id: "open", label: `Open ${markers(named)}`, testid: "dock-open-terminal", primary: true, run: open }]}
+        describedby="means-{sessionKey}"
+      />
+    {/snippet}
+    {#snippet terminalSaid()}It runs in a terminal, so it is answered there.{/snippet}
+    <AskCard
+      bind:element={dock}
       role="group"
       aria-label="{named} is waiting for you in its terminal"
       data-testid="terminal-dock"
-    >
-      <div class="what">
-        <span class="ring"></span>
-        <p>{@render asking(null)} asks for a permission in its terminal</p>
-        {@render waiting()}
-      </div>
-      <div class="choices">
-        <button class="choice primary plain" tabindex="0" data-choice="open" onclick={open} data-testid="dock-open-terminal"
-          ><span class="label">Open <Plain text={named} /></span></button
-        >
-      </div>
-      <p class="means">It runs in a terminal, so it is answered there.</p>
-    </div>
-  {:else if entry.kind === "round"}
-    {@const ask = entry.ask}
-    {@const beyond = ask.round!}
-    <!-- A round of review past the workflow's limit, which this session's
-         start waits on: the user's yes lets this one round through. -->
-    <div class="dock" bind:this={dock} role="group" aria-label="{agent} asks for another round of {beyond.step}" data-testid="round-dock">
-      <div class="what">
-        <span class="ring"></span>
-        <p><b>{agent}</b> asks for another round of <Plain text={beyond.step} /></p>
-        {@render waiting()}
-      </div>
-      <div class="body">
-        <p class="description" data-testid="conduct-round"><Plain text={roundQuestion(beyond)} /></p>
-        <p class="description">
-          In <Plain text={projectLabel(ask.project)} />{ask.worktree ? ", in a worktree of its own" : ""}.{#if ask.named !== null}{" "}<span
-              data-testid="conduct-account">{accountWords(ask.named)}</span
-            >{/if}
-        </p>
-        {#if ask.prompt !== ""}<p class="prompt"><Plain text={ask.prompt} /></p>{/if}
-      </div>
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="choices" onkeydown={(e) => onRoundKey(e, ask)}>
-        {#each [true, false] as allowed, at (at)}
-          <button
-            class="choice"
-            class:primary={allowed}
-            tabindex={at === pointed ? 0 : -1}
-            aria-disabled={armed ? undefined : "true"}
-            aria-describedby="means-{sessionKey}"
-            data-choice={allowed ? "round-allow" : "round-stop"}
-            data-testid={allowed ? "conduct-allow-round" : "conduct-no"}
-            onclick={() => round(ask, allowed)}
-            onfocus={() => (pointed = at)}
-            onpointerenter={() => (pointed = at)}
-            ><span class="key">{at + 1}</span>{allowed ? "Allow one more round" : "Stop at the limit"}</button
-          >
-        {/each}
-      </div>
-      <p class="means" id="means-{sessionKey}" data-testid="choice-means">
-        {pointed === 0
-          ? "Starts this one round. A round after it is asked about again."
-          : `Refuses the start, and ${agent} is told to ask you how to go on.`}
-      </p>
-    </div>
+      what={terminalLine}
+      aside={waiting}
+      actions={terminalWay}
+      means={terminalSaid}
+      meansId="means-{sessionKey}"
+    />
+  {:else if entry.kind === "conduct"}
+    <!-- A question this session put to the user: to start a session, or a
+         round of review past the workflow's limit, which its start waits
+         on. -->
+    <ConductCard
+      ask={entry.ask}
+      who={agent}
+      {armed}
+      id="dock-{sessionKey}"
+      testid={entry.ask.round !== null ? "round-dock" : "conduct-ask"}
+      aside={waiting}
+      bind:element={dock}
+      {onAnswered}
+    />
   {:else}
   {@const asked = entry.request.asked}
   {@const conversation = entry.conversation}
-  <div
-    class="dock"
-    bind:this={dock}
-    role="group"
-    aria-label="{askerLabel(asked.parent)} is waiting for you"
-    data-testid={asked.type === "permissionAsked" ? "permission-dock" : "question-dock"}
-    data-asker={who === null ? "own" : "started"}
-  >
-    {#if asked.type === "permissionAsked"}
-      {@const what = asks(asked, asked.call === null ? null : conversation.call(asked.call))}
-      {@const command = wholeCommand(asked, what.shape)}
-      {@const lines_ = change(asked)}
-      {@const full = whole(asked, what)}
-      {@const away = outside(asked)}
-      {@const headAway = what.shape === "path" && what.object !== null && where(asked, what.object).where !== "inside"}
-      {@const cutHead = what.object !== null && what.shape !== "command" && long(what.object)}
-      <div class="what">
-        <span class="ring"></span>
-        <p>
-          {@render asking(asked.parent)} asks to {@render pieces(what.lead)}{#if what.object !== null}{" "}{#if what.quoted}“<Plain text={cut(what.object)} />”{@render cutOff(what.object)}{:else if what.shape === "command"}{@const parts = lines(what.object)}<code
-                class="exact"><Plain text={cut(parts.first)} /></code
-              >{@render cutOff(parts.first)}{#if parts.rest > 0}<span class="also" data-testid="permission-more-lines"
-                  >{" "}and {parts.rest} more {parts.rest === 1 ? "line" : "lines"}</span
-                >{/if}{:else if what.shape === "path"}{@const at = where(asked, what.object)}{#if at.where !== "inside"}<span
-                  class="warn"
-                  data-testid="permission-outside">{AWAY[at.where]}</span
-                >{" "}{/if}<code class="exact"><Plain text={cut(at.text)} /></code>{@render cutOff(at.text)}{:else}<code
-                class="exact"><Plain text={cut(what.object)} /></code
-              >{@render cutOff(what.object)}{@render leadsTo(what.object)}{/if}{/if}{#if what.tail}{" "}{what.tail}{/if}{@render awayCount(away, headAway)}{#if asked.truncated}<span
-                  class="warn flow"
-                  data-testid="permission-truncated"
-                  >. The request is longer than the workbench can show, and its end is hidden</span
-                >{/if}
-        </p>
-        {@render waiting()}
-      </div>
-      <!-- What the request holds scrolls under its line; the line and the
-           choices stay in sight whatever it holds. -->
+  {@const asking_ = entry.request}
+  {#if asked.type === "permissionAsked"}
+    {@const what = asks(asked, asked.call === null ? null : conversation.call(asked.call))}
+    {@const command = wholeCommand(asked, what.shape)}
+    {@const lines_ = change(asked)}
+    {@const full = whole(asked, what)}
+    {@const away = outside(asked)}
+    {@const headAway = what.shape === "path" && what.object !== null && where(asked, what.object).where !== "inside"}
+    {@const cutHead = what.object !== null && what.shape !== "command" && long(what.object)}
+    {@const choices = offered(asked)}
+    {@const pointedOffer = asked.choices.find((offer) => offer.choice === pointed) ?? asked.choices[0]}
+    {#snippet permissionLine()}{@render asking(asked.parent)} wants to {@render pieces(what.lead)}{#if what.object === null}{#if what.tail}{" "}{what.tail}{/if}{@render awayCount(away, headAway)}{@render truncated()}{/if}{/snippet}
+    {#snippet permissionObject()}{#if what.object !== null}{#if what.quoted}“<Plain text={cut(what.object)} />”{@render cutOff(what.object)}{:else if what.shape === "command"}{@const parts = lines(what.object)}<code
+            class="exact"><Plain text={cut(parts.first)} /></code
+          >{@render cutOff(parts.first)}{#if parts.rest > 0}<span class="also" data-testid="permission-more-lines"
+              >{" "}and {parts.rest} more {parts.rest === 1 ? "line" : "lines"}</span
+            >{/if}{:else if what.shape === "path"}{@const at = where(asked, what.object)}{#if at.where !== "inside"}<span
+              class="warn"
+              data-testid="permission-outside">{AWAY[at.where]}</span
+            >{" "}{/if}<code class="exact"><Plain text={cut(at.text)} /></code>{@render cutOff(at.text)}{:else}<code
+            class="exact"><Plain text={cut(what.object)} /></code
+          >{@render cutOff(what.object)}{@render leadsTo(what.object)}{/if}{#if what.tail}<span class="tail">{" "}{what.tail}</span
+          >{/if}{@render awayCount(away, headAway)}{@render truncated()}{/if}{/snippet}
+    {#snippet permissionFact()}<Plain text={cut(asked.description ?? "")} />{@render cutOff(asked.description ?? "")}{/snippet}
+    {#snippet permissionAnswers()}
+      {#if denying !== null}
+        <div class="deny">
+          <input
+            bind:value={words}
+            onkeydown={onWordsKey}
+            placeholder="Tell {named} why, or what to do instead (optional)"
+            aria-label="Why the call is not allowed"
+            data-testid="deny-words"
+          />
+          <button class="choice" tabindex="0" onclick={() => denying && choose(denying)} data-testid="deny-send">Don't allow</button>
+        </div>
+      {:else}
+        <AskChoices {choices} armed={takes(asking_)} bind:pointed describedby="means-{sessionKey}" />
+      {/if}
+    {/snippet}
+    {#snippet permissionSaid()}{#if pointed === "more"}{behindSaid(choices)}{:else if pointedOffer !== undefined}{#if who === null || whoName === null}{choiceMeans(
+            pointedOffer,
+          )}{:else}{@const said = choiceMeansIn(pointedOffer, whoName, who.where)}{said[0]}<Plain text={said[1]} />{said[2]}{/if}{/if}{/snippet}
+    <AskCard
+      bind:element={dock}
+      role="group"
+      aria-label="{askerLabel(asked.parent)} is waiting for you"
+      data-testid="permission-dock"
+      data-asker={who === null ? "own" : "started"}
+      what={permissionLine}
+      aside={waiting}
+      fact={asked.description ? permissionFact : undefined}
+      thing={what.object !== null ? permissionObject : undefined}
+      code={!what.quoted}
+      thingTestid="permission-object"
+      actions={permissionAnswers}
+      means={denying === null ? permissionSaid : undefined}
+      meansId="means-{sessionKey}"
+      error={asking_.error}
+    >
+      <!-- What the request holds scrolls under the thing asked; who asks and
+           the choices stay in sight whatever it holds. -->
+      {#if away.some((each) => !(headAway && each.path === what.object)) || command !== null || cutHead || lines_ !== null || full !== null}
       <div class="body">
       {#each KINDS as kind (kind)}
         {@const these = away.filter((each) => each.where === kind && !(headAway && each.path === what.object))}
@@ -671,9 +683,6 @@
           </p>
         {/if}
       {/each}
-      {#if asked.description}
-        <p class="description"><Plain text={cut(asked.description)} />{@render cutOff(asked.description)}</p>
-      {/if}
       {#if command !== null || cutHead || lines_ !== null || full !== null}
         <div class="folds">
           {#if command !== null}
@@ -728,53 +737,28 @@
         {/if}
       {/if}
       </div>
-      {#if denying !== null}
-        <div class="deny">
-          <input
-            bind:value={words}
-            onkeydown={onWordsKey}
-            placeholder="Tell {named} why, or what to do instead (optional)"
-            aria-label="Why the call is denied"
-            data-testid="deny-words"
-          />
-          <button class="choice" tabindex="0" onclick={() => denying && choose(denying)} data-testid="deny-send">Deny</button>
-        </div>
-      {:else}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="choices" onkeydown={(e) => onChoicesKey(e, asked.choices)}>
-          {#each asked.choices as offer, at (offer.choice)}
-            <button
-              class="choice"
-              class:primary={at === 0}
-              tabindex={at === pointed ? 0 : -1}
-              aria-disabled={takes(entry.request) ? undefined : "true"}
-              data-choice={offer.choice}
-              data-testid="choice-{offer.choice}"
-              title={means(offer)}
-              aria-describedby="means-{sessionKey}"
-              onclick={() => choose(offer)}
-              onfocus={() => (pointed = at)}
-              onpointerenter={() => (pointed = at)}><span class="key">{at + 1}</span>{choiceLabel(offer)}</button
-            >
-          {/each}
-        </div>
-        {@const offer = asked.choices[pointed] ?? asked.choices[0]}
-        <p class="means" id="means-{sessionKey}" data-testid="choice-means">
-          {#if who === null || whoName === null}{choiceMeans(offer)}{:else}{@const said = choiceMeansIn(offer, whoName, who.where)}{said[0]}<Plain
-              text={said[1]}
-            />{said[2]}{/if}
-        </p>
       {/if}
-    {:else}
-      {@const questions = asked.questions}
-      <div class="what">
-        <span class="ring"></span>
-        <p>{@render asking(asked.parent)} asks you</p>
-        {@render waiting()}
-      </div>
+    </AskCard>
+    {#snippet truncated()}{#if asked.truncated}<span class="warn flow" data-testid="permission-truncated"
+          >. The request is longer than the workbench can show, and its end is hidden</span
+        >{/if}{/snippet}
+  {:else}
+    {@const questions = asked.questions}
+    {#snippet questionLine()}{@render asking(asked.parent)} asks{/snippet}
+    {#snippet questionAnswers()}<AskChoices choices={replies(questions)} armed={takes(asking_)} />{/snippet}
+    <AskCard
+      bind:element={dock}
+      role="group"
+      aria-label="{askerLabel(asked.parent)} is waiting for you"
+      data-testid="question-dock"
+      data-asker={who === null ? "own" : "started"}
+      what={questionLine}
+      aside={waiting}
+      actions={questionAnswers}
+      error={asking_.error}
+    >
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="questions" onkeydown={(e) => onQuestionKey(e, questions)}>
-        <div class="body">
+      <div class="questions body" onkeydown={(e) => onQuestionKey(e, questions)}>
         {#each questions as question, at (at)}
           <div class="question" data-testid="question">
             <p class="ask">
@@ -797,7 +781,7 @@
                     <button
                       class="option answer"
                       tabindex={index === 0 ? 0 : -1}
-                      aria-disabled={takes(entry.request) ? undefined : "true"}
+                      aria-disabled={takes(asking_) ? undefined : "true"}
                       data-option
                       data-testid="question-option"
                       onclick={() => pick(at, option.label, false, questions)}
@@ -813,7 +797,7 @@
                       role={question.multiple ? "checkbox" : "radio"}
                       aria-checked={on}
                       tabindex={index === 0 ? 0 : -1}
-                      aria-disabled={takes(entry.request) ? undefined : "true"}
+                      aria-disabled={takes(asking_) ? undefined : "true"}
                       data-option
                       data-testid="question-option"
                       onclick={() => pick(at, option.label, question.multiple, questions)}
@@ -846,33 +830,9 @@
             {/if}
           </div>
         {/each}
-        </div>
-        <div class="actions">
-          {#if !direct(questions) || (own[0] ?? "").trim() !== ""}
-            <button
-              class="choice primary"
-              tabindex="0"
-              disabled={answers(questions) === null}
-              aria-disabled={takes(entry.request) ? undefined : "true"}
-              onclick={() => send(questions)}
-              data-testid="question-send">{direct(questions) ? "Send your answer" : "Answer"}</button
-            >
-          {/if}
-          <button
-            class="choice quiet"
-            tabindex="0"
-            aria-disabled={takes(entry.request) ? undefined : "true"}
-            onclick={decline}
-            data-testid="question-decline"
-            >Don't answer</button
-          >
-        </div>
       </div>
-    {/if}
-    {#if entry.request.error !== null}
-      <p class="error" data-testid="dock-error"><Plain text={entry.request.error} /></p>
-    {/if}
-  </div>
+    </AskCard>
+  {/if}
   {/if}
   {/key}
 {/if}
@@ -937,17 +897,14 @@
     display: contents;
   }
 
-  .dock {
+  /* The card is drawn as every ask is, in the conversation's sizes and on
+     its surface, and never taller than half the window or so. */
+  .hold > :global(.ask-card) {
+    --ask-surface: var(--clear-surface);
+    --ask-size: var(--conv-small);
+    --ask-what-size: var(--conv-small);
+    --ask-fine: var(--conv-meta);
     margin: 0 0 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px 10px;
-    border-radius: calc(var(--radius) + 5px);
-    box-shadow: inset 0 0 0 1px var(--accent);
-    background: var(--clear-surface);
-    font-size: var(--conv-small);
-    color: var(--ink-2);
     max-height: 55vh;
     overflow: hidden;
   }
@@ -963,44 +920,6 @@
 
   .body:empty {
     display: none;
-  }
-
-  .what,
-  .choices,
-  .means,
-  .deny,
-  .actions,
-  .error {
-    flex: none;
-  }
-
-  .what {
-    display: flex;
-    align-items: baseline;
-    gap: 9px;
-    min-width: 0;
-  }
-
-  .what p {
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .what b {
-    color: var(--ink);
-    font-weight: 600;
-  }
-
-  .ring {
-    flex: none;
-    align-self: flex-start;
-    margin-top: calc((1lh - var(--dot)) / 2);
-    width: var(--dot);
-    height: var(--dot);
-    border-radius: 50%;
-    box-shadow: inset 0 0 0 1.75px var(--accent);
   }
 
   .more {
@@ -1052,36 +971,14 @@
     text-transform: var(--label-case);
   }
 
-  /* The prompt a round would start with, as the agent wrote it. */
-  .prompt {
-    margin: -2px 0 0 calc(var(--dot) + 9px);
-    padding: 4px 8px;
-    border-left: 2px solid var(--rule);
-    background: var(--surface-2);
-    color: var(--ink);
-    overflow-wrap: anywhere;
-  }
-
   /* A request that takes no answer yet, settling in or with an answer on
-     its way, says so by its controls fading. One that takes an answer
+     its way, says so by its options fading. One that takes an answer
      shows them whole at once, so no control that answers is ever drawn
      faint. */
-  .choice[aria-disabled="true"],
   .option[aria-disabled="true"] {
     opacity: 0.5;
     cursor: default;
     transition: opacity 0.2s;
-  }
-
-  .choice.plain {
-    padding: 0 12px;
-    max-width: 100%;
-  }
-
-  .choice .label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   code {
@@ -1090,6 +987,13 @@
     border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--ink);
+  }
+
+  /* In the block of the thing asked, its code is the block's own text. */
+  :global(.thing) code {
+    padding: 0;
+    background: none;
+    font-size: inherit;
   }
 
   .also {
@@ -1121,7 +1025,7 @@
   }
 
   .away {
-    margin: -4px 0 0 calc(var(--dot) + 9px);
+    margin: -4px 0 0 var(--indent);
     color: var(--ink-2);
     overflow-wrap: anywhere;
   }
@@ -1130,7 +1034,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px 10px;
-    margin-left: calc(var(--dot) + 5px);
+    margin-left: calc(var(--indent) - 4px);
   }
 
   .folds .reveal {
@@ -1138,7 +1042,7 @@
   }
 
   .description {
-    margin: -4px 0 0 calc(var(--dot) + 9px);
+    margin: -4px 0 0 var(--indent);
     color: var(--ink-2);
   }
 
@@ -1147,7 +1051,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-left: calc(var(--dot) + 5px);
+    margin-left: calc(var(--indent) - 4px);
     padding: 1px 4px;
     border: 0;
     border-radius: var(--radius-sm);
@@ -1224,8 +1128,6 @@
     background: color-mix(in srgb, var(--del) 14%, transparent);
   }
 
-  .choices,
-  .actions,
   .deny {
     display: flex;
     flex-wrap: wrap;
@@ -1242,7 +1144,7 @@
     align-items: center;
     gap: 6px;
     height: 28px;
-    padding: 0 11px 0 8px;
+    padding: 0 12px;
     border: 0;
     border-radius: var(--radius);
     background: none;
@@ -1255,46 +1157,12 @@
     cursor: pointer;
   }
 
-  .actions .choice,
-  .deny .choice {
-    padding: 0 12px;
-  }
-
-  .choice:hover:not([aria-disabled="true"]) {
+  .choice:hover {
     background: var(--surface-2);
   }
 
-  .choice.primary {
-    background: var(--accent);
-    box-shadow: none;
-    color: var(--surface);
-  }
-
-  .choice.primary:hover:not([aria-disabled="true"]) {
-    background: color-mix(in srgb, var(--accent) 88%, var(--ink));
-  }
-
-  .choice.quiet {
-    box-shadow: none;
-    color: var(--ink-2);
-  }
-
-  .choice:active:not(:disabled, [aria-disabled="true"]) {
-    background: var(--surface-2);
+  .choice:active {
     box-shadow: inset 0 0 0 1px var(--ink-3);
-  }
-
-  .choice.primary:active:not(:disabled, [aria-disabled="true"]) {
-    background: color-mix(in srgb, var(--accent) 78%, var(--ink));
-  }
-
-  .choice.primary:focus-visible {
-    outline-offset: 2px;
-  }
-
-  .choice:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 
   .key {
@@ -1310,22 +1178,9 @@
     opacity: 1;
   }
 
-  .means {
-    margin: -2px 0 0;
-    font-size: var(--conv-meta);
-    color: var(--ink-2);
-    overflow-wrap: anywhere;
-  }
-
   .questions {
-    display: flex;
-    flex-direction: column;
     gap: 10px;
-    min-height: 0;
-  }
-
-  .questions > .body {
-    gap: 10px;
+    margin-left: var(--indent);
   }
 
   .question {
@@ -1433,15 +1288,8 @@
     box-shadow: inset 0 0 0 1px var(--accent);
   }
 
-  .error {
-    margin: 0;
-    font-size: var(--conv-meta);
-    color: var(--del);
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .chev,
-    .choice[aria-disabled="true"],
     .option[aria-disabled="true"] {
       transition: none;
     }

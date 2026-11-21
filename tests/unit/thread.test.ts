@@ -617,8 +617,8 @@ describe("a permission request, in words", () => {
     expect(choiceLabel(offer("allow"))).toBe("Allow once");
     expect(choiceLabel(offer("allowSession"))).toBe("Allow for this session");
     expect(choiceLabel(offer("allowAlways"))).toBe("Always allow");
-    expect(choiceLabel(offer("deny"))).toBe("Deny");
-    expect(choiceLabel(offer("cancel"))).toBe("Deny and stop");
+    expect(choiceLabel(offer("deny"))).toBe("Don't allow");
+    expect(choiceLabel(offer("cancel"))).toBe("Don't allow, and stop");
     expect(choiceMeans(offer("allow"))).toBe("Allows this call and remembers nothing.");
     expect(choiceMeans(offer("allowAlways", "Bash(ls) in this project's uncommitted local settings"))).toBe(
       "Allows this call and remembers Bash(ls) in this project's uncommitted local settings.",
