@@ -15,31 +15,37 @@ the palette, which a project's new-session button opens as well, as
 [following a workflow](#following-a-workflow) describes. The session that
 follows a workflow is its orchestrator, and is told to direct work rather
 than do it, to start a session per piece in the project it belongs to, on a
-worktree of its own when pieces touch the same files, to wait on them
-rather than ask after them in a loop, to put the user's whole task in the
-prompt it starts a session with and none of its own housekeeping, to start
-a new session for each new task rather than resume or send to one that did
-other work, to read a session's report rather than ask it to say more, and
-to leave a line on its own row when it stops, whether to relay a question
-or to report, as well as the workflow's own steps. A fresh install has a
-workflow for exactly that, Direct: one step of work, on any model, with as
-many sessions at once as a session may run (see
-[settings](settings.md#workflows)). Its steps add what any workflow's do:
-edit no files, hand out work only through `start` and never through its
-own subagents, and name the step in each start. A session
-that follows no workflow is told none of this. Every session, an
+worktree of its own when pieces touch the same files, to name the model a
+piece calls for when it starts it, to start a new session for each new task
+rather than resume or send to one that did other work, and to relay a
+session's question to the user and answer it with `send`, as well as the
+workflow's own steps. A fresh install has a workflow for exactly that,
+Direct: one step of work, on any model, with as many sessions at once as a
+session may run (see [settings](settings.md#workflows)). Its steps add what
+any workflow's do: edit no files, hand out work only through `start` and
+never through its own subagents, and name the step in each start. A session
+that follows no workflow is told none of this.
+
+The rest is said where it is needed, in the descriptions of the tools,
+which every session that has them reads: `wait` says to wait on sessions
+rather than ask after them in a loop, `start` to put the user's whole task
+in the prompt and none of the caller's own housekeeping, `read` to read a
+session's closing report rather than ask it to say more, and `stop` and
+`sessions` that the workbench puts away a session once its work is over,
+as [when the work is over](#when-the-work-is-over) describes, so a session
+is stopped only when its work is not wanted. Every session, an
 orchestrator included, is told that once it has started sessions it keeps
 calling `wait` until all of them are done, and does not hand its turn back
 while any is running unless it needs the user or the user wrote to it,
 that it answers a message from the user that comes while they run as the
 final message of its turn and ends the turn there rather than waiting
-after the answer, that a message from the
-workbench, not the user, is what those sessions did while it was idle,
-both only where the workbench can wake it (see [when the user writes to
-it](#when-the-user-writes-to-it)),
-and that the workbench puts away a session it started once that session's
-work is over, as [when the work is over](#when-the-work-is-over) describes,
-so it stops one only when its work is not wanted.
+after the answer, and that a message from the workbench, not the user, is
+what those sessions did while it was idle, both only where the workbench
+can wake it (see [when the user writes to it](#when-the-user-writes-to-it)).
+How a session's row learns why it stopped is told as [the agent's
+tools](hooks.md#the-agents-tools) describe. What a session is told when it
+connects stays well inside the length Claude Code keeps of a tool server's
+instructions, 4096 characters, past which it cuts the rest.
 
 Earlier versions of the workbench ran such sessions in a project of their
 own, the folder `orchestrator` under the workbench's home. While
