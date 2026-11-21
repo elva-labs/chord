@@ -2,153 +2,64 @@
 
 <img src="docs/app-icon.png" width="128" height="128" alt="">
 
-A desktop app for working with coding agents that run as terminal programs,
-Claude Code and Codex CLI today. It puts the agent's own interface in the
-middle, the project's live git changes beside it, and every project and
-session you have going down the left, so you can run several agents at once,
-see what each one changed as it happens, and come back to a session later.
-
-The agents are not wrapped or replaced. Each runs in a real pty, full screen,
-with the keyboard almost entirely its own. The app adds what a terminal
-window lacks: the changes as they land, past sessions to resume, a session's
-state at a glance, and projects on other machines over ssh.
+A desktop app for working alongside Claude Code and Codex, across all your projects, where the agent can use the app as much as you can and you see everything it does.
 
 ![A session started in a project and given a task; the files it changes land in the changes pane as it works, with the git plugin's fold under the tree, and one of them is opened as a diff.](docs/demo.gif)
 
-## What it does
+## An agent that works the app with you
 
-- **Sessions.** Open a folder and start a session in it, or resume one the
-  agent had there before. Several projects and sessions run side by side;
-  switching between them stops nothing. A session's row says whether the
-  agent is working, waiting for you, or asking for permission, and with the
-  window in the background a system notification says so too.
-- **Changes.** The changed files and their diffs, refreshed as the agent
-  edits, with a file viewer and search over the tree. Under the tree sit what
-  the agent has presented and what runs under the project's sessions. A
-  session that moves into a git worktree takes the pane with it.
-- **Editor mode.** A switch in the top right corner puts the file tree and
-  a plain text editor in the middle and moves the agent to the right, still
-  running. Files open as tabs per session, saving is explicit, and a file
-  the agent changes under unsaved edits is never overwritten unasked. See
-  [editor](docs/editor.md).
-- **Tools for the agent.** With hooks on, the agent can point at a place in
-  a file or at a file's changes, put images, PDFs, documents, pages and
-  diagrams in front of you, ask what you are looking at, type a command
-  into a terminal for you to run, leave a line on its session's row, and
-  keep short notes of the conversation that the app holds for it. See
-  [hooks](docs/hooks.md) and [notes](docs/sessions.md#notes).
-- **Orchestrator.** Any session can start and steer other sessions: it
-  opens one per piece of work, in any open project and on a worktree of its
-  own, waits on them and answers for them, and is woken when one of them
-  stops while it is idle. The sessions it starts fold away
-  under their projects until one needs you, and are put away by the app
-  once their work is over. A workflow, turned on in the
-  settings or picked when starting, makes it direct the work rather than do
-  it and holds it to steps, models and rounds of review; Direct, one of the
-  two a fresh install has, has one step and no review. See
-  [orchestrator](docs/orchestrator.md).
-- **Plugins.** A plugin adds to the workbench from outside it: tools for the
-  agent, a section under the file tree with rows and actions, and a page of
-  its own in the changes pane. The settings offer the sources the workbench
-  knows and take one of your own. See [plugins](docs/plugins.md).
-- **Browser.** A tab beside the agent for looking at what it is building,
-  its docs or a pull request, with a fold under the tree and tools an agent
-  can read and drive it with. See [browser](docs/browser.md).
-- **Terminal.** Plain shells under the panes, per project, split if you like.
-- **Remote projects.** Pair a machine with one pasted token, or name a host
-  your ssh already reaches, and work in a folder there. The agent, the
-  changes and the shells run on that machine; the window does not know the
-  difference. See [remote](docs/remote.md).
-- **The look.** Modern to begin with, the panes flush on one surface;
-  terminal for mono chrome and panes drawn as boxes. Light, dark or whatever
-  the desktop is set to, five palettes, a background of your own behind the
-  chrome, from a calm tint to the colours themselves, and a little of it
-  through the panes if you like, and the terminal's font and the
-  interface's chosen apart. See [settings](docs/settings.md).
-- **Keyboard first.** The agent owns the keyboard. The app claims a few
-  modifier shortcuts, all of them yours to change. One goes to any session or
-  project, another runs any command or starts a session. See
-  [focus](docs/focus-model.md).
+The agent does not only answer in text. It opens a file at the lines it means, or a diff, in front of you. It presents a document, a diagram or a page. It opens the app it is building in a browser beside you, then clicks through it and reads the console. It starts other sessions, sends them work, waits on them and reads what they did. It changes a setting, or makes a theme, when you ask it to.
 
-## Platforms
+You see each of these as it happens: what it opens comes up in front of you, a browser tab it opened is marked as the agent's, and every session it starts has a row of its own that you can open and take over.
 
-macOS, Linux and Windows. The window is the app's own on all three: the
-traffic lights at the top left on macOS, app-drawn controls on the
-others. [Platforms](docs/platforms.md) has what differs.
+What matters is asked first. A change to the settings, a theme or your stylesheet is shown to you and made only if you allow it, every time. A session it would start in another project, on another agent or under another account is put to you, and a session it starts begins with no more permission than its own. A command it wants run is typed into a terminal for you to run yourself.
 
-## Installing it
+![The agent draws the request flow: a Mermaid diagram and a latency chart open in the viewer, one under the other, with the caption above and the call on the media list under the tree.](docs/tools-present.gif)
 
-Every [release](https://github.com/elva-labs/chord/releases) carries
-installers: `.dmg` for macOS on either chip, `.AppImage`, `.deb` and `.rpm`
-for Linux, `.msi` and a setup `.exe` for Windows. The macOS builds are signed
-and notarized. On macOS there is also a tap:
+## Every session at a glance
+
+Each session has a row with a dot that says whether the agent is working, waiting for you or asking for a permission, and the last line it left you. With the window in the background, a notification says when one needs you, and <kbd>Cmd</kbd><kbd>.</kbd> goes straight to it.
+
+## The changes as they land
+
+Beside the agent, the project's changed files and their diffs refresh as it edits. When the agent moves into a git worktree, the pane follows it there. Open a file to read it whole, or rendered if it is Markdown, HTML, a diagram or an image.
+
+## The agent you already use
+
+Claude Code and Codex run as themselves, with your login, settings, skills and MCP servers. A session runs in a terminal, with the agent's own interface, or in Chord, as a conversation the window draws, and the same conversation resumes either way. Past sessions are listed under their project, including the ones you ran from a plain terminal.
+
+## Make it yours
+
+[Plugins](docs/plugins.md) add tools for the agent, a section under the file tree and pages of their own. Themes, fonts, every shortcut and a stylesheet of your own change the rest. Also in the box: an [editor](docs/editor.md) beside the agent, and projects on [other machines](docs/remote.md) over ssh.
+
+## Install
+
+On macOS, with Homebrew:
 
 ```
 brew tap elva-labs/elva
 brew install --cask chord@beta
 ```
 
-Chord was called Agent Workbench before 1.0. Until Chord's first stable
-release, the stable cask is still `agent-workbench`, the app under that
-name; [release](docs/release.md#the-casks-under-the-apps-earlier-name)
-says how the old casks move to the new ones.
+Every [release](https://github.com/elva-labs/chord/releases) also carries installers for macOS, Linux and Windows. The macOS builds are signed and notarized.
 
-The cask also puts `awb` on the PATH, which opens a folder as a project from
-a terminal: `awb .` for the one you are in. See
-[platforms](docs/platforms.md#opening-folders-from-a-terminal).
+Chord runs the agents you have installed: `claude` or `codex` on your login shell's PATH. The cask also puts `awb` on the PATH, so `awb .` opens the folder you are in.
 
-## Running it from source
+Chord was called Agent Workbench before 1.0. Its settings move over on the first start, and [release](docs/release.md#the-casks-and-formulas-under-the-apps-earlier-name) says how the casks under the earlier name move.
 
-```
-npm install
-npm run tauri dev
-```
+## Docs
 
-A development build wears an icon of its own, its tile in the accent
-rather than dark, so it is told from the installed app in the dock. The
-icons are drawn from SVG sources beside them, and
-`node src-tauri/icons/generate.mjs` draws every size and bundle format
-from those, over the files in the tree. It needs Playwright's Chromium
-(`npx playwright install chromium`), and macOS for the disk image's
-background.
+Using it:
 
-Linux needs the WebKitGTK development packages Tauri asks for, plus
-`libxdo-dev`, `libayatana-appindicator3-dev` and `librsvg2-dev`.
+- [Sessions](docs/sessions.md): starting, reading a row, past sessions, in Chord or in a terminal.
+- [Layout](docs/layout.md) and [settings](docs/settings.md): the window, and what each setting changes.
+- [Hooks](docs/hooks.md), [browser](docs/browser.md) and [orchestrator](docs/orchestrator.md): what the agent can do in the app.
+- [Focus](docs/focus-model.md): the shortcuts and who owns the keyboard.
+- [Editor](docs/editor.md), [remote](docs/remote.md), [plugins](docs/plugins.md) and [platforms](docs/platforms.md).
 
-## Verifying it
+Building it:
 
-```
-npm run verify        # types, unit, Rust, end-to-end
-npm run test:driver   # the real binary, driven over WebDriver
-```
-
-[Testing](docs/testing.md) says what each tier covers.
-
-## Reading
-
-- [Architecture](docs/architecture.md): the one rule, the two halves, and
-  the core that runs without a window.
-- [Layout](docs/layout.md): the two shapes, what gives way when the window
-  shrinks, what moves when a pane goes, the tree and what sits under it, the
-  terminal panel, the window's chrome, zoom.
-- [Sessions](docs/sessions.md): what a session is, what its row says,
-  active and inactive projects and the shortcut to the next session that needs
-  you, past sessions, and how the changes pane keeps up.
-- [Focus](docs/focus-model.md): who owns the keyboard, and the two palettes.
-- [Settings](docs/settings.md): the seven tabs, the appearance and the look,
-  fonts and colours, live updates, past sessions and inactive projects,
-  accounts, plugins, keys.
-- [Hooks](docs/hooks.md): what the app installs in a project when asked, and
-  what it gives, the agent's tools among it.
-- [Browser](docs/browser.md): the tab beside the agent, how it is built, and
-  what an agent can do with it.
-- [Orchestrator](docs/orchestrator.md): a session that starts and steers
-  other sessions.
-- [Plugins](docs/plugins.md): where they come from, the sources offered out
-  of the box, what one may add to the workbench, and how one is written.
-- [Agents](docs/adapters.md): Claude Code and Codex CLI, and how they differ.
-- [Sessions in Chord](docs/integrated.md): an agent driven in messages
-  rather than in a terminal, and the events it gives the window.
-- [Remote](docs/remote.md): projects on other machines.
-- [Platforms](docs/platforms.md): what differs on each.
-- [Testing](docs/testing.md) and [CI and releases](docs/release.md).
+- [Building](docs/building.md): running it from source and verifying a change.
+- [Architecture](docs/architecture.md): the one rule and the two halves.
+- [Agents](docs/adapters.md) and [sessions in Chord](docs/integrated.md): how each agent is driven.
+- [Testing](docs/testing.md), [CI and releases](docs/release.md), and the full behaviour of [sessions](docs/reference/sessions.md), [layout](docs/reference/layout.md) and [settings](docs/reference/settings.md).
