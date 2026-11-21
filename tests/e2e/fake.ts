@@ -104,11 +104,11 @@ export const SETTINGS_FILE = "fake.settings";
 /** Where the fake keeps the user's stylesheet the same way. */
 export const STYLES_FILE = "fake.userStyles";
 
-/** The container of the Nth session of a project, whatever it reads as: a
-    row with no name reads "New session", and its close button still says
-    "Close session N". The container carries the `on` class. */
+/** The container of the Nth session of a project, whatever it reads as,
+    by the number it carries for tests: a row with no name reads "New
+    session". The container carries the `on` class. */
 export const sessionBox = (page: Page, number: number) =>
-  page.locator("[data-row^='session:']").filter({ has: page.locator(`[aria-label='Close session ${number}']`) });
+  page.locator(`[data-row^='session:'][data-ordinal='${number}']`);
 
 /** The row button of the Nth session of a project. */
 export const sessionRowOf = (page: Page, number: number) => sessionBox(page, number).getByTestId("session-row");

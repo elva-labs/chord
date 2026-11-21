@@ -1189,7 +1189,7 @@ test.describe("the file viewer", () => {
     const rows = page.getByTestId("process-row");
     await expect(rows).toHaveCount(2);
     await expect(rows.first()).toContainText("node server.js");
-    await expect(rows.first()).toContainText("session 1");
+    await expect(rows.first()).toContainText("New session");
     await expect(rows.first()).toContainText("2m");
     await expect(rows.first()).toContainText("50 MB");
     // The keyboard reaches the rows from the tree; End is the browser

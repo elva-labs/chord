@@ -36,7 +36,7 @@
     isLive,
     markRead,
     markUnread,
-    label,
+    shownName,
     lastChanged,
     loadHistory,
     loadMissingHistories,
@@ -682,7 +682,7 @@
           : held === "gathering"
             ? " The workbench tells it shortly, with any of the others that stop meanwhile."
             : "";
-    return `${label(starter)} has not heard: ${news.map((kid) => `${label(kid)} ${what(kid)}`).join(", ")}. ${hears}${woken}`;
+    return `${shownName(starter)} has not heard: ${news.map((kid) => `${shownName(kid)} ${what(kid)}`).join(", ")}. ${hears}${woken}`;
   }
 
   /** What a woken starter's row says woke it: the session, by the name its
@@ -696,7 +696,7 @@
 
   function wokenName(by: Woken["by"][number]): string {
     const row = byKey(by.key);
-    return row === null ? by.name : label(row);
+    return row === null ? by.name : shownName(row);
   }
 
   function wokenTitle(starter: Session, woken: Woken): string {
@@ -704,7 +704,7 @@
       `${wokenName(by)} ${by.rest === "ended" ? "ended" : by.rest === "permission" ? "asked for permission" : "stopped"}`;
     const list = woken.by.map(what);
     const said = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} and ${list.at(-1)}`;
-    return `${label(starter)} was idle, so the workbench sent it what happened: ${said}.`;
+    return `${shownName(starter)} was idle, so the workbench sent it what happened: ${said}.`;
   }
 
   function toggleKids(key: string) {
@@ -992,7 +992,7 @@
   });
 
   function gather(session: Session, about: string | null) {
-    const held = gathered.get(session.key) ?? { name: label(session), about: [] };
+    const held = gathered.get(session.key) ?? { name: shownName(session), about: [] };
     held.about.push(about === null ? null : shown(about));
     gathered.set(session.key, held);
     gathering ??= setTimeout(sayGathered, GATHER_MS);
@@ -1094,12 +1094,14 @@
   /** The question about closing a session or a project, while it is up. */
   let closingStrip = $state<HTMLDivElement | null>(null);
 
-  /** The session as the question names it: its label, and its project
-      too where another row reads the same, as a started session's row
+  /** The session as the question names it: what its row reads as, and
+      its project too where a row in another project reads the same, as a started session's row
       names the project it runs in. */
   function closingName(session: Session): string {
-    const name = label(session);
-    const same = sessions.all.some((other) => other.key !== session.key && label(other) === name);
+    const name = shownName(session);
+    const same = sessions.all.some(
+      (other) => other.key !== session.key && other.project !== session.project && shownName(other) === name,
+    );
     return same ? `${name} in ${projectLabel(session.project)}` : name;
   }
 
@@ -1634,6 +1636,7 @@
     class:cursor={current === `session:${session.key}`}
     class:starter={kids.length > 0}
     data-row="session:{session.key}"
+    data-ordinal={session.ordinal}
   >
     <button
       class="row line"
@@ -1772,7 +1775,7 @@
         class="icon"
         tabindex="-1"
         onclick={() => void closeSessionAsking(session)}
-        aria-label="Close {label(session)}"
+        aria-label="Close {shownName(session)}"
         title="Stop"
         data-testid="close-session">×</button
       >
@@ -1908,6 +1911,7 @@
           class:on={sessions.active === kid.key}
           class:cursor={current === `session:${kid.key}`}
           data-row="session:{kid.key}"
+          data-ordinal={kid.ordinal}
           in:rowFade|local
           out:rowFade|local
         >
@@ -1949,7 +1953,7 @@
                      counts: last on the line, so it goes before the rest. -->
                 <span
                   class="news-mark"
-                  title="{label(parent)} has not heard this yet"
+                  title="{shownName(parent)} has not heard this yet"
                   data-testid="started-news"
                 ></span>
               {/if}
@@ -1967,7 +1971,7 @@
             {/if}
             <span class="when">{since(lastChanged(kid), now)}</span>
             <span class="state told"
-              >{stateWord(kid)}{#if news.includes(kid)}, not heard by {label(parent)} yet{/if}{#if kidStays !== null}, {kidStays.line}{/if}</span
+              >{stateWord(kid)}{#if news.includes(kid)}, not heard by {shownName(parent)} yet{/if}{#if kidStays !== null}, {kidStays.line}{/if}</span
             >
           </button>
           <span class="actions">
@@ -1975,7 +1979,7 @@
               class="icon"
               tabindex="-1"
               onclick={() => void closeSessionAsking(kid)}
-              aria-label="Close {label(kid)}"
+              aria-label="Close {shownName(kid)}"
               title="Stop"
               data-testid="close-session">×</button
             >

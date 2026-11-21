@@ -66,7 +66,7 @@ describe("a session that starts waiting while the window is in the background", 
   it("is a notification naming the project and the session, without a chime", () => {
     live(A, "pty-1");
     exact("session-pty-1", "stop");
-    expect(told.notified).toEqual([{ title: "one · session 1", body: "Waiting for you" }]);
+    expect(told.notified).toEqual([{ title: "one · New session", body: "Waiting for you" }]);
     expect(told.chimes).toBe(0);
   });
 

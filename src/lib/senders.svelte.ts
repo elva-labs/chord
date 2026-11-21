@@ -1,5 +1,5 @@
 import { lastSegment } from "$lib/paths";
-import { label, sessions } from "$lib/sessions.svelte";
+import { sessions, shownName } from "$lib/sessions.svelte";
 
 /**
  * Who sent a message to a session, when it was not the user: a session
@@ -95,7 +95,7 @@ export function nameKeptBy(how: ((id: string) => string | null) | null) {
     kept. */
 export function sessionName(id: string): string | null {
   const row = sessions.all.find((candidate) => candidate.id === id);
-  return row === undefined ? kept(id) : label(row);
+  return row === undefined ? kept(id) : shownName(row);
 }
 
 /** Who sent a message: null for the user. A sender the window has no row
@@ -120,7 +120,7 @@ export function senderOf(message: { id: string }): Sender | null {
     key: row?.key ?? null,
     name:
       row !== null
-        ? label(row)
+        ? shownName(row)
         : folder !== null
           ? `an agent in ${lastSegment(folder)}`
           : ((id === null ? null : kept(id)) ?? "another session"),

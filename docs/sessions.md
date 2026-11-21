@@ -533,7 +533,10 @@ title the first of them is listed under, since a conversation that went
 on begins with its briefing and its own title is no name. A row nothing
 names reads `New session`, never its id or a number, and so does a session
 in a terminal whose first message the window never saw. A past session
-with no title reads `New session` too.
+with no title reads `New session` too. Everywhere else the window names a
+session, in a tooltip, a notification, a question before a close or a
+start, a shell's owner, it uses the words the row reads; a question before
+a close adds the project where a row in another project reads the same.
 
 A name the user gives a session through the agent's own rename command is
 the row's name at once and from then on. An in-Chord session hears it

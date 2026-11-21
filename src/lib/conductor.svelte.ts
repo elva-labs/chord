@@ -74,6 +74,7 @@ import {
   isViewed,
   keysStillIn,
   label,
+  shownName,
   sessionModelName,
   onClosed,
   onGiven,
@@ -4441,7 +4442,7 @@ function askUser(
         ? "An unnamed agent"
         : session === null
           ? "A session"
-          : label(session),
+          : shownName(session),
     project,
     prompt: prompt.split("\n")[0],
     worktree,

@@ -242,7 +242,7 @@ test.describe("an integrated session", () => {
     );
     const started = page.getByTestId("started-session");
     await expect(started).toHaveCount(1);
-    await expect(started).toContainText("session 2");
+    await expect(started).toContainText("New session");
     await expect(started).toContainText("Claude Code");
     await started.getByTestId("open-started").click();
     await expect(page.getByTestId("conversation")).toBeHidden();
@@ -2541,7 +2541,7 @@ test("wakes an idle integrated starter with what a session it started said, as t
   await expect(woken).toHaveText(`woken by ${name}`);
   await expect(woken).toHaveAttribute(
     "title",
-    `session 1 was idle, so the workbench sent it what happened: ${name} stopped.`,
+    `${await page.locator(".session.starter > .row .label").first().textContent()} was idle, so the workbench sent it what happened: ${name} stopped.`,
   );
   // At the end of the starter's second line, where the model stands.
   const summary = (await page.getByTestId("orchestrator-summary").boundingBox())!;

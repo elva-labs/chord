@@ -1294,12 +1294,19 @@ export function liveCount(project: string): number {
   return forProject(project).filter(isLive).length;
 }
 
-/** A short label for the row: its name, or its number in the project. A
-    name is the agent's or a caller's text, so what it holds that cannot be
-    seen is written out. */
+/** A session as an agent addresses it: its name, or its number in the
+    project. A name is the agent's or a caller's text, so what it holds
+    that cannot be seen is written out. Never shown to the user, who reads
+    shownName. */
 export function label(session: Session): string {
   const name = knownName(session);
   return name === null ? `session ${session.ordinal}` : shown(name);
+}
+
+/** A session as the user reads it, in a row, a tooltip, a notice or a
+    dialog: what its row reads as, else "New session". */
+export function shownName(session: Session): string {
+  return rowName(session) ?? "New session";
 }
 
 /** What a row reads as: its name, else the first words of the prompt it

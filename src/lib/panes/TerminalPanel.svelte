@@ -46,7 +46,7 @@
     type Shell,
   } from "$lib/terminals.svelte";
   import { startup } from "$lib/reopen.svelte";
-  import { byKey as sessionByKey, label as sessionLabel } from "$lib/sessions.svelte";
+  import { byKey as sessionByKey, shownName } from "$lib/sessions.svelte";
   import { projectLabel } from "$lib/workspace.svelte";
   import { sizeOf } from "$lib/zoom.svelte";
 
@@ -66,7 +66,7 @@
     if (owner === null) return "";
     if (owner.session === null) return projectLabel(owner.project);
     const session = sessionByKey(owner.session);
-    return session === null ? "" : sessionLabel(session);
+    return session === null ? "" : shownName(session);
   });
 
   /** What the shown group divides between its shells. */

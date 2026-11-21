@@ -1108,7 +1108,7 @@ test.describe("questions before anything unsaved goes", () => {
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
     await page.locator("[data-testid='session-row']").first().hover();
-    await page.locator(`${SESSIONS} [aria-label^='Close session']`).first().click();
+    await page.locator(`${SESSIONS} [data-testid='close-session']`).first().click();
     const strip = page.getByTestId("close-owner");
     await expect(strip).toContainText("with unsaved edits?");
     await expect(strip).toContainText("README.md");
@@ -1616,7 +1616,7 @@ test.describe("the session question in a peek", () => {
     await typeAtEnd(page, "mine");
     await page.getByTestId("unfold-sessions").click();
     await page.locator("[data-testid='session-row']").first().hover();
-    await page.locator(`${SESSIONS} [aria-label^='Close session']`).first().click();
+    await page.locator(`${SESSIONS} [data-testid='close-session']`).first().click();
     await expect(page.getByTestId("close-owner")).toBeVisible();
     // The peek put away by its chord, from wherever the keyboard is.
     await page.keyboard.press(`${MOD}+1`);
@@ -1840,7 +1840,7 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     await installFakeCore(page, { open: [PROJECT, LEAD] });
     await page.goto("/");
     await expect(page.locator(AGENT)).toBeVisible();
-    // A second project's own session 1, which starts a session 1 in demo.
+    // A second project's own session, which starts one in demo.
     await page.locator(`${SESSIONS} [data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
     await startNew(page);
     await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
@@ -1869,7 +1869,7 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     await started.hover();
     await started.getByTestId("close-session").click();
     const strip = page.getByTestId("close-owner");
-    await expect(strip).toContainText("Close session 1 in demo with unsaved edits?");
+    await expect(strip).toContainText("Close Bump the client with unsaved edits?");
     await expect(strip).toContainText("README.md");
     await expect(page.getByTestId("close-owner-cancel")).toBeFocused();
     await page.keyboard.press("Escape");
@@ -2057,9 +2057,9 @@ test.describe("an integrated session beside the editor", () => {
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
     await page.locator("[data-testid='session-row']").first().hover();
-    await page.locator(`${SESSIONS} [aria-label^='Close session']`).first().click();
+    await page.locator(`${SESSIONS} [data-testid='close-session']`).first().click();
     const strip = page.getByTestId("close-owner");
-    await expect(strip).toContainText("Close session 1 with unsaved edits?");
+    await expect(strip).toContainText("Close New session with unsaved edits?");
     await expect(strip).toContainText("README.md");
     await page.getByTestId("close-owner-confirm").click();
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(0);

@@ -2,7 +2,7 @@ import { untrack } from "svelte";
 import { core, type Process, type SessionEnded } from "$lib/core";
 import { claim } from "$lib/exits";
 import { hideTerminal } from "$lib/layout.svelte";
-import { activeSession, byKey as sessionByKey, label as sessionLabel } from "$lib/sessions.svelte";
+import { activeSession, byKey as sessionByKey, shownName } from "$lib/sessions.svelte";
 import { projectLabel, workspace } from "$lib/workspace.svelte";
 
 /**
@@ -172,7 +172,7 @@ export function withOwner(shell: Shell): string {
   const session = shell.session === null ? null : sessionByKey(shell.session);
   if (session === null) return `${label(shell)} of ${projectLabel(shell.project)}`;
   const elsewhere = shell.project === workspace.active ? "" : ` in ${projectLabel(shell.project)}`;
-  return `${label(shell)} of ${sessionLabel(session)}${elsewhere}`;
+  return `${label(shell)} of ${shownName(session)}${elsewhere}`;
 }
 
 /** Every shell that started in the project, whoever it belongs to. */

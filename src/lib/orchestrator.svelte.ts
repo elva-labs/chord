@@ -25,7 +25,7 @@ import {
 } from "$lib/conductor.svelte";
 import { handleOf, linkFor, send as sendIntegrated } from "$lib/integrated.svelte";
 import { lastSegment } from "$lib/paths";
-import { isLive, label, lastChanged, sessions, since, statusLabel, type Session } from "$lib/sessions.svelte";
+import { isLive, lastChanged, shownName, sessions, since, statusLabel, type Session } from "$lib/sessions.svelte";
 import { shown } from "$lib/unseen";
 import { projectLabel, workspace } from "$lib/workspace.svelte";
 import { drawnWith } from "$lib/projects.svelte";
@@ -322,7 +322,7 @@ export const NAME_SHOWN = 160;
 /** A started session's name as the board shows it: cut to what a row
     holds, marked where it was cut. */
 export function startedName(session: Session): string {
-  const chars = Array.from(label(session));
+  const chars = Array.from(shownName(session));
   return chars.length > NAME_SHOWN ? `${chars.slice(0, NAME_SHOWN).join("")}…` : chars.join("");
 }
 

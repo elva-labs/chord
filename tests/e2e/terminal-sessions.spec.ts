@@ -85,7 +85,7 @@ test("shows the shells of the session on screen, and keeps every shell as it was
   await twoSessions(page);
   await page.keyboard.press(`${MOD}+j`);
   await expect(page.locator(ROW)).toHaveCount(1);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of session 2");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
   const two = await typeInto(page, "a");
   await page.locator(`${SLOT}.on`).evaluate((slot) => slot.setAttribute("data-kept", "two"));
   await page.getByTestId("new-terminal").click();
@@ -96,7 +96,7 @@ test("shows the shells of the session on screen, and keeps every shell as it was
   await named(page, "session 1").click();
   await expect(page.locator(TERMINAL)).toBeVisible();
   await expect(page.locator(ROW)).toHaveCount(0);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of session 1");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
   await expect(page.getByTestId("terminal-status")).toContainText("No shell open for this session.");
   await expect(page.locator(SLOT)).toHaveCount(2);
   await page.getByTestId("start-terminal").click();
@@ -136,7 +136,7 @@ test("keeps a shell opened with no session on screen in reach beside a session, 
   await page.getByTestId("new-session").click();
   await startNew(page);
   await expect(page.locator(SESSION)).toHaveCount(1);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of session 1");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
   await expect(page.getByTestId("terminal-none")).toHaveText("None open.");
   const foot = page.getByTestId("terminal-project-shells");
   await expect(foot).toContainText("Shells of demo");
@@ -187,7 +187,7 @@ test("starts the shell it opens with after a reload beside the session on screen
   await page.reload();
   await expect(page.locator(TERMINAL)).toBeVisible();
   await expect(page.locator(SESSION)).toHaveCount(1);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of session 1");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
   await expect(page.locator(ROW)).toHaveCount(1);
   await expect(page.locator(SLOT)).toHaveCount(1);
   await expect(page.locator(`${SLOT}.on`)).toBeVisible();
@@ -208,7 +208,7 @@ test("closes a session's shells with it, and asks first while one has something 
   // up in the sessions pane, in the words the window's own close uses.
   await closeSession(page, "session 2");
   const strip = page.getByTestId("close-owner");
-  await expect(strip).toContainText("Close session 2 with 1 busy shell running?");
+  await expect(strip).toContainText("Close New session with 1 busy shell running?");
   await expect(strip).toContainText("“npm run dev” is running in shell 1. Closing the session stops it.");
   await expect(page.getByTestId("close-owner-cancel")).toBeFocused();
   await page.getByTestId("close-owner-cancel").click();
@@ -253,7 +253,7 @@ test("asks before Close project while a shell that started in it is busy, naming
   const strip = page.getByTestId("close-owner");
   await expect(strip).toContainText("Close demo with 2 busy shells running?");
   await expect(strip).toContainText(
-    "“npm run dev” is running in shell 1, and “make watch” in shell 1 of session 1. Closing the project stops them.",
+    "“npm run dev” is running in shell 1, and “make watch” in shell 1 of New session. Closing the project stops them.",
   );
   await page.keyboard.press("Escape");
   await expect(strip).toHaveCount(0);
@@ -276,7 +276,7 @@ test("lists in the processes fold what runs under the session on screen and its 
   const rows = page.getByTestId("process-row");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("node two.js");
-  await expect(rows.nth(0)).toContainText("session 2");
+  await expect(rows.nth(0)).toContainText("New session");
   await expect(rows.nth(1)).toContainText("npm run dev");
   await expect(rows.nth(1)).toContainText("shell 1");
   await expect(page.getByTestId("processes-fold")).toContainText("Processes (2)");
