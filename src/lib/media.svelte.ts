@@ -481,13 +481,33 @@ function sources(srcset: string): string | null {
 let local: ReadonlyMap<string, string> = new Map();
 let wanted = new Set<string>();
 
+/** For each `<picture>` drawn and still open, the innermost last, where
+    its images come from: the web or the project, by the first it names,
+    or null before it names one. */
+let pictures: ("web" | "project" | null)[] = [];
+
+/** Whether an image from `place` would mix the innermost open picture's
+    images, which come from the other place. The browser draws a picture's
+    first image it can, so a picture of both would fetch one from the web
+    only when a file of the project was not there, and so tell the web
+    whether it is. An image written into the document is from neither. */
+function mixes(place: "web" | "project"): boolean {
+  if (pictures.length === 0) return false;
+  const first = pictures.at(-1) ?? place;
+  pictures[pictures.length - 1] = first;
+  return first !== place;
+}
+
 /** An image's address as it is drawn, or null when the image is shown as
     its text: an address `IMAGE` allows, or a path relative to the
-    document, drawn from the file of its project `load` read for it. */
+    document, drawn from the file of its project `load` read for it. In a
+    picture, an image from the web or the project is drawn only when the
+    picture's others come from the same place. */
 function image(address: string): string | null {
   const src = address.trim();
-  if (IMAGE.test(src)) return src;
-  if (src === "" || /^[a-z][a-z0-9+.-]*:|^[/\\#?]/i.test(src)) return null;
+  if (/^data:image\//i.test(src)) return src;
+  if (IMAGE.test(src)) return mixes("web") ? null : src;
+  if (src === "" || /^[a-z][a-z0-9+.-]*:|^[/\\#?]/i.test(src) || mixes("project")) return null;
   const read = local.get(src);
   if (read === undefined) wanted.add(src);
   return read ?? null;
@@ -504,6 +524,7 @@ const counted = new Map<string, number>();
 function push(name: string) {
   opened.push(name);
   counted.set(name, (counted.get(name) ?? 0) + 1);
+  if (name === "picture") pictures.push(null);
 }
 
 /** The closing tags of the elements open from `at` up, the innermost
@@ -513,6 +534,7 @@ function closeFrom(at: number): string {
   while (opened.length > at) {
     const name = opened.pop()!;
     counted.set(name, counted.get(name)! - 1);
+    if (name === "picture") pictures.pop();
     out += `</${name}>`;
   }
   return out;
@@ -680,19 +702,21 @@ function drawDocument(
   markdown: string,
   images: ReadonlyMap<string, string>,
 ): { html: string; wanted: string[] } {
-  opened = [];
-  counted.clear();
+  const clear = () => {
+    opened = [];
+    counted.clear();
+    pictures = [];
+    local = new Map();
+    wanted = new Set();
+  };
+  clear();
   local = images;
-  wanted = new Set();
   try {
     const options = { ...marked.defaults, async: false, gfm: true };
     const html = new Scoped({ ...options, renderer }).parse(marked.lexer(markdown, options));
     return { html: html + closeFrom(0), wanted: [...wanted] };
   } finally {
-    opened = [];
-    counted.clear();
-    local = new Map();
-    wanted = new Set();
+    clear();
   }
 }
 
@@ -702,7 +726,8 @@ function drawDocument(
     the document is the agent's and the window is the app's. An image
     named by a path relative to the document is drawn from `images`, the
     files of its project read for it by that path, and is shown as its
-    text when it is not there. An element the document leaves open is
+    text when it is not there. A `<picture>` draws images from the web or
+    from the project, never both. An element the document leaves open is
     closed at the end of its block, or of the document. */
 export function render(markdown: string, images: ReadonlyMap<string, string> = new Map()): string {
   return drawDocument(markdown, images).html;

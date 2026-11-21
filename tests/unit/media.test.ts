@@ -1003,6 +1003,40 @@ describe("the HTML a document may draw", () => {
     expect(box.textContent).toContain("other");
   });
 
+  // A picture's fallback from the web would otherwise load only when the
+  // project's file was not there, and so tell the web whether it is.
+  it("draws a picture's images from the web or from the project, never both", async () => {
+    project.documents.set(
+      "/one/docs.md",
+      [
+        '<picture><source srcset="docs/icon.png"><img src="https://evil.example/miss.png" alt="here"></picture>',
+        '<picture><source srcset="docs/gone.png"><img src="https://evil.example/miss.png" alt="gone"></picture>',
+        '<picture><source srcset="https://evil.example/a.png"><img src="docs/icon.png" alt="web"></picture>',
+        '<picture><source srcset="docs/icon.png 1x, https://evil.example/b.png 2x"><img src="data:image/gif;base64,R0lGOD" alt="mixed"></picture>',
+        '<picture><source srcset="https://evil.example/c.png"> ![markdown](docs/shot.png)</picture>',
+      ].join("\n\n"),
+    );
+    const box = await loaded("/one/docs.md");
+    const drawn = [...box.querySelectorAll("picture")].map((picture) =>
+      [...picture.querySelectorAll("source, img")].flatMap((element) =>
+        (element.getAttribute("srcset") ?? element.getAttribute("src") ?? "")
+          .split(/,\s+/)
+          .map((candidate) => candidate.split(" ")[0]),
+      ),
+    );
+    expect(drawn).toEqual([
+      ["data:image/png;base64,AAAA"],
+      [],
+      ["https://evil.example/a.png"],
+      ["data:image/gif;base64,R0lGOD"],
+      ["https://evil.example/c.png"],
+    ]);
+    expect(box.textContent).toContain('<img src="https://evil.example/miss.png" alt="here">');
+    expect(box.textContent).toContain("markdown");
+    // An image of the project in a picture from the web is not even read.
+    expect(project.reads.map((read) => read.file).sort()).toEqual(["docs/gone.png", "docs/icon.png"]);
+  });
+
   it("reads a tag as a browser does, its case, its entities and a quote in it", () => {
     const box = drawn('<IMG SRC="https://example.com/a.png?x=1&amp;y=2" ALT=\'say "hi" &lt;b&gt;\'> <A HREF=https://example.com>u</A>');
     const image = box.querySelector("img");
