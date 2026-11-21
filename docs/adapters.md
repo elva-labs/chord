@@ -157,19 +157,19 @@ server does not start a session under a workflow, and says why.
 On Windows an agent installed as a script runs through the command
 interpreter, which ends a command at its first line break. Claude Code's
 command line holds only file names there. Codex would lose all but the
-first line of a workflow's instructions, so a Codex session under a workflow is
-refused in a terminal on Windows, saying so, and runs in Chord, where
-nothing of the workflow is on its command line. A session with no workflow
-starts as the table above says. The interpreter also takes the first and
-the last quote off a line with more than two, which cuts short a script
-path with a space in it, and the settings that name the tool server to
-Codex hold quotes. So a Codex installed as a script is not told the server
-on Windows: it starts the server from its own configuration, which passes
-the server none of the session's variables, and every call the session
-makes names no session. The workbench takes such a call for one from [an
-agent it did not start](orchestrator.md#who-is-calling). Its tools ask or
-not as the project's entry for the server says, as they do wherever the
-project's configuration names it.
+first line of a workflow's instructions, so a Codex session under a
+workflow is refused in a terminal on Windows, saying so, and runs in Chord,
+where nothing of the workflow is on its command line. A session with no
+workflow starts as the table above says. The interpreter also takes the
+first and the last quote off a line with more than two, which cuts short a
+script path with a space in it, and the settings that name the tool server
+to Codex hold quotes. So a Codex installed as a script is not told the
+server on Windows: it starts the server from its own configuration, which
+passes the server none of the session's variables, and every call the
+session makes names no session. The workbench takes such a call for one
+from [an agent it did not start](orchestrator.md#who-is-calling). Its tools
+ask or not as the project's entry for the server says, as they do wherever
+the project's configuration names it.
 
 ## Detection
 

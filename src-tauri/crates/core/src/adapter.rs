@@ -463,7 +463,7 @@ pub fn codex_developer_instructions(
 ///
 /// A session is given developer instructions wherever it has the tools:
 /// where the server is named here, or where it follows a workflow, which
-/// never starts without them.
+/// never starts without them. A script on Windows is given none, as below.
 ///
 /// Codex starts a server with only the variables its entry names, so the
 /// server is named whole wherever the session has it, with the variables
@@ -483,9 +483,9 @@ pub fn codex_developer_instructions(
 /// a line that has more than two, which cuts a script path with a space in
 /// it short. Codex then starts the server from its configuration alone, and
 /// the session's calls name no session. Nor is it given developer
-/// instructions: the interpreter reads the quotes inside the setting as its
-/// own, and the `<` and `>` of what the server says between them as
-/// redirections.
+/// instructions, wherever the server is named: the interpreter reads the
+/// quotes inside the setting as its own, and the `<` and `>` of what the
+/// server says between them as redirections.
 fn codex_workflow(ctx: &LaunchCtx, windows: bool, script: bool) -> Result<Vec<String>, String> {
     if windows && ctx.instructions.is_some() {
         return Err(CODEX_WORKFLOW_ON_WINDOWS.into());
@@ -523,7 +523,7 @@ fn codex_workflow(ctx: &LaunchCtx, windows: bool, script: bool) -> Result<Vec<St
     if ctx.start_only {
         settings.extend(CODEX_NO_SUBAGENTS.iter().map(|setting| setting.to_string()));
     }
-    if named.is_some() || ctx.instructions.is_some() {
+    if (named.is_some() || ctx.instructions.is_some()) && !(windows && script) {
         let told =
             codex_developer_instructions(ctx.orchestrator, None, ctx.wakes, ctx.instructions);
         settings.push(format!("developer_instructions={}", text(&told)));
@@ -1232,15 +1232,14 @@ mod tests {
         );
 
         // What the tool server tells an orchestrator, then the workflow's
-        // instructions, as one TOML string on one line.
+        // instructions, as one TOML string on one line. What the server says
+        // holds nothing such a string escapes, so it goes in as it is, and
+        // the workflow's line breaks and quotes are escaped.
+        assert!(!crate::mcp::ORCHESTRATOR_INSTRUCTIONS.contains(['"', '\\', '\n']));
         let directed = format!(
-            "developer_instructions={}",
-            serde_json::Value::from(format!(
-                "{}\n\n1. Direct the work.\n2. Say \"done\".",
-                crate::mcp::ORCHESTRATOR_INSTRUCTIONS
-            ))
+            r#"developer_instructions="{}\n\n1. Direct the work.\n2. Say \"done\".""#,
+            crate::mcp::ORCHESTRATOR_INSTRUCTIONS
         );
-        assert!(directed.ends_with(r#"\n\n1. Direct the work.\n2. Say \"done\".""#));
         let codex_settings = [
             vec![
                 "-c".to_string(),
@@ -1762,13 +1761,19 @@ mod tests {
             configured: Some(daemon),
             ..ctx
         };
+        // What the server says holds nothing a TOML string escapes, so the
+        // setting quotes it as it is.
+        for said in [
+            crate::mcp::INSTRUCTIONS,
+            crate::mcp::WOKEN_INSTRUCTIONS,
+            crate::mcp::ORCHESTRATOR_WOKEN_INSTRUCTIONS,
+        ] {
+            assert!(!said.contains(['"', '\\', '\n']));
+        }
         let told = |instructions: &str| {
             [
                 "-c".to_string(),
-                format!(
-                    "developer_instructions={}",
-                    serde_json::Value::from(instructions)
-                ),
+                format!("developer_instructions=\"{instructions}\""),
             ]
         };
         let server = [
@@ -1805,7 +1810,7 @@ mod tests {
             ..woken
         };
         let directed = format!(
-            "{}\n\nDirect the work.",
+            r"{}\n\nDirect the work.",
             crate::mcp::ORCHESTRATOR_WOKEN_INSTRUCTIONS
         );
         assert_eq!(
@@ -1862,6 +1867,20 @@ mod tests {
         // A script on Windows is told nothing of it: the interpreter would
         // cut the script's path short at the settings' quotes.
         assert!(codex_workflow(&configured, true, true).unwrap().is_empty());
+        // Nor is it given developer instructions where the workbench names
+        // the server: the interpreter would take the `<` and `>` in them for
+        // redirections.
+        let named_script = LaunchCtx {
+            server: Some(daemon),
+            ..woken
+        };
+        let script_settings = codex_workflow(&named_script, true, true).unwrap();
+        assert!(script_settings
+            .iter()
+            .any(|arg| arg.starts_with("mcp_servers.chord.command=")));
+        assert!(script_settings
+            .iter()
+            .all(|arg| !arg.starts_with("developer_instructions=")));
         // Elsewhere a script is run as itself and takes the settings.
         assert_eq!(codex_workflow(&configured, false, true).unwrap(), whole);
         // Claude Code passes its servers its whole environment, so it is

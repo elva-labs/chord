@@ -92,15 +92,16 @@ model, the effort and the mode the session asked for, and with approvals
 sent to the window whoever the user's own configuration names to review
 them. The thread's developer instructions, in the message that starts or
 resumes it, are what the tool server tells a session in Chord, followed by
-the workflow's instructions where the session follows one, and where the workflow delegates only through the workbench
-the thread's configuration turns Codex's own subagent tools off with the
-settings a terminal session is given. None of it goes on a command line,
-so on Windows too a Codex session can follow a workflow this way. A start
-that names no mode runs in the mode the user's configuration sets, which
-can be full access, and one that names no effort runs at the effort the
-configuration sets, else at the model's own default, which ready names.
-The thread's id is Codex's own, known once the thread has started, so the
-start answers with none and ready carries it.
+the workflow's instructions where the session follows one, and where the
+workflow delegates only through the workbench the thread's configuration
+turns Codex's own subagent tools off with the settings a terminal session
+is given. None of it goes on a command line, so on Windows too a Codex
+session can follow a workflow this way. A start that names no mode runs in
+the mode the user's configuration sets, which can be full access, and one
+that names no effort runs at the effort the configuration sets, else at
+the model's own default, which ready names. The thread's id is Codex's
+own, known once the thread has started, so the start answers with none and
+ready carries it.
 
 A mode is Codex's approval policy and sandbox together: read only, which
 asks before it changes anything; auto, which changes files and runs
