@@ -84,6 +84,25 @@ async function twoSessions(page: Page) {
   await expect(page.locator(".session.on")).toContainText("session 2");
 }
 
+/** Waits for the panes to stop moving: opening the browser eases the columns
+    to their new widths, and a button clicked while its column still slides
+    is missed. */
+const settled = (page: Page) =>
+  expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter(
+              (motion) =>
+                motion.playState === "running" &&
+                motion.effect?.getTiming().iterations !== Infinity,
+            ).length,
+      ),
+    )
+    .toBe(0);
+
 /** Opens a tab by hand from the fold and gives it an address. */
 async function openByHand(page: Page, address: string) {
   await page.getByTestId("browser-fold-new-tab").click();
@@ -91,6 +110,7 @@ async function openByHand(page: Page, address: string) {
   await field.fill(address);
   await field.press("Enter");
   await expect(page.getByTestId("browser-tab")).not.toHaveCount(0);
+  await settled(page);
 }
 
 const toSession1 = (page: Page) =>
@@ -222,6 +242,7 @@ test("a row carries one mark, the state dot, and says agent in its meta when an 
   await expect(page.locator("[data-testid='session-row']")).toHaveCount(1);
   await ask(page, "m1", "browser_open", "session-1", { url: "http://localhost:3000" });
   await page.getByTestId("browser-fold").click();
+  await settled(page);
   await page.getByTestId("browser-new-tab").click();
   await expect(page.getByTestId("browser-tab")).toHaveCount(2);
   const field = page.getByTestId("browser-address");
