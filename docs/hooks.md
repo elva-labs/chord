@@ -134,7 +134,7 @@ it acts:
 
 - `show` and `diff`, which open a file the agent names, or its diff, in
   the viewer, where a Markdown document can be drawn with images loaded
-  from any address;
+  from any address on the web and from its own project;
 - `present`, which draws what the agent names, an HTML page that runs
   its scripts and loads the files in its folder among them;
 - `terminal`, which types a command into a terminal for the user to run
@@ -209,17 +209,25 @@ network, a diagram drawn, a mermaid fence in a document drawn too, the
 caption in the bar above. Escape closes it as it
 closes a file.
 
-![The agent draws the request flow: a Mermaid diagram and a latency chart open in the viewer, one under the other, with the caption above and the call on the media list under the tree.](tools-present.gif) A link in a document opens outside the app.
-HTML in a document is drawn as far as a README on GitHub may use it: an
-image at its size, a paragraph, block or heading aligned, a link, a line
+![The agent draws the request flow: a Mermaid diagram and a latency chart open in the viewer, one under the other, with the caption above and the call on the media list under the tree.](tools-present.gif) A link in a document leads only to the web, an email or a place in the document, and only one to the web opens, outside the app.
+A document draws a subset of the HTML GitHub draws in a README: an image
+at its size, a paragraph, block or heading aligned, a link, a line
 break, a rule, details that fold open, keys, subscript and superscript,
-bold, italics, code, and a picture with a source for each colour scheme. An
-image there loads only from where one written in Markdown may, an address on
-the web or an image written into the document itself, and a link leads only
-to the web, an email or a place in the document. A tag that is not one of
-these, or that carries anything more than they need, shows as the text it
-is, so a script, a style, a frame, a form or an event handler never runs.
-HTML in a conversation always shows as its text. What was presented stays on the media
+bold, italics, code, and a picture with a source for a light and a dark
+colour scheme. An image's size is a whole number of pixels or a
+percentage, and no image is drawn wider than the document. An image
+there loads only from where one written in Markdown may: an address on
+the web, an image written into the document itself, or a file of the
+document's own project, named by its path from the document. Such a file
+is drawn only when it is still inside the project once its links are
+followed, is not hidden, is an image and is no larger than any file the
+viewer shows, up to 64 of them and 64 MB in all; a document outside a
+project draws none. A link or a text style left open closes at the end
+of its block, and an element opened inside a hundred others shows as its
+text. A tag that is not one of these, or that carries anything more than
+they need, shows as the text it is, so a script, a style, a frame, a
+form or an event handler never runs. HTML in a conversation always shows
+as its text. What was presented stays on the media
 list of the session whose token the call names, or of the project when the
 call names no session the window knows, a section under the file tree with a
 divider to drag and a header that folds it away, one row per set of files
