@@ -10,6 +10,7 @@
     isPicture,
     pick,
     selectedEntry,
+    treeRoot,
   } from "$lib/files.svelte";
   import { lastSegment } from "$lib/paths";
   import { editAt } from "$lib/editor.svelte";
@@ -152,7 +153,7 @@
     {@const reload = `${files.treeReads}:${files.shownReads}`}
     {#if path !== null}
       <div class="rendered" data-testid="viewer-rendered">
-        <MediaFile {path} alt={lastSegment(entry.path)} {reload} again={reload} />
+        <MediaFile {path} alt={lastSegment(entry.path)} root={treeRoot()} {reload} again={reload} />
       </div>
     {/if}
   {:else if entry.binary}

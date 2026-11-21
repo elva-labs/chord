@@ -18,6 +18,7 @@ pub mod codex_app_server;
 pub mod codex_history;
 pub mod codex_models;
 pub mod cwd;
+pub mod document_images;
 pub mod env;
 pub mod events;
 pub mod executable;

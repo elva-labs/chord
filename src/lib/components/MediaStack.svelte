@@ -25,6 +25,7 @@
       <MediaFile
         path={file}
         alt={item.caption ?? lastSegment(file)}
+        root={item.project}
         reload="{item.at}:{changes.treeReads}:{changes.shownReads}"
         again="{item.at}:{media.calls[item.id] ?? 0}"
       />

@@ -18,6 +18,9 @@
     path: string;
     /** What an image is called when it cannot be shown. */
     alt: string;
+    /** The project the file is in, on the same machine: a document draws
+        the images it names in it. */
+    root?: string | null;
     /** Changes when the file may have: a later call for it, or the
         working tree moving under it. */
     reload?: string;
@@ -28,7 +31,7 @@
     again?: string;
   }
 
-  let { path, alt, reload = "", again = "" }: Props = $props();
+  let { path, alt, root = null, reload = "", again = "" }: Props = $props();
 
   let loaded = $state<Loaded | null>(null);
 
@@ -41,9 +44,10 @@
 
   $effect(() => {
     const file = path;
+    const project = root;
     reload;
     const current = ++read;
-    void load(file).then((result) => {
+    void load(file, project).then((result) => {
       if (current !== read) return;
       const before = untrack(() => loaded);
       if (before !== null && JSON.stringify(before) === JSON.stringify(result)) return;

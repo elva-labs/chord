@@ -27,6 +27,18 @@ import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetHeld, switched } from "$lib/show.svelte";
 import { resetGoingOn } from "$lib/goingOn.svelte";
 
+/** A README naming images of its project, and what was read for it. */
+const project = vi.hoisted(() => ({
+  readme: [
+    "# Readme",
+    "",
+    '<img src="docs/icon.png" width="128" height="128" alt="">',
+    "",
+    "![shot](docs/shot.png?raw=1) ![again](docs/icon.png) ![spaced](docs/my%20icon.png) ![gone](docs/gone.png) ![said](docs/said.png)",
+  ].join("\n"),
+  reads: [] as { root: string; document: string; file: string }[],
+}));
+
 vi.mock("$lib/core", () => ({
   core: () => ({
     async setWindowTitle() {},
@@ -38,6 +50,8 @@ vi.mock("$lib/core", () => ({
     },
     async readMedia(path: string) {
       if (path.includes("missing")) throw new Error(`could not read ${path}`);
+      if (path.endsWith("README.md"))
+        return { mime: "text/markdown", data: btoa(project.readme), size: project.readme.length };
       if (path.endsWith(".md"))
         return { mime: "text/markdown", data: btoa("# Draft"), size: 7 };
       if (path.endsWith(".html"))
@@ -53,6 +67,13 @@ vi.mock("$lib/core", () => ({
         data: "AAAA",
         size: 3,
       };
+    },
+    async readDocumentImage(root: string, document: string, file: string) {
+      project.reads.push({ root, document, file });
+      if (file === "docs/said.png") return { mime: "text/plain", data: "AAAA", size: 3 };
+      if (file.endsWith("icon.png") || file === "docs/shot.png")
+        return { mime: "image/png", data: "AAAA", size: 3 };
+      throw new Error(`${file} is not there`);
     },
   }),
 }));
@@ -374,6 +395,37 @@ describe("presenting", () => {
     });
   });
 
+  it("draws a document's images from its project, each read once, and the rest as their text", async () => {
+    project.reads.length = 0;
+    const loaded = await load("/one/README.md", "/one");
+    expect(project.reads.map((read) => read.file).sort()).toEqual(
+      ["docs/gone.png", "docs/icon.png", "docs/my icon.png", "docs/said.png", "docs/shot.png"],
+    );
+    for (const read of project.reads) expect(read).toMatchObject({ root: "/one", document: "README.md" });
+    const box = document.createElement("div");
+    box.innerHTML = "html" in loaded ? loaded.html : "";
+    expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual(
+      Array(4).fill("data:image/png;base64,AAAA"),
+    );
+    expect(box.querySelector("img[width='128'][height='128']")).not.toBeNull();
+    expect(box.textContent).toContain("gone");
+    expect(box.textContent).toContain("said");
+  });
+
+  it("reads no image for a document with no project or outside its project", async () => {
+    project.reads.length = 0;
+    for (const [path, root] of [
+      ["/one/README.md", null],
+      ["/two/README.md", "/one"],
+      ["/one/README.md", "/one/README.md"],
+    ] as const) {
+      const loaded = await load(path, root);
+      expect("html" in loaded && loaded.html).toContain("<h1>Readme</h1>");
+      expect("html" in loaded && loaded.html).not.toContain("<img");
+    }
+    expect(project.reads).toEqual([]);
+  });
+
   it("reads a file as a data URL, or says why it cannot", async () => {
     expect(await load("/one/a.png")).toEqual({
       url: "data:image/png;base64,AAAA",
@@ -658,6 +710,7 @@ describe("what Markdown may draw", () => {
     "<textarea><img src=x onerror=1></textarea> <title><b>x</b></title> <xmp><img src=x onerror=1></xmp>",
     '<picture><source media="(min-width: 1200px) and (prefers-color-scheme: dark)" srcset="https://track.example/wide-dark.png"><img src="https://track.example/else.png"></picture>',
     '<div align="javascript:alert(1)">x</div> <img src="https://example.com/a.png" height="expression(alert(1))">',
+    '<img src="/etc/hosts.png"> <img src="file:///etc/a.png"> <img src="//evil.example/a.png"> ![a](../../.ssh/id.png)',
   ];
 
   it("draws only the elements it allows, with no handlers and no scripted links", () => {
@@ -902,6 +955,26 @@ describe("the HTML a document may draw", () => {
     const html = render(markdown);
     expect(performance.now() - started).toBeLessThan(1000);
     expect(html.match(/<b>/g)).toHaveLength(100);
+  });
+
+  it("draws an image of the document's project once it is read, and as its text before", () => {
+    const DATA = "data:image/png;base64,iVBORw0KGgo=";
+    const markdown = [
+      '<img src="docs/icon.png" width="128" height="128" alt="">',
+      "",
+      "![logo](docs/icon.png)",
+      "",
+      '<picture><source media="(prefers-color-scheme: dark)" srcset="docs/dark.png 2x, docs/icon.png"><img src="docs/icon.png"></picture>',
+      "",
+      "![other](docs/other.png)",
+    ].join("\n");
+    const before = drawn(markdown);
+    expect(before.querySelector("img, source")).toBeNull();
+    const box = document.createElement("div");
+    box.innerHTML = render(markdown, new Map([["docs/icon.png", DATA], ["docs/dark.png", DATA]]));
+    expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual([DATA, DATA, DATA]);
+    expect(box.querySelector("source")?.getAttribute("srcset")).toBe(`${DATA} 2x, ${DATA}`);
+    expect(box.textContent).toContain("other");
   });
 
   it("reads a tag as a browser does, its case, its entities and a quote in it", () => {

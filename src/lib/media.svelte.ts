@@ -20,7 +20,7 @@ import { runnable } from "$lib/bang";
 import { core, type Media, type PresentRequest } from "$lib/core";
 import { wholeLineageOf } from "$lib/goingOn.svelte";
 import { forProject, sessions } from "$lib/sessions.svelte";
-import { held, projectFor, sessionFor } from "$lib/show.svelte";
+import { held, projectFor, relativeTo, sessionFor } from "$lib/show.svelte";
 import { activate, workspace } from "$lib/workspace.svelte";
 import { showMedia } from "$lib/files.svelte";
 
@@ -223,7 +223,8 @@ export type Loaded =
   | { error: string };
 
 /** Where a link or an image in a document may point: the web, mail, or a
-    place in the document. Anything else, a `javascript:` link above all,
+    place in the document, and for a document's image also a file of its
+    project (see `image`). Anything else, a `javascript:` link above all,
     is rendered as its text. */
 const LINK = /^(?:https?:|mailto:|#)/i;
 const IMAGE = /^(?:https?:|data:image\/)/i;
@@ -236,9 +237,10 @@ renderer.link = ({ href, title, tokens }) => {
   return `<a href="${escapeAttribute(href)}"${named} rel="noopener noreferrer">${text}</a>`;
 };
 renderer.image = ({ href, title, text }) => {
-  if (!IMAGE.test(href)) return escapeText(text);
+  const src = image(href);
+  if (src === null) return escapeText(text);
   const named = title ? ` title="${escapeAttribute(title)}"` : "";
-  return `<img src="${escapeAttribute(href)}" alt="${escapeAttribute(text)}"${named}>`;
+  return `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(text)}"${named}>`;
 };
 
 /** The renderer for what an agent says in a conversation: the same, except
@@ -346,7 +348,7 @@ said.codespan = function (this: typeof said, token) {
 type Check = (value: string) => string | null;
 const ANY: Check = (value) => value;
 const HREF: Check = (value) => (LINK.test(value.trim()) ? value.trim() : null);
-const SRC: Check = (value) => (IMAGE.test(value.trim()) ? value.trim() : null);
+const SRC: Check = (value) => image(value);
 /** A value that is one of `values`, in any case, written in lower case. */
 const oneOf =
   (...values: string[]): Check =>
@@ -440,7 +442,7 @@ const INLINE = new Set(["a", "b", "i", "strong", "em", "code", "kbd", "sub", "su
     depth of what is drawn. */
 const DEEPEST = 100;
 
-/** A `srcset` with every image in it one `IMAGE` allows, written anew as
+/** A `srcset` with every image in it one `image` allows, written anew as
     the browser reads it: each address, and after it a width or a density
     if it has one. Null when an address or a descriptor is anything else. */
 function sources(srcset: string): string | null {
@@ -463,10 +465,29 @@ function sources(srcset: string): string | null {
       descriptor = srcset.slice(end, stop).trim();
       at = stop + 1;
     }
-    if (!IMAGE.test(url) || (descriptor !== "" && !/^\d+(?:\.\d+)?[wx]$/.test(descriptor))) return null;
-    candidates.push(descriptor === "" ? url : `${url} ${descriptor}`);
+    const src = image(url);
+    if (src === null || (descriptor !== "" && !/^\d+(?:\.\d+)?[wx]$/.test(descriptor))) return null;
+    candidates.push(descriptor === "" ? src : `${src} ${descriptor}`);
   }
   return candidates.length === 0 ? null : candidates.join(", ");
+}
+
+/** The files of its project that a document's images are drawn from while
+    it renders, as data URLs by the address the document names them by,
+    and the addresses it names that are not among them. */
+let local: ReadonlyMap<string, string> = new Map();
+let wanted = new Set<string>();
+
+/** An image's address as it is drawn, or null when the image is shown as
+    its text: an address `IMAGE` allows, or a path relative to the
+    document, drawn from the file of its project `load` read for it. */
+function image(address: string): string | null {
+  const src = address.trim();
+  if (IMAGE.test(src)) return src;
+  if (src === "" || /^[a-z][a-z0-9+.-]*:|^[/\\#?]/i.test(src)) return null;
+  const read = local.get(src);
+  if (read === undefined) wanted.add(src);
+  return read ?? null;
 }
 
 /** The elements drawn from the document's HTML that are still open, the
@@ -650,23 +671,38 @@ class Scoped extends Parser {
   }
 }
 
-/** Markdown rendered for the viewer. Raw HTML in the document is drawn
-    only as far as `ALLOWED` goes and shown as its text beyond that, and a
-    link or an image may point only where `LINK` and `IMAGE` allow, since
-    the document is the agent's and the window is the app's. An element
-    the document leaves open is closed at the end of its block, or of the
-    document. */
-export function render(markdown: string): string {
+/** A document drawn as `render` draws it, and the addresses of the images
+    it names in its project that are not among `images`. */
+function drawDocument(
+  markdown: string,
+  images: ReadonlyMap<string, string>,
+): { html: string; wanted: string[] } {
   opened = [];
   counted.clear();
+  local = images;
+  wanted = new Set();
   try {
     const options = { ...marked.defaults, async: false, gfm: true };
     const html = new Scoped({ ...options, renderer }).parse(marked.lexer(markdown, options));
-    return html + closeFrom(0);
+    return { html: html + closeFrom(0), wanted: [...wanted] };
   } finally {
     opened = [];
     counted.clear();
+    local = new Map();
+    wanted = new Set();
   }
+}
+
+/** Markdown rendered for the viewer. Raw HTML in the document is drawn
+    only as far as `ALLOWED` goes and shown as its text beyond that, and a
+    link or an image may point only where `LINK` and `IMAGE` allow, since
+    the document is the agent's and the window is the app's. An image
+    named by a path relative to the document is drawn from `images`, the
+    files of its project read for it by that path, and is shown as its
+    text when it is not there. An element the document leaves open is
+    closed at the end of its block, or of the document. */
+export function render(markdown: string, images: ReadonlyMap<string, string> = new Map()): string {
+  return drawDocument(markdown, images).html;
 }
 
 /** Markdown an agent wrote in a conversation, rendered as `render` does,
@@ -713,11 +749,61 @@ function decode(base64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-export async function load(path: string): Promise<Loaded> {
+/** How many of the images a document names in its project are read for
+    it at most, and how much of them in all. Past either, an image shows
+    as its text. */
+const IMAGES_READ = 64;
+const IMAGE_BYTES = 64 * 1024 * 1024;
+
+/** The file an address relative to a document names: without a query or
+    a fragment, and its escapes decoded. */
+function named(address: string): string {
+  const path = address.replace(/[?#][\s\S]*$/, "");
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+/** The images a document at `at` in the project at `root` names by
+    `addresses`, read where the project is, four at a time, as data URLs
+    by those addresses. One the document may not draw is left out. */
+async function readImages(root: string, at: string, addresses: string[]): Promise<Map<string, string>> {
+  const read = new Map<string, string>();
+  const queue = addresses.slice(0, IMAGES_READ);
+  let bytes = 0;
+  const reader = async () => {
+    for (let address = queue.shift(); address !== undefined; address = queue.shift()) {
+      if (bytes >= IMAGE_BYTES) return;
+      try {
+        const found = await core().readDocumentImage(root, at, named(address));
+        bytes += found.size;
+        if (bytes > IMAGE_BYTES) return;
+        if (found.mime.startsWith("image/")) read.set(address, `data:${found.mime};base64,${found.data}`);
+      } catch {
+        // Not an image the document may draw: it shows as its text.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, reader));
+  return read;
+}
+
+/** A file read for the viewer. A Markdown document in the project at
+    `root` draws the images it names by a path relative to itself from the
+    project; one outside it, or with no project, draws only those from the
+    web or written in it. */
+export async function load(path: string, root: string | null = null): Promise<Loaded> {
   try {
     const found: Media = await core().readMedia(path);
     if (found.mime === "text/markdown") {
-      return { mime: found.mime, html: render(decode(found.data)) };
+      const markdown = decode(found.data);
+      const first = drawDocument(markdown, new Map());
+      const at = root === null ? null : relativeTo(path, root);
+      if (root === null || !at || first.wanted.length === 0) return { mime: found.mime, html: first.html };
+      const images = await readImages(root, at, first.wanted);
+      return { mime: found.mime, html: images.size === 0 ? first.html : render(markdown, images) };
     }
     if (found.mime === "text/html") {
       return { mime: found.mime, page: decode(found.data) };
