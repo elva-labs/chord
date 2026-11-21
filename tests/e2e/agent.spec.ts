@@ -495,6 +495,18 @@ async function open(page: Page, options: FakeOptions = {}) {
   await expect(page.locator(AGENT)).toBeVisible();
 }
 
+/** The agent pane's empty state stands its message over its one button,
+    both centred across the pane. */
+async function centredOverButton(page: Page, button: string) {
+  const pane = (await page.locator(AGENT).boundingBox())!;
+  const message = (await page.locator(`${AGENT} [data-testid='agent-status'] .message`).boundingBox())!;
+  const action = (await page.getByTestId(button).boundingBox())!;
+  const middle = pane.x + pane.width / 2;
+  expect(Math.abs(message.x + message.width / 2 - middle)).toBeLessThanOrEqual(1);
+  expect(Math.abs(action.x + action.width / 2 - middle)).toBeLessThanOrEqual(1);
+  expect(action.y).toBeGreaterThanOrEqual(message.y + message.height);
+}
+
 test.describe("with no project", () => {
   test.beforeEach(async ({ page }) => {
     await open(page);
@@ -515,6 +527,7 @@ test.describe("with no project", () => {
   test("says so first, offers only to open a project, and has no changes pane", async ({ page }) => {
     await expect(page.getByTestId("agent-status")).toHaveText(/^Open a project to start\.\s*Open/);
     await expect(page.getByTestId("empty-open")).toBeVisible();
+    await centredOverButton(page, "empty-open");
     await expect(page.getByTestId("start-agent")).toHaveCount(0);
     await expect(page.locator("section[data-pane='changes']")).toBeHidden();
   });
@@ -562,6 +575,7 @@ test.describe("one project", () => {
     expect(await spawnCount(page)).toBe(0);
 
     await expect(page.getByTestId("start-agent")).toHaveText("New session");
+    await centredOverButton(page, "start-agent");
     await page.getByTestId("start-agent").click();
     await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "new");
     await expect(page.getByTestId("palette-row").and(page.locator("[data-kind='ready']"))).toBeVisible();
@@ -2205,6 +2219,17 @@ test.describe("the palettes", () => {
       await expect(entries(page)).toHaveCount(0);
     });
 
+    test("narrows to the one session a word names", async ({ page }) => {
+      await page.evaluate(() => window.__fake.emit("pty-1", "\x1b]0;\u2733 retry\x07"));
+      await expect(sessionBox(page, 1).locator(".label").first()).toHaveText("retry");
+      await page.keyboard.press(GOTO);
+      await page.keyboard.type("retry");
+      await expect(kind(page, "session")).toHaveCount(1);
+      await page.keyboard.press("Enter");
+      await expect(page.getByTestId(PALETTE)).toHaveCount(0);
+      await expect(onSession(page, 1)).toHaveCount(1);
+    });
+
     test("brings a project forward", async ({ page }) => {
       await expect(page.locator(".project.on")).toContainText("one");
       await page.keyboard.press(GOTO);
@@ -2529,6 +2554,7 @@ test.describe("a new session from the palette", () => {
   const entries = (page: Page) => page.getByTestId("palette-row");
   const chosen = (page: Page) => page.locator("[data-testid='palette-row'][aria-selected='true']");
   const ready = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='ready']");
+  const chips = (page: Page) => page.getByTestId("palette-chip");
   const change = (page: Page) => page.locator("[data-testid='palette-row'][data-kind='change']");
   /** The new session command, up to the step it opens on. */
   const askNew = async (page: Page, command = "new session") => {
@@ -2554,16 +2580,28 @@ test.describe("a new session from the palette", () => {
     await page.keyboard.press("Enter");
 
     await expect(page.getByTestId("palette")).toBeVisible();
+    await expect(chips(page)).toHaveText(["New session"]);
     await expect(field(page)).toBeFocused();
     await expect(field(page)).toHaveValue("");
     await expect(field(page)).toHaveAttribute("placeholder", "Which project");
     // The project on screen leads, with the cursor on it.
+    await expect(page.getByTestId("palette-group")).toHaveCount(0);
     await expect(entries(page).first()).toContainText("one");
     await expect(chosen(page)).toContainText("one");
 
     // The project answered, the defaults are one Enter away.
     await page.keyboard.press("Enter");
     await expect(ready(page)).toBeVisible();
+    await expect(chips(page)).toHaveText(["New session", "one"]);
+    // The chips stand inside the field's row, before the text.
+    const last = (await chips(page).last().boundingBox())!;
+    const first = (await chips(page).first().boundingBox())!;
+    const input = (await field(page).boundingBox())!;
+    const dialog = (await page.getByTestId("palette").boundingBox())!;
+    expect(last.x + last.width).toBeLessThanOrEqual(input.x + 1);
+    expect(first.x).toBeGreaterThanOrEqual(dialog.x);
+    expect(Math.abs(first.y + first.height / 2 - (input.y + input.height / 2))).toBeLessThanOrEqual(1);
+    expect(input.x + input.width).toBeLessThanOrEqual(dialog.x + dialog.width);
     await expect(chosen(page)).toHaveAttribute("data-kind", "ready");
     await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
     await page.keyboard.press("Enter");
@@ -2706,8 +2744,10 @@ test.describe("a new session from the palette", () => {
     await page.keyboard.press("Enter");
     await expect(ready(page)).toBeVisible();
     await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
+    await expect(chips(page)).toHaveText(["New session", "two"]);
     await askChange(page);
     await expect(field(page)).toHaveAttribute("placeholder", "How should it run");
+    await expect(chips(page)).toHaveText(["New session", "two"]);
     await expect(entries(page)).toHaveCount(2);
     await expect(entries(page).first()).toContainText("Claude Code");
     await expect(chosen(page)).toContainText("Claude Code");
@@ -2718,15 +2758,20 @@ test.describe("a new session from the palette", () => {
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Backspace");
     await expect(entries(page)).toHaveCount(2);
+    await expect(chips(page)).toHaveCount(2);
     await expect(ready(page)).toHaveCount(0);
     await page.keyboard.press("Backspace");
     await expect(ready(page)).toBeVisible();
+    await expect(chips(page)).toHaveText(["New session", "two"]);
     await expect(field(page)).toBeFocused();
     await page.keyboard.press("Backspace");
     await expect(field(page)).toHaveAttribute("placeholder", "Which project");
+    await expect(chips(page)).toHaveText(["New session"]);
+    await expect(page.getByTestId("palette-group")).toHaveCount(0);
     await expect(entries(page)).toHaveCount(2);
     await page.keyboard.press("Backspace");
     await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "commands");
+    await expect(chips(page)).toHaveCount(0);
     await expect(page.getByTestId("palette-prefix")).toBeVisible();
     await expect(field(page)).toHaveValue("new session");
     await expect(chosen(page)).toContainText("New session");
@@ -2815,9 +2860,17 @@ test.describe("a new session from the palette", () => {
     expect((await spawns(page))[0]).toMatchObject({ agent: "claude-code", model: "fable" });
     expect((await spawns(page))[0].instructions).toContain('workflow "Build and review"');
 
-    // An agent picked from the same question is that agent alone.
+    // Change offers the workflow first, above the agents, with the cursor
+    // on it; an agent picked from the same question is that agent alone.
     await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
-    await startWith(page, "Codex");
+    await change(page).click();
+    await expect(entries(page).first()).toContainText("Build and review");
+    await expect(chosen(page)).toContainText("Build and review");
+    const flow = (await entries(page).first().boundingBox())!;
+    const agentRow = (await paletteChoice(page, "Claude Code").boundingBox())!;
+    expect(flow.y + flow.height).toBeLessThanOrEqual(agentRow.y + 1);
+    await paletteChoice(page, "Codex").click();
+    await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawnCount(page)).toBe(2);
     expect((await spawns(page))[1].agent).toBe("codex");
     expect((await spawns(page))[1].instructions).toBeUndefined();
