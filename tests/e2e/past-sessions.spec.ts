@@ -194,48 +194,61 @@ test("lists the past sessions last, behind a fold that opens and closes", async 
 
 // The fold counts the sessions this window does not list as well. Open, it
 // ends on a row that opens the dialog to resume them from.
-test("counts the sessions the window does not list, and opens the resume dialog from the fold", async ({ page }) => {
-  const now = Math.floor(Date.now() / 1000);
-  const HOUR = 60 * 60;
-  const own = ["in-front", "left-1", "past-1", "left-2", "past-2", "left-3"];
-  await installFakeCore(page, {
-    open: [PROJECT],
-    transcripts: [...own, "elsewhere-1"].map((id, hours) => ({
-      id,
-      modified: now - hours * HOUR,
-      size: 100,
-      title: id,
-    })),
-  });
-  await page.addInitScript(
-    ({ project, ids }) => {
-      if (localStorage.getItem("chord.open") !== null) return;
-      localStorage.setItem("chord.mine", JSON.stringify({ [project]: ids }));
-      localStorage.setItem(
-        "chord.open",
-        JSON.stringify({
-          open: ids
-            .filter((id: string) => !id.startsWith("past"))
-            .map((id: string) => ({ project, id, agent: "claude-code", startIn: null, model: null })),
-          active: "in-front",
-        }),
-      );
-    },
-    { project: PROJECT, ids: own },
-  );
-  await page.goto("/");
-  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
+for (const look of ["modern", "terminal"] as const) {
+  test(`counts the sessions the window does not list, and opens the resume dialog from the fold, in the ${look} look`, async ({ page }) => {
+    const now = Math.floor(Date.now() / 1000);
+    const HOUR = 60 * 60;
+    const own = ["in-front", "left-1", "past-1", "left-2", "past-2", "left-3"];
+    await installFakeCore(page, {
+      open: [PROJECT],
+      settings: { look },
+      transcripts: [...own, "elsewhere-1"].map((id, hours) => ({
+        id,
+        modified: now - hours * HOUR,
+        size: 100,
+        title: id,
+      })),
+    });
+    await page.addInitScript(
+      ({ project, ids }) => {
+        if (localStorage.getItem("chord.open") !== null) return;
+        localStorage.setItem("chord.mine", JSON.stringify({ [project]: ids }));
+        localStorage.setItem(
+          "chord.open",
+          JSON.stringify({
+            open: ids
+              .filter((id: string) => !id.startsWith("past"))
+              .map((id: string) => ({ project, id, agent: "claude-code", startIn: null, model: null })),
+            active: "in-front",
+          }),
+        );
+      },
+      { project: PROJECT, ids: own },
+    );
+    await page.goto("/");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
 
-  const fold = page.getByTestId("earlier-fold");
-  await expect(fold).toHaveText("Earlier · 4");
-  await expect(page.getByTestId("earlier-sessions")).toHaveCount(0);
-  await fold.click();
-  await expect(fold).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByTestId("earlier-sessions")).toHaveText("1 not listed here…");
-  await page.getByTestId("earlier-sessions").click();
-  await expect(page.getByTestId("resume")).toBeVisible();
-  await expect(page.getByTestId("resume-filter")).toBeFocused();
-});
+    const fold = page.getByTestId("earlier-fold");
+    await expect(fold).toHaveText("Earlier · 4");
+    await expect(page.getByTestId("earlier-sessions")).toHaveCount(0);
+    await fold.click();
+    await expect(fold).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByTestId("earlier-sessions")).toHaveText("1 more from before…");
+    // Both lines sit in a session row's columns: the glyph centred under
+    // the dots, the words where the names start.
+    const dot = await page.locator("[data-ordinal] .dot").first().boundingBox();
+    const name = await page.locator("[data-ordinal] .first .label").first().boundingBox();
+    for (const line of [fold, page.getByTestId("earlier-sessions")]) {
+      const glyph = await line.locator(".chev").boundingBox();
+      const words = await line.locator(".fold-text").boundingBox();
+      expect(Math.abs(glyph!.x + glyph!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThanOrEqual(1);
+      expect(Math.abs(words!.x - name!.x)).toBeLessThanOrEqual(1);
+    }
+    await page.getByTestId("earlier-sessions").click();
+    await expect(page.getByTestId("resume")).toBeVisible();
+    await expect(page.getByTestId("resume-filter")).toBeFocused();
+  });
+}
 
 test("resumes a past session in the worktree the app made for it as its own", async ({ page }) => {
   const now = Math.floor(Date.now() / 1000);

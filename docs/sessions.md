@@ -263,9 +263,10 @@ than three rows with nothing running, the first two stand and the rest fold
 away. One quiet line at the end of the project's list counts what is out of
 sight, such as `Earlier · 8`, with a chevron like every other fold: the
 rows folded away and, under the project on screen, the
-[sessions not listed](#past-sessions) as well. Opened, the line stays where
-it is with the rows it holds under it, then a row that opens the sessions
-not listed, and closes them away again. With nothing folded away, the line
+[sessions not listed](#past-sessions) as well. Its chevron stands under the
+rows' dots and its words where their names start. Opened, the line stays where
+it is with the rows it holds under it, then a row such as `1 more from
+before…` that opens the sessions not listed, and closes them away again. With nothing folded away, the line
 opens the sessions not listed itself. Every row's name starts at the same
 place, past its dot. No row says which agent it runs.
 

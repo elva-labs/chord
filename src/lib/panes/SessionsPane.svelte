@@ -2169,7 +2169,7 @@
           <svg class="chev history" viewBox="0 0 16 16" aria-hidden="true"
             ><path d="M2.8 8a5.2 5.2 0 1 0 1.5-3.7" /><path d="M2.6 2.6v2.6h2.6" /><path d="M8 5.2V8l1.9 1.2" /></svg
           >
-          <span class="fold-text">{outside} not listed here…</span>
+          <span class="fold-text">{outside} more from before…</span>
         </button>
       {/if}
     {/if}
@@ -3441,13 +3441,25 @@
   }
 
   /* The rows that count what a project keeps out of sight, the tail of
-     its quiet rows and its earlier sessions: the chevron in the names'
-     column, in the quieter hand. */
+     its quiet rows and its earlier sessions, in the quieter hand: laid
+     out in a session row's columns, the glyph centred under the dots and
+     the words where the names start. */
   .fold.tail {
+    display: grid;
+    grid-template-columns: calc(var(--dot) + 10px) minmax(0, 1fr);
+    column-gap: 7px;
+    justify-items: start;
     margin: 0;
-    padding: var(--row-pad-y) var(--row-pad-x) var(--row-pad-y)
-      calc(var(--row-inset) + var(--row-pad-x) + var(--dot) + 10px);
+    padding: var(--row-pad-y) var(--row-pad-x) var(--row-pad-y) calc(var(--row-inset) + var(--row-pad-x));
     font-size: var(--fold-size);
+  }
+
+  .fold.tail .chev {
+    margin: 0 0 0 calc(var(--dot) / 2 - 7px);
+  }
+
+  .fold.tail .chev.history {
+    margin-left: calc(var(--dot) / 2 - 6.5px);
   }
 
   .fold-text {
