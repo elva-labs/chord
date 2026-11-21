@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     autoResume,
-    choose,
+    chooseHere,
     continueAfterLimit,
     followed,
     offered,
@@ -15,9 +15,10 @@
    * The usage limit refused the conversation's last turn: a calm line over
    * the composer that says so and when it resets, until another turn
    * begins. Where the conversation can go on by itself, its one button
-   * turns that on and waits for this turn, as the composer's auto-resume
-   * does; while it waits, the line says when it goes on and the button
-   * cancels. It never takes the keyboard.
+   * turns that on for this conversation alone and waits for this turn;
+   * while it waits, the line says when it goes on and the button cancels,
+   * for this conversation alone too. The choice a new conversation takes
+   * is left as it was. It never takes the keyboard.
    */
   interface Props {
     sessionKey: string;
@@ -74,16 +75,16 @@
 </script>
 
 {#if stopped !== null}
-  <div class="limit" role="group" aria-labelledby="limit-line-{sessionKey}" data-testid="usage-limit-notice">
-    <p class="line" id="limit-line-{sessionKey}" data-testid="usage-limit-line">{line}</p>
+  <div class="limit" data-testid="usage-limit-notice">
+    <p class="line" data-testid="usage-limit-line">{line}</p>
     {#if waiting && own}
-      <button class="quiet" type="button" onclick={() => choose(sessionKey, false)} data-testid="usage-limit-cancel">Cancel</button>
+      <button class="quiet" type="button" onclick={() => chooseHere(sessionKey, false)} data-testid="usage-limit-cancel">Cancel</button>
     {:else if !waiting && waitable}
       <button
         class="primary"
         type="button"
         onclick={() => continueAfterLimit(sessionKey)}
-        title="Turns auto-resume on: the conversation goes on by itself, from its notes, when the limit resets."
+        title="Turns auto-resume on for this conversation: it goes on by itself, from its notes, when the limit resets."
         data-testid="usage-limit-continue">Continue when it resets</button
       >
     {/if}

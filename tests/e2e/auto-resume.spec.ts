@@ -161,9 +161,12 @@ test("a turn the limit stops says so calmly over the composer, and waits for the
   const [box, field] = await Promise.all([notice.boundingBox(), page.getByTestId("composer-input").boundingBox()]);
   expect(box!.y + box!.height).toBeLessThanOrEqual(field!.y);
   await expect(page.getByTestId("composer-input")).toBeFocused();
-  await expect(page.getByRole("group", { name: /^Usage limit reached/ })).toBeVisible();
+  // Said once, by its live line, and not again as a named group.
+  await expect(notice.locator("[aria-live]")).toHaveText(/^Usage limit reached\. Resets at \d{1,2}[:.]\d{2}( [AP]M)?\.$/);
+  await expect(page.getByRole("group", { name: /^Usage limit reached/ })).toHaveCount(0);
 
-  // Continuing turns auto-resume on and waits for this turn.
+  // Continuing turns auto-resume on for this conversation and waits for
+  // this turn.
   await notice.getByTestId("usage-limit-continue").click();
   await expect(said).toHaveText(/^Continues in (59 min|1 h), when the limit resets\.$/);
   await expect(notice.locator("button")).toHaveText(["Cancel"]);

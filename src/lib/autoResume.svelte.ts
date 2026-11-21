@@ -24,8 +24,9 @@
  * it for good: turned on again there, only a turn the limit cuts short
  * after that is waited for. The notice the conversation shows under the
  * turn the limit cut short is the other way to choose: continuing from it
- * turns the choice on and waits for that turn, and cancelling turns the
- * choice off.
+ * turns the conversation's choice on and waits for that turn, and
+ * cancelling turns it off. Either is this conversation's alone, and the
+ * choice a new conversation takes stays as it was.
  *
  * At the time the window resets, and a minute for the server to agree,
  * the account's usage is read again. The conversation goes on only where
@@ -159,12 +160,21 @@ export function settle(key: string) {
     the next new conversation too. Turned off, what the conversation
     waited for is let go, and so is what the sessions it started did. */
 export function choose(key: string, on: boolean) {
-  autoResume.rows[key] = on;
-  if (!on) forget(key);
   if (autoResume.next !== on) {
     autoResume.next = on;
     persist({ autoResume: on });
   }
+  chooseHere(key, on);
+}
+
+/** The user chose on the notice of the turn the limit cut short: the
+    choice is this conversation's alone, and the next new conversation
+    still takes the last one made on a composer. Turned off, what the
+    conversation waited for is let go, and so is what the sessions it
+    started did. */
+export function chooseHere(key: string, on: boolean) {
+  autoResume.rows[key] = on;
+  if (!on) forget(key);
   look();
 }
 
@@ -231,14 +241,14 @@ export function limitEnded(key: string, window: string | null, resetsAt: number 
 }
 
 /** The user chose, on the notice of the turn the limit cut short, that
-    the conversation goes on when it resets: the choice is turned on, as on
-    the composer, and that turn is waited for. False where there is no
-    such turn to wait for. */
+    the conversation goes on when it resets: its own choice is turned on,
+    and that turn is waited for. False where there is no such turn to wait
+    for. */
 export function continueAfterLimit(key: string): boolean {
   const at = autoResume.limited[key];
   const session = byKey(key);
   if (at === undefined || session === null || !offered(session) || followed(session) !== null) return false;
-  choose(key, true);
+  chooseHere(key, true);
   autoResume.stopped[key] = { resetsAt: at, going: false };
   watch();
   look();

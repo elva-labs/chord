@@ -914,7 +914,8 @@ was reached and when it resets, until another turn begins. It never takes
 the keyboard. Where the conversation is offered going on by itself, the
 line has one button, Continue when it resets, which turns that choice on
 and waits for the reset; while it waits the line says when it goes on and
-the button is Cancel.
+the button is Cancel. Both are this conversation's choice alone: the one
+a new conversation takes stays as it was.
 
 A conversation whose turn the session window's limit cut short can go on
 by itself once that window starts over. It is the conversation's own

@@ -31,6 +31,7 @@ const {
   autoResume,
   autoResumeSettings,
   choose,
+  chooseHere,
   continueAfterLimit,
   followed,
   isOn,
@@ -295,12 +296,20 @@ describe("going on from the usage limit's notice", () => {
     expect(continueAfterLimit("a")).toBe(true);
     expect(isOn(one)).toBe(true);
     expect(resumesAt(one)).toBe(RESET * 1000);
+    // The choice is this conversation's alone: a new one takes the last
+    // made on a composer, as before.
+    expect(autoResume.next).toBe(false);
+    expect(isOn(row({ key: "b" }))).toBe(false);
     // Cancelled, the choice is off and the notice can wait again.
-    choose("a", false);
+    chooseHere("a", false);
     expect(resumesAt(one)).toBeNull();
     expect(autoResume.limited.a).toBe(RESET * 1000);
     expect(continueAfterLimit("a")).toBe(true);
     expect(resumesAt(one)).toBe(RESET * 1000);
+    // Cancelling there leaves a new conversation's choice on, where it was.
+    autoResume.next = true;
+    chooseHere("a", false);
+    expect(autoResume.next).toBe(true);
   });
 
   it("waits for nothing after a week's limit, a limit with no time, a turn that began, or for a session another started", () => {
