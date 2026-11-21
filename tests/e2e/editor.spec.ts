@@ -1859,6 +1859,17 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     const started = page.locator(`${SESSIONS} .session.kid`);
     await expect(started).toContainText("Bump the client");
     await expect(started).toContainText("demo");
+    // Both agents title their sessions alike, so the two rows read the
+    // same in two projects.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __spawns: { ptyId: string }[];
+        __say: (id: string, text: string) => void;
+      };
+      for (const spawn of w.__spawns) w.__say(spawn.ptyId, "\x1b]0;\u2733 release\x07");
+    });
+    await expect(started.locator(".label").first()).toHaveText("release");
+    await expect(page.locator(`${SESSIONS} [data-row^='session:'] .label`).filter({ hasText: "release" })).toHaveCount(2);
 
     // Unsaved edits beside the started session, in editor mode.
     await started.getByTestId("started-session").click();
@@ -1869,7 +1880,7 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     await started.hover();
     await started.getByTestId("close-session").click();
     const strip = page.getByTestId("close-owner");
-    await expect(strip).toContainText("Close Bump the client with unsaved edits?");
+    await expect(strip).toContainText("Close release in demo with unsaved edits?");
     await expect(strip).toContainText("README.md");
     await expect(page.getByTestId("close-owner-cancel")).toBeFocused();
     await page.keyboard.press("Escape");
