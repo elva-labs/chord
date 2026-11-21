@@ -73,6 +73,7 @@ import {
   reopeningRow,
   isViewed,
   keysStillIn,
+  knownName,
   label,
   toldName,
   sessionModelName,
@@ -2576,7 +2577,7 @@ function sessionLines(request: Placed): string {
       session.id !== null &&
       mine(request, session) &&
       (only === null || session.project === only) &&
-      named(label(session)),
+      named(knownName(session)),
   );
   const gone = (conductor.started[caller] ?? []).filter(
     (entry) =>
@@ -2590,11 +2591,14 @@ function sessionLines(request: Placed): string {
   const more = over.length - shown.length;
   const news = laterNews(caller);
   const owed = laterWaiting(caller);
-  if (listed.length === 0 && gone.length === 0 && news.calls.length === 0 && owed.length === 0)
+  if (listed.length === 0 && gone.length === 0 && news.calls.length === 0 && owed.length === 0) {
+    const where = only === null ? "" : " in that project";
     return words.length > 0 && (conductor.started[caller] ?? []).length > 0
-      ? "None of the sessions you started has those words in its name."
-      : "You have started no sessions.";
-  const wayBack = "Start, naming its session, resumes any of them, listed or not, and a line sent to one put away resumes it as well.";
+      ? `None of the sessions you started${where} has those words in its name.`
+      : `You have started no sessions${where}.`;
+  }
+  const wayBack =
+    "Any of them, listed or not, resumes through start with session set to its id, and one put away through send as well.";
   const lines = [
     ...news.lines,
     ...owed.map((one) =>
@@ -2604,7 +2608,7 @@ function sessionLines(request: Placed): string {
     ),
     ...listed.map(describe),
     ...sinceRestart.map((entry) => describeGone(caller, entry)),
-    ...shown.map(describeOver),
+    ...shown.map((entry) => describeOver(caller, entry)),
     ...(more > 0
       ? [`${more} more that are over, from longer ago: call sessions with all: true to list them, or with find and words of a name. ${wayBack}`]
       : shown.length > 0
@@ -2655,10 +2659,15 @@ function describeGone(owner: string, entry: Started): string {
 }
 
 /** A session that is over, as a listing gives it in short: its id, its
-    name when it has one, and why it is not running. */
-function describeOver(entry: Started): string {
+    name when it has one, its place in the workflow when it had one, and
+    why it is not running. */
+function describeOver(owner: string, entry: Started): string {
   const name = sessions.names[entry.id] ?? entry.name;
-  return [idText(entry.id), ...(name === null ? [] : [quotedName(name)]), goneState(entry)].join("  ");
+  const parts = [idText(entry.id), ...(name === null ? [] : [quotedName(name)])];
+  const at = placed(owner, entry.id);
+  if (at !== null) parts.push(placeText(at));
+  parts.push(goneState(entry));
+  return parts.join("  ");
 }
 
 /** Whether a remembered session is over: its row went in a window, put
