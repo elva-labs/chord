@@ -2,9 +2,7 @@
 
 <kbd>Cmd</kbd><kbd>,</kbd> opens the settings (<kbd>Ctrl</kbd><kbd>,</kbd> on Windows and Linux). A choice applies at once, and every window on the machine follows it. The [settings reference](reference/settings.md) describes each one in full.
 
-![The settings over the workbench, with the tabs down the left and the Appearance tab open.](settings.png)
-
-The tabs are Appearance, Live updates, Sessions, Workflows, Accounts, Plugins, Keys and Notifications.
+![The settings over the workbench, open on the appearance settings.](settings.png)
 
 ## Appearance
 
@@ -40,8 +38,8 @@ How the app learns what an agent is doing: by watching the files, or through age
 
 ## Sessions
 
-- **Terminal or integrated**, for each agent: the agent's own interface, or a conversation the window draws. A terminal to begin with. [Sessions](sessions.md#integrated-sessions) says what the difference is.
-- **What a new session starts on**: the model, effort and mode you last chose for that agent. Use defaults goes back to the agent's own.
+- **In a terminal or in Chord**, for each agent: the agent's own interface, or a conversation the window draws. In a terminal to begin with. [Sessions](sessions.md#integrated-sessions) says what the difference is.
+- **What a new session starts on**: the model, effort and mode you last chose for that agent. They can be put back to the agent's own.
 - **Asking before a session starts another**: off to begin with, so a session may start one in its own project without asking. Turned on, every start is put to you.
 - **How long past sessions stay listed**: forever, 30 days, 7 days or 1 day. Older ones are still there to resume behind the row of earlier sessions.
 - **How long an unused project stays in the list**: 1 day, 7 days, 30 days or never, 7 days to begin with.
@@ -60,9 +58,9 @@ An account is a separate login: a Claude Code configuration directory and a Code
 
 Sources of plugins, with a switch for each plugin. Every plugin is off to begin with. See [plugins](plugins.md).
 
-## Keys
+## Shortcuts
 
-The whole table of key chords, with two presets and room for your own. See [focus](focus-model.md).
+The whole table of shortcuts, with two presets and room for your own. See [focus](focus-model.md).
 
 ## Notifications
 
@@ -70,7 +68,7 @@ While the window is in the background, a system notification says when a session
 
 ## An agent changing them
 
-An agent can ask to change the settings when you ask it to, such as a darker look or a chord of your own. Each change is shown to you first, and nothing changes unless you allow it. The hooks, plugins, accounts, notifications and what is asked before a session starts are yours alone to change. See [an agent changing them](reference/settings.md#an-agent-changing-them).
+An agent can ask to change the settings when you ask it to, such as a darker look or a shortcut of your own. Each change is shown to you first, and nothing changes unless you allow it. The hooks, plugins, accounts, notifications and what is asked before a session starts are yours alone to change. See [an agent changing them](reference/settings.md#an-agent-changing-them).
 
 ## Where they are kept
 

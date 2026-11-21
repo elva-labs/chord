@@ -55,4 +55,4 @@ In editor mode the tree keeps a column on the left and the editor takes the rest
 
 <kbd>Cmd</kbd><kbd>=</kbd> and <kbd>Cmd</kbd><kbd>-</kbd> zoom the terminal or editor that has focus, and <kbd>Cmd</kbd><kbd>0</kbd> puts it back. See [zoom](reference/layout.md#zoom).
 
-On Windows and Linux, read <kbd>Ctrl</kbd> for <kbd>Cmd</kbd> throughout. A few chords differ there; [focus](focus-model.md) has the full table.
+On Windows and Linux, read <kbd>Ctrl</kbd> for <kbd>Cmd</kbd> throughout. A few shortcuts differ there; [focus](focus-model.md) has the full table.

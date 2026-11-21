@@ -1,11 +1,10 @@
 # Sessions
 
-A session is one agent at work in one project. Open a folder as a project and start a session in it with the button on the project's header, or resume one the agent had there before. Several projects and sessions run at once, and switching between them stops nothing. Everything below is described in full in the [sessions reference](reference/sessions.md).
+A session is one agent at work in one project. Open a folder as a project and start a session in it, or resume one the agent had there before. Several projects and sessions run at once, and switching between them stops nothing. Everything below is described in full in the [sessions reference](reference/sessions.md).
 
 ## Starting and closing
 
-- The `+` on a project's header starts a session. With both Claude Code and Codex installed, it asks which agent.
-- <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project. <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd> opens the command palette, which can also start a session.
+- Start a session from the project's header or from the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project.
 - The × on a live row stops the session and keeps it in the project's past sessions. Closing a project stops everything running in it.
 - Closing asks first when it would lose unsaved edits or stop a shell that is still running something.
 
@@ -39,19 +38,13 @@ When the app starts again, the sessions that were open come back as yellow rows,
 
 The changes pane follows the session on screen. When the agent moves into a git worktree, the pane shows the changes there and says so in its header. See [following the session](reference/sessions.md#following-the-session).
 
-## Integrated sessions
+<a id="integrated-sessions"></a>
 
-A session runs either in a terminal, with the agent's own interface, or integrated, as a conversation the window draws itself. Which one is a setting for each agent, [sessions](settings.md#sessions), a terminal to begin with. Either way the agent's own login, settings, skills and MCP servers apply, and the conversation is the same one: a session started one way resumes the other.
+## In Chord or in a terminal
 
-In an integrated session:
+A session runs either in a terminal, with the agent's own interface, or in Chord, as a conversation the window draws itself. Which one is a setting for each agent, [sessions](settings.md#sessions), in a terminal to begin with. Either way the agent's own login, settings, skills and MCP servers apply, and the conversation is the same one: a session started one way resumes the other.
 
-- a permission the agent asks for appears over the composer, to allow or deny;
-- images and files can be pasted or dropped into a message;
-- `/` lists the agent's commands, `@` mentions a file, and `!` runs a shell command of your own;
-- a message sent while the agent works waits for the turn, with Send now and Take back;
-- <kbd>Esc</kbd> stops a turn, and <kbd>Esc</kbd> twice in an empty composer goes back to before one of your earlier messages.
-
-[Integrated sessions](reference/sessions.md#integrated-sessions) has all of it, and [integrated](integrated.md) how the agents are driven.
+In Chord, the agent's questions about permissions are answered in the window, its slash commands work, and images and files can go with a message. The [reference](reference/sessions.md#integrated-sessions) has the detail, and [sessions in Chord](integrated.md) how the agents are driven.
 
 ### When the setting is switched
 
@@ -59,7 +52,7 @@ Sessions already open move to the new way once they are at rest, with their conv
 
 ## Subagents on the rail
 
-An integrated Claude Code session's subagents show under its row while they run, each with what it was asked to do and its state. See [subagents on the rail](reference/sessions.md#subagents-on-the-rail).
+A Claude Code session in Chord shows its subagents under its row while they run, each with what it was asked to do and its state. See [subagents on the rail](reference/sessions.md#subagents-on-the-rail).
 
 ## Accounts
 
@@ -75,4 +68,4 @@ A Claude Code conversation that is large and has gone cold, past its prompt cach
 
 ## Dropping files
 
-A file dropped on a terminal types its path there. Dropped on an integrated session, an image goes with the next message and any other file is its path. See [dropping files](reference/sessions.md#dropping-files).
+A file dropped on a terminal types its path there. Dropped on a session in Chord, an image goes with the next message and any other file is its path. See [dropping files](reference/sessions.md#dropping-files).
