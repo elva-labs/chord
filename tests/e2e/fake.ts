@@ -106,12 +106,18 @@ export const STYLES_FILE = "fake.userStyles";
 
 /** The container of the Nth session of a project, whatever it reads as,
     by the number it carries for tests: a row with no name reads "New
-    session". The container carries the `on` class. */
-export const sessionBox = (page: Page, number: number) =>
-  page.locator(`[data-row^='session:'][data-ordinal='${number}']`);
+    session". The number counts within a project, so with two projects
+    open the project's path picks its section. The container carries the
+    `on` class. */
+export const sessionBox = (page: Page, number: number, project?: string) =>
+  (project === undefined
+    ? page
+    : page.getByTestId("project-section").filter({ has: page.locator(`[data-row='project:${project}']`) })
+  ).locator(`[data-row^='session:'][data-ordinal='${number}']`);
 
 /** The row button of the Nth session of a project. */
-export const sessionRowOf = (page: Page, number: number) => sessionBox(page, number).getByTestId("session-row");
+export const sessionRowOf = (page: Page, number: number, project?: string) =>
+  sessionBox(page, number, project).getByTestId("session-row");
 
 /** Starts one session the other way from the defaults, alone, through the
     palette's command for it: an integrated one where sessions run in a

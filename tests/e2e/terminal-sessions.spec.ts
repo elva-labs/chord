@@ -20,7 +20,6 @@ const SESSION = "[data-testid='session-row']";
 /** Cmd on macOS, Ctrl elsewhere. */
 const MOD = "ControlOrMeta";
 
-/** The row of the session with this name, wherever the order puts it. */
 /** A nameless row reads "New session", so "session N" is found by its place: the Nth row. */
 const named = (page: Page, name: string) =>
   sessionRowOf(page, Number(name.replace("session ", "")));
@@ -69,6 +68,21 @@ async function twoSessions(page: Page) {
   await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
 }
 
+/** The Nth session started gets this title from its agent, as Claude Code
+    sets its terminal's title, which names its row. */
+function title(page: Page, number: number, name: string) {
+  return page.evaluate(
+    ({ number, name }) => {
+      const w = window as unknown as {
+        __spawns: { ptyId: string }[];
+        __say: (id: string, text: string) => void;
+      };
+      w.__say(w.__spawns[number - 1].ptyId, `\x1b]0;\u2733 ${name}\x07`);
+    },
+    { number, name },
+  );
+}
+
 /** Closes a session from its row's ×. */
 async function closeSession(page: Page, name: string) {
   await named(page, name).hover();
@@ -83,9 +97,12 @@ test.beforeEach(async ({ page }) => {
 
 test("shows the shells of the session on screen, and keeps every shell as it was across a switch", async ({ page }) => {
   await twoSessions(page);
+  await title(page, 1, "alpha");
+  await title(page, 2, "beta");
+  await expect(sessionBox(page, 2).locator(".label").first()).toHaveText("beta");
   await page.keyboard.press(`${MOD}+j`);
   await expect(page.locator(ROW)).toHaveCount(1);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of beta");
   const two = await typeInto(page, "a");
   await page.locator(`${SLOT}.on`).evaluate((slot) => slot.setAttribute("data-kept", "two"));
   await page.getByTestId("new-terminal").click();
@@ -96,7 +113,7 @@ test("shows the shells of the session on screen, and keeps every shell as it was
   await named(page, "session 1").click();
   await expect(page.locator(TERMINAL)).toBeVisible();
   await expect(page.locator(ROW)).toHaveCount(0);
-  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of New session");
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of alpha");
   await expect(page.getByTestId("terminal-status")).toContainText("No shell open for this session.");
   await expect(page.locator(SLOT)).toHaveCount(2);
   await page.getByTestId("start-terminal").click();
@@ -108,6 +125,7 @@ test("shows the shells of the session on screen, and keeps every shell as it was
   // Back on session 2: its shells, the one it had in front, the same
   // terminal it was, still at its pty.
   await named(page, "session 2").click();
+  await expect(page.getByTestId("terminal-owner")).toHaveText("Shells of beta");
   await expect(page.locator(ROW)).toHaveCount(2);
   await expect(page.locator(ROW).nth(1)).toHaveAttribute("aria-current", "true");
   await page.locator(ROW).first().click();
