@@ -39,7 +39,7 @@
   let drawn = $state<{ svg: string } | { error: string } | null>(null);
 
   /** Which read is the current one: a slow read of an earlier state must
-      not land over a newer one. */
+      not land over a newer one, and stops reading a document's images. */
   let read = 0;
 
   $effect(() => {
@@ -47,7 +47,7 @@
     const project = root;
     reload;
     const current = ++read;
-    void load(file, project).then((result) => {
+    void load(file, project, () => current !== read).then((result) => {
       if (current !== read) return;
       const before = untrack(() => loaded);
       if (before !== null && JSON.stringify(before) === JSON.stringify(result)) return;

@@ -1065,6 +1065,13 @@ describe("the HTML a document may draw", () => {
     expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("alt"))).toEqual(["a"]);
   });
 
+  it("reads no more of a document's images once it is no longer wanted", async () => {
+    project.documents.set("/one/docs.md", "![a](docs/icon.png) ![b](docs/shot.png)");
+    const read = await load("/one/docs.md", "/one", () => true);
+    expect(project.reads).toEqual([]);
+    expect("html" in read && read.html).not.toContain("<img");
+  });
+
   it("reads a tag as a browser does, its case, its entities and a quote in it", () => {
     const box = drawn('<IMG SRC="https://example.com/a.png?x=1&amp;y=2" ALT=\'say "hi" &lt;b&gt;\'> <A HREF=https://example.com>u</A>');
     const image = box.querySelector("img");

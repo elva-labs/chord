@@ -827,13 +827,23 @@ function named(address: string): string {
     is left out. No read is begun once those read come to more than
     `IMAGE_BYTES`: the document names each of them before any address not
     yet begun, and `image` counts them as it draws them, so it can draw
-    none named after them. */
-async function readImages(root: string, at: string, addresses: string[]): Promise<Map<string, ProjectImage>> {
+    none named after them. Nor is one begun once `stale` says the document
+    is no longer wanted. */
+async function readImages(
+  root: string,
+  at: string,
+  addresses: string[],
+  stale: () => boolean,
+): Promise<Map<string, ProjectImage>> {
   const read = new Map<string, ProjectImage>();
   const queue = addresses.slice(0, IMAGES_READ);
   let bytes = 0;
   const reader = async () => {
-    for (let address = queue.shift(); address !== undefined && bytes <= IMAGE_BYTES; address = queue.shift()) {
+    for (
+      let address = queue.shift();
+      address !== undefined && bytes <= IMAGE_BYTES && !stale();
+      address = queue.shift()
+    ) {
       try {
         const found = await core().readDocumentImage(root, at, named(address));
         if (!found.mime.startsWith("image/")) continue;
@@ -850,9 +860,14 @@ async function readImages(root: string, at: string, addresses: string[]): Promis
 
 /** A file read for the viewer. A Markdown document in the project at
     `root` draws the images it names by a path relative to itself from the
-    project; one outside it, or with no project, draws only those from the
-    web or written in it. */
-export async function load(path: string, root: string | null = null): Promise<Loaded> {
+    project, and stops reading them once `stale` says the file is no
+    longer wanted; one outside it, or with no project, draws only those
+    from the web or written in it. */
+export async function load(
+  path: string,
+  root: string | null = null,
+  stale: () => boolean = () => false,
+): Promise<Loaded> {
   try {
     const found: Media = await core().readMedia(path);
     if (found.mime === "text/markdown") {
@@ -860,7 +875,7 @@ export async function load(path: string, root: string | null = null): Promise<Lo
       const first = drawDocument(markdown, new Map());
       const at = root === null ? null : relativeTo(path, root);
       if (root === null || !at || first.wanted.length === 0) return { mime: found.mime, html: first.html };
-      const images = await readImages(root, at, first.wanted);
+      const images = await readImages(root, at, first.wanted, stale);
       return { mime: found.mime, html: images.size === 0 ? first.html : drawDocument(markdown, images).html };
     }
     if (found.mime === "text/html") {
