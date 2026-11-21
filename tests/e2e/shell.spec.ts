@@ -204,7 +204,7 @@ test("opens with three panes and the agent focused", async ({ page }) => {
   await expect(page.locator(SESSIONS)).toBeVisible();
   await expect(page.locator(AGENT)).toBeVisible();
   await expect(page.locator(CHANGES)).toBeVisible();
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
 });
 
@@ -220,14 +220,14 @@ test("gives the agent pane the most room", async ({ page }) => {
 
 test("moves focus between panes by click and by keyboard", async ({ page }) => {
   await page.locator(SESSIONS).click();
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
   await expect(page.locator(SESSIONS)).toHaveClass(/focused/);
 
   await page.keyboard.press(`${MOD}+3`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
 
   await page.keyboard.press(`${MOD}+2`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 });
 
 test("drags the sessions splitter and keeps the width", async ({ page }) => {
@@ -585,7 +585,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     // The first session, by its id, while the second is on screen.
@@ -613,7 +613,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.locator(TREE).focus();
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
@@ -636,7 +636,7 @@ test.describe("the file viewer", () => {
     await expect(page.locator(".session.on")).toContainText("session 1");
     await expect(hunk).toBeVisible();
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   });
 
   // Two sessions that both exist, switched between by picking their rows:
@@ -646,7 +646,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     await sessionRow(page, "session 1").click();
@@ -677,7 +677,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     await sessionRow(page, "session 1").click();
@@ -713,7 +713,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.evaluate((project) => {
       (window as unknown as { __cwds: Record<string, string> }).__cwds = {
         "pty-1": `${project}/.claude/worktrees/feature`,
@@ -747,7 +747,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.locator(TREE).focus();
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
@@ -772,7 +772,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     // The first session, by its id, while the second is on screen.
@@ -804,7 +804,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.getByTestId("new-session").click();
     await expect(page.locator("[data-testid='session-row']")).toHaveCount(2);
     const event = (kind: string, note: string | null = null) =>
@@ -1138,7 +1138,7 @@ test.describe("the file viewer", () => {
       /^\s*▸\s*Processes\s*$/,
     );
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.evaluate(() => {
       const now = Math.floor(Date.now() / 1000);
       (window as unknown as { __processes: unknown }).__processes = {
@@ -1603,7 +1603,7 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await pushView(page, { html: REACHING, open: true });
     const inner = page.frameLocator("[data-testid='plugin-page']");
 

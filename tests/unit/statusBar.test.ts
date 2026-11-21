@@ -58,7 +58,7 @@ describe("the status bar's session words", () => {
     open();
     render(StatusBar);
     await waitFor(() => expect(asked.length).toBeGreaterThan(0));
-    expect(screen.getByTestId("folder-readout")).toHaveTextContent("repo");
+    expect(screen.queryByTestId("folder-readout")).toBeNull();
     expect(screen.queryByTestId("branch-readout")).toBeNull();
   });
 
@@ -71,7 +71,7 @@ describe("the status bar's session words", () => {
     expect(said).toHaveTextContent("");
 
     session.working = true;
-    await waitFor(() => expect(screen.getByTestId("state-readout")).toHaveTextContent("working"));
+    expect(screen.queryByTestId("state-readout")).toBeNull();
     expect(said).toHaveTextContent("");
 
     session.working = false;

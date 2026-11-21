@@ -92,7 +92,7 @@ test("slides the pane in at the left edge, and back a moment after the pointer l
   await slidOut(page);
   expect(Date.now() - away).toBeGreaterThanOrEqual(AWAY_AFTER - 50);
   // The keyboard never moved.
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 });
 
 // A pointer resting where the edge comes to stand under it has not moved
@@ -159,7 +159,7 @@ test("slides in with the keyboard by the bound chord, and Escape returns the key
 
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
   expect(await page.evaluate(() => document.activeElement?.closest("[data-pane]")?.getAttribute("data-pane"))).toBe(
     "sessions",
   );
@@ -170,14 +170,14 @@ test("slides in with the keyboard by the bound chord, and Escape returns the key
 
   await page.keyboard.press("Escape");
   await slidOut(page);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 
   // The chord again sends it back too.
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
   await page.keyboard.press(PRESS_BOUND);
   await slidOut(page);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 });
 
 test("picking a session sends the pane back, the keyboard in its agent", async ({ page }) => {
@@ -190,16 +190,16 @@ test("picking a session sends the pane back, the keyboard in its agent", async (
   await expect(rows).toHaveCount(2);
   await rows.last().click();
   await slidOut(page);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 
   // Picking the project sends it back too, the keyboard where it was.
   await page.keyboard.press(`${MOD}+3`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
   await page.locator(`${SESSIONS} [data-row="project:${PROJECT}"]`).click();
   await slidOut(page);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
 });
 
 test("goes to a session from the palette without showing the pane", async ({ page }) => {
@@ -208,7 +208,7 @@ test("goes to a session from the palette without showing the pane", async ({ pag
   await startSession(page);
   await page.keyboard.press(`${MOD}+p`);
   await page.keyboard.press("Enter");
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   await slidOut(page);
 });
 
@@ -282,7 +282,7 @@ async function pixel(page: Page, x: number, y: number): Promise<string> {
 for (const look of ["modern", "terminal"] as const)
   test(`stands over the focused card's mark, in the ${look} look`, async ({ page }) => {
     await start(page, { look, appearance: "light" });
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     // The focused pane's mark: the card's top edge in the modern look, the
     // box's border in the terminal look.
     const card = await boxOf(page, look === "modern" ? `${AGENT} > .body` : AGENT);
@@ -373,7 +373,7 @@ test("takes a question in the pane away with it, by the chord, Cmd+B or a change
   await page.keyboard.press(PRESS_BOUND);
   await slidOut(page);
   await expect(question).toHaveCount(0);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   // Back again, nothing waits.
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
@@ -496,7 +496,7 @@ test("peeks over the focused card's mark while reviewing", async ({ page }) => {
   await page.locator("[data-testid='file-tree']").getByText("mod.rs", { exact: true }).click();
   await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
   await page.keyboard.press(`${MOD}+2`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   // The columns ease into the reviewing shape: the card is read once they
   // are at rest.
   await columnsAtRest(page);
@@ -511,7 +511,7 @@ test("peeks over the focused card's mark while reviewing", async ({ page }) => {
   // Read where the peeked pane stands over the agent's card.
   const x = Math.round(card.x + 30);
   expect(x).toBeLessThan((await boxOf(page, pane)).x + (await boxOf(page, pane)).width);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   expect(await pixel(page, x, y)).not.toBe(mark);
 });
 

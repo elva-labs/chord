@@ -18,6 +18,7 @@
     modelChoices,
     workflowChoices,
   } from "$lib/settingChoices";
+  import { asksFirst } from "$lib/lastChosen.svelte";
   import type { AgentId, Workflow } from "$lib/core";
   import { clock, modelName, tokens } from "$lib/thread";
   import { modelLabel as knownModelLabel } from "$lib/models";
@@ -322,7 +323,8 @@
   let field = $state<HTMLTextAreaElement | null>(null);
   let box = $state<HTMLDivElement | null>(null);
   /** The menu open over the composer's bar, if one is. */
-  let menu = $state<"model" | "effort" | "mode" | "resume" | "workflow" | null>(null);
+  type Setting = "mode" | "effort" | "workflow" | "resume";
+  let menu = $state<"model" | Setting | "more" | null>(null);
   /** It was opened with the pointer rather than a key. */
   let byPointer = $state(false);
   let reading = $state(0);
@@ -665,14 +667,6 @@
 
   let running = $derived(conversation.current !== null || conversation.working);
   let hasWords = $derived(link.draft.trim() !== "" || link.images.length > 0 || link.files.length > 0);
-  /** The keys the empty field names, for what the agent and project take. */
-  let keysSaid = $derived.by(() => {
-    const keys = [slash ? "/ for commands" : null, root !== null ? "@ for files" : null, "! for the shell"].filter(
-      (key) => key !== null,
-    );
-    return `. Type ${keys.join(", ")}`;
-  });
-
   /** The kinds of image the agent takes. */
   const IMAGES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
   const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
@@ -1044,7 +1038,7 @@
     conversation.ready === null && current !== null ? knownModelLabel(agentId, current) : modelName(conversation, current),
   );
   /** The model as the chip says it: which one a default is, once known. */
-  let modelLabel = $derived(name === null ? "Default model" : defaultModel ? `Default · ${name}` : name);
+  let modelLabel = $derived(name === null ? "Default model" : name);
   /** A model chosen during a turn, which the next turn runs on. */
   let after = $derived(conversation.modelAfterTurn);
 
@@ -1116,14 +1110,73 @@
     if (!choosable && untrack(() => menu) === "workflow") menu = null;
   });
 
+  // ---- what shows, and what waits behind the plus ----
+
+  /** One rule for every chip: it shows while its value is away from its
+      default. The mode's default is the one that asks before anything
+      changes; a workflow's and going on's are none and off. The agent names
+      no default effort, so a model's effort always shows. */
+  let away = $derived({
+    mode: mode !== null && !asksFirst(agentId, mode),
+    effort: effort !== null,
+    workflow: choosable && workflow !== null,
+    resume: resumable && (resumeOn || resumes !== null),
+  });
+
+  /** Chips kept while the pointer or the keyboard is in the row or a menu
+      of it is open, so nothing moves under the pointer; they go once the
+      row is left. */
+  let kept = $state({ mode: false, effort: false, workflow: false, resume: false });
+  let pointerIn = $state(false);
+  let focusIn = $state(false);
+  let inRow = $derived(pointerIn || focusIn);
+  $effect(() => {
+    const busy = inRow || menu !== null;
+    for (const which of ["mode", "effort", "workflow", "resume"] as const) {
+      const keep = busy && (away[which] || untrack(() => kept[which]));
+      if (untrack(() => kept[which]) !== keep) kept[which] = keep;
+    }
+  });
+  /** Where the keyboard has gone once a focus change has settled, as when
+      a menu is removed with the focus in it and the owner puts it back. */
+  const settleFocus = (row: HTMLElement) =>
+    setTimeout(() => (focusIn = row.contains(document.activeElement)), 0);
+
+  let showEffort = $derived(away.effort || kept.effort);
+  let showMode = $derived(away.mode || kept.mode);
+  let showWorkflow = $derived(away.workflow || kept.workflow);
+  let showResume = $derived(away.resume || kept.resume);
+
+  /** What the plus offers: the settings the agent and the session take that
+      are not shown. */
+  let more = $derived.by(() => {
+    const list: { value: Setting; name: string; about: string }[] = [];
+    if (modes.length > 0 && mode !== null && !showMode)
+      list.push({ value: "mode", name: "Mode", about: "What the agent may do without asking" });
+    if (choosable && !showWorkflow)
+      list.push({ value: "workflow", name: "Workflow", about: "Who directs, works and reviews" });
+    if (resumable && resumeFollows === null && !showResume)
+      list.push({ value: "resume", name: "Auto-resume", about: "Go on by itself when the usage limit resets" });
+    return list;
+  });
+
+  function pickMore(value: string) {
+    const which = value as Setting;
+    kept[which] = true;
+    menu = which;
+    byPointer = false;
+  }
+
   function closeMenu(how: "escape" | "tab" | "away") {
     const which = menu;
     menu = null;
-    if (how === "escape")
+    if (how === "escape") {
+      focusIn = true;
       void tick().then(() => box?.querySelector<HTMLButtonElement>(`[data-testid='${which}-chip']`)?.focus());
+    }
   }
 
-  function openMenu(which: "model" | "effort" | "mode" | "resume" | "workflow", e: MouseEvent) {
+  function openMenu(which: "model" | "more" | Setting, e: MouseEvent) {
     byPointer = e.detail > 0;
     menu = menu === which ? null : which;
   }
@@ -1395,7 +1448,7 @@
       rows="1"
       placeholder={answers
         ? "↑ to answer, or write a message"
-        : `${conversation.entries.length === 0 ? `Tell ${agent} what to do` : `Reply to ${agent}`}${keysSaid}`}
+        : `Message ${agent}`}
       aria-label="Message to {agent}"
       aria-autocomplete={slash || root !== null ? "list" : undefined}
       aria-controls={back.phase !== null
@@ -1452,7 +1505,14 @@
   {/if}
   <!-- Why a message could not be sent now, or taken back, said aloud. -->
   <p class="sr" aria-live="polite" data-testid="composer-now-said">{link.nowError ?? ""}</p>
-  <div class="bar">
+  <div
+    class="bar"
+    role="group"
+    onpointerenter={() => (pointerIn = true)}
+    onpointerleave={() => (pointerIn = false)}
+    onfocusin={() => (focusIn = true)}
+    onfocusout={(e) => settleFocus(e.currentTarget)}
+  >
     <button
       class="chip bare"
       tabindex="0"
@@ -1504,7 +1564,7 @@
     {#if after !== null}
       <span class="after" data-testid="model-after-turn"><Plain text={modelName(conversation, after) ?? after} /> from the next turn</span>
     {/if}
-    {#if effort !== null}
+    {#if showEffort && effort !== null}
       <div class="picker">
         <!-- In a narrow pane the word goes, and the level stays. -->
         <button
@@ -1532,7 +1592,7 @@
         {/if}
       </div>
     {/if}
-    {#if mode !== null}
+    {#if showMode && mode !== null}
       <div class="picker">
         <button
           class="chip"
@@ -1557,7 +1617,7 @@
         {/if}
       </div>
     {/if}
-    {#if resumable}
+    {#if showResume}
       <div class="picker">
         {#if resumeFollows !== null}
           <!-- A session another started goes by its starter's choice: the
@@ -1601,7 +1661,7 @@
         {/if}
       </div>
     {/if}
-    {#if choosable}
+    {#if showWorkflow}
       <div class="picker">
         <button
           class="chip"
@@ -1626,6 +1686,34 @@
             within={box}
             testid="workflow-menu"
             optionTestid="workflow-option"
+          />
+        {/if}
+      </div>
+    {/if}
+    {#if more.length > 0}
+      <div class="picker">
+        <button
+          class="chip bare"
+          tabindex="0"
+          onclick={(e) => openMenu("more", e)}
+          aria-haspopup="menu"
+          aria-expanded={menu === "more"}
+          aria-label="More settings"
+          title="More settings"
+          data-testid="more-chip"><Icon name="plus" size={13} /></button
+        >
+        {#if menu === "more"}
+          <ChoiceMenu
+            label="More settings"
+            choices={more}
+            onpick={pickMore}
+            onclose={closeMenu}
+            pointer={byPointer}
+            end
+            actions
+            within={box}
+            testid="more-menu"
+            optionTestid="more-option"
           />
         {/if}
       </div>
@@ -1655,7 +1743,9 @@
         <button
           class="round send"
           tabindex="0"
-          onclick={() => submit()}
+          onclick={() => {
+            if (submit()) field?.focus();
+          }}
           disabled={shell !== null ? !ready || shell === "" : !ready || !hasWords || reading > 0 || unlisted}
           aria-label={shell !== null ? "Run" : running ? "Send, to wait for the agent" : "Send"}
           title={shell !== null

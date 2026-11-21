@@ -31,6 +31,7 @@
     refusedAsHeld,
     reopenOtherWay,
     reopeningRow,
+    sessionModelName,
     sessions,
     resumeWithout,
     dismissKept,
@@ -41,7 +42,15 @@
   import { referenced } from "$lib/show.svelte";
   import type { SessionKind } from "$lib/sessionKind.svelte";
   import type { Session } from "$lib/sessions.svelte";
-  import { goOnIfCold, handleOf, launch as launchIntegrated, linkOf, unspoken } from "$lib/integrated.svelte";
+  import {
+    conversationOf,
+    goOnIfCold,
+    handleOf,
+    launch as launchIntegrated,
+    linkOf,
+    unspoken,
+  } from "$lib/integrated.svelte";
+  import { heldModel, modelInUse } from "$lib/settingChoices";
   import { accountOf } from "$lib/accounts.svelte";
   import { conductor, dismissRefusal, runStanding, workflowTag } from "$lib/conductor.svelte";
   import { workspace } from "$lib/workspace.svelte";
@@ -82,6 +91,14 @@
         ? shown(label(current))
         : `Agent · ${agentLabel(current.agent)}`,
   );
+
+  /** The model the session runs on, by the name the composer's chip uses. */
+  let model = $derived.by(() => {
+    if (current === null || !integrated) return current === null ? null : sessionModelName(current);
+    const conversation = conversationOf(current.key);
+    if (current.workflow !== null) return heldModel(conversation, current.workflow);
+    return modelInUse(conversation) ?? sessionModelName(current);
+  });
 
   /** The workflow the session on screen is part of, and its place in it. */
   let tag = $derived(current === null ? null : workflowTag(current));
@@ -244,7 +261,7 @@
   {/if}
 {/snippet}
 
-<Pane id="agent" {title} head={tag !== null ? head : undefined}>
+<Pane id="agent" {title} meta={model ?? undefined} head={tag !== null ? head : undefined}>
   <div class="wrap" bind:this={wrap}>
     {#if refusal !== null && current !== null}
       <!-- What the workflow refused the agent, said to the user too. -->

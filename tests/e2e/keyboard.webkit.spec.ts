@@ -50,22 +50,29 @@ test("reaches and uses every control of the composer by Tab", async ({ page }) =
   await expect(page.getByTestId("model-menu")).toHaveCount(0);
   await page.getByTestId("model-chip").focus();
   await page.keyboard.press("Tab");
-  expect(await focused(page)).toBe("mode-chip");
-  // Before the first message, the workflow: its menu by keyboard too.
-  await page.keyboard.press("Tab");
-  expect(await focused(page)).toBe("workflow-chip");
+  expect(await focused(page)).toBe("more-chip");
   expect(await visiblyFocused(page)).toBe(true);
+  // What waits behind the plus: its menu by keyboard, and the workflow it
+  // brings up, whose menu opens.
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("more-menu")).toBeVisible();
+  expect(await focused(page)).toBe("more-option");
+  await page.getByTestId("more-option").filter({ hasText: "Workflow" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("workflow-menu")).toBeVisible();
   expect(await focused(page)).toBe("workflow-option");
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("workflow-menu")).toHaveCount(0);
   expect(await focused(page)).toBe("workflow-chip");
+  expect(await visiblyFocused(page)).toBe(true);
+  await page.keyboard.press("Tab");
+  expect(await focused(page)).toBe("more-chip");
   await page.keyboard.press("Tab");
   expect(await focused(page)).toBe("send");
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("user-message")).toHaveCount(1);
-  // Sent, the workflow is kept and its chip goes.
+  // Sent, the keyboard is back in the field, so the row is left: the workflow is kept and its chip goes.
+  await expect(input).toBeFocused();
   await expect(page.getByTestId("workflow-chip")).toHaveCount(0);
 });
 

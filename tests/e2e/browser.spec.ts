@@ -419,12 +419,12 @@ test.describe("keeping the keyboard from a browser tab", () => {
 
   test("a click landing in a tab marks the changes pane focused", async ({ page }) => {
     await page.keyboard.press(`${MOD}+2`);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 
     await page.evaluate(() =>
       (window as unknown as { __browserFocused?: () => void }).__browserFocused?.(),
     );
 
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
   });
 });

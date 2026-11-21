@@ -31,6 +31,12 @@ const chip = (page: Page, which = "resume") => page.locator(`[data-testid='${whi
 const option = (page: Page, name: string) =>
   page.getByTestId("resume-option").filter({ has: page.locator(".name", { hasText: new RegExp(`^${name}$`) }) });
 
+/** Brings the auto-resume chip up from behind the plus; its menu opens. */
+async function reveal(page: Page) {
+  await page.getByTestId("more-chip").click();
+  await page.getByTestId("more-option").filter({ hasText: "Auto-resume" }).click();
+}
+
 /** The account's figures hold a session window, used as far as given. */
 const windowed = (page: Page, handle = H, percent = 40) =>
   agent(page, `f.limits("${handle}", [{ kind: "session", percent: ${percent}, resetsAt: now + 3600 }, { kind: "weekly", percent: 12 }]);`);
@@ -55,16 +61,23 @@ test("is offered only where the account has a session window, off until chosen, 
   // No figures yet, and then a week alone: nothing to choose.
   await expect(chip(page)).toHaveCount(0);
   await agent(page, `f.limits("${H}", [{ kind: "weekly", percent: 12 }]);`);
-  await expect(chip(page, "mode")).toBeVisible();
+  await page.getByTestId("more-chip").click();
+  await expect(page.getByTestId("more-option").filter({ hasText: "Auto-resume" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(chip(page)).toHaveCount(0);
   await windowed(page);
+  // Behind the plus until chosen, then a chip of its own.
+  await expect(chip(page)).toHaveCount(0);
+  await reveal(page);
+  await expect(page.getByTestId("resume-menu")).toBeVisible();
+  await page.keyboard.press("Escape");
   const resume = chip(page);
   await expect(resume).toHaveText("Auto-resume off");
-  // Beside the mode, on its line.
-  const [mode, own] = await Promise.all([chip(page, "mode").boundingBox(), resume.boundingBox()]);
-  expect(mode!.x + mode!.width).toBeLessThanOrEqual(own!.x);
-  expect(Math.abs(own!.y - mode!.y)).toBeLessThan(2);
-  expect(Math.abs(own!.height - mode!.height)).toBeLessThan(1);
+  // Beside the model, on its line.
+  const [model, own] = await Promise.all([chip(page, "model").boundingBox(), resume.boundingBox()]);
+  expect(model!.x + model!.width).toBeLessThanOrEqual(own!.x);
+  expect(Math.abs(own!.y - model!.y)).toBeLessThan(2);
+  expect(Math.abs(own!.height - model!.height)).toBeLessThan(1);
 
   await resume.click();
   await expect(page.getByTestId("resume-option").locator(".name")).toHaveText(["Off", "On"]);
@@ -83,13 +96,14 @@ test("is offered only where the account has a session window, off until chosen, 
   // The next new session starts with it on.
   await page.getByTestId("project-new-session").click();
   await expect(page.locator("[data-testid='composer-input']:visible")).toBeFocused();
+  // It is on, so it shows without the plus.
   await expect(chip(page)).toHaveText("Auto-resume on");
 });
 
 test("the row and the chip say when it resumes, until a turn begins or it is turned off", async ({ page }) => {
   await open(page);
   await windowed(page, H, 100);
-  await chip(page).click();
+  await reveal(page);
   await option(page, "On").click();
   await refused(page, 3600);
   const when = page.getByTestId("session-resumes");
@@ -121,8 +135,12 @@ test("the row and the chip say when it resumes, until a turn begins or it is tur
   await chip(page).click();
   await option(page, "Off").click();
   await expect(when).toHaveCount(0);
-  await expect(chip(page)).toHaveText("Auto-resume off");
-  await chip(page).click();
+  // Off is the default, so the chip goes once the row is left and comes
+  // back from the plus.
+  await page.mouse.move(0, 0);
+  await page.getByTestId("composer-input").focus();
+  await expect(chip(page)).toHaveCount(0);
+  await reveal(page);
   await option(page, "On").click();
   await expect(chip(page)).toHaveText("Auto-resume on");
   await expect(when).toHaveCount(0);
@@ -136,7 +154,7 @@ test("goes on by itself from its notes once the usage reads open after the reset
     "From the workbench, not the user: this conversation goes on from an earlier one of yours, which was not read again, since reading all of it with its cache lapsed would cost far more. What you need to go on is below.\n\nBrief:\n> Build the thing.\nEnd of the workbench's briefing.";
   await open(page);
   await windowed(page, H, 100);
-  await chip(page).click();
+  await reveal(page);
   await option(page, "On").click();
   // The core briefs the conversation when asked to, and reads the window
   // as open in figures taken now.

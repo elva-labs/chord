@@ -980,22 +980,35 @@ export function dayName(at: number, now: number = Date.now()): string {
   });
 }
 
-/** The times a thread shows, in the order it shows them, as it writes
-    them: the first time of each day with the day's name, unless every one
-    is today's, and a time marked `day` with it whatever comes before. */
-export function stamps(times: { at: number; day?: boolean }[], now: number = Date.now()): string[] {
+/** How long a thread is quiet before the next entry is set off by its time. */
+export const QUIET_MS = 5 * 60_000;
+
+/** The time written whole, for the hover over an entry and the divider. */
+export function exactTime(at: number): string {
+  return new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "medium" });
+}
+
+/** Where a thread sets a time between its entries: before the first entry
+    that came more than `QUIET_MS` after the one before it, or on another
+    day, and before the first entry when it is not today's. A time is a
+    clock, with the day's name when the day is not today. Keyed by the
+    entry it stands before. */
+export function timeBreaks(
+  entries: { key: string; at: number | null }[],
+  now: number = Date.now(),
+  quiet: number = QUIET_MS,
+): Map<string, string> {
   const dayOf = (at: number) => new Date(at).toDateString();
   const today = dayOf(now);
-  const earlier = times.some((time) => dayOf(time.at) !== today);
-  const named = new Set<string>();
-  return times.map((time) => {
-    const day = dayOf(time.at);
-    const first = !named.has(day);
-    named.add(day);
-    return time.day === true || (first && (earlier || day !== today))
-      ? `${dayName(time.at, now)} ${clock(time.at)}`
-      : clock(time.at);
-  });
+  const breaks = new Map<string, string>();
+  let before: number | null = null;
+  for (const entry of entries) {
+    if (entry.at === null) continue;
+    const apart = before === null ? dayOf(entry.at) !== today : entry.at - before > quiet || dayOf(entry.at) !== dayOf(before);
+    if (apart) breaks.set(entry.key, dayOf(entry.at) === today ? clock(entry.at) : `${dayName(entry.at, now)} ${clock(entry.at)}`);
+    before = entry.at;
+  }
+  return breaks;
 }
 
 /**

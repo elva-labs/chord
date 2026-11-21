@@ -5,7 +5,6 @@
   import { core } from "$lib/core";
   import { flash } from "$lib/flash.svelte";
   import { fits } from "$lib/giveWay";
-  import { conversationOf, linkFor } from "$lib/integrated.svelte";
   import { layout, returnFocus } from "$lib/layout.svelte";
   import {
     ageOf,
@@ -19,54 +18,36 @@
   } from "$lib/limits.svelte";
   import { sessionState } from "$lib/orchestrator.svelte";
   import { hostOf } from "$lib/remote.svelte";
-  import { activeSession, sessionModelName, unreadCount } from "$lib/sessions.svelte";
-  import {
-    choose,
-    effortChoices,
-    effortInUse,
-    effortName,
-    heldModel,
-    modelChoices,
-    modelInUse,
-  } from "$lib/settingChoices";
-  import { projectLabel } from "$lib/workspace.svelte";
-  import ChoiceMenu from "./ChoiceMenu.svelte";
+  import { activeSession, unreadCount } from "$lib/sessions.svelte";
   import Icon from "./conversation/Icon.svelte";
 
   /**
-   * The window's foot. From the left: which pane has the keyboard; what
-   * the session on screen is doing, the folder it works in and its
-   * branch; what it runs on, its model and its effort; the account it
-   * runs under, once there is more than one, with that account's
-   * allowance, the share used of each limit window the agent reported;
-   * and at the right end how many sessions wait for you and a word in
-   * passing, which keep their place whatever the figures do. The window's
-   * mode is the corner's switch to say, so the bar does not.
+   * The window's foot. At the left the branch the session on screen works
+   * on; at its right the account it runs under, once there is more than one,
+   * with that account's allowance, the share used of each limit window the
+   * agent reported, then how many sessions wait for you. A word in passing
+   * keeps its place between the branch and the allowance. The
+   * window's mode is the corner's switch to say, so the bar does not, and
+   * the model, the effort and the mode belong to the composer.
    *
-   * The model and the effort of an integrated session each open a menu of
-   * what the agent offers, and the allowance opens a popover with every
-   * window in full. A press opens one, Escape or a press elsewhere puts it
-   * away, and the keyboard goes back where it was; the keyboard going
-   * elsewhere by a chord puts it away too and stays where it went. What is
-   * open stays above its control as the window changes size. A terminal
-   * session's model is what it was started on, as plain text, since the
-   * agent owns any change there, and so is the model of a session that
-   * follows a workflow, which the workflow sets.
+   * The allowance opens a popover with every window in full. A press opens
+   * it, Escape or a press elsewhere puts it away, and the keyboard goes back
+   * where it was; the keyboard going elsewhere by a chord puts it away too
+   * and stays where it went. What is open stays above its control as the
+   * window changes size.
    *
-   * Short of room, the bar lets its parts go in order: the focus, then the
-   * folder, then the word "account:", then every figure but the one
-   * nearest its end, then the branch, then that figure's reset time. Only
-   * after that is the model or the account's name cut short; what the
-   * session is doing and what waits for you never are. A word in
-   * passing takes no room: it stands in the space before what waits, and
-   * where that space is too short it is drawn over the parts before it
-   * while it shows, so nothing moves for it.
+   * Short of room, the bar lets its parts go in order: the word "account:",
+   * then every figure but the one nearest its end, then the branch, then
+   * that figure's reset time. Only after that is the account's name cut
+   * short; what waits for you never is. A word in passing takes no room: it
+   * stands in the space before the allowance, and where that space is too short
+   * it is drawn over the parts before it while it shows, so nothing moves
+   * for it.
    */
 
   /** What gives way, first to last. */
-  const STEPS = ["chrome", "folder", "prefix", "fold", "branch", "reset"];
+  const STEPS = ["prefix", "fold", "branch", "reset"];
   const POPOVER_WIDTH = 540;
-  const MENU_WIDTH = 320;
   const EDGE = 8;
 
   let now = $state(Date.now());
@@ -80,23 +61,12 @@
   let popover = $state<HTMLElement | null>(null);
 
   let session = $derived(activeSession());
-  let integrated = $derived(session?.kind === "integrated" ? session : null);
-  let conversation = $derived(integrated === null ? null : conversationOf(integrated.key));
-  /** The session takes a change of its settings now, or once the run it
-      is starting again under a workflow just picked is up. */
-  let live = $derived(
-    integrated !== null &&
-      integrated.status === "running" &&
-      (linkFor(integrated.key).handle !== null || linkFor(integrated.key).restarting),
-  );
-
   /** What the session is doing, in the words its row and its dot use. */
   let doing = $derived(session === null ? null : sessionState(session));
   /** What a screen reader is told as the session starts asking: only the
       two states that wait on the user, so working and idle flips stay
       quiet. The words hold while the state does, so nothing is said twice. */
   let asked = $derived(doing === "asks you" || doing === "waits for permission" ? doing : "");
-  let folder = $derived(session === null ? null : projectLabel(session.project));
   /** Where the session works, which is what its branch is read from. */
   let dir = $derived(session === null ? null : (session.worktree ?? session.startIn ?? session.project));
 
@@ -123,21 +93,6 @@
     };
   });
 
-  let model = $derived.by(() => {
-    if (session === null) return null;
-    // Under a workflow, named as the composer's held chip names it.
-    if (integrated !== null && integrated.workflow !== null && conversation !== null)
-      return heldModel(conversation, integrated.workflow);
-    const named = conversation === null ? null : modelInUse(conversation);
-    return named ?? sessionModelName(session);
-  });
-  let effort = $derived(conversation === null ? null : effortInUse(conversation));
-  /** A workflow holds its orchestrator's model, so it is not a choice. */
-  let modelMenu = $derived(
-    live && conversation !== null && integrated?.workflow === null && (conversation.ready?.models.length ?? 0) > 0,
-  );
-  let effortMenu = $derived(live && conversation !== null && conversation.efforts.length > 0);
-
   let account = $derived(session !== null && hasAccounts() ? accountLabel(session.account) : null);
   let report = $derived(session === null ? null : limitsOf(hostOf(session.project), session.agent, session.account));
   let figures = $derived(report === null ? [] : figuresOf(report, now));
@@ -163,7 +118,7 @@
 
   // ---- what opens from the bar ----
 
-  type Opened = "model" | "effort" | "allowance";
+  type Opened = "allowance";
   let open = $state<Opened | null>(null);
   let at = $state({ left: 0, bottom: 0, width: POPOVER_WIDTH });
   /** Where the keyboard was before the bar took it, to give it back. */
@@ -182,8 +137,7 @@
     const foot = bar?.getBoundingClientRect().top ?? window.innerHeight - 26;
     const bottom = window.innerHeight - foot + 6;
     const width = Math.min(POPOVER_WIDTH, window.innerWidth - 2 * EDGE);
-    const wide = which === "allowance" ? width : MENU_WIDTH;
-    const left = Math.max(EDGE, Math.min(box.left - (which === "allowance" ? 10 : 4), window.innerWidth - EDGE - wide));
+    const left = Math.max(EDGE, Math.min(box.left - 10, window.innerWidth - EDGE - width));
     if (left !== at.left || bottom !== at.bottom || width !== at.width) at = { left, bottom, width };
   }
 
@@ -202,7 +156,7 @@
     now = Date.now();
     place(which, button);
     open = which;
-    if (which === "allowance") void tick().then(() => popover?.focus());
+    void tick().then(() => popover?.focus());
   }
 
   /** Puts away what is open; with `restore`, the keyboard goes back where
@@ -230,17 +184,6 @@
     const control = trigger;
     drop();
     control?.focus();
-  }
-
-  function menuClosed(how: "escape" | "tab" | "away") {
-    if (how === "tab") tabAway();
-    else if (how === "escape") close(true);
-    else drop();
-  }
-
-  function pick(setting: "model" | "effort", value: string) {
-    if (integrated !== null && conversation !== null) choose(integrated.key, conversation, setting, value);
-    close(true);
   }
 
   /** The keyboard going elsewhere, by a chord or a click, puts the
@@ -310,11 +253,7 @@
   });
 
   $effect(() => {
-    const gone =
-      (open === "model" && !modelMenu) ||
-      (open === "effort" && !effortMenu) ||
-      (open === "allowance" && figures.length === 0);
-    if (gone) untrack(() => close(true));
+    if (open === "allowance" && figures.length === 0) untrack(() => close(true));
   });
 
   let heading = $derived(account ?? (session === null ? "" : agentLabel(session.agent)));
@@ -337,77 +276,16 @@
 {/snippet}
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<footer class="status no-select" bind:this={bar} use:fits={STEPS} onkeydown={onBarKey} data-testid="status-bar">
-  <span class="focus" data-testid="focus-readout">focus: {layout.focus}</span>
+<footer class="status no-select" bind:this={bar} use:fits={STEPS} onkeydown={onBarKey} data-testid="status-bar" data-focus={layout.focus} data-state={doing}>
   {#if session !== null}
-    <span class="div d1" aria-hidden="true"></span>
     <span class="place" data-testid="session-place">
-      <span class="doing" data-testid="state-readout">{doing}</span>
       <span class="sr" aria-live="polite" data-testid="state-said">{asked}</span>
-      <span class="where folder" title={session.project} data-testid="folder-readout"
-        ><Icon name="folder" size={12} /><span class="txt">{folder}</span></span
-      >
       {#if branch !== null}
         <span class="where branch" title="Branch {branch}" data-testid="branch-readout"
           ><Icon name="branch" size={12} /><span class="txt">{branch}</span></span
         >
       {/if}
     </span>
-    {#if model !== null || effort !== null || account !== null || figures.length > 0}
-      <span class="div" aria-hidden="true"></span>
-    {/if}
-  {/if}
-
-  {#if session !== null && (model !== null || effort !== null)}
-    <span class="sess" data-testid="session-settings">
-      {#if model !== null}
-        {#if modelMenu}
-          <button
-            class="hit"
-            class:open={open === "model"}
-            tabindex="0"
-            onpointerdown={keep}
-            onclick={(e) => toggle("model", e)}
-            aria-haspopup="menu"
-            aria-expanded={open === "model"}
-            title="Change model"
-            data-testid="model-readout">{model}</button
-          >
-        {:else}
-          <span
-            class="plain"
-            title={integrated?.workflow != null
-              ? `Set by ${integrated.workflow.name}`
-              : integrated === null
-                ? "The model the session was started on"
-                : "The model the session runs on"}
-            data-testid="model-readout">{model}</span
-          >
-        {/if}
-      {/if}
-      {#if model !== null && effort !== null}<span class="sepdot" aria-hidden="true">&nbsp;·&nbsp;</span>{/if}
-      {#if effort !== null}
-        {#if effortMenu}
-          <button
-            class="hit"
-            class:open={open === "effort"}
-            tabindex="0"
-            onpointerdown={keep}
-            onclick={(e) => toggle("effort", e)}
-            aria-haspopup="menu"
-            aria-expanded={open === "effort"}
-            aria-label="Effort: {effortName(effort)}"
-            title="Change effort"
-            data-testid="effort-readout">{effortName(effort).toLowerCase()}</button
-          >
-        {:else}
-          <span class="plain" title="The effort the session runs at" data-testid="effort-readout"
-            >{effortName(effort).toLowerCase()}</span
-          >
-        {/if}
-      {/if}
-    </span>
-    {#if account !== null || figures.length > 0}<span class="div" aria-hidden="true"></span>{/if}
   {/if}
 
   {#if session !== null && (account !== null || figures.length > 0)}
@@ -456,35 +334,13 @@
   <span class="grow">
     <span class="flash" class:on={(flash.text ?? flash.held ?? "") !== ""} role="status" data-testid="flash-readout">{flash.text ?? flash.held ?? ""}</span>
   </span>
+
   {#if unreadCount() > 0}
     <span class="waiting" data-testid="waiting-readout">{unreadCount()} waiting for you</span>
   {/if}
 
   <div class="layer" bind:this={layer}>
-    {#if open === "model" && conversation !== null}
-      <ChoiceMenu
-        label="Model"
-        choices={modelChoices(conversation)}
-        note={conversation.current !== null ? "A model chosen now is used from the next turn." : null}
-        onpick={(value) => pick("model", value)}
-        onclose={menuClosed}
-        pointer={byPointer}
-        at={at}
-        testid="status-model-menu"
-        optionTestid="status-model-option"
-      />
-    {:else if open === "effort" && conversation !== null}
-      <ChoiceMenu
-        label="Effort"
-        choices={effortChoices(conversation)}
-        onpick={(value) => pick("effort", value)}
-        onclose={menuClosed}
-        pointer={byPointer}
-        at={at}
-        testid="status-effort-menu"
-        optionTestid="status-effort-option"
-      />
-    {:else if open === "allowance" && report !== null}
+    {#if open === "allowance" && report !== null}
       <div
         bind:this={popover}
         class="pop"
@@ -572,10 +428,6 @@
     flex-shrink: 0;
   }
 
-  .focus {
-    color: var(--accent);
-  }
-
   .waiting,
   .flash {
     color: var(--accent);
@@ -610,12 +462,6 @@
     padding-left: 14px;
   }
 
-  .div {
-    width: 1px;
-    height: 12px;
-    background: var(--rule-strong);
-  }
-
   .layer {
     display: contents;
   }
@@ -629,10 +475,6 @@
     flex: 0 1 auto;
     min-width: 0;
     color: var(--ink-2);
-  }
-
-  .doing {
-    flex: none;
   }
 
   .sr {
@@ -659,61 +501,6 @@
   }
 
   .where .txt {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* ---- the session's model and effort ---- */
-
-  .sess {
-    display: flex;
-    align-items: center;
-    flex: 0 1 auto;
-    min-width: 0;
-    color: var(--ink-2);
-  }
-
-  .plain {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .sepdot {
-    flex: none;
-  }
-
-  /* A control's padding is its hover, bled into the gaps around it, so the
-     text sits where plain text would. */
-  .hit {
-    display: inline-flex;
-    align-items: center;
-    height: 20px;
-    padding: 0 5px;
-    margin: 0 -5px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    font: inherit;
-    color: var(--ink-2);
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .hit:hover,
-  .hit.open {
-    background: var(--hover);
-    color: var(--ink);
-  }
-
-  .hit:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-  }
-
-  .sess .hit {
-    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -795,14 +582,6 @@
   }
 
   /* ---- what gives way ---- */
-
-  .status:global([data-fit~="chrome"]) :is(.focus, .d1) {
-    display: none;
-  }
-
-  .status:global([data-fit~="folder"]) .folder {
-    display: none;
-  }
 
   .status:global([data-fit~="prefix"]) .pre {
     display: none;

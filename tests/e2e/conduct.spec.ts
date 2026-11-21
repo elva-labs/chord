@@ -136,7 +136,7 @@ test.describe("the conductor", () => {
       );
     for (const answer of ["conduct-no", "conduct-once"]) {
       await page.keyboard.press(`${MOD}+1`);
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
       await push(page, {
         id: `c-${answer}`,
         tool: "start",

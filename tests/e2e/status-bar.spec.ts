@@ -110,12 +110,10 @@ async function settled(page: Page, width: number) {
 }
 
 test.describe("the session on screen", () => {
-  test("says its model and effort, then the account with its three windows as text", async ({ page }) => {
+  test("says its branch, then the account with its three windows as text, and nothing of the model, the folder or the focus", async ({ page }) => {
     await open(page, { accounts: WORK });
     await agent(page, `f.configure("${H}", { effort: "high" });`);
     await report(page, THREE, { plan: "team" });
-    await expect(page.getByTestId("model-readout")).toHaveText("Sonnet");
-    await expect(page.getByTestId("effort-readout")).toHaveText("high");
     await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
     await expect(page.getByTestId("limit-figure")).toHaveText(["5h11%", "Week34%", "Fable52%"]);
     // Nothing shouts: every figure is in the bar's own ink, at no more
@@ -125,27 +123,13 @@ test.describe("the session on screen", () => {
       await expect(figure(page, kind)).toHaveAttribute("data-tone", "normal");
       expect(await style(figure(page, kind), "color")).toBe(ink);
     }
-    // In order: the focus, what the session is doing and where, the model
-    // and effort, the account and its figures. The mode is the corner's
-    // switch to say, so the bar does not.
-    await expect(page.getByTestId("state-readout")).toHaveText("idle");
-    await expect(page.getByTestId("folder-readout")).toHaveText("demo");
-    await expect(page.getByTestId("folder-readout")).toHaveAttribute("title", PROJECT);
     await expect(page.getByTestId("branch-readout")).toHaveText("main");
-    await expect(page.getByTestId("status-bar")).not.toContainText(/reviewing|editing/);
+    for (const gone of ["focus-readout", "state-readout", "folder-readout", "model-readout", "effort-readout"])
+      await expect(page.getByTestId(gone)).toHaveCount(0);
+    await expect(bar(page)).not.toContainText(/focus|idle|demo|Sonnet|high|reviewing|editing/);
+    // In order: the branch, then the account and its figures.
     const xs = await Promise.all(
-      [
-        "focus-readout",
-        "state-readout",
-        "folder-readout",
-        "branch-readout",
-        "model-readout",
-        "effort-readout",
-        "account-readout",
-        "limits-readout",
-      ].map(
-        async (id) => (await page.getByTestId(id).boundingBox())!.x,
-      ),
+      ["branch-readout", "account-readout", "limits-readout"].map(async (id) => (await page.getByTestId(id).boundingBox())!.x),
     );
     expect([...xs].sort((a, b) => a - b)).toEqual(xs);
   });
@@ -162,7 +146,7 @@ test.describe("the session on screen", () => {
     const foot = (await bar(page).boundingBox())!;
     const waiting = (await page.getByTestId("waiting-readout").boundingBox())!;
     const figures = (await page.getByTestId("limits-readout").boundingBox())!;
-    expect(waiting.x).toBeGreaterThan(figures.x + figures.width + 100);
+    expect(waiting.x).toBeGreaterThan(figures.x + figures.width);
     expect(foot.x + foot.width - (waiting.x + waiting.width)).toBeLessThan(40);
     // A word in passing stands just before what waits, which stays put.
     await page.keyboard.press("ControlOrMeta+=");
@@ -258,7 +242,7 @@ test.describe("the session on screen", () => {
       { kind: "session", percent: 23, resetsAt: HOUR + 35 * 60 },
       { kind: "weekly", percent: 41, resetsAt: 4 * 24 * HOUR },
     ], { plan: "plus" });
-    await expect(page.getByTestId("model-readout")).toHaveText("GPT-5-Codex");
+    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveText("GPT-5-Codex");
     await expect(page.getByTestId("account-readout")).toHaveText("account: personal");
     await expect(page.getByTestId("limit-figure")).toHaveText(["5h23%", "Week41%"]);
     await page.getByTestId("account-group").click();
@@ -317,12 +301,10 @@ test.describe("a terminal session", () => {
     await page.goto("/");
     await page.getByTestId("start-agent").click();
     await expect(page.locator("section[data-pane='agent'] .xterm")).toBeVisible();
-    const model = page.getByTestId("model-readout");
-    await expect(model).toHaveText("Fable");
-    expect(await model.evaluate((node) => node.tagName)).toBe("SPAN");
-    // The agent may have changed it since, in its own terminal.
-    await expect(model).toHaveAttribute("title", "The model the session was started on");
-    await expect(page.getByTestId("effort-readout")).toHaveCount(0);
+    // The header names the model it was started on; the agent may have
+    // changed it since, in its own terminal.
+    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveText("Fable");
+    await expect(page.getByTestId("model-readout")).toHaveCount(0);
     // No integrated session on the account has said its limits.
     await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
     await expect(page.getByTestId("limit-figure")).toHaveCount(0);
@@ -339,7 +321,7 @@ test.describe("a terminal session", () => {
     await page.getByTestId("new-session").click();
     await page.keyboard.press("Enter");
     await expect(page.locator("section[data-pane='agent'] .xterm").first()).toBeVisible();
-    await expect(page.getByTestId("model-readout")).toHaveCount(0);
+    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveCount(0);
     await expect(page.getByTestId("session-settings")).toHaveCount(0);
     await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
     await expect(page.getByTestId("limit-figure")).toHaveCount(3);
@@ -390,11 +372,12 @@ test.describe("a terminal session", () => {
   });
 });
 
-test("with no session selected, says only the focus and what waits", async ({ page }) => {
+test("with no session selected, says nothing but what waits", async ({ page }) => {
   await installFakeCore(page, { open: [PROJECT], settings: { accounts: WORK } });
   await page.goto("/");
-  await expect(page.getByTestId("focus-readout")).toBeVisible();
+  await expect(page.getByTestId("status-bar")).toBeVisible();
   for (const id of [
+    "focus-readout",
     "state-readout",
     "folder-readout",
     "branch-readout",
@@ -409,15 +392,13 @@ test("with no session selected, says only the focus and what waits", async ({ pa
 
 test.describe("a narrow window", () => {
   const STEPS: [string, string][] = [
-    ["chrome", "focus-readout"],
-    ["folder", "folder-readout"],
     ["prefix", "account-readout"],
     ["fold", "limit-figure"],
     ["branch", "branch-readout"],
     ["reset", "limit-figure"],
   ];
 
-  test("lets the focus go first, then the folder, the prefix, the figures but one, the branch and the reset time, and never cuts the state or what waits", async ({
+  test("lets the prefix go first, then the figures but one, the branch and the reset time, and never cuts what waits", async ({
     page,
   }) => {
     await open(page, { accounts: WORK });
@@ -445,17 +426,13 @@ test.describe("a narrow window", () => {
       expect(taken, `at ${width}`).toEqual(STEPS.slice(0, taken.length).map(([step]) => step));
       if (!seen.includes(fit)) seen.push(fit);
       // What a step hides is hidden, and what it has not reached is drawn.
-      await expect(page.getByTestId("focus-readout")).toBeVisible({ visible: !taken.includes("chrome") });
-      await expect(page.getByTestId("folder-readout")).toBeVisible({ visible: !taken.includes("folder") });
       await expect(page.getByTestId("branch-readout")).toBeVisible({ visible: !taken.includes("branch") });
       await expect(page.locator(".pre")).toBeVisible({ visible: !taken.includes("prefix") });
       await expect(page.locator("[data-testid='limit-figure']:visible")).toHaveCount(taken.includes("fold") ? 1 : 3);
       // Folded, the figure that stays is the reached week.
       if (taken.includes("fold")) await expect(figure(page, "weekly")).toBeVisible();
       await expect(page.locator(".rs")).toBeVisible({ visible: !taken.includes("reset") });
-      // What the session is doing and what waits for you are never cut,
-      // nor is a word in passing.
-      expect(await whole(page, "state-readout"), `state at ${width}`).toBe(true);
+      // What waits for you is never cut, nor is a word in passing.
       expect(await whole(page, "waiting-readout"), `waiting at ${width}`).toBe(true);
       // The word goes by itself, so it is said again at each width and
       // read in the same turn as its text.
@@ -512,7 +489,7 @@ test.describe("a narrow window", () => {
       return (await bar(page).getAttribute("data-fit")) ?? "";
     };
     // The narrowest window where nothing has given way: a pixel less and
-    // the focus and the mode go.
+    // the prefix goes.
     let [low, high] = [400, 1440];
     expect(await fit(low)).not.toBe("");
     while (high - low > 1) {
@@ -522,7 +499,7 @@ test.describe("a narrow window", () => {
     }
     expect(await fit(high)).toBe("");
     const before = await Promise.all(
-      ["focus-readout", "model-readout", "account-group"].map(async (id) => (await page.getByTestId(id).boundingBox())!.x),
+      ["branch-readout", "account-group"].map(async (id) => (await page.getByTestId(id).boundingBox())!.x),
     );
     // The word goes by itself after a moment: the page's clock stands
     // still until the checks are done, so it is there for all of them.
@@ -533,7 +510,7 @@ test.describe("a narrow window", () => {
     await page.clock.runFor(100);
     await expect(bar(page)).toHaveAttribute("data-fit", "");
     const after = await Promise.all(
-      ["focus-readout", "model-readout", "account-group"].map(async (id) => (await page.getByTestId(id).boundingBox())!.x),
+      ["branch-readout", "account-group"].map(async (id) => (await page.getByTestId(id).boundingBox())!.x),
     );
     expect(after).toEqual(before);
     // There is no room for it, so it covers the end of the figures, whole
@@ -565,8 +542,7 @@ test.describe("a narrow window", () => {
     await page.getByTestId("mode-editor").click();
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "editing");
     await page.setViewportSize({ width: 460, height: 800 });
-    await expect(bar(page)).toHaveAttribute("data-fit", /chrome/);
-    await expect(page.getByTestId("model-readout")).toBeVisible();
+    await expect(page.getByTestId("account-group")).toBeVisible();
     expect(await bar(page).evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   });
 });
@@ -638,63 +614,8 @@ test.describe("the allowance popover", () => {
   });
 });
 
-test.describe("the model and the effort", () => {
-  test("open the same choices as the composer, and change the session's setting", async ({ page }) => {
-    await open(page, { accounts: WORK });
-    await agent(page, `f.configure("${H}", { effort: "high" });`);
-    const model = page.getByTestId("model-readout");
-    await model.click();
-    const menu = page.getByTestId("status-model-menu");
-    await expect(menu).toBeVisible();
-    await expect(page.getByTestId("status-model-option").locator(".name")).toHaveText(["Default (recommended)", "Haiku", "Sonnet"]);
-    const sonnet = page.getByTestId("status-model-option").filter({ has: page.locator(".name", { hasText: /^Sonnet$/ }) });
-    await expect(sonnet).toHaveAttribute("aria-checked", "true");
-    // Above the bar, from the word that opened it.
-    const box = (await menu.boundingBox())!;
-    const word = (await model.boundingBox())!;
-    expect(box.y + box.height).toBeLessThanOrEqual((await bar(page).boundingBox())!.y);
-    expect(Math.abs(box.x - word.x)).toBeLessThan(12);
-    await page.getByTestId("status-model-option").filter({ hasText: "Haiku" }).click();
-    await expect(menu).toHaveCount(0);
-    await expect(model).toHaveText("Haiku");
-    await expect(page.getByTestId("model-chip")).toHaveText("Haiku");
-    expect((await calls(page)).filter((call) => call.method === "configure").at(-1)).toMatchObject({
-      settings: { model: "haiku" },
-    });
-    await expect(page.getByTestId("composer-input")).toBeFocused();
-
-    // The agent offers Haiku with no efforts, so the bar names none; Sonnet
-    // takes them.
-    await expect(page.getByTestId("effort-readout")).toHaveCount(0);
-    await expect(page.getByTestId("session-settings")).toHaveText("Haiku");
-    await model.click();
-    await sonnet.click();
-    const effort = page.getByTestId("effort-readout");
-    await effort.click();
-    await expect(page.getByTestId("status-effort-option").locator(".name")).toHaveText(["Low", "Medium", "High"]);
-    await expect(page.getByTestId("status-effort-option").filter({ hasText: "High" })).toHaveAttribute("aria-checked", "true");
-    await page.getByTestId("status-effort-option").filter({ hasText: "Low" }).click();
-    await expect(effort).toHaveText("low");
-    expect((await calls(page)).filter((call) => call.method === "configure").at(-1)).toMatchObject({
-      settings: { effort: "low" },
-    });
-  });
-
-  test("are one menu at a time, and a press elsewhere puts it away", async ({ page }) => {
-    await open(page);
-    await agent(page, `f.configure("${H}", { effort: "high" });`);
-    await page.getByTestId("model-readout").click();
-    await expect(page.getByTestId("status-model-menu")).toBeVisible();
-    await page.getByTestId("effort-readout").click();
-    await expect(page.getByTestId("status-model-menu")).toHaveCount(0);
-    await expect(page.getByTestId("status-effort-menu")).toBeVisible();
-    await page.getByTestId("thread").click({ position: { x: 20, y: 20 } });
-    await expect(page.getByTestId("status-effort-menu")).toHaveCount(0);
-  });
-});
-
 test.describe("what the bar opens", () => {
-  for (const which of ["model-readout", "account-group"])
+  for (const which of ["account-group"])
     test(`stays open above its control as the window changes size, and keeps the keyboard: ${which}`, async ({ page }) => {
       await open(page, { accounts: WORK });
       await report(page, THREE);
@@ -702,7 +623,7 @@ test.describe("what the bar opens", () => {
       await input.fill("draft");
       const control = page.getByTestId(which);
       await control.click();
-      const opened = page.getByTestId(which === "model-readout" ? "status-model-menu" : "allowance-popover");
+      const opened = page.getByTestId("allowance-popover");
       await expect(opened).toBeVisible();
       const owner = await page.evaluate(() => document.activeElement?.closest("[data-testid]")?.getAttribute("data-testid"));
       for (const width of [1300, 1160, 900]) {
@@ -731,12 +652,12 @@ test.describe("what the bar opens", () => {
   test("goes when a chord takes the keyboard elsewhere, and leaves it there", async ({ page }) => {
     await open(page, { accounts: WORK });
     await report(page, THREE);
-    await page.getByTestId("model-readout").click();
-    await expect(page.getByTestId("status-model-menu")).toBeVisible();
+    await page.getByTestId("account-group").click();
+    await expect(page.getByTestId("allowance-popover")).toBeVisible();
     await page.keyboard.press("ControlOrMeta+1");
-    await expect(page.getByTestId("status-model-menu")).toHaveCount(0);
-    await expect(page.getByTestId("model-readout")).toHaveAttribute("aria-expanded", "false");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("allowance-popover")).toHaveCount(0);
+    await expect(page.getByTestId("account-group")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     expect(await page.evaluate(() => document.activeElement?.closest("[data-pane]")?.getAttribute("data-pane"))).toBe(
       "sessions",
     );
@@ -747,7 +668,7 @@ test.describe("what the bar opens", () => {
     await expect(page.getByTestId("model-menu")).toBeVisible();
     await page.keyboard.press("ControlOrMeta+1");
     await expect(page.getByTestId("model-menu")).toHaveCount(0);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     // A press on the chip that opened it still closes it.
     await page.getByTestId("model-chip").click();
     await expect(page.getByTestId("model-menu")).toBeVisible();

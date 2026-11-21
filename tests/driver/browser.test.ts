@@ -208,7 +208,9 @@ function disabled(driver: WebDriver, testid: string): Promise<boolean> {
 }
 
 function focusReadout(driver: WebDriver): Promise<string> {
-  return textOf(driver, "[data-testid='focus-readout']");
+  return driver.executeScript(
+    () => `focus: ${document.querySelector("[data-testid='status-bar']")?.getAttribute("data-focus") ?? ""}`,
+  ) as Promise<string>;
 }
 
 /** A test that calls a tool has the tool server's minute for the app to

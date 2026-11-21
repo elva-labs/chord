@@ -114,7 +114,7 @@ test.describe("a shell", () => {
       // The last takes the panel with it, and the keyboard goes to the agent pane.
       await page.keyboard.press(platform.inTerminal);
       await expect(page.locator(TERMINAL)).toBeHidden();
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
       expect(await controls(page)).toEqual([]);
     });
   }

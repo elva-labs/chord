@@ -23,7 +23,11 @@ function chip(page: Page, which: "model" | "mode") {
 }
 
 async function pick(page: Page, which: "model" | "mode", name: string) {
-  await chip(page, which).click();
+  // A mode at its default waits behind the plus, which opens its menu.
+  if (which === "mode" && (await chip(page, which).count()) === 0) {
+    await page.getByTestId("more-chip").click();
+    await page.getByTestId("more-option").filter({ hasText: "Mode" }).click();
+  } else await chip(page, which).click();
   await page.getByTestId(`${which}-option`).filter({ hasText: name }).first().click();
   await expect(page.getByTestId(`${which}-menu`)).toHaveCount(0);
 }
@@ -32,8 +36,8 @@ test("a new conversation starts on the model and mode last chosen, after a resta
   await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
-  await expect(chip(page, "model")).toHaveText("Default · Sonnet");
-  await expect(chip(page, "mode")).toHaveText("Default");
+  await expect(chip(page, "model")).toHaveText("Sonnet");
+  await expect(chip(page, "mode")).toHaveCount(0);
   await pick(page, "model", "Haiku");
   await pick(page, "mode", "Accept edits");
   await expect(chip(page, "model")).toHaveText("Haiku");
@@ -60,7 +64,7 @@ test("a new conversation starts on the model and mode last chosen, after a resta
   await pick(page, "model", "Default");
   await expect(chip(page, "mode")).toHaveText("Plan");
   await page.getByTestId("project-new-session").click();
-  await expect(chip(page, "model")).toHaveText("Default · Sonnet");
+  await expect(chip(page, "model")).toHaveText("Sonnet");
   await expect(chip(page, "mode")).toHaveText("Accept edits");
   const last = (await starts(page)).at(-1)!.options!;
   expect(last.model).toBeUndefined();

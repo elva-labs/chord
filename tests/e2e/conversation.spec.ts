@@ -77,7 +77,6 @@ test.describe("an integrated session", () => {
     await expect(page.getByTestId("conversation")).toBeVisible();
     await expect(page.locator(`${AGENT} .xterm`)).toHaveCount(0);
     await expect(page.getByTestId("thread-intro")).toContainText("A new Claude Code session in demo");
-    await expect(page.getByTestId("folder-readout")).toHaveText("demo");
     await expect(page.getByTestId("branch-readout")).toHaveText("main");
     // The header holds the name and nothing the bar says.
     await expect(page.locator(`${AGENT} > header .title`)).toHaveText("session 1");
@@ -278,7 +277,7 @@ test.describe("an integrated session", () => {
     await openIntegrated(page, { untrusted: true });
     const gate = page.getByTestId("trust-gate");
     await expect(gate).toContainText("Trust this folder?");
-    await expect(page.getByTestId("state-readout")).toHaveText("asks to trust the folder");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "asks to trust the folder");
     await expect(gate).toContainText(PROJECT);
     await page.getByTestId("trust-folder").click();
     await expect(gate).toHaveCount(0);
@@ -296,23 +295,23 @@ test.describe("an integrated session", () => {
 
   test("says on its row and in the status bar what the core says it is doing", async ({ page }) => {
     await openIntegrated(page);
-    const meta = page.getByTestId("state-readout");
-    await expect(meta).toHaveText("idle");
+    const meta = page.getByTestId("status-bar");
+    await expect(meta).toHaveAttribute("data-state", "idle");
     await agent(page, `f.send("${H}", crypto.randomUUID(), "go"); f.startTurn("${H}");`);
-    await expect(meta).toHaveText("working");
+    await expect(meta).toHaveAttribute("data-state", "working");
     const asked = await page.evaluate(`window.__integrated.ask("${H}", "Bash", { command: "ls" })`);
-    await expect(meta).toHaveText("waits for permission");
+    await expect(meta).toHaveAttribute("data-state", "waits for permission");
     await expect(page.locator("[data-testid='session-row'] .dot.permission")).toBeVisible();
     await agent(page, `f.answer("${H}", "${String(asked)}", "allow");`);
     await agent(page, `f.question("${H}", [{ header: null, question: "Which?", options: [], multiple: false }]);`);
-    await expect(meta).toHaveText("asks you");
+    await expect(meta).toHaveAttribute("data-state", "asks you");
     await agent(page, `f.interrupt("${H}");`);
-    await expect(meta).toHaveText("idle");
+    await expect(meta).toHaveAttribute("data-state", "idle");
   });
 
   test("says working in the status bar and on its row while a turn only waits on its sessions", async ({ page }) => {
     await openIntegrated(page);
-    const meta = page.getByTestId("state-readout");
+    const meta = page.getByTestId("status-bar");
     const row = page.getByTestId("session-row");
     await agent(
       page,
@@ -321,13 +320,13 @@ test.describe("an integrated session", () => {
        f.startTool("${H}", "mcp__chord__wait", {}, { kind: "mcp" });`,
     );
     await expect(page.getByTestId("now")).toHaveText("Waiting on the sessions it started");
-    await expect(meta).toHaveText("working");
+    await expect(meta).toHaveAttribute("data-state", "working");
     await expect(row.locator(".dot")).toHaveClass(/\bworking\b/);
     await expect(row.locator(".dot")).toHaveAttribute("title", "working");
     // Said once: the header holds the name alone.
     await expect(page.locator(`${AGENT} > header`)).not.toContainText(/working|idle/);
     await agent(page, `f.endTurn("${H}");`);
-    await expect(meta).toHaveText("idle");
+    await expect(meta).toHaveAttribute("data-state", "idle");
     await expect(row.locator(".dot")).not.toHaveClass(/\bworking\b/);
     await expect(row.locator(".dot")).toHaveAttribute("title", "idle");
   });
@@ -543,7 +542,7 @@ test.describe("the composer", () => {
   test("shows the model and changes it", async ({ page }) => {
     await openIntegrated(page);
     const chip = page.getByTestId("model-chip");
-    await expect(chip).toHaveText("Default · Sonnet");
+    await expect(chip).toHaveText("Sonnet");
     await chip.click();
     await expect(page.getByTestId("model-option").locator(".name")).toHaveText(["Default (recommended)", "Haiku", "Sonnet"]);
     await page.getByTestId("model-option").filter({ hasText: "Haiku" }).click();
@@ -605,9 +604,9 @@ test.describe("the composer", () => {
     await openIntegrated(page);
     await page.keyboard.type("draft");
     await page.keyboard.press("ControlOrMeta+1");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     await page.keyboard.press("ControlOrMeta+2");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await expect(input(page)).toBeFocused();
     await expect(input(page)).toHaveValue("draft");
   });
@@ -837,7 +836,7 @@ test.describe("a session of an agent shaped as Codex is", () => {
     await expect(page.getByTestId("permission-dock")).toBeVisible();
     await agent(page, `f.endTurn("${H}");`);
     await expect(page.getByTestId("permission-dock")).toHaveCount(0);
-    await expect(page.getByTestId("state-readout")).toHaveText("idle");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "idle");
     await expect(page.getByTestId("composer-input")).toBeEnabled();
   });
 
@@ -917,7 +916,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     await expect(page.getByTestId("run-chip")).toBeFocused();
     // Away to another pane and back by key, the composer has it again.
     await page.keyboard.press("ControlOrMeta+1");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     await page.keyboard.press("ControlOrMeta+2");
     await expect(page.getByTestId("composer-input")).toBeFocused();
   });
@@ -931,8 +930,8 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     await input.fill("Fix the flaky cache test");
     await page.keyboard.press("Enter");
     await agent(page, `f.startTurn("${H}");`);
-    const status = page.getByTestId("state-readout");
-    await expect(status).toHaveText("working");
+    const status = page.getByTestId("status-bar");
+    await expect(status).toHaveAttribute("data-state", "working");
     const rules = page.getByTestId("run-popover");
     const interrupted = async () => (await calls(page)).some((call) => call.method === "interrupt");
 
@@ -945,7 +944,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     await page.keyboard.press("Escape");
     await expect(rules).toHaveCount(0);
     expect(await interrupted()).toBe(false);
-    await expect(status).toHaveText("working");
+    await expect(status).toHaveAttribute("data-state", "working");
     await expect(input).toBeFocused();
 
     // Shown by the pointer resting on the chip, the same.
@@ -1175,7 +1174,7 @@ test.describe("the model and the mode", () => {
   test("say which model the default is, and that one chosen during a turn is used from the next", async ({ page }) => {
     await openIntegrated(page);
     const chip = page.getByTestId("model-chip");
-    await expect(chip).toHaveText("Default · Sonnet");
+    await expect(chip).toHaveText("Sonnet");
     await chip.click();
     await expect(page.getByTestId("model-option").filter({ hasText: "Sonnet" }).last()).toHaveAttribute("aria-checked", "true");
     await page.keyboard.press("Escape");
@@ -1219,7 +1218,7 @@ test.describe("the model and the mode", () => {
     await installFakeCore(page, { open: [PROJECT], agents: ["codex"], integrable: ["codex"], settings: { integrated: ["codex"] } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
-    await expect(page.getByTestId("model-chip")).toHaveText("Default · GPT-5-Codex");
+    await expect(page.getByTestId("model-chip")).toHaveText("GPT-5-Codex");
     await expect(page.getByTestId("session-row")).toHaveAttribute("title", "GPT-5-Codex");
   });
 
@@ -1612,13 +1611,13 @@ test("takes up a session the core still runs when the window is reloaded", async
   await expect(page.getByTestId("work-line")).toHaveCount(1);
   await expect(page.getByTestId("thread-intro")).toHaveCount(0);
   await expect(page.getByTestId("run-began")).toHaveCount(0);
-  await expect(page.getByTestId("state-readout")).toHaveText("waits for permission");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "waits for permission");
   expect((await calls(page)).map((call) => call.method)).toEqual(["snapshot", "history"]);
   await page.getByTestId("choice-allow").click();
   expect((await calls(page)).at(-1)).toMatchObject({ method: "answer", id: H, choice: "allow" });
   await agent(page, `f.emit("${H}", { type: "text", block: "c", parent: null, text: "All 12 pass.", done: true }); f.endTurn("${H}");`);
   await expect(page.getByTestId("agent-text").last()).toHaveText("All 12 pass.");
-  await expect(page.getByTestId("state-readout")).toHaveText("idle");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "idle");
 });
 
 test.describe("a resumed conversation", () => {
@@ -1789,17 +1788,52 @@ test.describe("a resumed conversation", () => {
     await expect(page.getByTestId("run-began")).toHaveText(/^Resumed here/);
   });
 
+  test("sets a time between messages after a quiet while and on another day, and not between close ones", async ({ page }) => {
+    await page.clock.install({ time: new Date(2026, 10, 21, 12, 0, 0) });
+    await openIntegrated(page);
+    const say = async (words: string, reply: string) => {
+      await page.getByTestId("composer-input").fill(words);
+      await page.keyboard.press("Enter");
+      await agent(page, `f.turn("${H}", ${JSON.stringify(reply)});`);
+      await expect(page.getByTestId("agent-text").last()).toHaveText(reply);
+    };
+    const dividers = page.getByTestId("time-divider");
+    await say("one", "First.");
+    await page.clock.fastForward(60_000);
+    await say("two", "Second.");
+    // Under five quiet minutes, nothing is set between them.
+    await expect(dividers).toHaveCount(0);
+    await page.clock.fastForward(6 * 60_000);
+    await say("three", "Third.");
+    await expect(dividers).toHaveCount(1);
+    await expect(dividers.first()).toHaveText(/^12:\d{2}/);
+    await expect(dividers.first().locator("time")).toHaveAttribute("datetime", /^2026-11-21T/);
+    // Before the third message, not after it.
+    expect((await box(page, "time-divider", 0)).y).toBeLessThan((await box(page, "user-message", 2)).y);
+    expect((await box(page, "agent-run", 1)).y).toBeLessThan((await box(page, "time-divider", 0)).y);
+    // A message the next day is set off too, and what stands from the day
+    // before, which is no longer today's, names its day.
+    await page.clock.fastForward(24 * 60 * 60_000);
+    await say("four", "Fourth.");
+    await expect(dividers).toHaveCount(3);
+    await expect(dividers.first()).toHaveText(/^[A-Z][a-z]{2} \d{1,2}:\d{2}/);
+    await expect(dividers.nth(1)).toHaveText(/^[A-Z][a-z]{2} \d{1,2}:\d{2}/);
+    await expect(dividers.last()).toHaveText(/^\d{1,2}:\d{2}/);
+  });
+
   test("draws what it said before above what it says now, with a line where it resumed", async ({ page }) => {
     await withPast(page, { keep: true });
     await page.getByTestId("past-session").click();
     await expect(page.getByTestId("user-message")).toHaveCount(2);
     await expect(page.getByTestId("user-message").first()).toContainText("Count the files in src");
-    // The first time of a day other than today names the day; the rest of
-    // that day's do not.
+    // A quiet divider names the day where it is not today; messages
+    // carry no time of their own.
     const day = await weekday(page, threeDaysAgo());
-    await expect(page.getByTestId("user-message").first().locator("time")).toHaveText(new RegExp(`^${day} \\d{1,2}:\\d{2}`));
-    await expect(page.getByTestId("agent-run").first().locator("time")).toHaveText(/^\d{1,2}:\d{2}/);
-    await expect(page.getByTestId("user-message").nth(1).locator("time")).toHaveText(/^\d{1,2}:\d{2}/);
+    await expect(page.getByTestId("time-divider").first()).toHaveText(new RegExp(`^${day} \\d{1,2}:\\d{2}`));
+    // The time is there for a screen reader, not drawn.
+    await expect(page.getByTestId("user-message").first().locator(".who time")).toHaveAttribute("datetime", /^\d{4}-/);
+    await expect(page.getByTestId("user-message").first().locator(".who time")).toHaveText(/\d{4}/);
+    await expect(page.getByTestId("user-message").first().locator(".who")).toHaveAttribute("title", /\d{4}/);
     await expect(page.getByTestId("agent-run").first().locator("header")).toContainText("Sonnet");
     await expect(page.getByTestId("agent-text").first()).toHaveText("There are 12 files in src.");
     await expect(page.getByTestId("work-line").nth(1)).toContainText("changed 1 file");
@@ -1813,8 +1847,8 @@ test.describe("a resumed conversation", () => {
     await page.keyboard.press("Enter");
     await agent(page, `f.turn("${H}", "Four of them pass.");`);
     await expect(page.getByTestId("agent-text").last()).toHaveText("Four of them pass.");
-    // The line named today, so this run's times do not again.
-    await expect(page.getByTestId("user-message").nth(2).locator("time")).toHaveText(/^\d{1,2}:\d{2}/);
+    // The line says when this run began, so no divider stands beside it.
+    await expect(page.getByTestId("time-divider")).toHaveCount(1);
     // The line stands between the last run read and the first message of
     // this run.
     const line = await box(page, "run-began", 0);
@@ -1909,7 +1943,7 @@ test.describe("a resumed conversation", () => {
     // The turn the quit cut short is over: nothing in it is still at work.
     await expect(page.getByTestId("work-line").last()).toContainText("Worked for");
     await expect(page.getByTestId("now")).toHaveCount(0);
-    await expect(page.getByTestId("state-readout")).toHaveText("idle");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "idle");
     await expect(page.getByTestId("send")).toBeVisible();
     // The line stands under all of it, where this run began.
     const line = await box(page, "run-began", 0);
@@ -1986,7 +2020,7 @@ test.describe("a resumed conversation", () => {
         ]),
       );
       const day = await weekday(page, threeDaysAgo());
-      await expect(page.getByTestId("user-message").first().locator("time")).toHaveText(new RegExp(`^${day} \\d{1,2}:\\d{2}`));
+      await expect(page.getByTestId("time-divider").first()).toHaveText(new RegExp(`^${day} \\d{1,2}:\\d{2}`));
       // A turn Codex names no model for goes under the agent's own name.
       await expect(page.getByTestId("agent-run").first().locator("header")).toContainText("Codex");
       await expect(page.getByTestId("agent-text").first()).toHaveText("There are 12 files in src.");
@@ -2044,7 +2078,7 @@ test("lays out the composer's bar in a narrow pane with nothing drawn over anoth
   await agent(page, `f.context("${H}", 41000, 200000); f.configure("${H}", { effort: "high" });`);
   await expect(page.getByTestId("effort-chip")).toBeVisible();
   const boxes = await Promise.all(
-    ["attach", "model-chip", "effort-chip", "mode-chip", "workflow-chip", "send"].map((id) => page.getByTestId(id).boundingBox()),
+    ["attach", "model-chip", "effort-chip", "more-chip", "send"].map((id) => page.getByTestId(id).boundingBox()),
   );
   const ctx = await page.getByTestId("composer").locator(".ctx").boundingBox();
   const all = [...boxes, ctx].map((box) => box!);
@@ -2057,7 +2091,7 @@ test("lays out the composer's bar in a narrow pane with nothing drawn over anoth
   const composer = (await page.getByTestId("composer").boundingBox())!;
   for (const box of all) expect(box.x + box.width).toBeLessThanOrEqual(composer.x + composer.width + 0.5);
   // Send keeps to the right end, wrapped or not.
-  const send = all[5];
+  const send = all[4];
   expect(composer.x + composer.width - (send.x + send.width)).toBeLessThan(16);
 });
 
@@ -2769,7 +2803,7 @@ test.describe("after a reload, an orchestrated session", () => {
     await expect(view.getByTestId("user-message")).toHaveAttribute("data-from", "integrated-session-1");
     await expect(view.getByText("are not shown here")).toHaveCount(0);
     // The message keeps the time it was sent at.
-    await expect(view.getByTestId("user-message").locator("time")).toHaveText(/\d{1,2}:\d{2}/);
+    await expect(view.getByTestId("user-message").locator(".who")).toHaveAttribute("title", /\d{1,2}:\d{2}/);
     expect((await calls(page)).filter((call) => call.method === "start")).toHaveLength(0);
   });
 
@@ -2782,7 +2816,7 @@ test.describe("after a reload, an orchestrated session", () => {
     await expect(own.locator(".label")).toHaveText("session 1");
     await own.click();
     // It is at rest itself, and the session it started is in its turn.
-    await expect(page.getByTestId("state-readout")).toHaveText("a session working");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "a session working");
     await expect(page.locator("[data-testid='conversation']:visible").getByTestId("thread-intro")).not.toContainText(
       "Earlier messages",
     );
@@ -3260,4 +3294,35 @@ test.describe("the conversation's width", () => {
     const [above, below] = await Promise.all([parts.nth(0).boundingBox(), parts.nth(1).boundingBox()]);
     expect(below!.y - (above!.y + above!.height)).toBeGreaterThanOrEqual(7.5);
   });
+});
+
+test("shows a chip while its value is away from the default, and keeps it only while the row is in use", async ({ page }) => {
+  await openIntegrated(page);
+  const mode = page.getByTestId("mode-chip");
+  // The agent names no default effort, so once it has an effort, it shows
+  // whatever it is, and the plus does not offer it.
+  await agent(page, `f.configure("${H}", { effort: "medium" });`);
+  await expect(page.getByTestId("effort-chip")).toBeVisible();
+  // A mode that asks first is the default, and stays behind the plus.
+  await expect(mode).toHaveCount(0);
+  await page.getByTestId("more-chip").click();
+  const entries = page.getByTestId("more-option");
+  await expect(entries.first()).toHaveAttribute("role", "menuitem");
+  await expect(entries.first()).not.toHaveAttribute("aria-checked", /.*/);
+  await expect(entries.filter({ hasText: "Effort" })).toHaveCount(0);
+  await entries.filter({ hasText: "Mode" }).click();
+  await expect(page.getByTestId("mode-menu")).toBeVisible();
+  await page.getByTestId("mode-option").filter({ hasText: "Accept edits" }).click();
+  await expect(mode).toBeVisible();
+  // Back to the default: the chip stays while the pointer is in the row.
+  await mode.click();
+  await page.getByTestId("mode-option").first().click();
+  await expect(mode).toBeVisible();
+  // It goes once the pointer and the keyboard have left the row.
+  await page.mouse.move(5, 5);
+  await page.getByTestId("composer-input").focus();
+  await expect(mode).toHaveCount(0);
+  // And a mode away from the default comes back to show on its own.
+  await agent(page, `f.configure("${H}", { mode: "acceptEdits" });`);
+  await expect(mode).toBeVisible();
 });

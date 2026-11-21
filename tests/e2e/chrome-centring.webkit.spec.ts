@@ -36,7 +36,7 @@ async function open(page: Page, look: string, background: boolean) {
   await page.goto("/");
   await page.getByTestId("start-agent").click();
   await expect(page.getByTestId("composer-input")).toBeFocused();
-  await expect(page.getByTestId("model-readout")).toBeVisible();
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "idle");
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -102,7 +102,7 @@ for (const look of ["modern", "terminal"])
       test("stands the agent pane's title on the changes title's line", async ({ page, browserName }) => {
         await open(page, look, background);
         const head = "section[data-pane='agent'] > header";
-        await expect(page.getByTestId("state-readout")).toHaveText("idle");
+        await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "idle");
         const runs = await offsets(page, `${head} .title`, head);
         const changes = await offsets(page, "section[data-pane='changes'] > header .title", "section[data-pane='changes'] > header");
         const line = Object.values(changes)[0];

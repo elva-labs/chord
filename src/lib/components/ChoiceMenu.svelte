@@ -44,6 +44,8 @@
         menu opened by a press marks nothing until the pointer or a key
         says where. */
     pointer?: boolean;
+    /** The entries are actions, not choices with one in use. */
+    actions?: boolean;
     testid: string;
     optionTestid: string;
   }
@@ -58,6 +60,7 @@
     end = false,
     within = null,
     pointer = false,
+    actions = false,
     testid,
     optionTestid,
   }: Props = $props();
@@ -66,7 +69,7 @@
   let pointing = $state(untrack(() => pointer));
 
   function items(): HTMLButtonElement[] {
-    return [...(menu?.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']") ?? [])];
+    return [...(menu?.querySelectorAll<HTMLButtonElement>("[role^='menuitem']") ?? [])];
   }
 
   /** Opened from the right edge, where its left edge stands from what
@@ -122,7 +125,7 @@
 
   function onpointermove(e: PointerEvent) {
     pointing = true;
-    const choice = (e.target as Element | null)?.closest<HTMLButtonElement>("[role='menuitemradio']");
+    const choice = (e.target as Element | null)?.closest<HTMLButtonElement>("[role^='menuitem']");
     if (choice != null && choice !== document.activeElement) choice.focus({ preventScroll: true });
   }
 
@@ -153,8 +156,8 @@
 >
   {#each choices as choice (choice.value)}
     <button
-      role="menuitemradio"
-      aria-checked={choice.on}
+      role={actions ? "menuitem" : "menuitemradio"}
+      aria-checked={actions ? undefined : (choice.on ?? false)}
       aria-disabled={choice.off ? "true" : undefined}
       class:on={choice.on}
       class:off={choice.off}

@@ -113,6 +113,12 @@ export function choose(agent: AgentId, setting: Setting, value: string) {
     the mode that asks before anything changes. */
 const ASKS: Record<AgentId, string> = { "claude-code": "default", codex: "read-only" };
 
+/** Whether `mode` is the one an agent asks before anything changes in, the
+    mode a session begins in unless told otherwise. */
+export function asksFirst(agent: AgentId, mode: string): boolean {
+  return ASKS[agent] === mode;
+}
+
 /** A Claude Code terminal's hooks say it switched to `mode`. Any process of
     the user's can write what the hooks report, so such a switch is kept
     only where it goes no further than what is kept now, Default standing

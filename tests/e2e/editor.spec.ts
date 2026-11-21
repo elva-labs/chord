@@ -116,11 +116,11 @@ test.describe("the editing shape", () => {
     await expect.poll(async () => (await box(page, SESSIONS)).width).toBeGreaterThan((await foldedWidth(page)) + 1);
     // Drawn over the files pane: nothing beside it moved.
     expect((await box(page, FILES)).x).toBe(files.x);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
 
     await page.keyboard.press("Escape");
     await expect.poll(async () => (await box(page, SESSIONS)).width).toBeLessThanOrEqual((await foldedWidth(page)) + 1);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
   });
 });
 
@@ -277,7 +277,7 @@ for (const linux of [false, true]) {
       if (linux) await asLinux(page);
       await open(page, 1728);
       await page.getByTestId("start-agent").click();
-      await expect(page.getByTestId("state-readout")).toHaveText("running");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     });
 
     // Where the app draws the window's buttons the pane is wider by half
@@ -611,7 +611,7 @@ test.describe("the editor and its tabs", () => {
 
   test("keeps each session's tabs", async ({ page }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await expect(tab(page, "README.md")).toBeVisible();
 
@@ -1098,7 +1098,7 @@ test.describe("questions before anything unsaved goes", () => {
 
   test("asks before a session with unsaved tabs is closed, in the sessions pane", async ({ page }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
     await page.locator("[data-testid='session-row']").first().hover();
@@ -1113,7 +1113,7 @@ test.describe("questions before anything unsaved goes", () => {
 
   test("asks before Close project in the project's menu, and Cancel keeps it", async ({ page }) => {
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
     const head = page.locator(`${SESSIONS} [data-row="project:${PROJECT}"]`);
@@ -1541,7 +1541,7 @@ test.describe("the corner and the keyboard", () => {
     await open(page, 1728);
     await page.keyboard.press(`${MOD}+3`);
     await page.getByTestId("toggle-right").focus();
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
   });
 });
 
@@ -1603,7 +1603,7 @@ test.describe("the session question in a peek", () => {
     await flip(page);
     await page.getByTestId("unfold-sessions").click();
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
     await page.getByTestId("unfold-sessions").click();
@@ -1664,7 +1664,7 @@ test.describe("the session question from the keyboard", () => {
     await open(page, 1728);
     await flip(page);
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
     await page.keyboard.press(`${MOD}+1`);
@@ -1695,7 +1695,7 @@ test.describe("the question's three buttons", () => {
     await open(page, 2000);
     await flip(page);
     await page.getByTestId("new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await treeRow(page, "README.md").dblclick();
     await typeAtEnd(page, "mine");
     await page.keyboard.press(`${MOD}+1`);
@@ -1751,7 +1751,7 @@ test.describe("the question's three buttons", () => {
       await expect(at.locator(AGENT)).toBeVisible();
       if ((await at.getByTestId("shell").getAttribute("data-mode")) !== "editing") await flip(at);
       await at.getByTestId("new-session").click();
-      await expect(at.getByTestId("state-readout")).toHaveText("running");
+      await expect(at.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
       await treeRow(at, "README.md").dblclick();
       await typeAtEnd(at, "mine");
       await at.keyboard.press(`${MOD}+1`);
@@ -1831,7 +1831,7 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     await expect(page.locator(AGENT)).toBeVisible();
     // A second project's own session 1, which starts a session 1 in demo.
     await page.locator(`${SESSIONS} [data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.evaluate(
       (project) =>
         (window as unknown as { __conductRequest: (call: unknown) => void }).__conductRequest({
@@ -2033,7 +2033,7 @@ test.describe("an integrated session beside the editor", () => {
     await page.getByTestId("composer-input").fill("a draft");
     await page.getByTestId("toggle-right").click();
     await expect(page.locator(AGENT)).toBeHidden();
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
     await page.getByTestId("toggle-right").click();
     await expect(page.locator(AGENT)).toBeVisible();
     await expect(page.getByTestId("composer-input")).toHaveValue("a draft");
@@ -2151,7 +2151,7 @@ for (const linux of [false, true]) {
             await expect(page.getByTestId("user-message")).toHaveCount(1);
             await integrated(page, `f.startTurn("int-1"); f.endTurn("int-1");`);
             await expect(page.locator(`${AGENT} header .title`)).toHaveText("session 1");
-            await expect(page.getByTestId("state-readout")).toHaveText("idle");
+            await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "idle");
           }
           await expect(page.getByTestId("run-words")).toHaveText("Build and review");
 
