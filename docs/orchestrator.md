@@ -80,12 +80,18 @@ worktree, its agent, what it is doing and the last line it left. What it is
 doing is working, waiting, asking for permission, at its usage limit until
 the time the agent named, stopped on an error, waiting with its turn
 interrupted by the user, or waiting on work in the background, as under
-`wait` below. A session that is not running says why: it ended, the user
-closed its row, the workbench put it away once its work was over, or it
-has not run since the workbench was restarted, each with the way back: a
-line sent to it for the last two, a start naming it for the others. A session
-that has stopped, ended or asked for permission without the caller having
-been told says so beside what it is doing, and listing it counts as
+`wait` below. A session with no row that has not run since the workbench
+was restarted is listed in full as well, with the way back: a line sent to
+it. After those come the sessions that are over: closed by the user,
+ended, or put away by the workbench once its work was over. They are
+listed latest gone first, the last ten only, each by its id, its name and
+why. One line ends them with the way back, a start naming any of them,
+listed or not, and for one put away a line sent to it as well, and when
+there are more, how many and that a call with `all: true` lists them. A
+call with `find` and words of a name lists only the sessions whose name
+has them all, over or not, and one with `project` only that project's. A
+session that has stopped, ended or asked for permission without the caller
+having been told says so beside what it is doing, and listing it counts as
 telling. `start` starts a session in a project with a first prompt, on a
 worktree of its own if it asks for one, and answers with the new session's
 id and tells it to keep calling `wait` until every session it started is
@@ -291,7 +297,8 @@ then. Lines that arrive while it comes back wait for it, and then go to it
 as to any running session.
 
 A session put away stays on its starter's list. `sessions` lists it as put
-away by the workbench once its work was over, and a line its starter sends
+away once its work was over, among the last ten that are over until
+others go after it, and a line its starter sends
 it resumes it where it ran, with its conversation and the line as what it
 goes on with. A wait over all of the starter's sessions passes over one
 put away while it waits, and once every session it watched has been put

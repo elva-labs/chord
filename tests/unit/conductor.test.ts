@@ -129,6 +129,9 @@ import { pickResume, resume } from "$lib/resume.svelte";
 
 const A = "/home/ada/dev/one";
 const B = "/home/ada/dev/two";
+/** The line a listing ends the sessions that are over with. */
+const WAY_BACK =
+  "Start, naming its session, resumes any of them, listed or not, and a line sent to one put away resumes it as well.";
 
 const answers: {
   id: string;
@@ -6492,7 +6495,7 @@ describe("a session the user closed or the app lost", () => {
 
     await handle(call("sessions", {}, as));
     expect(last().content).toBe(
-      `sid-1  "Cache flake"  ${A}  claude-code  closed by the user  resume it with start, naming session sid-1`,
+      `sid-1  "Cache flake"  closed by the user\n${WAY_BACK}`,
     );
     await handle(call("wait", { session: "sid-1" }, as));
     expect(last().content).toBe(
@@ -6671,9 +6674,7 @@ describe("a session the user closed or the app lost", () => {
     expect(forProject(A)).toEqual([second]);
     expect(workOver(second)).toBe(false);
     await handle(call("sessions", {}, as));
-    expect(last().content).toContain(
-      "put away by the workbench once its work was over  a line you send it resumes it, as start naming session sid-1 does",
-    );
+    expect(last().content).toContain(`sid-1  "Cache flake"  put away once its work was over\n${WAY_BACK}`);
     await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER);
     expect(forProject(A)).toEqual([second]);
   });
@@ -6757,6 +6758,60 @@ describe("a session the user closed or the app lost", () => {
     );
   });
 
+  it("is listed latest gone first, as the last ten that are over, with all and find for the rest", async () => {
+    const first = await startOne();
+    const second = await startAllowed(call("start", { project: A, prompt: "Bump deps", name: "Bump deps" }, as), "pty-2", "sid-2");
+    close(second.key);
+    close(first.key);
+    flushSync();
+    await handle(call("sessions", {}, as));
+    expect(last().content).toBe(`sid-1  "Cache flake"  closed by the user\nsid-2  "Bump deps"  closed by the user\n${WAY_BACK}`);
+
+    // Ten more that are over, from an earlier run.
+    const earlier = Array.from({ length: 10 }, (_, i) => ({
+      id: `old-${i + 1}`,
+      project: B,
+      worktree: null,
+      agent: "claude-code" as const,
+      name: `Task ${i + 1}`,
+      account: null,
+      left: "done" as const,
+    }));
+    conductor.started[tok("caller-1")] = [...earlier, ...conductor.started[tok("caller-1")]];
+    await handle(call("sessions", {}, as));
+    const lines = last().content!.split("\n");
+    expect(lines).toHaveLength(11);
+    expect(lines.slice(0, 3)).toEqual([
+      'sid-1  "Cache flake"  closed by the user',
+      'sid-2  "Bump deps"  closed by the user',
+      'old-10  "Task 10"  put away once its work was over',
+    ]);
+    expect(lines[9]).toBe('old-3  "Task 3"  put away once its work was over');
+    expect(lines[10]).toBe(
+      `2 more that are over, from longer ago: call sessions with all: true to list them, or with find and words of a name. ${WAY_BACK}`,
+    );
+
+    await handle(call("sessions", { all: true }, as));
+    expect(last().content!.split("\n")).toHaveLength(13);
+    expect(last().content).toContain('old-1  "Task 1"  put away once its work was over');
+
+    await handle(call("sessions", { find: "task 1" }, as));
+    expect(last().content).toBe(
+      `old-10  "Task 10"  put away once its work was over\nold-1  "Task 1"  put away once its work was over\n${WAY_BACK}`,
+    );
+    await handle(call("sessions", { find: "nothing like it" }, as));
+    expect(last().content).toBe("None of the sessions you started has those words in its name.");
+    await handle(call("sessions", { project: A }, as));
+    expect(last().content).toBe(`sid-1  "Cache flake"  closed by the user\nsid-2  "Bump deps"  closed by the user\n${WAY_BACK}`);
+
+    // One not listed still resumes by its id.
+    await resumed(call("start", { session: "old-1", prompt: "Go on" }, as), "pty-9");
+    expect(last().error).toBeNull();
+    await handle(call("sessions", {}, as));
+    expect(last().content!.split("\n")[0]).toContain('old-1  "Task 1"');
+    expect(last().content).toContain("claude-code  waiting");
+  });
+
   it("is listed as ended when its row had ended, and as not running after a restart", async () => {
     const row = await startOne();
     ended({ id: "pty-1", code: 0, clean: true });
@@ -6765,7 +6820,7 @@ describe("a session the user closed or the app lost", () => {
     expect(last().content).toContain("claude-code  exited  resume it with start, naming session sid-1");
     close(row.key);
     await handle(call("sessions", {}, as));
-    expect(last().content).toContain("claude-code  ended  resume it with start");
+    expect(last().content).toBe(`sid-1  "Cache flake"  ended\n${WAY_BACK}`);
 
     const other = await startAllowed(
       call("start", { project: B, prompt: "Bump deps" }, as),
@@ -6776,9 +6831,11 @@ describe("a session the user closed or the app lost", () => {
     restarted();
     await handle(call("sessions", {}, as));
     const lines = last().content!.split("\n");
-    expect(lines[0]).toContain("ended");
-    expect(lines[1]).toContain("sid-2");
-    expect(lines[1]).toContain("not running since the workbench was restarted");
+    // One not run since the restart is listed in full, ahead of one that
+    // is over.
+    expect(lines[0]).toContain("sid-2");
+    expect(lines[0]).toContain("not running since the workbench was restarted");
+    expect(lines[1]).toBe('sid-1  "Cache flake"  ended');
     await handle(call("stop", { session: "sid-2" }, as));
     expect(last().content).toContain("it has not run since the workbench was restarted");
   });
@@ -7140,7 +7197,7 @@ describe("a session whose work is over", () => {
     expect(killed).toContain("pty-1");
     await handle(call("sessions"));
     expect(last().content).toContain("sid-1");
-    expect(last().content).toContain("put away by the workbench once its work was over  a line you send it resumes it");
+    expect(last().content).toContain(`sid-1  put away once its work was over\n${WAY_BACK}`);
     await handle(call("read", { session: "sid-1" }));
     expect(last().content).toBe(
       "Session sid-1 is not running: the workbench put it away once its work was over. A line you send it resumes it, as start naming session sid-1 does.",

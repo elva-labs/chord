@@ -895,11 +895,13 @@ pub fn projects_tool() -> Value {
 pub fn sessions_tool() -> Value {
     json!({
         "name": "sessions",
-        "description": "The sessions you started: for each one its id, the project and the worktree it runs in, which agent it is, whether it is working, waiting on a question or stopped, and the last line it left. When you follow a workflow, each also says the step it is for, and a review which round of that step it is and the session whose work it checks. The ones not running are listed too, from an earlier run of yours as well, with why: the workbench puts a session away once it has rested a few minutes after you heard it was done. The user's own sessions are not listed.",
+        "description": "The sessions you started that are open or not run since a restart, in full: for each its id, the project and the worktree it runs in, which agent it is, whether it is working, waiting on a question, at a usage limit or stopped, and the last line it left. When you follow a workflow, each also says the step it is for, and a review which round of that step it is and the session whose work it checks. Then the last ten that are over, latest first, by id, name and why: closed, ended, or put away; the workbench puts a session away once it has rested a few minutes after you heard it was done. The user's own sessions are not listed.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "project": { "type": "string", "description": "A project's path, to list that project's sessions alone." }
+                "project": { "type": "string", "description": "A project's path, to list that project's sessions alone." },
+                "all": { "type": "boolean", "description": "True to list every session that is over, not only the last ten." },
+                "find": { "type": "string", "description": "Words of a name, to list only the sessions whose name has them all, over or not." }
             }
         }
     })
@@ -2790,6 +2792,21 @@ mod tests {
         assert_eq!(named("projects")["inputSchema"]["properties"], json!({}));
         assert_eq!(
             named("sessions")["inputSchema"]["properties"]["project"]["type"],
+            "string"
+        );
+        // The ones that are over are listed only the last few, unless the
+        // call asks for all or finds by name.
+        let listing = named("sessions");
+        assert!(listing["description"]
+            .as_str()
+            .unwrap()
+            .contains("the last ten that are over"));
+        assert_eq!(
+            listing["inputSchema"]["properties"]["all"]["type"],
+            "boolean"
+        );
+        assert_eq!(
+            listing["inputSchema"]["properties"]["find"]["type"],
             "string"
         );
     }

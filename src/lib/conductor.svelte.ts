@@ -345,10 +345,11 @@ function putAway(key: string) {
   close(key);
   if (id === null) return;
   disown(project, id);
-  const entry = owner === null ? null : remembered(owner, id);
+  if (owner === null) return;
+  const entry = remembered(owner, id);
   if (entry === null) return;
   entry.left = "done";
-  saveStarted();
+  remember(owner, entry);
 }
 
 /** Whether something of a row is the user's still: it is unread or on
@@ -653,7 +654,8 @@ export const conductor = $state({
       was started in this run. A list an earlier version kept under the bare
       folder a caller that named no session called from is kept as it is,
       and is no caller's, since no caller is a bare folder. A list it kept
-      under a session's id is the token's that session is given. */
+      under a session's id is the token's that session is given. Each list
+      runs from the session started or gone longest ago to the latest. */
   started: {} as Record<string, Started[]>,
   /** The worktrees each caller's starts made, by the caller's token, kept
       between runs until they are taken away. A caller's board offers to
@@ -895,7 +897,9 @@ function saveStarted() {
   }
 }
 
-/** Puts a session on a caller's list, or brings its entry up to date. */
+/** Puts a session on a caller's list, or brings its entry up to date, at
+    the list's end, so a list runs from the session started or gone longest
+    ago to the latest. */
 function remember(caller: string, entry: Started) {
   const list = conductor.started[caller] ?? [];
   conductor.started[caller] = [
@@ -2546,31 +2550,51 @@ export function wokenBy(session: Session): Woken | null {
   return conductor.woken[session.key] ?? null;
 }
 
+/** How many of the sessions a caller started that are over, put away,
+    closed or ended, a listing gives, the latest first, unless the call asks
+    for all or finds by name. */
+const OVER_LISTED = 10;
+
 /**
  * The caller's own sessions, the ones it started: the user's own are on
  * their own subjects, and a session directing work has no business in
  * them, not even to know what they are. A session with no id yet is left
- * out: the id is how the agent names one. After the rows, the sessions the
- * caller started that are no longer open, from this run or an earlier one,
- * which a start with the session named brings back.
+ * out: the id is how the agent names one. The rows are given in full, and
+ * so are the sessions not run since a restart, which a line resumes; then
+ * the ones that are over, the latest first and only the last few unless the
+ * call asks for all or finds by words of a name, each by its id, its name
+ * and why. A start with the session named brings any of them back, listed
+ * or not.
  */
 function sessionLines(request: Placed): string {
   const only = text(request, "project");
+  const words = (text(request, "find") ?? "").toLowerCase().split(/\s+/).filter((word) => word !== "");
+  const named = (name: string | null) => words.every((word) => (name ?? "").toLowerCase().includes(word));
+  const caller = callerOf(request);
   const listed = sessions.all.filter(
     (session) =>
       session.id !== null &&
       mine(request, session) &&
-      (only === null || session.project === only),
+      (only === null || session.project === only) &&
+      named(label(session)),
   );
-  const gone = (conductor.started[callerOf(request)] ?? []).filter(
+  const gone = (conductor.started[caller] ?? []).filter(
     (entry) =>
-      byId(entry.id) === null && (only === null || entry.project === only),
+      byId(entry.id) === null &&
+      (only === null || entry.project === only) &&
+      named(sessions.names[entry.id] ?? entry.name),
   );
-  const caller = callerOf(request);
+  const sinceRestart = gone.filter((entry) => !isOver(entry));
+  const over = gone.filter(isOver).reverse();
+  const shown = words.length > 0 || flag(request, "all") ? over : over.slice(0, OVER_LISTED);
+  const more = over.length - shown.length;
   const news = laterNews(caller);
   const owed = laterWaiting(caller);
   if (listed.length === 0 && gone.length === 0 && news.calls.length === 0 && owed.length === 0)
-    return "You have started no sessions.";
+    return words.length > 0 && (conductor.started[caller] ?? []).length > 0
+      ? "None of the sessions you started has those words in its name."
+      : "You have started no sessions.";
+  const wayBack = "Start, naming its session, resumes any of them, listed or not, and a line sent to one put away resumes it as well.";
   const lines = [
     ...news.lines,
     ...owed.map((one) =>
@@ -2579,7 +2603,13 @@ function sessionLines(request: Placed): string {
         : `Your ${one.what} is still under way; wait tells you how it went.`,
     ),
     ...listed.map(describe),
-    ...gone.map((entry) => describeGone(caller, entry)),
+    ...sinceRestart.map((entry) => describeGone(caller, entry)),
+    ...shown.map(describeOver),
+    ...(more > 0
+      ? [`${more} more that are over, from longer ago: call sessions with all: true to list them, or with find and words of a name. ${wayBack}`]
+      : shown.length > 0
+        ? [wayBack]
+        : []),
   ];
   // Listing a stop is telling it, and so is listing how a call went.
   for (const session of listed) tell(session.key);
@@ -2624,11 +2654,24 @@ function describeGone(owner: string, entry: Started): string {
   return parts.join("  ");
 }
 
+/** A session that is over, as a listing gives it in short: its id, its
+    name when it has one, and why it is not running. */
+function describeOver(entry: Started): string {
+  const name = sessions.names[entry.id] ?? entry.name;
+  return [idText(entry.id), ...(name === null ? [] : [quotedName(name)]), goneState(entry)].join("  ");
+}
+
+/** Whether a remembered session is over: its row went in a window, put
+    away by the workbench, closed by the user or ended. One not run since a
+    restart is not, and nor is one marked in a way this version does not
+    know. */
+const isOver = (entry: Started) => entry.left === "closed" || entry.left === "ended" || entry.left === "done";
+
 /** Why a remembered session has no row, in a listing's words. */
 function goneState(entry: Started): string {
   if (entry.left === "closed") return "closed by the user";
   if (entry.left === "ended") return "ended";
-  if (entry.left === "done") return "put away by the workbench once its work was over";
+  if (entry.left === "done") return "put away once its work was over";
   return "not running since the workbench was restarted";
 }
 
@@ -4318,7 +4361,7 @@ onClosed((session) => {
   if (entry === null) return;
   const ended = session.status === "exited" || session.status === "crashed" || session.status === "failed";
   entry.left = ended ? "ended" : "closed";
-  saveStarted();
+  remember(caller, entry);
 });
 // The prompt a session is started with is its starter's.
 startersFrom(startedFor);
