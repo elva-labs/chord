@@ -21,7 +21,7 @@ import { attention } from "$lib/attention.svelte";
 import { core, type Settings } from "$lib/core";
 import { focusPane } from "$lib/layout.svelte";
 import { persist } from "$lib/persist";
-import { shownName, type Session } from "$lib/sessions.svelte";
+import { toldName, type Session } from "$lib/sessions.svelte";
 import { goTo, projectLabel } from "$lib/workspace.svelte";
 
 export const notify = $state({
@@ -58,7 +58,7 @@ export function setChime(on: boolean) {
 /** The notification's title: the project, then the session's name. */
 export function titleFor(session: Session): string {
   const project = projectLabel(session.project);
-  return `${project} · ${shownName(session)}`;
+  return `${project} · ${toldName(session)}`;
 }
 
 /** The notification's body: what the session is waiting on. */

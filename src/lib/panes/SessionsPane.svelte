@@ -38,6 +38,7 @@
     markUnread,
     shownName,
     lastChanged,
+    readsLikeAnother,
     loadHistory,
     loadMissingHistories,
     sessionModelName,
@@ -1093,15 +1094,17 @@
   /** The question about closing a session or a project, while it is up. */
   let closingStrip = $state<HTMLDivElement | null>(null);
 
-  /** The session as the question names it: what its row reads as, and
-      its project too where a row in another project reads the same, as a started session's row
-      names the project it runs in. */
+  /** The session as the question names it: what its row reads as, its
+      project too where a row in another project reads the same, as a
+      started session's row names the project it runs in, and the age its
+      row shows where another live row in its project reads the same. */
   function closingName(session: Session): string {
     const name = shownName(session);
-    const same = sessions.all.some(
+    const elsewhere = sessions.all.some(
       (other) => other.key !== session.key && other.project !== session.project && shownName(other) === name,
     );
-    return same ? `${name} in ${projectLabel(session.project)}` : name;
+    const named = elsewhere ? `${name} in ${projectLabel(session.project)}` : name;
+    return readsLikeAnother(session) ? `${named}, ${since(lastChanged(session), now)}` : named;
   }
 
   /** The sessions and projects whose shells are being read before the

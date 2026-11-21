@@ -3,7 +3,7 @@ import type { Conversation, Request } from "$lib/conversation.svelte";
 import { linkOf } from "$lib/integrated.svelte";
 import { agentVisible } from "$lib/layout.svelte";
 import { lastSegment } from "$lib/paths";
-import { byKey, byToken, isLive, sessions, shownName, type Session } from "$lib/sessions.svelte";
+import { byKey, byToken, isLive, sessions, toldName, type Session } from "$lib/sessions.svelte";
 import { projectLabel } from "$lib/workspace.svelte";
 
 /**
@@ -111,7 +111,7 @@ export function askerOf(entry: Docked): { name: string; step: string | null; whe
   const row = byKey(entry.key);
   const folder = folderOf(entry);
   const where = row === null || folder === null ? "its folder" : folder === row.project ? projectLabel(row.project) : lastSegment(folder);
-  return { name: row === null ? "a session it started" : shownName(row), step: placeOf(entry.key)?.step ?? null, where };
+  return { name: row === null ? "a session it started" : toldName(row), step: placeOf(entry.key)?.step ?? null, where };
 }
 
 /** The folder the asking session works in, which a path it names is read

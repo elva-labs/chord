@@ -21,6 +21,7 @@ import {
   historyLabel,
   rowName,
   shownName,
+  toldName,
   firstWords,
   earlierLabel,
   loadHistory,
@@ -3026,6 +3027,25 @@ describe("a name the agent or a caller gave", () => {
     expect(shownName(copy)).toBe("New session");
     ended({ id: "pty-done", code: 0, clean: true });
     expect(shownName(copy)).toBe("Fix it");
+  });
+  it("tells a nameless session from another that reads the same in its project by its row's age", () => {
+    const now = Date.now();
+    const one = create("/p");
+    started(one.key, "pty-one", "sid-one");
+    one.changedAt = now - 3 * 60_000;
+    expect(toldName(one, now)).toBe("New session");
+    // A row in another project reads the same without telling them apart.
+    const away = create("/q");
+    started(away.key, "pty-away", "sid-away");
+    expect(toldName(one, now)).toBe("New session");
+    const two = create("/p");
+    started(two.key, "pty-two", "sid-two");
+    two.changedAt = now - 2 * 3_600_000;
+    expect(toldName(one, now)).toBe("New session, 3m");
+    expect(toldName(two, now)).toBe("New session, 2h");
+    // A finished row tells nothing apart.
+    ended({ id: "pty-two", code: 0, clean: true });
+    expect(toldName(one, now)).toBe("New session");
   });
   it("reads a started session's prompt without the workbench's sentence after it", () => {
     const kid = create("/p", null, undefined, null, `Bump the client ${OUTCOME_ASK_TERMINAL}`);

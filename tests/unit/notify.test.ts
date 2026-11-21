@@ -35,7 +35,7 @@ import {
   setChime,
   titleFor,
 } from "$lib/notify.svelte";
-import { create, exact, onWaiting, reset, sessions, started, type Session } from "$lib/sessions.svelte";
+import { create, ended, exact, onWaiting, reset, sessions, started, type Session } from "$lib/sessions.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 
 const A = "/home/ada/dev/one";
@@ -151,6 +151,18 @@ describe("the words", () => {
     session.needs = null;
     session.status = "exited";
     expect(bodyFor(session)).toBe("Ended");
+  });
+
+  it("tell two nameless sessions of one project apart by the age their rows show", () => {
+    const older = live(A, "pty-1");
+    const newer = live(A, "pty-2");
+    older.changedAt = Date.now() - 3 * 60_000;
+    newer.changedAt = Date.now();
+    expect(titleFor(older)).toBe("one · New session, 3m");
+    expect(titleFor(newer)).toBe("one · New session, now");
+    // One left alone in its project reads as it is.
+    ended({ id: "pty-2", code: 0, clean: true });
+    expect(titleFor(older)).toBe("one · New session");
   });
 
   it("name the orchestrator folder by its name, as the pane does", () => {

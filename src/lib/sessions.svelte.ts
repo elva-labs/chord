@@ -1309,6 +1309,24 @@ export function shownName(session: Session): string {
   return rowName(session) ?? "New session";
 }
 
+/** A session as the user reads it where the text alone says who: an ask,
+    a notification, the question about closing it. Where another live
+    session in its project reads the same, the age its row shows follows,
+    "New session, 3m", so the words point at one row on screen. */
+export function toldName(session: Session, now = Date.now()): string {
+  const name = shownName(session);
+  return readsLikeAnother(session) ? `${name}, ${since(lastChanged(session), now)}` : name;
+}
+
+/** Whether another live session in the same project reads as this one. */
+export function readsLikeAnother(session: Session): boolean {
+  const name = shownName(session);
+  return sessions.all.some(
+    (other) =>
+      other.key !== session.key && other.project === session.project && isLive(other) && shownName(other) === name,
+  );
+}
+
 /** What a row reads as: its name, else the first words of the prompt it
     started with, unless they read as the user, the workbench, an agent or
     another live session's name. Null where nothing says anything, for a
