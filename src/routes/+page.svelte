@@ -77,6 +77,7 @@
   } from "$lib/browser.svelte";
   import { loadNotices } from "$lib/notice.svelte";
   import { loadZoom, zoomed } from "$lib/zoom.svelte";
+  import { loadStartedFolds } from "$lib/startedFolds.svelte";
   import { handle as handleDrag } from "$lib/drops.svelte";
   import { stash } from "$lib/exits";
   import {
@@ -185,6 +186,7 @@
   loadNotices();
   loadZoom();
   loadEditorSize();
+  loadStartedFolds();
 
   // What is on screen, on record for the agent's tools and for the core
   // to watch where it is, and what runs under the sessions, for the

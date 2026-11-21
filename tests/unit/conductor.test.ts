@@ -1,3 +1,4 @@
+import { isStartedFolded, resetStartedFolds, setStartedFolded } from "$lib/startedFolds.svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
 import type { ConductRequest } from "$lib/core";
@@ -1933,7 +1934,10 @@ describe("a session named by the start of its id", () => {
       rested: [ONE],
     };
     going.runs[row.key] = { from: ONE, context: 400_000, briefing: null, spoken: false };
+    setStartedFolded({ key: row.key, id: ONE }, true);
     identified(row.key, TWO);
+    expect(isStartedFolded({ key: row.key, id: TWO })).toBe(true);
+    expect(isStartedFolded({ key: row.key, id: ONE })).toBe(false);
     expect(conductor.started[caller].map((entry) => entry.id)).toEqual([TWO]);
     expect(Object.keys(conductor.runs[caller].places)).toEqual([TWO]);
     expect(conductor.runs[caller].places[TWO].piece).toBe(ONE);
@@ -1943,7 +1947,9 @@ describe("a session named by the start of its id", () => {
     await sending;
     expect(last().content).toBe(`Sent to session ${TWO}. Call wait to hear what it does next.`);
     resetGoingOn();
+    resetStartedFolds();
     localStorage.removeItem("chord.wentOn");
+    localStorage.removeItem("chord.foldedStarters");
   });
 
   it("resumes one of the caller's own by the start of its id", async () => {

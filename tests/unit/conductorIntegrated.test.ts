@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
 import type { ConductRequest } from "$lib/core";
-import { allow, conductor, handle, refuse, resetConductor, STOP_WHEN_DONE, stopStarted, unheard, USER_WROTE, WAKE_AFTER, WAKES_MAX, watchStops } from "$lib/conductor.svelte";
+import { allow, conductor, handle, refuse, resetConductor, START_WAIT, STOP_WHEN_DONE, stopStarted, unheard, USER_WROTE, WAKE_AFTER, WAKES_MAX, watchStops } from "$lib/conductor.svelte";
 import { conversationOf, handleOf, launch, linkFor, listenIntegrated, resetIntegrated, resume, send, userWaiting } from "$lib/integrated.svelte";
-import { byKey, close, create, ended as endedTerminal, forProject, keepName, label, reopenOtherWay, reset as resetSessions, sessions, started, titled, type Session } from "$lib/sessions.svelte";
+import { byKey, close, create, ended as endedTerminal, failed, forProject, identified as identifiedRow, keepName, label, reopenOtherWay, reset as resetSessions, sessions, started, titled, type Session } from "$lib/sessions.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
 import { resetSessionKinds, setKind } from "$lib/sessionKind.svelte";
@@ -979,3 +979,147 @@ describe("an orchestrator that runs integrated", () => {
   });
 });
 
+
+describe("a start that is refused", () => {
+  const added: string[] = [];
+  const removed: string[] = [];
+
+  beforeEach(() => {
+    added.length = 0;
+    removed.length = 0;
+    const core = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    core.worktreeAdd = async (project: string, name: string) => {
+      const path = `${project}/.worktrees/${name}`;
+      added.push(path);
+      return path;
+    };
+    core.worktrees = async () =>
+      added
+        .filter((path) => !removed.includes(path))
+        .map((path) => ({ path, name: path.split("/").at(-1)!, branch: "b", merged: true, dirty: false }));
+    core.worktreeRemove = async (_project: string, name: string) => {
+      removed.push(added.find((path) => path.endsWith(`/${name}`))!);
+    };
+    setKind("claude-code", "integrated");
+  });
+
+  it("leaves no worktree, row, entry or news behind when the folder is not trusted", async () => {
+    fake.untrusted.add(`${A}/.worktrees/fix-it`);
+    const starter = callerToken();
+    const request = call("start", { project: A, prompt: "Fix it", name: "Fix it", worktree: true });
+    const answering = handle(request);
+    await settle();
+    if (conductor.asking !== null) allow();
+    await settle();
+    const row = forProject(A).at(-1)!;
+    await launch(row.key);
+    flushSync();
+    await answering;
+    expect(answerTo(request)?.error).toContain("The folder is not trusted yet");
+    expect(added).toEqual([`${A}/.worktrees/fix-it`]);
+    expect(removed).toEqual(added);
+    expect(forProject(A)).toEqual([]);
+    expect(conductor.trees[starter] ?? []).toEqual([]);
+    expect(Object.keys(conductor.startedBy)).toEqual([]);
+    expect(unheard(sessions.all.find((row) => row.token === starter)!)).toEqual([]);
+    const listed = call("sessions");
+    await handle(listed);
+    expect(answerTo(listed)?.content ?? "").not.toContain("Fix it");
+  });
+
+  /** Starts with a worktree, lets the row come into being and hands it to
+      the test while the call is still waiting on it. */
+  async function startAndHold(tick: () => Promise<unknown> = settle) {
+    const starter = callerToken();
+    const request = call("start", { project: A, prompt: "Fix it", name: "Fix it", worktree: true });
+    const answering = handle(request);
+    await tick();
+    if (conductor.asking !== null) allow();
+    await tick();
+    return { starter, request, answering, row: forProject(A).at(-1)! };
+  }
+
+  it("takes back a start whose row failed", async () => {
+    const { starter, request, answering, row } = await startAndHold();
+    failed(row.key, "spawn failed");
+    await answering;
+    expect(answerTo(request)?.error).toContain("spawn failed");
+    expect(removed).toEqual(added);
+    expect(forProject(A)).toEqual([]);
+    expect(conductor.trees[starter] ?? []).toEqual([]);
+    expect(Object.keys(conductor.startedBy)).toEqual([]);
+  });
+
+  it("takes back a start whose row exited before it was identified", async () => {
+    const { request, answering, row } = await startAndHold();
+    started(row.key, "pty-gone", null);
+    endedTerminal({ id: "pty-gone", code: 1, clean: false });
+    await answering;
+    expect(answerTo(request)?.content).toBeNull();
+    expect(forProject(A)).toEqual([]);
+    expect(removed).toEqual(added);
+  });
+
+  it("keeps a worktree the core will not remove, on the starter's list", async () => {
+    const core = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    core.worktreeRemove = async () => {
+      throw "the worktree has changes";
+    };
+    const { starter, answering, row } = await startAndHold();
+    failed(row.key, "spawn failed");
+    await answering;
+    expect(forProject(A)).toEqual([]);
+    expect(conductor.trees[starter]?.map((tree) => tree.path)).toEqual(added);
+  });
+
+  it("drops the entry of a worktree that is already gone", async () => {
+    const { starter, answering, row } = await startAndHold();
+    removed.push(...added);
+    failed(row.key, "spawn failed");
+    await answering;
+    expect(conductor.trees[starter] ?? []).toEqual([]);
+  });
+
+  it("waits for a running row whose id arrives later and keeps it", async () => {
+    const { request, answering, row } = await startAndHold();
+    started(row.key, "pty-codex", null);
+    await settle();
+    expect(answerTo(request)).toBeUndefined();
+    identifiedRow("pty-codex", "codex-thread-1", null);
+    await answering;
+    expect(answerTo(request)?.error ?? null).toBeNull();
+    expect(answerTo(request)?.content).toContain("codex-thread-1");
+    expect(byKey(row.key)?.status).toBe("running");
+    expect(removed).toEqual([]);
+  });
+
+  it("neither closes a running row nor removes its worktree when the id never comes", async () => {
+    vi.useFakeTimers();
+    try {
+      const { request, answering, row } = await startAndHold(() => vi.advanceTimersByTimeAsync(0));
+      started(row.key, "pty-codex", null);
+      await vi.advanceTimersByTimeAsync(START_WAIT + 1);
+      await answering;
+      expect(answerTo(request)?.content).toBeNull();
+      expect(byKey(row.key)?.status).toBe("running");
+      expect(removed).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("makes nothing when the user says no", async () => {
+    const starter = callerToken();
+    const request = call("start", { project: A, prompt: "Fix it", name: "Fix it", worktree: true });
+    const answering = handle(request);
+    await settle();
+    expect(conductor.asking).not.toBeNull();
+    refuse();
+    await answering;
+    expect(answerTo(request)?.error).toContain("The user did not allow the session to be started");
+    expect(added).toEqual([]);
+    expect(forProject(A)).toEqual([]);
+    expect(conductor.trees[starter] ?? []).toEqual([]);
+    expect(Object.keys(conductor.startedBy)).toEqual([]);
+  });
+});
