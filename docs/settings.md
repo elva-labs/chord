@@ -1,16 +1,16 @@
 # Settings
 
-<kbd>Cmd</kbd><kbd>,</kbd> opens the settings (<kbd>Ctrl</kbd><kbd>,</kbd> on Windows and Linux). A choice applies at once, and every window on the machine follows it. The [settings reference](reference/settings.md) describes each one in full.
+<kbd>Cmd</kbd><kbd>,</kbd> opens the settings (<kbd>Ctrl</kbd><kbd>,</kbd> on Windows and Linux). A choice applies at once, and every window on the machine follows it. Each setting is its name, its control and at most one short line, and one you have changed shows Reset beside it. The [settings reference](reference/settings.md) describes each one in full.
 
 ![The settings over the workbench, open on the appearance settings.](settings.png)
 
 ## Appearance
 
-System, light or dark. System follows the desktop.
+Mode is system, light or dark. System follows the desktop. The Appearance tab also holds the look, the colour, compact mode and the two fonts, with the background and custom styles behind More.
 
 ## Theme
 
-Modern, with rounded cards in a sans, or terminal, with square boxes in mono. Both use the same colours. <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>T</kbd> cycles through them. See [theme](reference/settings.md#theme).
+The look: modern, with rounded cards in a sans, or terminal, with square boxes in mono. Both use the same colours. <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>T</kbd> cycles through them. See [theme](reference/settings.md#theme).
 
 ## Font
 
@@ -34,15 +34,15 @@ A stylesheet of your own, `user.css` beside the settings file, laid over the app
 
 ## Live updates
 
-How the app learns what an agent is doing: by watching the files, or through agent [hooks](hooks.md), which keep the session's row more exact and give the agent the app's tools. A fresh install has the hooks on. A project can go the other way from the rest. See [live updates](reference/settings.md#live-updates).
+Let agents talk to Chord, in the Sessions tab. Off, the app learns what an agent is doing by watching its files. On, it does through agent [hooks](hooks.md), which keep the session's row more exact and give the agent the app's tools. A fresh install has it on. A project can go the other way from the rest, under By project. See [live updates](reference/settings.md#live-updates).
 
 ## Sessions
 
-- **In a terminal or in Chord**, for each agent: the agent's own interface, or a conversation the window draws. In a terminal to begin with. [Sessions](sessions.md#integrated-sessions) says what the difference is.
-- **What a new session starts on**: the model, effort and mode you last chose for that agent. They can be put back to the agent's own.
-- **Asking before a session starts another**: off to begin with, so a session may start one in its own project without asking. Turned on, every start is put to you.
-- **How long past sessions stay listed**: forever, 30 days, 7 days or 1 day. Older ones are still there to resume behind the row of earlier sessions.
-- **How long an unused project stays in the list**: 1 day, 7 days, 30 days or never, 7 days to begin with.
+- **Run**, for each agent: In Chord, a conversation the window draws, or In a terminal, the agent's own interface. In a terminal to begin with. [Sessions](sessions.md#sessions-in-chord) says what the difference is.
+- **Start on**, for each agent: the model, effort and mode you last chose for it. Use defaults puts back the agent's own.
+- **Ask before a session starts another**: Outside its project to begin with, so a session may start one in its own project without asking. Every time puts every start to you.
+- **Keep listed**: how long past sessions stay listed, forever, 30 days, 7 days or 1 day. Older ones are still there to resume behind the row of earlier sessions.
+- **Fold inactive projects after**: 1 day, 7 days, 30 days or never, 7 days to begin with.
 
 See [sessions](reference/settings.md#sessions).
 
@@ -58,9 +58,9 @@ An account is a separate login: a Claude Code configuration directory and a Code
 
 Sources of plugins, with a switch for each plugin. Every plugin is off to begin with. See [plugins](plugins.md).
 
-## Shortcuts
+## Keys
 
-The whole table of shortcuts, with two presets and room for your own. See [focus](focus-model.md).
+The whole table of shortcuts, with two presets and room for your own. A shortcut changed from its preset shows Reset, and Reset all shortcuts puts the preset back. See [focus](focus-model.md).
 
 ## Notifications
 
@@ -68,7 +68,7 @@ While the window is in the background, a system notification says when a session
 
 ## An agent changing them
 
-An agent can ask to change the settings when you ask it to, such as a darker look or a shortcut of your own. Each change is shown to you first, and nothing changes unless you allow it. The hooks, plugins, accounts, notifications and what is asked before a session starts are yours alone to change. See [an agent changing them](reference/settings.md#an-agent-changing-them).
+An agent can ask to change the settings when you ask it to, such as a darker look or a shortcut of your own. Each change is put to you over the window first, from what it is to what it would be, and nothing changes unless you choose Allow. The hooks, plugins, accounts, notifications and what is asked before a session starts are yours alone to change. See [an agent changing them](reference/settings.md#an-agent-changing-them).
 
 ## Where they are kept
 

@@ -41,7 +41,7 @@ brew tap elva-labs/elva
 brew install --cask chord@beta
 ```
 
-Every [release](https://github.com/elva-labs/chord/releases) also carries a `.dmg` for macOS, an `.AppImage` and a `.deb` for Linux, and a setup `.exe` for Windows. Stable releases add an `.rpm` and an `.msi`. The macOS builds are signed and notarized.
+Every [release](https://github.com/elva-labs/chord/releases) also carries installers for macOS, Linux and Windows. The macOS builds are signed and notarized.
 
 Chord runs the agents you have installed: `claude` or `codex` on your login shell's PATH. The cask also puts `awb` on the PATH, so `awb .` opens the folder you are in.
 

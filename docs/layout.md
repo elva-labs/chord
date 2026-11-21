@@ -21,7 +21,7 @@ A folded sessions pane keeps a narrow column with each project's session dots. W
 
 ## Dividers
 
-Drag the gap between two panes to resize them. Double-click it to go back to the default width. With the divider focused, the arrow keys move it, by more with <kbd>Shift</kbd>. See [dividers](reference/layout.md#dividers).
+Drag the gap between two panes to resize them. Double-click it to go back to the default width. A pane keeps the size you chose: a narrow window draws it smaller for the moment, and it widens back once there is room. With the divider focused, the arrow keys move it, by more with <kbd>Shift</kbd>. See [dividers](reference/layout.md#dividers).
 
 ## Compact mode
 
@@ -29,7 +29,7 @@ A setting under Appearance that takes the sessions pane out of the layout. It sl
 
 ## The status bar
 
-The row along the window's foot says what the session on screen is doing, the folder and branch it works in, its model and effort, and, with more than one account, the account and how much of its allowance is used. Click a part for more. See [the status bar](reference/layout.md#the-status-bar).
+The row along the window's foot names the branch the session on screen works on and, with more than one account, the account and how much of its allowance is used. At its right end it says how many sessions wait for you. The session's state is on its row's dot, and its model on the composer and the agent pane's header. See [the status bar](reference/layout.md#the-status-bar).
 
 ## The terminal panel
 
@@ -37,7 +37,7 @@ Plain shells under the panes. <kbd>Cmd</kbd><kbd>J</kbd> shows and hides the pan
 
 ## The field above the tree
 
-The field at the top of the changes pane narrows the tree to matching paths. <kbd>Cmd</kbd><kbd>F</kbd> filters files, and <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>F</kbd> searches inside them. See [the field above the tree](reference/layout.md#the-field-above-the-tree).
+The field at the top of the changes pane narrows the tree to matching paths. <kbd>Cmd</kbd><kbd>F</kbd> filters files, and <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>F</kbd> searches inside them. A folder you open or close yourself stays that way, through restarts too. See [the field above the tree](reference/layout.md#the-field-above-the-tree).
 
 ## Under the tree
 

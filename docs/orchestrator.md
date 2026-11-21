@@ -288,7 +288,7 @@ away it answers that none is running.
 After a restart, a session another session started comes back under its
 starter as every row open at the quit does, where it stood among the
 others and with nothing running behind it (see
-[sessions](sessions.md#after-a-restart)). What the restart cut off stays,
+[sessions](reference/sessions.md#after-a-restart)). What the restart cut off stays,
 and what was already over goes as it would have. One whose work was over
 at the quit as far as it and its starter go, its turn ended by itself and
 its starter told, with nothing it started still at work, is over still

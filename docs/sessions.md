@@ -5,6 +5,7 @@ A session is one agent at work in one project. Open a folder as a project and st
 ## Starting and closing
 
 - Start a session from the project's header or from the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project.
+- New session in Chord or New session in a terminal, in the project's ⋯ menu and the palette, starts one the other way from the setting.
 - The × on a live row stops the session and keeps it in the project's past sessions. Closing a project stops everything running in it.
 - Closing asks first when it would lose unsaved edits or stop a shell that is still running something.
 
@@ -32,27 +33,29 @@ A project you have not used for a week folds under Inactive at the foot of the p
 
 Under the live sessions sit the ones you ran in the project lately. Click one to resume it. Older sessions, including ones run from a plain terminal, wait behind a row such as "33 earlier sessions…", which opens a searchable list. See [past sessions](reference/sessions.md#past-sessions).
 
-When the app starts again, the sessions that were open come back as yellow rows, and the one on screen resumes. See [after a restart](reference/sessions.md#after-a-restart).
+When the app starts again, the sessions that were open come back as yellow rows, and the one on screen resumes. A session another session started comes back under its starter, and a line sent to it starts it. See [after a restart](reference/sessions.md#after-a-restart).
 
 ## Following the session
 
 The changes pane follows the session on screen. When the agent moves into a git worktree, the pane shows the changes there and says so in its header. See [following the session](reference/sessions.md#following-the-session).
 
-<a id="integrated-sessions"></a>
-
-## In Chord or in a terminal
+## Sessions in Chord
 
 A session runs either in a terminal, with the agent's own interface, or in Chord, as a conversation the window draws itself. Which one is a setting for each agent, [sessions](settings.md#sessions), in a terminal to begin with. Either way the agent's own login, settings, skills and MCP servers apply, and the conversation is the same one: a session started one way resumes the other.
 
-In Chord, the agent's questions about permissions are answered in the window, its slash commands work, and images and files can go with a message. The [reference](reference/sessions.md#integrated-sessions) has the detail, and [sessions in Chord](integrated.md) how the agents are driven.
+In Chord, the agent's questions dock over the composer. A permission offers Allow once, Allow for this session and Don't allow, each answered by its number key, with more behind More. Its slash commands work, and images and files can go with a message. A turn stopped at the usage limit says when the limit resets, and a Claude Code conversation can Continue when it resets. The [reference](reference/sessions.md#sessions-in-chord) has the detail, and [sessions in Chord](integrated.md) how the agents are driven.
 
 ### When the setting is switched
 
-Sessions already open move to the new way once they are at rest, with their conversation. A single session can be reopened the other way from its row's menu. See [when the setting is switched](reference/sessions.md#when-the-setting-is-switched).
+Sessions already open move to the new way once they are at rest, with their conversation. A single session can be reopened the other way from its row's menu, with Reopen as a conversation or Reopen in a terminal. See [when the setting is switched](reference/sessions.md#when-the-setting-is-switched).
 
 ## Subagents on the rail
 
 A Claude Code session in Chord shows its subagents under its row while they run, each with what it was asked to do and its state. See [subagents on the rail](reference/sessions.md#subagents-on-the-rail).
+
+## Names
+
+A row is `session N` until the agent names it, and a name you give it through the agent's rename command stays. See [names](reference/sessions.md#names).
 
 ## Accounts
 
