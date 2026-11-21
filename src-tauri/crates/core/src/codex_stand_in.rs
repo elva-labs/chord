@@ -518,6 +518,10 @@ fn the_account_s_home_and_the_tool_server_go_with_the_session() {
 fn a_session_under_a_workflow_is_told_it_in_the_thread_and_delegates_only_through_start() {
     let server = PathBuf::from("/opt/workbench/chord-remote");
     let told = "1. Direct the work.\n2. Say \"done\" when it is.";
+    let directed = format!(
+        "{}\n\n{told}",
+        crate::mcp::ORCHESTRATOR_CONVERSATION_INSTRUCTIONS
+    );
     let no_subagents = json!({
         "multi_agent": false,
         "multi_agent_v2": {"disable_native_tools": true},
@@ -550,9 +554,10 @@ fn a_session_under_a_workflow_is_told_it_in_the_thread_and_delegates_only_throug
             "thread/start"
         };
         let params = &h.sent(method)[0]["params"];
-        // The instructions go in the message that starts the thread, whole,
-        // on every start and every resume.
-        assert_eq!(params["developerInstructions"], told, "{method}");
+        // What the tool server tells an orchestrator in a conversation, then
+        // the workflow's instructions, go in the message that starts the
+        // thread, whole, on every start and every resume.
+        assert_eq!(params["developerInstructions"], directed, "{method}");
         // Codex's own subagent tools are turned off with the settings a
         // terminal session is started with, as the tables they name.
         assert_eq!(params["config"]["features"], no_subagents, "{method}");
@@ -570,8 +575,8 @@ fn a_session_under_a_workflow_is_told_it_in_the_thread_and_delegates_only_throug
         h.stop();
     }
 
-    // With its own tools left alone, it is told the workflow and nothing
-    // else changes; with no workflow, it is told nothing.
+    // With its own tools left alone, it is told the same and nothing else
+    // changes.
     let h = start_with(
         "workflow-own-tools",
         &format!("{}\ndrain", ready_scenario()),
@@ -582,9 +587,45 @@ fn a_session_under_a_workflow_is_told_it_in_the_thread_and_delegates_only_throug
     );
     h.until_type("ready");
     let params = &h.sent("thread/start")[0]["params"];
-    assert_eq!(params["developerInstructions"], told);
+    assert_eq!(params["developerInstructions"], directed);
     assert!(params["config"].get("features").is_none(), "{params}");
     h.stop();
+
+    // With no workflow, a session with the tools is told what the tool
+    // server tells a conversation, on a start and on a resume, since Codex
+    // shows its model only the start of what a server says; one without
+    // them is told nothing.
+    for resume in [false, true] {
+        let h = start_with(
+            if resume {
+                "no-workflow-resumed"
+            } else {
+                "no-workflow-tools"
+            },
+            &format!("{}\ndrain", ready_scenario()),
+            |launch| {
+                if resume {
+                    launch.session = Some("019a-old");
+                    launch.resume = true;
+                }
+                launch.tool_server = Some(Box::leak(server.clone().into_boxed_path()));
+            },
+        );
+        h.until_type("ready");
+        let method = if resume {
+            "thread/resume"
+        } else {
+            "thread/start"
+        };
+        let params = &h.sent(method)[0]["params"];
+        assert_eq!(
+            params["developerInstructions"],
+            crate::mcp::CONVERSATION_INSTRUCTIONS,
+            "{method}"
+        );
+        assert!(params["config"].get("features").is_none(), "{params}");
+        h.stop();
+    }
     let h = start("no-workflow", &format!("{}\ndrain", ready_scenario()));
     h.until_type("ready");
     let params = &h.sent("thread/start")[0]["params"];
@@ -1717,10 +1758,13 @@ mod model {
             run(command.trim(), false)
         } else if prompt.contains("GIVEN") {
             // What the model was given: the tools by name, and whether a
-            // workflow's instructions are anywhere in what it read.
+            // workflow's instructions, and the tool server's rule on notes,
+            // are anywhere in what it read.
             let names: Vec<&str> = tools.iter().map(|(_, name)| name.as_str()).collect();
-            let told = body.to_string().contains("WORKFLOW-MARKER");
-            said(&json!({"tools": names, "told": told}).to_string())
+            let read = body.to_string();
+            let told = read.contains("WORKFLOW-MARKER");
+            let rules = read.contains("Keep notes with the note tool");
+            said(&json!({"tools": names, "told": told, "rules": rules}).to_string())
         } else if prompt.contains("MCP") {
             match tools.iter().find(|(_, name)| name.contains("echo")) {
                 Some((namespace, name)) => {
@@ -2316,13 +2360,16 @@ fn real_codex_under_a_workflow_reads_its_instructions_and_has_no_subagent_tools(
         "followup_task",
     ];
 
-    let (plain, _) = given(None, false, false);
+    let (plain, unled) = given(None, false, false);
     println!("under no workflow: {plain}");
     assert_eq!(plain["told"], false);
+    assert_eq!(plain["rules"], false);
     assert!(has(&plain, "spawn_agent"), "{plain}");
     let (fresh, thread) = given(None, true, true);
     println!("under a workflow: {fresh}");
     assert_eq!(fresh["told"], true);
+    // The tool server's rules come with the workflow's, whole.
+    assert_eq!(fresh["rules"], true);
     for tool in subagent_tools {
         assert!(!has(&fresh, tool), "{tool} is gone under a workflow");
     }
@@ -2341,6 +2388,13 @@ fn real_codex_under_a_workflow_reads_its_instructions_and_has_no_subagent_tools(
     for tool in subagent_tools {
         assert!(!has(&left, tool), "{tool} stays gone");
     }
+    // Nor does a resume add developer instructions to what a thread has
+    // read: Codex puts them in the model's context when it builds the
+    // context anew, on a thread's first turn or once it compacts.
+    let (late, _) = given(Some(&unled), true, true);
+    println!("begun under none, resumed under one: {late}");
+    assert_eq!(late["told"], false);
+    assert_eq!(late["rules"], false);
 
     // The other way round: a thread that began under a workflow that left
     // it its own tools keeps them when resumed under one that takes them.

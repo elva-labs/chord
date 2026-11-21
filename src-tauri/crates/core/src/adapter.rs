@@ -433,11 +433,37 @@ fn codex_version(
         .find_map(crate::codex_app_server::numbers)
 }
 
+/// What Codex is given as developer instructions for a session with the
+/// workbench's tools: what the tool server tells a session with this role,
+/// view and word on waking, then a workflow's instructions when it follows
+/// one. Codex shows its model only the start of what a server says until
+/// the model takes up one of the server's tools, so the rules reach it here.
+pub fn codex_developer_instructions(
+    orchestrator: bool,
+    view: Option<&str>,
+    wakes: bool,
+    workflow: Option<&str>,
+) -> String {
+    let told = crate::mcp::instructions_for(
+        orchestrator.then_some(ORCHESTRATOR_ROLE),
+        view,
+        wakes.then_some(WAKES),
+    );
+    match workflow {
+        Some(workflow) => format!("{told}\n\n{workflow}"),
+        None => told.to_string(),
+    }
+}
+
 /// The same for Codex, which takes each as a setting of its configuration:
-/// the instructions as developer instructions, its own subagent tools taken
-/// away, and the tool server as one of its servers. Codex has no setting
-/// that reads developer instructions from a file, so they go on the command
-/// line, which is refused on Windows.
+/// the developer instructions, its own subagent tools taken away, and the
+/// tool server as one of its servers. Codex has no setting that reads
+/// developer instructions from a file, so they go on the command line, and
+/// a workflow's, which run over many lines, are refused on Windows.
+///
+/// A session is given developer instructions wherever it has the tools:
+/// where the server is named here, or where it follows a workflow, which
+/// never starts without them.
 ///
 /// Codex starts a server with only the variables its entry names, so the
 /// server is named whole wherever the session has it, with the variables
@@ -456,7 +482,10 @@ fn codex_version(
 /// holds quotes, and the interpreter takes the first and the last quote off
 /// a line that has more than two, which cuts a script path with a space in
 /// it short. Codex then starts the server from its configuration alone, and
-/// the session's calls name no session.
+/// the session's calls name no session. Nor is it given developer
+/// instructions: the interpreter reads the quotes inside the setting as its
+/// own, and the `<` and `>` of what the server says between them as
+/// redirections.
 fn codex_workflow(ctx: &LaunchCtx, windows: bool, script: bool) -> Result<Vec<String>, String> {
     if windows && ctx.instructions.is_some() {
         return Err(CODEX_WORKFLOW_ON_WINDOWS.into());
@@ -465,8 +494,9 @@ fn codex_workflow(ctx: &LaunchCtx, windows: bool, script: bool) -> Result<Vec<St
     // with the same escapes.
     let text = |value: &str| serde_json::Value::from(value).to_string();
     let configured = ctx.configured.filter(|_| !(windows && script));
+    let named = ctx.server.or(configured);
     let mut settings = Vec::new();
-    if let Some(server) = ctx.server.or(configured) {
+    if let Some(server) = named {
         settings.push(format!(
             "mcp_servers.{CODEX_SERVER_KEY}.command={}",
             text(&server.to_string_lossy())
@@ -493,8 +523,10 @@ fn codex_workflow(ctx: &LaunchCtx, windows: bool, script: bool) -> Result<Vec<St
     if ctx.start_only {
         settings.extend(CODEX_NO_SUBAGENTS.iter().map(|setting| setting.to_string()));
     }
-    if let Some(instructions) = ctx.instructions {
-        settings.push(format!("developer_instructions={}", text(instructions)));
+    if named.is_some() || ctx.instructions.is_some() {
+        let told =
+            codex_developer_instructions(ctx.orchestrator, None, ctx.wakes, ctx.instructions);
+        settings.push(format!("developer_instructions={}", text(&told)));
     }
     Ok(settings
         .into_iter()
@@ -1199,6 +1231,16 @@ mod tests {
             )
         );
 
+        // What the tool server tells an orchestrator, then the workflow's
+        // instructions, as one TOML string on one line.
+        let directed = format!(
+            "developer_instructions={}",
+            serde_json::Value::from(format!(
+                "{}\n\n1. Direct the work.\n2. Say \"done\".",
+                crate::mcp::ORCHESTRATOR_INSTRUCTIONS
+            ))
+        );
+        assert!(directed.ends_with(r#"\n\n1. Direct the work.\n2. Say \"done\".""#));
         let codex_settings = [
             vec![
                 "-c".to_string(),
@@ -1218,7 +1260,7 @@ mod tests {
                 "-c".to_string(),
                 "features.multi_agent_v2.disable_native_tools=true".to_string(),
                 "-c".to_string(),
-                r#"developer_instructions="1. Direct the work.\n2. Say \"done\".""#.to_string(),
+                directed.clone(),
             ],
         ]
         .concat();
@@ -1271,10 +1313,7 @@ mod tests {
         );
         assert_eq!(
             codex_workflow(&ctx, false, false).unwrap(),
-            [
-                "-c",
-                r#"developer_instructions="1. Direct the work.\n2. Say \"done\".""#
-            ]
+            ["-c".to_string(), directed]
         );
         // Resumed with instructions other than those it was first given,
         // Claude Code is told to read them rather than the record it keeps.
@@ -1352,6 +1391,62 @@ mod tests {
             assert!(names(&with, tool), "{tool} is there without the settings");
             assert!(!names(&without, tool), "{tool} is gone with them");
         }
+    }
+
+    /// What the tool server tells an orchestrator and its workflow's
+    /// instructions reach Codex's model whole, as one developer message,
+    /// from the setting the workbench passes. Run where Codex is installed,
+    /// on a home of its own; a machine without it has nothing to check.
+    #[test]
+    fn codex_gives_its_model_the_developer_instructions_whole() {
+        let vars: HashMap<String, String> = std::env::vars().collect();
+        let Some(codex) = find_on_path(&vars, "codex") else {
+            return;
+        };
+        let home = Scratch::new("codex-home-developer");
+        let ctx = LaunchCtx {
+            project: Path::new("/tmp"),
+            env: &vars,
+            config_dir: None,
+            session: None,
+            token: Some("token-1"),
+            prompt: None,
+            model: None,
+            mode: None,
+            orchestrator: true,
+            instructions: Some("1. Direct the work.\n2. Say \"done\"."),
+            instructions_file: None,
+            start_only: true,
+            server: None,
+            server_file: None,
+            configured: None,
+            afresh: false,
+            compact_at: None,
+            wakes: true,
+        };
+        let settings = codex_workflow(&ctx, false, false).unwrap();
+        let setting = settings
+            .iter()
+            .find(|setting| setting.starts_with("developer_instructions="))
+            .unwrap();
+        let output = std::process::Command::new(&codex)
+            .args(["debug", "prompt-input", "-c", setting, "hi"])
+            .env(CODEX_HOME_VAR, home.path())
+            .current_dir(&home)
+            .output()
+            .unwrap();
+        let input: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let told = format!(
+            "{}\n\n1. Direct the work.\n2. Say \"done\".",
+            crate::mcp::ORCHESTRATOR_WOKEN_INSTRUCTIONS
+        );
+        let given = input.as_array().unwrap().iter().any(|item| {
+            item["role"] == "developer"
+                && item["content"]
+                    .as_array()
+                    .is_some_and(|parts| parts.iter().any(|part| part["text"] == told))
+        });
+        assert!(given, "{input}");
     }
 
     /// Whether `text` names the tool `name` whole, not as the start or end
@@ -1660,12 +1755,23 @@ mod tests {
         assert!(codex_workflow(&ctx, false, false).unwrap().is_empty());
         // The project's configuration names it: it is named again, whole,
         // with the variables Codex is to pass on, and nothing of its tools'
-        // approval, so the one the project's entry says holds.
+        // approval, so the one the project's entry says holds. What the
+        // server tells the session goes with it, whole, as developer
+        // instructions.
         let configured = LaunchCtx {
             configured: Some(daemon),
             ..ctx
         };
-        let whole = [
+        let told = |instructions: &str| {
+            [
+                "-c".to_string(),
+                format!(
+                    "developer_instructions={}",
+                    serde_json::Value::from(instructions)
+                ),
+            ]
+        };
+        let server = [
             "-c".to_string(),
             format!("mcp_servers.chord.command=\"{}\"", daemon.display()),
             "-c".to_string(),
@@ -1676,7 +1782,36 @@ mod tests {
             "-c".to_string(),
             "mcp_servers.chord.tool_timeout_sec=1860".to_string(),
         ];
+        let whole = [server.to_vec(), told(crate::mcp::INSTRUCTIONS).to_vec()].concat();
         assert_eq!(codex_workflow(&configured, false, false).unwrap(), whole);
+        // A session the workbench hears from at each turn's end is told the
+        // rule for that, and an orchestrator its own, with the workflow's
+        // instructions after them.
+        let woken = LaunchCtx {
+            wakes: true,
+            ..configured
+        };
+        assert_eq!(
+            codex_workflow(&woken, false, false).unwrap(),
+            [
+                server.to_vec(),
+                told(crate::mcp::WOKEN_INSTRUCTIONS).to_vec()
+            ]
+            .concat()
+        );
+        let directing = LaunchCtx {
+            orchestrator: true,
+            instructions: Some("Direct the work."),
+            ..woken
+        };
+        let directed = format!(
+            "{}\n\nDirect the work.",
+            crate::mcp::ORCHESTRATOR_WOKEN_INSTRUCTIONS
+        );
+        assert_eq!(
+            codex_workflow(&directing, false, false).unwrap()[8..],
+            told(&directed)
+        );
         // Named where no configuration names it, the tools that read, show
         // or are asked about by the window run without asking, each by an
         // approval of its own, and the rest ask as the user's approval
@@ -1686,8 +1821,11 @@ mod tests {
             server: Some(daemon),
             ..ctx
         };
-        let approving = [whole.to_vec(), tool_approvals()].concat();
-        assert_eq!(codex_workflow(&named, false, false).unwrap(), approving);
+        let approving = [server.to_vec(), tool_approvals()].concat();
+        assert_eq!(
+            codex_workflow(&named, false, false).unwrap(),
+            [approving.clone(), told(crate::mcp::INSTRUCTIONS).to_vec()].concat()
+        );
         assert!(
             approving.contains(&"mcp_servers.chord.tools.notify.approval_mode=\"approve\"".into())
         );
@@ -1706,6 +1844,21 @@ mod tests {
             );
         }
         assert_eq!(codex_workflow(&configured, true, false).unwrap(), whole);
+        // On Windows the settings are quoted into one command line, which
+        // holds 32767 characters; the longest instructions a terminal there
+        // is given take a fraction of it.
+        let line = |settings: &[String]| -> usize {
+            settings
+                .iter()
+                .map(|arg| arg.len() + arg.matches('"').count() + 3)
+                .sum()
+        };
+        let longest = LaunchCtx {
+            server: Some(daemon),
+            ..woken
+        };
+        let longest = codex_workflow(&longest, true, false).unwrap();
+        assert!(line(&longest) < 32767 / 4, "{}", line(&longest));
         // A script on Windows is told nothing of it: the interpreter would
         // cut the script's path short at the settings' quotes.
         assert!(codex_workflow(&configured, true, true).unwrap().is_empty());

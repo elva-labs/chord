@@ -46,7 +46,11 @@ can wake it (see [when the user writes to it](#when-the-user-writes-to-it)).
 How a session's row learns why it stopped is told as [the agent's
 tools](hooks.md#the-agents-tools) describe. What a session is told when it
 connects stays well inside the length Claude Code keeps of a tool server's
-instructions, 4096 characters, past which it cuts the rest.
+instructions, 4096 characters, past which it cuts the rest. Codex shows its
+model only their first few lines until the model takes up one of the
+tools, so a Codex session is given them whole as developer instructions
+too, as [the agents](adapters.md#naming-the-session-to-its-tools)
+describe.
 
 Earlier versions of the workbench ran such sessions in a project of their
 own, the folder `orchestrator` under the workbench's home. While

@@ -90,9 +90,9 @@ past turns, which the window reads apart, as described under
 [history](#history). The thread starts with the
 model, the effort and the mode the session asked for, and with approvals
 sent to the window whoever the user's own configuration names to review
-them. A session that follows a workflow gives the workflow's instructions
-as the thread's developer instructions, in the message that starts or
-resumes it, and where the workflow delegates only through the workbench
+them. The thread's developer instructions, in the message that starts or
+resumes it, are what the tool server tells a session in Chord, followed by
+the workflow's instructions where the session follows one, and where the workflow delegates only through the workbench
 the thread's configuration turns Codex's own subagent tools off with the
 settings a terminal session is given. None of it goes on a command line,
 so on Windows too a Codex session can follow a workflow this way. A start
