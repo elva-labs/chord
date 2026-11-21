@@ -71,7 +71,8 @@ test("reaches and uses every control of the composer by Tab", async ({ page }) =
   expect(await focused(page)).toBe("send");
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("user-message")).toHaveCount(1);
-  // Sent, the workflow is kept and its chip goes.
+  // Sent, the keyboard is back in the field, so the row is left: the workflow is kept and its chip goes.
+  await expect(input).toBeFocused();
   await expect(page.getByTestId("workflow-chip")).toHaveCount(0);
 });
 

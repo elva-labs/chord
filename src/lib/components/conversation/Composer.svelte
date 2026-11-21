@@ -1743,7 +1743,9 @@
         <button
           class="round send"
           tabindex="0"
-          onclick={() => submit()}
+          onclick={() => {
+            if (submit()) field?.focus();
+          }}
           disabled={shell !== null ? !ready || shell === "" : !ready || !hasWords || reading > 0 || unlisted}
           aria-label={shell !== null ? "Run" : running ? "Send, to wait for the agent" : "Send"}
           title={shell !== null
