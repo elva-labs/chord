@@ -36,7 +36,8 @@ The pane's title row carries two small buttons at its end: the order the
 projects are listed in, and a menu with Open project, Open remote project,
 for a folder on another machine, and Settings; see [remote](remote.md).
 Under it sits a
-field, `Go to a session or project` with the shortcut of go to, which opens
+field, `Go to a session or project` with the shortcut of go to (in the
+terminal look the words take the shortcut's room), which opens
 [go to](focus-model.md#the-palettes), and beside it a button in the accent
 that opens the palette's New session, which asks for the project first when
 more than one is open. With no project open, the pane lists nothing: the

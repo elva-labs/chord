@@ -2614,6 +2614,13 @@
     color: var(--ink-3);
   }
 
+  /* The terminal look's monospace words fill the field at the pane's
+     default width, so they take the chord's room there; the palette and the
+     keys list still show the chord. */
+  :global(:root:not([data-look])) .go kbd {
+    display: none;
+  }
+
   .add {
     flex: none;
     width: 30px;

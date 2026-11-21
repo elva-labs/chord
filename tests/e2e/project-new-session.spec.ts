@@ -188,3 +188,23 @@ test("New session in the palette leaves the session on screen until the new one 
   await askingInOther(page);
   await startInOther(page);
 });
+
+for (const look of ["modern", "terminal"] as const) {
+  test(`the go-to field reads whole in the ${look} look`, async ({ page }) => {
+    await installFakeCore(page, { open: [PROJECT], settings: { look } });
+    await page.goto("/");
+    const text = page.getByTestId("go-to").locator(".go-text");
+    await expect(text).toHaveText("Go to a session or project");
+    const fits = await text.evaluate((node) => node.scrollWidth <= node.clientWidth);
+    expect(fits).toBe(true);
+    // The modern look has room for the chord after the words; the terminal
+    // look's wider words take its room.
+    const chord = page.getByTestId("go-to").locator("kbd");
+    if (look === "modern") {
+      const words = (await text.boundingBox())!;
+      expect(words.x + words.width).toBeLessThanOrEqual((await chord.boundingBox())!.x);
+    } else {
+      await expect(chord).toBeHidden();
+    }
+  });
+}
