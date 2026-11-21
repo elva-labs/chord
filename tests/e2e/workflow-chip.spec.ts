@@ -138,11 +138,12 @@ test("picking a workflow makes the session its orchestrator, as New session unde
   const [made] = await starts(direct);
   await elsewhere.close();
 
-  await open(page);
+  await open(page, undefined, {}, false);
   const [first] = await starts(page);
   expect(first.options!.instructions).toBeUndefined();
   const input = page.getByTestId("composer-input");
   await input.fill("Make the sessions pane fill quickly after a restart.");
+  await reveal(page);
   await chip(page).click();
   await options(page).filter({ hasText: "Build and review" }).click();
 

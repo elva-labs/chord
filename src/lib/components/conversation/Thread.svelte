@@ -1235,7 +1235,7 @@
         {@const doing = live ? nowDoing(conversation, entry.parts) : null}
         <article class="msg agent" data-testid="agent-run" data-turn={entry.turn} data-copy-host="message">
           <header class="who" title={entry.at === null ? undefined : exactTime(entry.at)}>
-            <i class="mark"></i><b><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></b>
+            {#if entry.at !== null}<time class="said-at" datetime={new Date(entry.at).toISOString()}>{exactTime(entry.at)}</time>{/if}<i class="mark"></i><b><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></b>
             {#if entry.parts.some((part) => part.kind === "text" && part.text.trim() !== "")}
               <Copy label="Copy as Markdown" text={() => replyMarkdown(entry.parts)} host="message" place="end" testid="copy-reply" />
             {/if}
@@ -1351,6 +1351,7 @@
     data-copy-host="message"
   >
     <header class="who" title={at === null ? undefined : exactTime(at)}>
+      {#if at !== null}<time class="said-at" datetime={new Date(at).toISOString()}>{exactTime(at)}</time>{/if}
       {#if from === null}
         {#if words.text !== ""}
           <Copy label="Copy" name="Copy the message" text={() => unsent(words.text, mentionsOf(said.id)).draft} host="message" testid="copy-message" />
@@ -1516,6 +1517,7 @@
   >
     <header class="who" title={command.at === null ? undefined : exactTime(command.at)}>
       <Copy label="Copy" name="Copy the command" text={() => `!${command.text}`} host="message" testid="copy-command" />
+      {#if command.at !== null}<time class="said-at" datetime={new Date(command.at).toISOString()}>{exactTime(command.at)}</time>{/if}
       <b>You</b>
     </header>
     <div class="bubble">
@@ -2139,5 +2141,13 @@
     .state .dot {
       animation: none;
     }
+  }
+  .said-at {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>

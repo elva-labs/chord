@@ -18,7 +18,7 @@
     modelChoices,
     workflowChoices,
   } from "$lib/settingChoices";
-  import { asksFirst, chosenFor } from "$lib/lastChosen.svelte";
+  import { asksFirst } from "$lib/lastChosen.svelte";
   import type { AgentId, Workflow } from "$lib/core";
   import { clock, modelName, tokens } from "$lib/thread";
   import { modelLabel as knownModelLabel } from "$lib/models";
@@ -1052,7 +1052,6 @@
 
   function pick(setting: "model" | "effort" | "mode", value: string) {
     menu = null;
-    if (setting !== "model") revealed[setting] = true;
     choose(sessionKey, conversation, setting, value);
     field?.focus();
   }
@@ -1085,7 +1084,6 @@
 
   function pickResume(value: string) {
     menu = null;
-    revealed.resume = true;
     chooseResume(sessionKey, value === "on");
     field?.focus();
   }
@@ -1103,7 +1101,6 @@
 
   function pickWorkflow(value: string) {
     menu = null;
-    revealed.workflow = true;
     follow(sessionKey, value === "" ? null : value);
     field?.focus();
   }
@@ -1115,52 +1112,57 @@
 
   // ---- what shows, and what waits behind the plus ----
 
-  /** The effort the agent was on when it said it was ready, which stands
-      for its default where nothing marks one. */
-  let baseEffort = $state<string | null | undefined>(undefined);
-  $effect(() => {
-    if (untrack(() => baseEffort) === undefined && conversation.ready !== null) baseEffort = effort;
+  /** One rule for every chip: it shows while its value is away from its
+      default. The mode's default is the one that asks before anything
+      changes; a workflow's and going on's are none and off. The agent names
+      no default effort, so a model's effort always shows. */
+  let away = $derived({
+    mode: mode !== null && !asksFirst(agentId, mode),
+    effort: effort !== null,
+    workflow: choosable && workflow !== null,
+    resume: resumable && (resumeOn || resumes !== null),
   });
 
-  /** Settings the plus brought up, which stay while the composer does,
-      whatever they are set to. */
-  let revealed = $state({ mode: false, effort: false, workflow: false, resume: false });
+  /** Chips kept while the pointer or the keyboard is in the row or a menu
+      of it is open, so nothing moves under the pointer; they go once the
+      row is left. */
+  let kept = $state({ mode: false, effort: false, workflow: false, resume: false });
+  let pointerIn = $state(false);
+  let focusIn = $state(false);
+  let inRow = $derived(pointerIn || focusIn);
+  $effect(() => {
+    const busy = inRow || menu !== null;
+    for (const which of ["mode", "effort", "workflow", "resume"] as const) {
+      const keep = busy && (away[which] || untrack(() => kept[which]));
+      if (untrack(() => kept[which]) !== keep) kept[which] = keep;
+    }
+  });
+  /** Where the keyboard has gone once a focus change has settled, as when
+      a menu is removed with the focus in it and the owner puts it back. */
+  const settleFocus = (row: HTMLElement) =>
+    setTimeout(() => (focusIn = row.contains(document.activeElement)), 0);
 
-  /** Each is shown once it is set away from its default, or has been
-      brought up; the others wait behind the plus. */
-  let showEffort = $derived(
-    effort !== null &&
-      (revealed.effort || effort !== baseEffort || chosenFor(agentId).effort === effort),
-  );
-  let showMode = $derived(mode !== null && (revealed.mode || !asksFirst(agentId, mode)));
-  let showWorkflow = $derived(choosable && (workflow !== null || revealed.workflow));
-  let showResume = $derived(
-    resumable && (revealed.resume || resumeOn || resumes !== null),
-  );
+  let showEffort = $derived(away.effort || kept.effort);
+  let showMode = $derived(away.mode || kept.mode);
+  let showWorkflow = $derived(away.workflow || kept.workflow);
+  let showResume = $derived(away.resume || kept.resume);
 
   /** What the plus offers: the settings the agent and the session take that
       are not shown. */
   let more = $derived.by(() => {
-    const list: { value: Setting; name: string; about: string; on: boolean }[] = [];
-    if (modes.length > 0 && !showMode)
-      list.push({ value: "mode", name: "Mode", about: "What the agent may do without asking", on: false });
-    if (conversation.efforts.length > 0 && !showEffort)
-      list.push({ value: "effort", name: "Effort", about: "How hard the model thinks before it answers", on: false });
+    const list: { value: Setting; name: string; about: string }[] = [];
+    if (modes.length > 0 && mode !== null && !showMode)
+      list.push({ value: "mode", name: "Mode", about: "What the agent may do without asking" });
     if (choosable && !showWorkflow)
-      list.push({ value: "workflow", name: "Workflow", about: "Who directs, works and reviews", on: false });
+      list.push({ value: "workflow", name: "Workflow", about: "Who directs, works and reviews" });
     if (resumable && resumeFollows === null && !showResume)
-      list.push({
-        value: "resume",
-        name: "Auto-resume",
-        about: "Go on by itself when the usage limit resets",
-        on: false,
-      });
+      list.push({ value: "resume", name: "Auto-resume", about: "Go on by itself when the usage limit resets" });
     return list;
   });
 
   function pickMore(value: string) {
     const which = value as Setting;
-    revealed[which] = true;
+    kept[which] = true;
     menu = which;
     byPointer = false;
   }
@@ -1168,8 +1170,10 @@
   function closeMenu(how: "escape" | "tab" | "away") {
     const which = menu;
     menu = null;
-    if (how === "escape")
+    if (how === "escape") {
+      focusIn = true;
       void tick().then(() => box?.querySelector<HTMLButtonElement>(`[data-testid='${which}-chip']`)?.focus());
+    }
   }
 
   function openMenu(which: "model" | "more" | Setting, e: MouseEvent) {
@@ -1501,7 +1505,14 @@
   {/if}
   <!-- Why a message could not be sent now, or taken back, said aloud. -->
   <p class="sr" aria-live="polite" data-testid="composer-now-said">{link.nowError ?? ""}</p>
-  <div class="bar">
+  <div
+    class="bar"
+    role="group"
+    onpointerenter={() => (pointerIn = true)}
+    onpointerleave={() => (pointerIn = false)}
+    onfocusin={() => (focusIn = true)}
+    onfocusout={(e) => settleFocus(e.currentTarget)}
+  >
     <button
       class="chip bare"
       tabindex="0"
@@ -1699,6 +1710,7 @@
             onclose={closeMenu}
             pointer={byPointer}
             end
+            actions
             within={box}
             testid="more-menu"
             optionTestid="more-option"

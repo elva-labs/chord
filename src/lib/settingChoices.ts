@@ -18,7 +18,8 @@ export interface Choice {
   value: string;
   name: string;
   about: string | null;
-  on: boolean;
+  /** The one in use; absent where the menu lists actions, not choices. */
+  on?: boolean;
   /** It cannot be chosen here: its line says why. */
   off?: boolean;
 }

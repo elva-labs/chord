@@ -1788,6 +1788,39 @@ test.describe("a resumed conversation", () => {
     await expect(page.getByTestId("run-began")).toHaveText(/^Resumed here/);
   });
 
+  test("sets a time between messages after a quiet while and on another day, and not between close ones", async ({ page }) => {
+    await page.clock.install({ time: new Date(2026, 10, 21, 12, 0, 0) });
+    await openIntegrated(page);
+    const say = async (words: string, reply: string) => {
+      await page.getByTestId("composer-input").fill(words);
+      await page.keyboard.press("Enter");
+      await agent(page, `f.turn("${H}", ${JSON.stringify(reply)});`);
+      await expect(page.getByTestId("agent-text").last()).toHaveText(reply);
+    };
+    const dividers = page.getByTestId("time-divider");
+    await say("one", "First.");
+    await page.clock.fastForward(60_000);
+    await say("two", "Second.");
+    // Under five quiet minutes, nothing is set between them.
+    await expect(dividers).toHaveCount(0);
+    await page.clock.fastForward(6 * 60_000);
+    await say("three", "Third.");
+    await expect(dividers).toHaveCount(1);
+    await expect(dividers.first()).toHaveText(/^12:\d{2}/);
+    await expect(dividers.first().locator("time")).toHaveAttribute("datetime", /^2026-11-21T/);
+    // Before the third message, not after it.
+    expect((await box(page, "time-divider", 0)).y).toBeLessThan((await box(page, "user-message", 2)).y);
+    expect((await box(page, "agent-run", 1)).y).toBeLessThan((await box(page, "time-divider", 0)).y);
+    // A message the next day is set off too, and what stands from the day
+    // before, which is no longer today's, names its day.
+    await page.clock.fastForward(24 * 60 * 60_000);
+    await say("four", "Fourth.");
+    await expect(dividers).toHaveCount(3);
+    await expect(dividers.first()).toHaveText(/^[A-Z][a-z]{2} \d{1,2}:\d{2}/);
+    await expect(dividers.nth(1)).toHaveText(/^[A-Z][a-z]{2} \d{1,2}:\d{2}/);
+    await expect(dividers.last()).toHaveText(/^\d{1,2}:\d{2}/);
+  });
+
   test("draws what it said before above what it says now, with a line where it resumed", async ({ page }) => {
     await withPast(page, { keep: true });
     await page.getByTestId("past-session").click();
@@ -1797,7 +1830,9 @@ test.describe("a resumed conversation", () => {
     // carry no time of their own.
     const day = await weekday(page, threeDaysAgo());
     await expect(page.getByTestId("time-divider").first()).toHaveText(new RegExp(`^${day} \\d{1,2}:\\d{2}`));
-    await expect(page.getByTestId("user-message").first().locator("time")).toHaveCount(0);
+    // The time is there for a screen reader, not drawn.
+    await expect(page.getByTestId("user-message").first().locator(".who time")).toHaveAttribute("datetime", /^\d{4}-/);
+    await expect(page.getByTestId("user-message").first().locator(".who time")).toHaveText(/\d{4}/);
     await expect(page.getByTestId("user-message").first().locator(".who")).toHaveAttribute("title", /\d{4}/);
     await expect(page.getByTestId("agent-run").first().locator("header")).toContainText("Sonnet");
     await expect(page.getByTestId("agent-text").first()).toHaveText("There are 12 files in src.");
@@ -3259,4 +3294,35 @@ test.describe("the conversation's width", () => {
     const [above, below] = await Promise.all([parts.nth(0).boundingBox(), parts.nth(1).boundingBox()]);
     expect(below!.y - (above!.y + above!.height)).toBeGreaterThanOrEqual(7.5);
   });
+});
+
+test("shows a chip while its value is away from the default, and keeps it only while the row is in use", async ({ page }) => {
+  await openIntegrated(page);
+  const mode = page.getByTestId("mode-chip");
+  // The agent names no default effort, so once it has an effort, it shows
+  // whatever it is, and the plus does not offer it.
+  await agent(page, `f.configure("${H}", { effort: "medium" });`);
+  await expect(page.getByTestId("effort-chip")).toBeVisible();
+  // A mode that asks first is the default, and stays behind the plus.
+  await expect(mode).toHaveCount(0);
+  await page.getByTestId("more-chip").click();
+  const entries = page.getByTestId("more-option");
+  await expect(entries.first()).toHaveAttribute("role", "menuitem");
+  await expect(entries.first()).not.toHaveAttribute("aria-checked", /.*/);
+  await expect(entries.filter({ hasText: "Effort" })).toHaveCount(0);
+  await entries.filter({ hasText: "Mode" }).click();
+  await expect(page.getByTestId("mode-menu")).toBeVisible();
+  await page.getByTestId("mode-option").filter({ hasText: "Accept edits" }).click();
+  await expect(mode).toBeVisible();
+  // Back to the default: the chip stays while the pointer is in the row.
+  await mode.click();
+  await page.getByTestId("mode-option").first().click();
+  await expect(mode).toBeVisible();
+  // It goes once the pointer and the keyboard have left the row.
+  await page.mouse.move(5, 5);
+  await page.getByTestId("composer-input").focus();
+  await expect(mode).toHaveCount(0);
+  // And a mode away from the default comes back to show on its own.
+  await agent(page, `f.configure("${H}", { mode: "acceptEdits" });`);
+  await expect(mode).toBeVisible();
 });

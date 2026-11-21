@@ -135,8 +135,12 @@ test("the row and the chip say when it resumes, until a turn begins or it is tur
   await chip(page).click();
   await option(page, "Off").click();
   await expect(when).toHaveCount(0);
-  await expect(chip(page)).toHaveText("Auto-resume off");
-  await chip(page).click();
+  // Off is the default, so the chip goes once the row is left and comes
+  // back from the plus.
+  await page.mouse.move(0, 0);
+  await page.getByTestId("composer-input").focus();
+  await expect(chip(page)).toHaveCount(0);
+  await reveal(page);
   await option(page, "On").click();
   await expect(chip(page)).toHaveText("Auto-resume on");
   await expect(when).toHaveCount(0);
