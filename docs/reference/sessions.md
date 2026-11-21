@@ -34,11 +34,11 @@ terminal wakes it; it is read again as it leaves Inactive.
 
 The pane's title row carries two small buttons at its end: the order the
 projects are listed in, and a menu with Open project, Open remote project,
-for a folder on another machine, and Settings; see [remote](remote.md).
+for a folder on another machine, and Settings; see [remote](../remote.md).
 Under it sits a
 field, `Go to a session or project` with the shortcut of go to (in the
 terminal look the words take the shortcut's room), which opens
-[go to](focus-model.md#the-palettes), and beside it a button in the accent
+[go to](../focus-model.md#the-palettes), and beside it a button in the accent
 that opens the palette's New session, which asks for the project first when
 more than one is open. With no project open, the pane lists nothing: the
 agent pane's Open project is the one way in.
@@ -54,7 +54,7 @@ pushes it out, and the list's scroll bar is drawn over the headers as it is
 over the rows. A hairline separates one project from the next. A new
 session from a project's own button or menu opens the palette's New session
 with the project already chosen, on one line of what the session starts on
-that Enter accepts; see [the palettes](focus-model.md#the-palettes). It is
+that Enter accepts; see [the palettes](../focus-model.md#the-palettes). It is
 the one way a session is started, whichever button or key asks for it.
 Nothing else changes until the session starts: the session on screen
 stays, the list keeps its order, and the project comes forward with the new
@@ -63,7 +63,7 @@ project's other sessions is put on screen on the way, so none of them
 starts. Backing out of the palette leaves everything as it was.
 The `orchestrator` folder an earlier version kept sessions in is listed among
 the projects while it holds past sessions, with no button for a new session
-and Close project alone in its menu; see [orchestrator](orchestrator.md).
+and Close project alone in its menu; see [orchestrator](../orchestrator.md).
 
 A row's own button takes the place of its time while the pointer is on the
 row, so it never covers a word of the name. On a live row it is ×, which
@@ -73,11 +73,11 @@ their row. Two steps, so nothing running is archived by accident. On the
 keyboard, Delete does either for the row under the cursor.
 
 Closing a session also closes the browser tabs it owns; see
-[browser](browser.md#whose-tabs-they-are), and the shells opened beside it;
+[browser](../browser.md#whose-tabs-they-are), and the shells opened beside it;
 see [the terminal panel](layout.md#the-terminal-panel). Closing a session
 or a project whose editor tabs hold the only copy of unsaved edits asks
 first, at the top of the pane; see
-[the editor](editor.md#nothing-unsaved-goes-unasked). So does closing one
+[the editor](../editor.md#nothing-unsaved-goes-unasked). So does closing one
 while a shell that goes with it has something running, naming what runs.
 
 The kill lives in one place: closing a session stops its pty and clears the
@@ -87,7 +87,7 @@ with the process and the agent sees SIGHUP. Picking a session that belongs
 to another project brings that project forward. A session that hangs under
 the session that started it, in another project, is drawn there: picking it
 uses the starter's project, and while it is on screen the starter's project
-is the one on screen, for the pane and the [palette](focus-model.md#the-palettes)
+is the one on screen, for the pane and the [palette](../focus-model.md#the-palettes)
 alike. The project it runs in stays where it was in the list, and the
 changes pane, the terminal and the window's title still follow it, since
 that is the repository the session works in.
@@ -200,9 +200,9 @@ starter, starts it in its row. One the workbench had put away before the
 quit stays put away, one whose work was over at the quit is put away by
 the same rest as before it, and one the quit cut off at work stays until
 it is woken, closed or stopped; see
-[orchestrator](orchestrator.md#when-the-work-is-over). A session left open
+[orchestrator](../orchestrator.md#when-the-work-is-over). A session left open
 in the `orchestrator` folder of an earlier version comes back too, and
-lists that folder again; see [orchestrator](orchestrator.md).
+lists that folder again; see [orchestrator](../orchestrator.md).
 
 A row that was unread when the app quit comes back unread, with the line it
 had under its name, whether it went unread by itself or was marked by hand;
@@ -241,7 +241,7 @@ line: the agent's line, in the accent while it asks for a permission, or
 for a session that started others what those are doing; at its end is the
 model the session runs on, or for a session that started others how many
 of them it has not yet heard from, as the
-[orchestrator](orchestrator.md#in-the-panes) describes. The two lines are
+[orchestrator](../orchestrator.md#in-the-panes) describes. The two lines are
 laid out apart, so the model never narrows the name. A model is named as
 the composer names it: Claude's as they are said, `opus-4-1` as Opus 4.1,
 and Codex's by the names Codex's own list gives them for the account,
@@ -344,7 +344,7 @@ another started is its starter's. A session's notification is taken away
 once the session is looked at, and a question's once it is answered or
 gone. Where the system does not tell the app of a click or let it take a
 notification away, the notification is left as the system leaves it; see
-[platforms](platforms.md). Both are switched
+[platforms](../platforms.md). Both are switched
 in the [settings](settings.md#notifications). A session an orchestrator
 started goes unread only when it needs a permission, which no agent can
 grant for it: its stopping, ending, ringing or leaving a line is the
@@ -420,7 +420,7 @@ half a minute for it; one older than that is from a session run elsewhere,
 which a resume of it here does not take for news. A turn Codex reports as
 aborted, which is what an Escape does there, is a stop that says the user
 cut it short. Neither turn cut short wakes a session that started others;
-see [orchestrator](orchestrator.md#when-it-is-idle).
+see [orchestrator](../orchestrator.md#when-it-is-idle).
 
 ## Subagents on the rail
 
@@ -501,7 +501,7 @@ under the account for every project, marked `this project's`. A pick is
 kept for the project only, and between runs. A session another session starts runs under
 the account the start names, else under the starter's when that was
 chosen for the starter, else under its project's, as the
-[orchestrator](orchestrator.md#the-tools) describes; its row under the
+[orchestrator](../orchestrator.md#the-tools) describes; its row under the
 starter names the account when it is not its project's. A session resumed
 runs under the account it ran under. The status bar names the account the
 active session runs under, Default included, as long as there are
@@ -576,7 +576,7 @@ sessions already open, as [when the setting is
 switched](#when-the-setting-is-switched) describes. An agent runs
 in Chord only where the core says it can drive it in messages, and the
 rest run in a terminal. A session under a
-[workflow](orchestrator.md#following-a-workflow) runs the way the setting
+[workflow](../orchestrator.md#following-a-workflow) runs the way the setting
 of its orchestrator's agent says, as any session does, and is told the
 workflow either way; so does a resumed one. A single new
 session can be started the other way from New session's, for the agent the
@@ -586,7 +586,7 @@ Started the other way, a session is a pick, as an agent picked is, and
 runs alone whatever the project follows. The + and
 New session start the agent's own way, or the project's workflow, so
 nothing is asked of someone who never changes it. An in-Chord session is
-driven through the core in messages, as [sessions in Chord](integrated.md)
+driven through the core in messages, as [sessions in Chord](../integrated.md)
 describes, and is a row like any other: it is listed, stopped with its ×,
 brought back after a restart and resumed the same way.
 
@@ -679,7 +679,7 @@ the thread's own notes, under From and that session's name, its time and a
 way to go to it. What the workbench sends of its own, to wake a session
 that started others, stands the same way under Workbench, with nothing to
 go to and nothing to put back in the composer; see
-[orchestrator](orchestrator.md#when-it-is-idle). Each session in it is
+[orchestrator](../orchestrator.md#when-it-is-idle). Each session in it is
 named as the user knows it: by its row's name, and once its row has gone,
 as it does when the starter stops it, by the name it was started with or
 known by, and as a session where none is kept. Its id is for the agent
@@ -807,7 +807,7 @@ While the conversation changes, a reply streaming among it, the count
 stays right and the current match stays on what holds it; words that had
 no match go to the first one that comes. A long conversation is counted
 a slice at a time, and typing never waits on it. The keys are in
-[focus](focus-model.md#a-session-in-chord).
+[focus](../focus-model.md#a-session-in-chord).
 
 A permission the agent asks for docks over the composer rather than in the
 thread, drawn as every ask is: who wants what on its first line, the agent
@@ -929,7 +929,7 @@ the project has a git repository. It shows the model the
 session runs on, which a click changes, and a new session the user starts
 shows from its first frame the model, the mode and the effort last chosen
 for its agent, which it starts on, as
-[sessions in Chord](integrated.md#what-a-new-session-starts-on) describes: the agent's default is named once
+[sessions in Chord](../integrated.md#what-a-new-session-starts-on) describes: the agent's default is named once
 the agent has said which model that is, and a model chosen during a turn is
 said to be used from the next. A session that follows a workflow shows its
 orchestrator's model and holds it, saying the workflow sets it, and so does
@@ -937,7 +937,7 @@ the status bar. Both name the model the run says it is on, and the
 workflow's own name for it until the run has said. It shows the mode the
 session runs in, as the agent says it does, which a click changes at once
 among the modes the agent offers. A session starts in the mode a terminal
-session would, as [sessions in Chord](integrated.md#the-mode-a-session-starts-in)
+session would, as [sessions in Chord](../integrated.md#the-mode-a-session-starts-in)
 describes: for a new session the one last chosen for its agent, else the
 one the user's own agent settings name, and for a session that starts again
 or is resumed, the one it last ran in. A mode from those
@@ -975,10 +975,10 @@ reaches it, and a lone digit
 sent then goes only on a second Enter, so it is not sent as a message by surprise. A message that was not delivered, refused
 by the agent or never sent, can be put back in the composer. What is being
 written stays with its session while another is on screen. The keys are in
-[focus](focus-model.md#a-session-in-chord).
+[focus](../focus-model.md#a-session-in-chord).
 
 A new session, until its first message, also shows the
-[workflow](orchestrator.md#following-a-workflow) it follows in a chip
+[workflow](../orchestrator.md#following-a-workflow) it follows in a chip
 after the mode: the project's workflow to begin with, or none. The chip
 opens a menu of no workflow, the agent working alone on the model the user
 picks, then each workflow with a line saying which model directs, works and
@@ -1070,7 +1070,7 @@ A `!` typed as the first thing in the composer makes what follows a
 command for the shell, which the empty composer's hint names. The field
 turns to the shell's type with the `!` in the accent, the folder it runs
 in stands where the context share was, files cannot be attached, and Enter
-runs it in that folder, as [sessions in Chord](integrated.md#commands-the-user-runs)
+runs it in that folder, as [sessions in Chord](../integrated.md#commands-the-user-runs)
 describes; before the agent is ready the composer says it runs once it
 is. What it prints goes to the agent as context for the next message,
 with no turn of its own. The thread shows it as the user's, the `!` and the
@@ -1094,7 +1094,7 @@ runs it again. Prose, the user's messages, the agent's thinking and plan,
 a tool's output and a subagent's words get no mark.
 
 A session at rest goes back to before one of the user's own messages, as
-[sessions in Chord](integrated.md#going-back) describes. Esc twice within a
+[sessions in Chord](../integrated.md#going-back) describes. Esc twice within a
 moment in its empty composer, or Go back to an earlier message in the
 palette, opens a list over the composer of the user's own messages the
 agent keeps, oldest first, with the newest marked; a first Esc says what a
@@ -1176,7 +1176,7 @@ that holds no message of a session that was spoken to is said to be so in
 the same way. The line stays above whatever the session says after it.
 A session nothing was said in, resumed after it ended, has nothing to
 read, and says nothing of earlier messages.
-[Sessions in Chord](integrated.md#history) has what is read and how.
+[Sessions in Chord](../integrated.md#history) has what is read and how.
 
 The line reads `Resumed here, today 09:40`, naming the day when it is
 another. The first time shown on each day names its day too, as `Thu 18:02`,
@@ -1274,7 +1274,7 @@ kept. A later note can replace an earlier one, which then no longer
 stands, so a changed decision does not stand beside the old one.
 
 The agent keeps and reads them with the workbench's own tools, as
-[hooks](hooks.md#the-agents-tools) describes. It is told as it connects to
+[hooks](../hooks.md#the-agents-tools) describes. It is told as it connects to
 keep a note whenever something settles: a decision and why, a finding,
 what the user asked for or prefers, what is left open, and never a key,
 token, password or personal data. The call goes alongside another one, in a terminal the notify at a turn's end most of all and in a conversation one made while working, never between its thinking and its answer, so it adds
@@ -1287,7 +1287,7 @@ the user's home on the machine the session runs on, under the session's
 token, so they follow the session across its runs and across restarts of
 the app. The folder and its files are readable by the user alone, and
 nothing of them is written into the project. A call carrying a session's token keeps notes as
-that session, as [who is calling](orchestrator.md#who-is-calling)
+that session, as [who is calling](../orchestrator.md#who-is-calling)
 describes for the other tools.
 
 The list the agent is given, by the notes tool and when it goes on from
@@ -1318,7 +1318,7 @@ there, not by the turns it went back on. The same rule holds for the
 user's own sessions, the one on screen included, and for sessions another
 started. A conversation that goes on by itself once a usage limit resets
 goes on from its notes whatever its size and rest, as
-[sessions in Chord](integrated.md#going-on-after-a-limit) describes.
+[sessions in Chord](../integrated.md#going-on-after-a-limit) describes.
 
 Going on, the row starts a fresh conversation of the agent's, with the
 same row, name and token, so the notes and everything the workbench
@@ -1486,4 +1486,4 @@ they write into your configuration, and nothing should edit that because you
 opened a folder. They go where the agent keeps local, uncommitted settings,
 so they never turn up in a diff, and turning them off removes only what was
 added. A worktree the workbench makes for a session gets them too, as
-[hooks](hooks.md) describes.
+[hooks](../hooks.md) describes.

@@ -30,7 +30,7 @@ editing, and so does <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>E</kbd> or the
 command palette. The mode belongs to the window and is remembered across a
 restart. Reviewing stays what it is in agent mode; [editor
 mode](#editor-mode) has the editing shape's own rules, and
-[editor](editor.md) what the editor does.
+[editor](../editor.md) what the editor does.
 
 The viewer is a pane rather than a sheet over the terminal. A sheet traps
 focus and hides what you were watching; a pane takes its room from somewhere
@@ -166,7 +166,7 @@ The allowance is the share used of each limit window of the account, as
 text: `5h 11%  Week 34%  Fable 52%` for the five hour window, the week, and
 the week for one model. Only the windows the account has are drawn. The
 figures belong to the account on its machine and are read there, as
-[account limits](integrated.md#account-limits) describes, so a terminal
+[account limits](../integrated.md#account-limits) describes, so a terminal
 session and an in-Chord one on the same account show the same figures,
 and the newest wins whoever read them. A share is rounded, and reads 100%
 only when the window is used up.
@@ -192,7 +192,7 @@ share used and when it resets in words, such as `resets in 2 h 10 min` or
 the figures are below. Where some figures moved after the last full read,
 it says how old each part is: `Some figures are from just now, the rest
 from 20 min ago`. How the bar's menus and the popover take the
-keyboard and give it back is in the [focus model](focus-model.md#the-status-bar).
+keyboard and give it back is in the [focus model](../focus-model.md#the-status-bar).
 
 Short of room, the bar lets its parts go in this order: the word
 `account:`, then every figure but the one nearest its end, then the branch,
@@ -460,7 +460,7 @@ place, with its exit code.
 Closing a session closes its shells, and closing a project every shell
 that started in it. While one of them has something running, either asks
 first, in the sessions pane, in the words the window uses before it
-closes; see [focus](focus-model.md#closing-what-is-in-front). A session
+closes; see [focus](../focus-model.md#closing-what-is-in-front). A session
 closed without the user being asked, as when the session that started it
 stops it, closes its idle shells and gives a busy one to the project's own,
 so what runs in it is never stopped unasked. A session that has only
@@ -475,7 +475,7 @@ the panel for it when it is closed; the + names the shortcut the table gives
 it. A row's × closes its shell, and
 <kbd>Cmd</kbd><kbd>W</kbd> closes the shell in front while the panel has the
 keyboard. A shell with something still running in it asks first, as
-[focus](focus-model.md#closing-what-is-in-front) describes.
+[focus](../focus-model.md#closing-what-is-in-front) describes.
 
 Shells come in groups, one group on screen at a time. A new shell is a group
 of its own; `split` opens one beside the current shell, in its group, taking
@@ -614,7 +614,7 @@ of its own, has been allowed to start more in a project without being
 asked, or has worktrees its starts left behind: a row for each session,
 with the controls to stop
 them, send them a line and clean up after them; the
-[orchestrator](orchestrator.md#in-the-panes) says what they are. It stands
+[orchestrator](../orchestrator.md#in-the-panes) says what they are. It stands
 open until folded, and opens by itself when one of them asks for a
 permission. **Processes** is
 what runs under the session on screen, its shells and the project's own
@@ -627,9 +627,9 @@ session switches the list at once. A stop button on the row ends the
 process, and nothing outside a session's or a shell's own tree can be
 reached from there. **Browser** is the embedded browser's
 tabs for the session on screen, one row per tab, standing even with none
-open since it is where a tab is opened from; see [browser](browser.md). A
+open since it is where a tab is opened from; see [browser](../browser.md). A
 plugin that sends sections adds a fold of its own under those;
-[plugins](plugins.md) says what it holds.
+[plugins](../plugins.md) says what it holds.
 
 The tree's cursor walks on into the sections: <kbd>Down</kbd> past the
 last file lands on the first header, <kbd>Enter</kbd> opens a media call
@@ -669,7 +669,7 @@ are still the answer to "this" while the question is typed; a click in the
 viewer lets them go, and the line numbers are never part of a selection.
 What the agent presented opens in the same place, every file of the call
 down the viewer. The embedded browser takes the same place again, in place
-of a file or what was presented; [browser](browser.md) has what it shows
+of a file or what was presented; [browser](../browser.md) has what it shows
 there.
 
 What the viewer holds belongs to the session on screen. Switching to
@@ -697,4 +697,4 @@ The column's header names the project, with the worktree a session follows,
 and holds buttons for a new file and a new folder; the editor's header holds
 its tabs and the views control, and stays with no file open. Peeked, the
 sessions pane covers the folded column and the tree's together. What the
-editor does is in [editor](editor.md).
+editor does is in [editor](../editor.md).

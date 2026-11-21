@@ -18,7 +18,7 @@ switch. A row that has been changed from what it started as shows Reset,
 and a row that has not shows nothing. The close button at the top right,
 or <kbd>Esc</kbd>, closes the dialog.
 
-![The settings over the workbench: the four tabs down the left, and the Appearance tab with its appearance, theme, font and colour choices.](settings.png)
+![The settings over the workbench: the four tabs down the left, and the Appearance tab with its appearance, theme, font and colour choices.](../settings.png)
 
 ## Appearance
 
@@ -289,13 +289,13 @@ Shown in the Sessions tab as Let agents talk to Chord, with the line
 Shows when an agent works, waits or asks. Off is the watcher only, on is
 agent hooks, chosen once for every project; each project you open follows
 it, and a project that should go the other way can say so under By project. The `orchestrator` folder is among those projects while the
-sessions pane lists it (see [orchestrator](orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
+sessions pane lists it (see [orchestrator](../orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
 choice existed starts with them off, and is told once, in a word over the
 agent pane, what turning them on gives, in every project. Turn on there turns them on for
 every project, as this section's choice does; Not now puts the offer away
 for good. What each means for the changes pane and for a session's
 row is in [sessions](sessions.md); what the hooks write and where, and the
-tools they bring the agent, is in [hooks](hooks.md).
+tools they bring the agent, is in [hooks](../hooks.md).
 
 ## Sessions
 
@@ -311,12 +311,12 @@ started the other way from a project's ⋯ menu or the palette. What an
 in-Chord session is like is in
 [sessions](sessions.md#sessions-in-chord), and the mode it starts in,
 which is the one the agent's own settings name as for a terminal session,
-in [sessions in Chord](integrated.md#the-mode-a-session-starts-in). It is the
+in [sessions in Chord](../integrated.md#the-mode-a-session-starts-in). It is the
 user's to change, and an agent's settings tools refuse it.
 
 What a new session starts on, for each agent: the model, the effort and
 the mode the user last chose for it, as
-[sessions in Chord](integrated.md#what-a-new-session-starts-on) describes, or the
+[sessions in Chord](../integrated.md#what-a-new-session-starts-on) describes, or the
 agent's own defaults where nothing is kept. Each agent's line says what
 it keeps, and Use defaults beside it lets go of all three. Choosing the
 agent's own default model on a chip lets go of the model alone. The
@@ -324,7 +324,7 @@ choices are kept by the window as the user makes them, and an agent's
 settings tools refuse them. Whether a Claude Code conversation goes on by
 itself once a usage limit resets is kept the same way, from the chip on a
 conversation's composer, as
-[sessions in Chord](integrated.md#going-on-after-a-limit) describes; a file from
+[sessions in Chord](../integrated.md#going-on-after-a-limit) describes; a file from
 before has none, which reads as off.
 
 Whether you are asked before every session another session starts. Off to
@@ -335,7 +335,7 @@ session in a terminal whose hooks have not said its mode, as with hooks
 off, is put to you, and so is a start anywhere else. Every time puts each
 one to you, in the starting session's own project too, with Allow once or
 No and never an answer that stands, as
-[orchestrator](orchestrator.md#what-the-user-is-asked) describes. It is
+[orchestrator](../orchestrator.md#what-the-user-is-asked) describes. It is
 the user's to change, and an agent's settings tools refuse it.
 
 How long a past session stays listed under its project: forever, 30 days,
@@ -400,7 +400,7 @@ Direct is for directing work with no review: its orchestrator is on the
 same model, and its one step, Work, runs on any model, eight sessions at
 once at most, which is as many as a session may run. Its orchestrator hands
 each piece to a session of its own and does none itself, as
-[orchestrator](orchestrator.md) describes. A settings file from before
+[orchestrator](../orchestrator.md) describes. A settings file from before
 workflows existed gets the same two, and a list written before Direct
 shipped is given Direct once, at its end, unless it holds a workflow of
 that name or as many as it may. They are ordinary workflows, changed,
@@ -426,7 +426,7 @@ and a project that chose it follows the default again.
 A workflow also says whether its orchestrator hands out work only as
 sessions the user can see, which it does unless the workflow says
 otherwise. Its agent's own ways of handing work to agents the user cannot
-see are then taken away, as [agents](adapters.md#under-a-workflow) lists,
+see are then taken away, as [agents](../adapters.md#under-a-workflow) lists,
 so every piece it hands out is a session of its own on the sessions pane,
 started with the `start` tool; with the setting off it keeps its own
 subagents, and their work does not show as sessions. The settings file
@@ -453,7 +453,7 @@ says; where that copy no longer reads either, the session does not start,
 its header says it waits for the user's choice, and the user is asked
 whether to resume it without a workflow. A session another session started follows
 none. How a workflow's session directs the others is in
-[orchestrator](orchestrator.md).
+[orchestrator](../orchestrator.md).
 
 The tab lists the workflows across the top, with the default tagged, and
 New workflow after them. The picked one has its name above the diagram,
@@ -553,7 +553,7 @@ setup with no other account named is what it always was. Default is
 theirs alone: no account can be called that, in any case, whether in the
 tab or written into the settings file, so a session that starts another
 can name the agents' own login by it (see
-[orchestrator](orchestrator.md#the-tools)).
+[orchestrator](../orchestrator.md#the-tools)).
 
 The tab lists the accounts, Default first, each with where it keeps each
 agent. Add an account… opens a form: a name, and under it the two
@@ -580,7 +580,7 @@ in a project that names none, the account last picked there is the one a
 new session starts under, as [sessions](sessions.md#accounts) describes. Under an
 account it starts with the agent's directory set to the account's, its
 past sessions are read from there, and the tools the hooks bring are
-registered there too, as [hooks](hooks.md) describes; an account with no
+registered there too, as [hooks](../hooks.md) describes; an account with no
 directory for the agent runs it on the agent's own. What a project's row
 shows, and how one session can go another way, is in
 [sessions](sessions.md#accounts).
@@ -597,14 +597,14 @@ switch per plugin. Check for updates, at the top, asks every fetched source at
 once. The sources the workbench knows are listed from the first launch with
 every plugin off, and turning one on fetches its source first. A source of
 your own goes in behind Add a source, under them. What adding, enabling,
-checking and updating do is in [plugins](plugins.md).
+checking and updating do is in [plugins](../plugins.md).
 
 ## Keys
 
 The whole shortcut table, with two presets and room for your own. A shortcut
 that differs from its preset shows Reset beside it, and Reset all shortcuts at
 the end of the tab puts the default preset back. What the app may claim and why
-is in [focus](focus-model.md).
+is in [focus](../focus-model.md).
 
 ## Notifications
 
@@ -619,7 +619,7 @@ the settings.
 ## An agent changing them
 
 An agent can read the settings and ask to change them, with two tools the
-workbench offers it alongside the others in [hooks](hooks.md). They are for
+workbench offers it alongside the others in [hooks](../hooks.md). They are for
 when the user asks the agent for a change to the workbench itself, a darker
 appearance or a shortcut of their own, and the agent is told so.
 
@@ -637,7 +637,7 @@ how the window looks, as the look is, and the agent may ask for it.
 
 A change that will do is put to the user over the window, where a
 session's question to start another stands when it is not docked (see
-[the orchestrator](orchestrator.md#what-the-user-is-asked)), and never in a
+[the orchestrator](../orchestrator.md#what-the-user-is-asked)), and never in a
 dock. It waits while a question to start a session or for another round of
 review is up, docked or not, so only one question is up at a time. It says
 who is asking, the reason, and each setting from what it is to what it
@@ -801,7 +801,7 @@ The window keeps a copy of its own as well, so the first frame of a start is
 painted as the last one was before the file has been read. On a machine
 without the file, that copy is what the file is first written from.
 
-The plugins keep their own record, described in [plugins](plugins.md). A
+The plugins keep their own record, described in [plugins](../plugins.md). A
 window on a remote machine's project still follows the settings of the
 machine the window runs on.
 
