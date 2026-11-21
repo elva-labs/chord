@@ -85,6 +85,7 @@ import {
   sessions,
   spokenTo,
   statusMessage,
+  wake as wakeRow,
   type Session,
 } from "$lib/sessions.svelte";
 import type { AgentId, ReviewStep, Workflow, WorkflowStep, WorkStep } from "$lib/core";
@@ -309,11 +310,11 @@ export function stopStarted(key: string): void {
  * again from the end of each call that names it, its row closes and goes
  * among the earlier sessions, as a stopped one does, but it stays on its
  * starter's list, and a line its starter sends it resumes it. The time is
- * kept by the window, so a reload counts it again from the start. A row of
- * a session another started that is left from before a restart goes the
- * same way, without being started, unless it was on screen at the quit;
- * one that comes back unread or with words of the user's in it goes
- * `PUT_AWAY_AFTER` after the user has seen it.
+ * kept by the window, so a reload counts it again from the start. A row
+ * left from before a restart has nothing running: one whose work was over
+ * at the quit rests on toward being put away as it did before, and any
+ * other stays as it came back until a line starts it in its row, the user
+ * closes it or its starter stops it.
  */
 
 /** How long a started session stays at least once its work is over: long
@@ -324,15 +325,10 @@ export const PUT_AWAY_AFTER = 5 * 60_000;
 /** The rows on their way to being put away, by key. */
 const puttingAway = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** Rows of sessions another started, left from before a restart, that
-    stay until the user has seen them, by key. */
-const leftToSee = new SvelteSet<string>();
-
 /** Closes a started session's row and files it with the earlier sessions,
     keeping it on its starter's list: the starter did not say it was done
-    with it. The list says the workbench put it away, or for a row left
-    from before a restart, that it has not run since. */
-function putAway(key: string, done: boolean) {
+    with it. The list says the workbench put it away. */
+function putAway(key: string) {
   const session = byKey(key);
   if (session === null) return;
   const { project, id } = session;
@@ -348,19 +344,8 @@ function putAway(key: string, done: boolean) {
   disown(project, id);
   const entry = owner === null ? null : remembered(owner, id);
   if (entry === null) return;
-  if (done) entry.left = "done";
-  else delete entry.left;
+  entry.left = "done";
   saveStarted();
-}
-
-/** Puts away a started session's row left from before a restart, which
-    has nothing running behind it, without starting it. One the user has
-    yet to see stays until they have. */
-export function putAwayLeft(key: string) {
-  const session = byKey(key);
-  if (session === null || session.status !== "dormant" || startedFor(key) === null) return;
-  if (openToUser(session)) leftToSee.add(key);
-  else putAway(key, false);
 }
 
 /** Whether something of a row is the user's still: it is unread or on
@@ -371,29 +356,49 @@ function openToUser(session: Session): boolean {
   return session.unread || sessions.active === key || drafting(key) || typingInto(key) || userWriting(key);
 }
 
-/** Whether a row left from before a restart that stayed for the user to
-    see is still left, and has been seen. */
-function seenLeft(session: Session): boolean {
-  return (
-    leftToSee.has(session.key) &&
-    session.status === "dormant" &&
-    startedFor(session.key) !== null &&
-    !openToUser(session)
-  );
+/** The rows brought back from before a restart whose work was over at the
+    quit, by key. Each rests toward being put away as it did before the
+    quit until it works again, and a line from its starter is work. */
+const overAtQuit = new SvelteSet<string>();
+
+/** Marks a row brought back from before a restart as one whose work was
+    over at the quit. */
+export function cameBackOver(key: string) {
+  overAtQuit.add(key);
+}
+
+/** Whether a started session's work is over as far as it and its starter
+    go, whatever is still the user's of it: it is running, ended its turn
+    itself with nothing left running and no error, its starter has been
+    told, it asks nothing, and none of the sessions it started itself is at
+    work or has come to rest without its hearing. A row brought back from
+    before a restart whose work was over at the quit is over, running or
+    not, until it works again. The record of open rows keeps this, so a
+    restart puts away only what was on its way out. */
+export function workOver(session: Session): boolean {
+  void heard.version;
+  if (session.id === null || startedFor(session.key) === null) return false;
+  const mark = stops.get(session.key);
+  const before = overAtQuit.has(session.key) && mark?.worked !== true;
+  if (session.status === "dormant") {
+    if (!before) return false;
+  } else {
+    if (session.status !== "running" || session.working || session.needs !== null) return false;
+    if (!before && (mark === undefined || !mark.worked || mark.rest !== "quiet" || mark.told !== "quiet")) return false;
+    if (!before && restWay(session).way !== "done") return false;
+  }
+  // What it started itself reports to it: it stays while one of those is
+  // at work or has a rest it has not heard.
+  return !startedBy(session.token).some((kid) => atWork(kid) || untold(kid));
 }
 
 /** Whether a started session's work is over, as far as the rows say: see
     above. What no row says, a call naming it, is asked as it goes. */
 function overWith(session: Session): boolean {
-  if (session.id === null || startedFor(session.key) === null) return false;
-  if (session.status !== "running" || session.working || session.needs !== null) return false;
+  if (!workOver(session)) return false;
   if (reopeningRow(session.key) || openToUser(session)) return false;
-  const mark = stops.get(session.key);
-  if (mark === undefined || !mark.worked || mark.rest !== "quiet" || mark.told !== "quiet") return false;
-  if (restWay(session).way !== "done") return false;
-  // What it started itself reports to it: it stays while one of those is
-  // at work or has a rest it has not heard.
-  if (startedBy(session.token).some((kid) => atWork(kid) || untold(kid))) return false;
+  // A row left from before a restart has nothing running to close.
+  if (session.status === "dormant") return true;
   return session.kind === "integrated" ? handleOf(session.key) !== null : session.ptyId !== null;
 }
 
@@ -421,10 +426,8 @@ function calledFor(id: string): boolean {
     calls back the ones where something of it opened again. */
 function planPutAways() {
   void heard.version;
-  for (const key of [...leftToSee]) if (byKey(key)?.status !== "dormant") leftToSee.delete(key);
-  const due = new Set(
-    sessions.all.filter((session) => overWith(session) || seenLeft(session)).map((session) => session.key),
-  );
+  for (const key of overAtQuit) if (byKey(key) === null) overAtQuit.delete(key);
+  const due = new Set(sessions.all.filter(overWith).map((session) => session.key));
   for (const [key, timer] of puttingAway)
     if (!due.has(key)) {
       clearTimeout(timer);
@@ -444,17 +447,12 @@ function putAwayDue(key: string) {
   puttingAway.delete(key);
   const session = byKey(key);
   if (session === null) return;
-  if (seenLeft(session)) {
-    leftToSee.delete(key);
-    putAway(key, false);
-    return;
-  }
   if (!overWith(session)) return;
   if (calledFor(session.id!)) {
     countFromNow(key);
     return;
   }
-  putAway(key, true);
+  putAway(key);
 }
 
 /** A call is done: each row on its way to being put away that the call
@@ -475,7 +473,7 @@ function makeRoom(rows: Session[]) {
       const timer = puttingAway.get(row.key);
       if (timer !== undefined) clearTimeout(timer);
       puttingAway.delete(row.key);
-      putAway(row.key, true);
+      putAway(row.key);
     }
 }
 
@@ -1949,7 +1947,9 @@ const unheardMark = (mark: Mark | undefined) =>
 /** Brings the record of a started session's stops up to date with the row. */
 function observe(session: Session) {
   const key = session.key;
-  if (startedFor(key) === null) {
+  // A row left from before a restart has not run in this window: nothing
+  // of it is news until it does.
+  if (startedFor(key) === null || session.status === "dormant") {
     if (stops.delete(key)) moved();
     return;
   }
@@ -2083,7 +2083,6 @@ export function watchStops(): () => void {
     answeredAt.clear();
     for (const timer of puttingAway.values()) clearTimeout(timer);
     puttingAway.clear();
-    leftToSee.clear();
   };
 }
 
@@ -2593,13 +2592,18 @@ function describe(session: Session): string {
   const place = placeOf(session.key);
   if (place !== null) parts.push(placeText(place));
   parts.push(stateWords(session));
-  // A row with nothing running behind it is resumed in place.
-  if (!isLive(session)) parts.push(`resume it with start, naming session ${idText(session.id!)}`);
+  // A row with nothing running behind it is resumed in place, and one left
+  // from before a restart by a line as well.
+  if (session.status === "dormant") parts.push(lineBack(session.id!));
+  else if (!isLive(session)) parts.push(`resume it with start, naming session ${idText(session.id!)}`);
   if (untold(session)) parts.push("not reported to you yet");
   const line = quotedLine(session.note);
   if (line !== null) parts.push(`last line: ${line}`);
   return parts.join("  ");
 }
+
+/** A listing's way back for a session a line resumes. */
+const lineBack = (id: string) => `a line you send it resumes it, as start naming session ${idText(id)} does`;
 
 /** A remembered session that is not open as a row, in the same words. */
 function describeGone(owner: string, entry: Started): string {
@@ -2612,7 +2616,7 @@ function describeGone(owner: string, entry: Started): string {
   if (at !== null) parts.push(placeText(at));
   parts.push(
     goneState(entry),
-    backOnALine(entry) ? "a line you send it resumes it" : `resume it with start, naming session ${idText(entry.id)}`,
+    backOnALine(entry) ? lineBack(entry.id) : `resume it with start, naming session ${idText(entry.id)}`,
   );
   return parts.join("  ");
 }
@@ -2636,7 +2640,7 @@ export function placeText(place: Place): string {
 export function stateOf(session: Session): string {
   switch (session.status) {
     case "dormant":
-      return "not started since the workbench restarted";
+      return "not running since the workbench was restarted";
     case "starting":
       return "starting";
     case "exited":
@@ -3415,24 +3419,29 @@ async function resumeSession(
         `Session ${id} ran in the worktree ${worktree}, which is gone. Start a new session for the work instead.`,
       );
 
-    // A row that ended is its transcript again; the resumed session takes
+    // A row left from before a restart starts in its row, with the call's
+    // line and model, and is at work again whatever it was at the quit. A
+    // row that ended is its transcript again; the resumed session takes
     // its place rather than sitting beside it, with the shells opened
     // beside it.
     const now = byId(id);
-    if (now !== null) close(now.key, true);
+    const left = now !== null && now.status === "dormant" ? now : null;
+    if (now !== null && left === null) close(now.key, true);
     const looking = sessions.active;
-    const session = create(
-      project,
-      id,
-      agent,
-      worktree,
-      prompt === null ? null : `${oneLine(prompt)} ${outcomeAsk(agent)}`,
-      model,
-      entry.account ?? null,
-      null,
-    );
-    // A started session runs in a worktree only when one was made for it.
-    session.madeTree = worktree !== null;
+    const given = prompt === null ? null : `${oneLine(prompt)} ${outcomeAsk(agent)}`;
+    let session: Session;
+    if (left !== null) {
+      session = left;
+      session.prompt = given;
+      if (given !== null) session.engaged = true;
+      if (model !== null) session.model = model;
+      overAtQuit.delete(session.key);
+      wakeRow(session.key);
+    } else {
+      session = create(project, id, agent, worktree, given, model, entry.account ?? null, null);
+      // A started session runs in a worktree only when one was made for it.
+      session.madeTree = worktree !== null;
+    }
     conductor.startedBy[session.key] = caller;
     // It has a row again, so why the last one went is past.
     const kept = remembered(caller, id);
@@ -3445,7 +3454,7 @@ async function resumeSession(
       hold();
     }
     if (session.title === null && entry.name !== null) session.title = entry.name;
-    if (now !== null) handOver(now.key, { project, session: session.key });
+    if (now !== null && left === null) handOver(now.key, { project, session: session.key });
     if (looking !== null && byKey(looking) !== null) sessions.active = looking;
 
     const trouble = await cameUp(session.key);
@@ -3478,9 +3487,10 @@ async function resumeSession(
     could not be. */
 const comingBack = new Map<string, Promise<Answered>>();
 
-/** Resumes a session the caller started that has no row, with a line the
-    caller sent it as what it goes on with, as a start naming it would. */
-async function bringBack(request: Placed, entry: Started, line: string): Promise<Answered> {
+/** Resumes a session the caller started that has no row, or a row left
+    from before a restart, with a line the caller sent it as what it goes
+    on with, as a start naming it would. */
+async function bringBack(request: Placed, entry: Gone, line: string): Promise<Answered> {
   const why = goneWhy(entry);
   const resuming = resumeSession(
     { ...request, tool: "start", arguments: { session: entry.id, prompt: line } },
@@ -3545,6 +3555,10 @@ async function sendText(request: Placed): Promise<Answered> {
     return bringBack(request, entry, line);
   }
   if (!mine(request, session)) return notMine(id);
+  // A row left from before a restart has nothing running behind it: the
+  // line starts it in its row.
+  const left = leftBehind(session);
+  if (left !== null) return bringBack(request, left, line);
   // A session being reopened the other way takes the line once its next
   // run is up, the way it then runs.
   if (
@@ -3741,7 +3755,8 @@ async function waitFor(request: Placed): Promise<Answered> {
   const seconds = number(request, "seconds", WAIT_SECONDS, WAIT_MAX);
   let watched: Session[];
   if (id === null) {
-    watched = startedBy(callerOf(request));
+    // A row left from before a restart has nothing running to wait for.
+    watched = startedBy(callerOf(request)).filter((row) => row.status !== "dormant");
     // A call answered before it was done is waited on as a session is.
     const owed = (conductor.later[callerOf(request)] ?? []).length > 0;
     if (watched.length === 0 && !owed && (conductor.started[callerOf(request)] ?? []).length > 0)
@@ -3759,6 +3774,8 @@ async function waitFor(request: Placed): Promise<Answered> {
       return entry === null ? refused(`The workbench has no session ${id}.`) : said(notRunning(entry));
     }
     if (!mine(request, session)) return notMine(id);
+    const left = leftBehind(session);
+    if (left !== null) return said(notRunning(left));
     watched = [session];
   }
   const owner = callerOf(request);
@@ -3938,6 +3955,10 @@ function readSession(request: Placed): Answered {
     return entry === null ? refused(`The workbench has no session ${id}.`) : said(notRunning(entry));
   }
   if (!mine(request, session)) return notMine(id);
+  // A row left from before a restart has nothing on screen and no turn in
+  // this window to read.
+  const left = leftBehind(session);
+  if (left !== null) return said(notRunning(left));
   const lines = number(request, "lines", LINES, LINES_MAX);
   // An integrated session has no screen: what its agent last said and did
   // is read from its conversation instead.
@@ -4083,9 +4104,20 @@ function stateWords(session: Session): string {
   return state;
 }
 
+/** What is told of a session that is not running: its id, and why its
+    row went if it did. */
+type Gone = Pick<Started, "id" | "left">;
+
+/** A row left from before a restart, as a call naming it is told of it:
+    not run since the restart, and back on a line. The row says so, whatever
+    the caller's list holds. Null for any other row. */
+function leftBehind(session: Session): Gone | null {
+  return session.status === "dormant" && session.id !== null ? { id: session.id } : null;
+}
+
 /** Why a session a caller started has no row: the user closed it, it
     ended, or it has not run since the workbench was restarted. */
-function goneWhy(entry: Started): string {
+function goneWhy(entry: Gone): string {
   if (entry.left === "closed") return "the user closed it";
   if (entry.left === "ended") return "it ended";
   if (entry.left === "done") return "the workbench put it away once its work was over";
@@ -4095,10 +4127,10 @@ function goneWhy(entry: Started): string {
 /** Whether a line the caller sends a session that has no row resumes it:
     one the workbench put away, or one not run since a restart. One the
     user closed or that ended is resumed only by a start that names it. */
-const backOnALine = (entry: Started) => entry.left !== "closed" && entry.left !== "ended";
+const backOnALine = (entry: Gone) => entry.left !== "closed" && entry.left !== "ended";
 
 /** How a session the caller started that has no row comes back. */
-function wayBack(entry: Started): string {
+function wayBack(entry: Gone): string {
   const id = idText(entry.id);
   return backOnALine(entry)
     ? `A line you send it resumes it, as start naming session ${id} does.`
@@ -4107,7 +4139,7 @@ function wayBack(entry: Started): string {
 
 /** What a call naming a session the caller started, which has no row, is
     answered: it is not running, why, and how to bring it back. */
-function notRunning(entry: Started): string {
+function notRunning(entry: Gone): string {
   return `Session ${idText(entry.id)} is not running: ${goneWhy(entry)}. ${wayBack(entry)}`;
 }
 
@@ -4689,6 +4721,7 @@ export function resetConductor() {
   allowed.clear();
   seen.clear();
   stops.clear();
+  overAtQuit.clear();
   owed.clear();
   reserved.clear();
   waiting.clear();
@@ -4712,6 +4745,5 @@ export function resetConductor() {
   conductor.wakesInRow = {};
   for (const timer of puttingAway.values()) clearTimeout(timer);
   puttingAway.clear();
-  leftToSee.clear();
   comingBack.clear();
 }

@@ -66,6 +66,8 @@ import {
   carryOver,
   ALL_PUT_AWAY,
   PUT_AWAY_AFTER,
+  cameBackOver,
+  workOver,
 } from "$lib/conductor.svelte";
 import {
   byKey,
@@ -97,6 +99,7 @@ import {
   toldFor,
   WORK_BYTES,
   WORK_WINDOWS,
+  wake,
   type Session,
 } from "$lib/sessions.svelte";
 import {
@@ -3802,7 +3805,7 @@ describe("what a caller started, between runs", () => {
     restarted();
     await handle(call("sessions", {}, { session: "caller-1" }));
     expect(last().content).toBe(
-      `sid-1  ${BOUNDED}  ${A}  claude-code  not running since the workbench was restarted  a line you send it resumes it`,
+      `sid-1  ${BOUNDED}  ${A}  claude-code  not running since the workbench was restarted  a line you send it resumes it, as start naming session sid-1 does`,
     );
   });
 
@@ -4707,6 +4710,33 @@ describe("starting in a workflow's shape", () => {
     expect(answers.find((answer) => answer.id === waiting.id)?.content).toContain(
       'Your line to session r1 went ahead: Sent to session r1, for step "Review" round 3',
     );
+  });
+
+  it("keeps a session's place and round when a line after a restart resumes it in its row", async () => {
+    orchestrating();
+    const work = await begun({ step: "Work", name: "Fix the cache" }, "w1");
+    const review = await begun({ step: "Review", work: "w1" }, "r1");
+    reviewed(review);
+    await sent("w1", "The reviewer asks for a smaller change");
+    expect(placeOf(work.key)?.round).toBe(2);
+
+    restarted();
+    orchestrating();
+    const back = reopened(B, "w1", "claude-code", null, null, null);
+    reopened(B, "r1", "claude-code", null, null, null);
+    flushSync();
+    expect(placeOf(back.key)).toMatchObject({ step: "Work", piece: "w1", round: 2 });
+    const answering = handle(call("send", { session: "w1", text: "Smaller still" }, { session: "orch" }));
+    await settle();
+    expect(back.status).toBe("starting");
+    started(back.key, "pty-w1b", "w1");
+    flushSync();
+    await vi.advanceTimersByTimeAsync(ENTER_AFTER);
+    await answering;
+    expect(last().error).toBeNull();
+    expect(forProject(B)[0]).toBe(back);
+    expect(placeOf(back.key)).toMatchObject({ step: "Work", piece: "w1", round: 2 });
+    expect(placeTextOf(back.key)?.short).toBe("Work, 2 of 4");
   });
 
   it("puts work sent back in the round after its review's, for a line, a resume and a start that carries the piece on", async () => {
@@ -6477,6 +6507,167 @@ describe("a session the user closed or the app lost", () => {
     await handle(call("sessions", {}, as));
     expect(last().content).not.toContain("closed by the user");
     expect(last().content).toContain("claude-code  waiting");
+  });
+
+  // After a restart the rows of the sessions it started are back, not
+  // running, each where it stood: a line or a start resumes one in its row.
+  it("resumes a row left from before a restart in its place, on a line or a start", async () => {
+    await startOne();
+    await startAllowed(call("start", { project: A, prompt: "Bump deps" }, as), "pty-2", "sid-2");
+    restarted();
+    const first = reopened(A, "sid-1", "claude-code", null, null, null);
+    const second = reopened(A, "sid-2", "claude-code", null, null, null);
+    const caller = byToken(callerKey("caller-1"))!;
+    flushSync();
+    expect(startedBy(caller.token)).toEqual([first, second]);
+    // Nothing of it is news to its starter while it has not run.
+    expect(unheard(caller)).toEqual([]);
+
+    await handle(call("sessions", {}, as));
+    const listed = last().content!.split("\n");
+    expect(listed[0]).toContain("sid-1");
+    expect(listed[0]).toContain("not running since the workbench was restarted  a line you send it resumes it");
+    await handle(call("read", { session: "sid-1" }, as));
+    expect(last().content).toBe(
+      "Session sid-1 is not running: it has not run since the workbench was restarted. A line you send it resumes it, as start naming session sid-1 does.",
+    );
+    await handle(call("wait", { session: "sid-1" }, as));
+    expect(last().content).toContain("it has not run since the workbench was restarted");
+
+    const sending = handle(call("send", { session: "sid-1", text: "Go on with the test" }, as));
+    await settle();
+    expect(first.status).toBe("starting");
+    expect(first.prompt).toContain("Go on with the test");
+    started(first.key, "pty-9", "sid-1");
+    flushSync();
+    await sending;
+    expect(last().error).toBeNull();
+    expect(last().content).toContain("Your line resumed it.");
+
+    const starting = handle(call("start", { session: "sid-2", prompt: "Go on with the deps" }, as));
+    await settle();
+    expect(second.status).toBe("starting");
+    started(second.key, "pty-10", "sid-2");
+    flushSync();
+    await starting;
+    expect(last().content).toContain("Resumed session sid-2");
+    // The same rows, in the same order, under the same starter.
+    expect(forProject(A)).toEqual([first, second]);
+    expect(startedBy(caller.token)).toEqual([first, second]);
+  });
+
+  // A starter that has not run since the restart is not woken by what its
+  // sessions do meanwhile: their news waits for it.
+  it("keeps the news of a session the user woke for its starter while the starter has not run since the restart", async () => {
+    await startOne();
+    restarted();
+    const caller = reopened(C, "caller-1", "claude-code", null, null, null);
+    const kid = reopened(A, "sid-1", "claude-code", null, null, null);
+    flushSync();
+    expect(startedBy(caller.token)).toEqual([kid]);
+    wake(kid.key);
+    started(kid.key, "pty-9", "sid-1");
+    kid.working = true;
+    flushSync();
+    kid.working = false;
+    flushSync();
+    await vi.advanceTimersByTimeAsync(WAKE_AFTER + COLD_AFTER["claude-code"]);
+    expect(caller.status).toBe("dormant");
+    expect(written).toEqual([]);
+    // Up again, it has the rest to hear.
+    wake(caller.key);
+    started(caller.key, "pty-0", "caller-1");
+    flushSync();
+    expect(unheard(caller)).toEqual([kid]);
+  });
+
+  // The tools start one level only; the list is given a started session's
+  // own here, as the rows allow for.
+  it("brings back a started session's own sessions under its row", async () => {
+    await startOne();
+    const kept = JSON.parse(localStorage.getItem("chord.started")!);
+    kept[tok("sid-1")] = [{ id: "sid-2", project: B, worktree: null, agent: "claude-code", name: "Write the test" }];
+    localStorage.setItem("chord.started", JSON.stringify(kept));
+    restarted();
+    const middle = reopened(A, "sid-1", "claude-code", null, null, null);
+    const inner = reopened(B, "sid-2", "claude-code", null, null, null);
+    const caller = byToken(callerKey("caller-1"))!;
+    flushSync();
+    expect(startedBy(caller.token)).toEqual([middle]);
+    expect(startedBy(middle.token)).toEqual([inner]);
+    expect(inner.status).toBe("dormant");
+  });
+
+  // What was at work at the quit stays as it came back until it is woken,
+  // closed or stopped: a question, a usage limit, a rest its starter had
+  // not heard. Only a rest its starter heard is on record as over.
+  it("is on record as over only once its starter heard it rest, and one that was not stays after a restart", async () => {
+    const asking = await startOne();
+    const limited = await startAllowed(call("start", { project: A, prompt: "Bump deps" }, as), "pty-2", "sid-2");
+    const untold = await startAllowed(call("start", { project: A, prompt: "Tidy up" }, as), "pty-3", "sid-3");
+    const told = await startAllowed(call("start", { project: A, prompt: "Fix the docs" }, as), "pty-4", "sid-4");
+    exact("sid-2", "prompt");
+    exact("sid-2", "failed", "You've hit your 5-hour limit · resets 4pm (Europe/Stockholm)", false, {
+      error: "rate_limit",
+    });
+    for (const id of ["sid-3", "sid-4"]) {
+      exact(id, "prompt");
+      exact(id, "stop");
+    }
+    asking.needs = "permission";
+    flushSync();
+    for (const id of ["sid-1", "sid-2", "sid-4"]) await handle(call("wait", { session: id }, as));
+    expect([asking, limited, untold, told].map(workOver)).toEqual([false, false, false, true]);
+
+    restarted();
+    const back = ["sid-1", "sid-2", "sid-3"].map((id) => reopened(A, id, "claude-code", null, null, null));
+    flushSync();
+    expect(back.map(workOver)).toEqual([false, false, false]);
+    await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER * 2);
+    expect(forProject(A)).toEqual(back);
+    for (const row of back) expect(row.status).toBe("dormant");
+    // A stop takes one off the pane and off the list.
+    await handle(call("stop", { session: "sid-1" }, as));
+    expect(last().content).toBe("Stopped session sid-1. It is off your list now, and not offered to resume.");
+    expect(forProject(A)).toEqual(back.slice(1));
+    await handle(call("sessions", {}, as));
+    expect(last().content).not.toContain("sid-1");
+    // A wait that names none has nothing running to wait on.
+    await handle(call("wait", {}, as));
+    expect(last().content).toContain("None of the sessions you started is running.");
+  });
+
+  // One whose work was over at the quit rests on toward being put away as
+  // it did before. A line from its starter is work, so that one stays.
+  it("puts away a row whose work was over at the quit after the usual rest, and not one its starter sent a line", async () => {
+    await startOne();
+    await startAllowed(call("start", { project: A, prompt: "Bump deps" }, as), "pty-2", "sid-2");
+    restarted();
+    const first = reopened(A, "sid-1", "claude-code", null, null, null);
+    const second = reopened(A, "sid-2", "claude-code", null, null, null);
+    cameBackOver(first.key);
+    cameBackOver(second.key);
+    flushSync();
+    expect([first, second].map(workOver)).toEqual([true, true]);
+
+    const sending = handle(call("send", { session: "sid-2", text: "Pin the lockfile too" }, as));
+    await settle();
+    expect(second.status).toBe("starting");
+    expect(workOver(second)).toBe(false);
+    started(second.key, "pty-9", "sid-2");
+    flushSync();
+    await sending;
+    expect(last().content).toContain("Your line resumed it.");
+
+    await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER);
+    expect(forProject(A)).toEqual([second]);
+    expect(workOver(second)).toBe(false);
+    await handle(call("sessions", {}, as));
+    expect(last().content).toContain(
+      "put away by the workbench once its work was over  a line you send it resumes it, as start naming session sid-1 does",
+    );
+    await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER);
+    expect(forProject(A)).toEqual([second]);
   });
 
   // A name a start gave is the session's until its agent gives one, after

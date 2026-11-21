@@ -285,13 +285,24 @@ goes on with. A wait over all of the starter's sessions passes over one
 put away while it waits, and once every session it watched has been put
 away it answers that none is running.
 
-After a restart, a row of a session another session started that the core
-no longer runs is put away the same way, without being started, unless it
-was the session on screen at the quit. One that comes back unread, or that
-the user writes in before the core has answered, stays until the user has
-seen it, and goes five minutes after. A row whose core could not be asked,
-which may still run it, is kept. Its starter's list says it has not run
-since the workbench was restarted, and a line sent to it resumes it.
+After a restart, a session another session started comes back under its
+starter as every row open at the quit does, where it stood among the
+others and with nothing running behind it (see
+[sessions](sessions.md#after-a-restart)). What the restart cut off stays,
+and what was already over goes as it would have. One whose work was over
+at the quit as far as it and its starter go, its turn ended by itself and
+its starter told, with nothing it started still at work, is over still
+though nothing runs: once the user has read it, it is off screen and
+holds no words of theirs, its row closes five minutes later, as it would
+have before the quit, and it is put away as above. Any other, one
+starting, running, asking, at its usage limit or come to rest without its
+starter hearing, stays as it came back until a line wakes it, the user
+closes it or its starter stops it. A record from an earlier version does
+not say which, so each of its sessions stays. Its starter hears nothing of
+either until it runs again, and until it runs or is put away its list
+says it has not run since the workbench was restarted. While its row is
+there, a line sent to it, by the user or by its starter, resumes it in
+that row, as a start naming it does.
 
 ## Who is calling
 
@@ -667,26 +678,26 @@ resumed keeps its token, so the sessions it started are still its own: the
 ones still running answer to its tools as before, and a row with one of its
 ids, resumed from the pane by hand, hangs under it all the same. When the
 app itself was closed, the orchestrator comes back with the other sessions
-that were open, and the sessions it started do not. `sessions` then lists
-them as not running since the workbench was restarted, after the running
-ones; one whose row the user closed is listed as closed by the user, one
-whose row had ended as ended, and one the workbench put away as put away,
-before a restart and after it, until a
-row of it is up again, however it came back: by `start`, by hand from the
-pane, or in place of its row, as a session whose workflow was lost is. A
-wait held for a session resumed in place of its row goes on with the new
-row. `start`
-with one of those ids
+that were open, and the sessions it started come back under it, not
+running, but for one whose row had ended before the quit, which does not
+come back, as no ended row does. `sessions` then lists them as not
+running since the workbench was restarted, after the running ones; one
+whose row the user closed is listed as closed by the user, one whose row
+had ended as ended, and one the workbench put away as put away, before a
+restart and after it, until a row of it is up again, however it came
+back: by `start`, by hand from the pane, or in place of its row, as a
+session whose workflow was lost is. A wait held for a session resumed in
+place of its row goes on with the new row. `start` with one of those ids
 in place of a project and prompt brings it back where it ran, in its
 worktree with its conversation, and so does a line sent to one the
-workbench put away or one not run since the restart. A prompt given with it is what the session
-goes on with; without one it comes up waiting for a line. The cap and the
-one-level rule apply, and a session whose worktree has since been cleaned
-up, or whose project is no longer open, is refused with the reason. A
-session the orchestrator stopped itself is not offered back: the stop said
-it was done with. The record lives with the window's other memory, so a
-wiped local storage forgets it, which only means the orchestrator starts
-afresh.
+workbench put away or one not run since the restart. A prompt given with
+it is what the session goes on with; without one it comes up waiting for
+a line. The cap and the one-level rule apply, and a session whose
+worktree has since been cleaned up, or whose project is no longer open,
+is refused with the reason. A session the orchestrator stopped itself is
+not offered back: the stop said it was done with. The record lives with
+the window's other memory, so a wiped local storage forgets it, which
+only means the orchestrator starts afresh.
 
 A session from before there were tokens had all of this kept under its id,
 and the standing answers it was given in this run of the app as well. When

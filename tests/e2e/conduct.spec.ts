@@ -434,12 +434,16 @@ test.describe("the conductor", () => {
       );
     expect((await spawns()).at(-1)?.model).toBe("sonnet");
 
-    // The app comes back with the caller, resumed, and without the session
-    // it started: that one is the caller's to bring back.
+    // The app comes back with the caller, resumed, and the session it
+    // started under it, by its name, not running until something resumes
+    // it.
     await page.reload();
     await expect(page.locator(AGENT)).toBeVisible();
     await expect(rows(page)).toHaveCount(1);
-    await expect(page.getByTestId("started-session")).toHaveCount(0);
+    const kid = page.getByTestId("started-session");
+    await expect(kid).toHaveCount(1);
+    await expect(kid).toContainText("Cache flake");
+    await expect(kid.locator(".dot")).toHaveClass(/dormant/);
     await expect.poll(async () => (await spawns()).map((spawn) => spawn.session)).toEqual([
       "session-1",
     ]);
@@ -464,9 +468,10 @@ test.describe("the conductor", () => {
     const answer = (await answerTo(page, "c-9"))!;
     expect(answer.error).toBeNull();
     expect(answer.content).toContain("Resumed session session-2");
-    // Back under its starter, resumed by id, with the prompt on its
-    // command line.
-    await expect(page.getByTestId("started-session")).toHaveCount(1);
+    // Resumed by id in the row it had, with the prompt on its command line.
+    await expect(kid).toHaveCount(1);
+    await expect(kid).toContainText("Cache flake");
+    await expect(kid.locator(".dot")).not.toHaveClass(/dormant/);
     const resumed = (await spawns()).at(-1);
     expect(resumed?.session).toBe("session-2");
     expect(resumed?.prompt).toContain("Go on with the test");
@@ -641,7 +646,7 @@ test.describe("what a starter is told", () => {
 
     await push(page, { id: "l-1", tool: "sessions", session: "session-1" });
     expect((await answered(page, "l-1")).content).toMatch(
-      /^session-2 .* put away by the workbench once its work was over {2}a line you send it resumes it$/,
+      /^session-2 .* put away by the workbench once its work was over {2}a line you send it resumes it, as start naming session session-2 does$/,
     );
     await push(page, {
       id: "t-1",
