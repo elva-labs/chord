@@ -317,6 +317,37 @@ test.describe("typing on a new session's line with accounts named", () => {
     expect((await spawns(page))[0].agent).toBe("codex");
     await expect(page.getByTestId("account-readout")).toHaveText("account: Work");
   });
+
+  test("offers in the footer only what Enter does on what is typed", async ({ page }) => {
+    await installFakeCore(page, {
+      open: [PROJECT],
+      agents: ["claude-code", "codex"],
+      settings: { accounts: WORK, ...NO_WORKFLOW },
+    });
+    await page.goto("/");
+    await expect(page.locator(AGENT)).toBeVisible();
+    await page.keyboard.press(`${MOD}+Shift+P`);
+    await page.keyboard.type("new session in");
+    await page.keyboard.press("Enter");
+    const field = page.getByTestId("palette-field");
+    const hints = page.getByTestId("palette-hints");
+    await expect(field).toHaveAttribute("placeholder", "Enter starts it");
+    await expect(hints).toContainText("start");
+    await page.keyboard.type("cod");
+    await expect(field).toHaveAttribute("placeholder", "");
+    await expect(hints).toContainText("choose");
+    await expect(hints).not.toContainText("start");
+    // Nothing matches, so Enter has nothing to do and the footer offers it
+    // for nothing.
+    await page.keyboard.type("zzz");
+    await expect(page.getByText("Nothing matches.")).toBeVisible();
+    await expect(hints).not.toContainText("choose");
+    await expect(hints).not.toContainText("start");
+    await expect(hints).toContainText("back");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("palette")).toBeVisible();
+    expect(await spawns(page)).toHaveLength(0);
+  });
 });
 
 test.describe("a new session in a project that names no account", () => {

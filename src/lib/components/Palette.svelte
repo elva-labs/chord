@@ -178,7 +178,9 @@
       : palette.mode === "commands"
         ? "Run a command"
         : palette.ready
-          ? "Enter starts it"
+          ? palette.query === ""
+            ? "Enter starts it"
+            : ""
           : asking === "project"
           ? "Which project"
           : asking === "account"
@@ -347,7 +349,11 @@
         <span><kbd>&gt;</kbd> commands</span>
         <span><kbd>esc</kbd> close</span>
       {:else if palette.mode === "new" && palette.ready}
-        <span><kbd>↵</kbd> start</span>
+        {#if palette.query.trim() === ""}
+          <span><kbd>↵</kbd> start</span>
+        {:else if items.length > 0}
+          <span><kbd>↵</kbd> choose</span>
+        {/if}
         <span><kbd>⌫</kbd> back</span>
         <span><kbd>esc</kbd> close</span>
       {:else if palette.mode === "new"}
