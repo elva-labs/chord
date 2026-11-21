@@ -34,8 +34,10 @@ When writing or changing one:
   earlier attempts, or answers to questions nobody in the doc asked.
 - Do not reference source files or folder structure; they do not stay
   current. Describe the mechanism instead.
-- The README says what the project is and what it solves. Architecture and
-  behaviour go in their own docs, summarised in the README in a line each.
+- The README is the project's front page, written to win a newcomer over.
+  It holds only what a newcomer needs to know, spends the reader's attention
+  with care, draws them in and links to more. Anything longer, architecture
+  and behaviour among it, lives in the docs.
 - Say a thing once and reference it from elsewhere.
 
 ## Verifying
