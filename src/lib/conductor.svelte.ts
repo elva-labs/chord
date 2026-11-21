@@ -88,11 +88,13 @@ import {
   statusMessage,
   wake as wakeRow,
   type Session,
+  type SessionStatus,
 } from "$lib/sessions.svelte";
 import type { AgentId, ReviewStep, Workflow, WorkflowStep, WorkStep } from "$lib/core";
 import { CODEX_DEFAULT } from "$lib/models";
 import { hostOf } from "$lib/remote.svelte";
 import { forgetNotes } from "$lib/notes";
+import { moveStartedFold } from "$lib/startedFolds.svelte";
 import { onWentOn, wentOn, wentOnFrom } from "$lib/goingOn.svelte";
 import { instructionLines, modelText } from "$lib/workflowInstructions";
 import { stepFacts } from "$lib/workflows.svelte";
@@ -2843,11 +2845,15 @@ async function startFitted(
   const id = await idFor(session.key);
   if (id === null) {
     const row = byKey(session.key);
-    return refused(
-      row === null
-        ? "The session was closed before it started."
-        : statusMessage(row),
-    );
+    const reason =
+      row === null ? "The session was closed before it started." : statusMessage(row);
+    // A start that failed leaves nothing behind. One still starting or
+    // running when the wait ran out may yet be identified, and keeps what
+    // it made.
+    if (row === null || FAILED.has(row.status)) {
+      await undoStart(session.key, project, startIn);
+    }
+    return refused(reason);
   }
   const row = byKey(session.key);
   if (row !== null) logUsage(row, "start", { starter: caller, modelBelow: below !== null });
@@ -2895,6 +2901,31 @@ async function startFitted(
   return said(
     `Started session ${idText(id)} for ${placeText(at)} in ${where}${underWords(named)}. It has the prompt.${runsOn}${begins}${notCalled} ${KEEP_WAITING}`,
   );
+}
+
+/** The states of a row that never came up and will not. */
+const FAILED = new Set<SessionStatus>(["failed", "exited", "crashed"]);
+
+/** Takes back what a start that never came up made: its row, the row's
+    place with its starter, and the worktree made for it, with its branch.
+    A worktree the core will not part with stays, and the starter's list of
+    trees keeps it. */
+async function undoStart(key: string, project: string, tree: string | null) {
+  delete conductor.startedBy[key];
+  delete conductor.places[key];
+  close(key);
+  if (tree === null) return;
+  try {
+    const made = (await core().worktrees(project)).find(
+      (candidate) => candidate.path === tree,
+    );
+    if (made !== undefined) {
+      await core().worktreeRemove(project, made.name, dirsOf());
+    }
+  } catch {
+    return;
+  }
+  treeRemoved(project, tree);
 }
 
 /** Claude's models, most capable first, by the family a model's name
@@ -4308,6 +4339,7 @@ onForgotten((tokens, project) => {
 // conversation keeps its place on its starter's list and in its workflow
 // under the fresh conversation's id, and the old id still names it.
 onWentOn((from, to) => {
+  moveStartedFold(from, to);
   let started = false;
   for (const list of Object.values(conductor.started))
     for (const entry of list)
@@ -4641,7 +4673,7 @@ function idFor(key: string): Promise<string | null> {
         return;
       }
       if (session.id !== null) settle(session.id);
-      else if (session.status !== "starting") settle(null);
+      else if (session.status !== "starting" && session.status !== "running") settle(null);
     },
     START_WAIT,
     null,

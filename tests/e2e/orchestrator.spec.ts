@@ -194,6 +194,25 @@ test.describe("the orchestrator", () => {
     await expect.poll(at).toBe(own_row);
   });
 
+  test("keeps a folded orchestrator folded after a reload", async ({ page }) => {
+    await orchestrate(page);
+    await expect(page.getByTestId("started-session")).toHaveCount(1);
+    await page.getByTestId("collapse-started").click();
+    await expect(page.getByTestId("started-session")).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.locator(AGENT)).toBeVisible();
+    await expect(page.getByTestId("started-dots")).toHaveCount(1);
+    await expect(page.getByTestId("started-session")).toHaveCount(0);
+
+    await page.getByTestId("collapse-started").click();
+    await expect(page.getByTestId("started-session")).toHaveCount(1);
+    await page.reload();
+    await expect(page.locator(AGENT)).toBeVisible();
+    await expect(page.getByTestId("started-session")).toHaveCount(1);
+    await expect(page.getByTestId("started-dots")).toHaveCount(0);
+  });
+
   test("breathes on the orchestrator's own dot while a started session works", async ({
     page,
   }) => {
