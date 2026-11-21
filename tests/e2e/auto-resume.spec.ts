@@ -149,7 +149,8 @@ test("the row and the chip say when it resumes, until a turn begins or it is tur
 test("a turn the limit stops says so calmly over the composer, and waits for the reset from there", async ({ page }) => {
   await open(page);
   await windowed(page, H, 100);
-  await expect(chip(page)).toHaveText("Auto-resume off");
+  // Off is the default, so its chip is behind the plus.
+  await expect(chip(page)).toHaveCount(0);
   await refused(page, 3600);
   const notice = page.locator("[data-testid='usage-limit-notice']:visible");
   const said = notice.getByTestId("usage-limit-line");
@@ -173,9 +174,10 @@ test("a turn the limit stops says so calmly over the composer, and waits for the
   await expect(chip(page)).toHaveText(/^Resumes \d{1,2}[:.]\d{2}/);
   await expect(page.getByTestId("session-resumes")).toHaveText(/^resumes /);
 
-  // Cancelling turns it off, and the notice offers it again.
+  // Cancelling turns it off, back behind the plus, and the notice offers
+  // it again.
   await notice.getByTestId("usage-limit-cancel").click();
-  await expect(chip(page)).toHaveText("Auto-resume off");
+  await expect(chip(page)).toHaveCount(0);
   await expect(page.getByTestId("session-resumes")).toHaveCount(0);
   await expect(notice.getByTestId("usage-limit-continue")).toBeVisible();
 
