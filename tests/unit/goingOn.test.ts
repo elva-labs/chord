@@ -87,10 +87,21 @@ describe("taking a conversation up again", () => {
     expect(asked.at(-1)).not.toHaveProperty("always");
   });
 
-  it("asks nothing for a new conversation or another agent's, and resumes whole once the user asks", async () => {
+  it("judges a Codex conversation as a Claude Code one, from the notes after a limit too", async () => {
+    answer = COLD;
+    expect(await takeUp(row({ agent: "codex" }))).toBeNull();
+    expect(asked[0]).toMatchObject({ agent: "codex", session: "old-id", token: "token-1" });
+    expect(briefingFor("row-1")).toBe("BRIEFING");
+    expect(await takeUp(row({ agent: "codex" }), true)).toBeNull();
+    expect(asked[1]).toMatchObject({ agent: "codex", always: true });
+    askWhole("row-1");
+    expect(await takeUp(row({ agent: "codex" }))).toBe("old-id");
+    expect(asked).toHaveLength(2);
+  });
+
+  it("asks nothing for a new conversation, and resumes whole once the user asks", async () => {
     answer = COLD;
     expect(await takeUp(row({ resumedFrom: null }))).toBeNull();
-    expect(await takeUp(row({ agent: "codex" }))).toBe("old-id");
     expect(asked).toHaveLength(0);
     askWhole("row-1");
     expect(await takeUp(row())).toBe("old-id");

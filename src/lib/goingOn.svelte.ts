@@ -5,7 +5,8 @@
  * the briefing the core wrote, the brief and list of notes, how it began,
  * its last exchanges and where its transcript is. Warm or small, it is
  * resumed whole, and so is one the user asks to have whole from the row's
- * menu. The core judges which from the transcript; the window acts on it.
+ * menu. The core judges which from the transcript, or a Codex
+ * conversation's rollout; the window acts on it.
  * A conversation that goes on by itself once a usage limit resets goes on
  * from its notes whatever its size and rest.
  *
@@ -75,17 +76,16 @@ function save() {
 /**
  * Decides how a row about to start takes its conversation up again, and
  * answers the agent's id to resume, or null to start a fresh conversation
- * that goes on from the notes. Only a Claude Code conversation is judged;
- * a judgement that fails resumes whole. With `always` the conversation
- * goes on from its notes whatever its size and rest, and the id comes
- * back only where it cannot.
+ * that goes on from the notes. A judgement that fails resumes whole. With
+ * `always` the conversation goes on from its notes whatever its size and
+ * rest, and the id comes back only where it cannot.
  */
 export async function takeUp(session: Session, always = false): Promise<string | null> {
   const from = session.resumedFrom;
   delete going.runs[session.key];
   if (from === null) return null;
-  if ((!always && whole.delete(session.key)) || session.agent !== "claude-code") {
-    logUsage(session, "resume", { from, whole: true, asked: session.agent === "claude-code" });
+  if (!always && whole.delete(session.key)) {
+    logUsage(session, "resume", { from, whole: true, asked: true });
     return from;
   }
   try {

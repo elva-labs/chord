@@ -8,7 +8,7 @@ import { attention, resetAttention } from "$lib/attention.svelte";
 import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
 import { register, resetScreens } from "$lib/screens";
 import { bodyFor } from "$lib/notify.svelte";
-import { resetGoingOn } from "$lib/goingOn.svelte";
+import { going, lineageOf, resetGoingOn } from "$lib/goingOn.svelte";
 import {
   activeSession,
   adoptPastSessions,
@@ -1015,6 +1015,20 @@ describe("an agent that mints its own id", () => {
     zoomed(session.key, null, 1);
     identified("pty-1", "minted", null);
     expect(zoom.kept["minted"]?.size).toBe(13);
+  });
+
+  it("keeps the row's name for a run that went on from notes, as going on from the old conversation", () => {
+    const session = create(A, null, "codex");
+    session.title = "Login fix";
+    started(session.key, "pty-1", null);
+    going.runs[session.key] = { from: "cx-old", context: 240_000, briefing: null, spoken: true };
+    // The index names the fresh thread by its first message, the briefing.
+    identified("pty-1", "cx-new", "From the workbench, not the user: this conversation goes on");
+    expect(session.id).toBe("cx-new");
+    expect(label(session)).toBe("Login fix");
+    expect(sessions.names["cx-new"]).toBe("Login fix");
+    expect(lineageOf("cx-new")).toEqual(["cx-old", "cx-new"]);
+    resetGoingOn();
   });
 
   it("ignores an identification for a pty it does not have", () => {

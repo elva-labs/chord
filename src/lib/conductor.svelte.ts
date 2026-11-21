@@ -3494,17 +3494,22 @@ async function resumeSession(
     started = true;
     if (owesRound) owed.add(session.key);
     // A cold and large conversation went on fresh from its notes, under
-    // an id of its own that the old one still names.
+    // an id of its own that the old one still names. An agent that mints
+    // its own ids writes the fresh one down later, and the old one names
+    // the session until then.
     const fresh = wentOn(session.key) !== null;
-    const named = (fresh ? byKey(session.key)?.id : null) ?? id;
+    const own = fresh ? (byKey(session.key)?.id ?? null) : null;
+    const named = own ?? id;
     if (goesOn !== null && goesOn !== at) place(caller, named, goesOn);
     const where = worktree === null ? project : `${project}, in ${worktree}`;
     const round =
       goesOn !== null && goesOn !== at ? ` for ${placeText(goesOn)}` : "";
-    if (fresh)
+    if (fresh) {
+      const ids = own === null || own === id ? " Its old id names it." : ` Its id is ${idText(own)}, and either id names it.`;
       return said(
-        `Session ${id}${round} went on in ${where} as a fresh conversation, ${idText(named)}, from its notes and last exchanges: its own was cold and large, so it was not read again. Either id names it. ${prompt === null ? "It is waiting. Send it a line to go on, then call wait." : `It has the prompt. ${KEEP_WAITING}`}`,
+        `Session ${id}${round} went on in ${where} as a fresh conversation from its notes and last exchanges: its own was cold and large, so it was not read again.${ids} ${prompt === null ? "It is waiting. Send it a line to go on, then call wait." : `It has the prompt. ${KEEP_WAITING}`}`,
       );
+    }
     return said(
       prompt === null
         ? `Resumed session ${id} in ${where}. It has its conversation and is waiting. Send it a line to go on, then call wait.`
