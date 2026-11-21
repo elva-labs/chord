@@ -11,21 +11,48 @@ use crate::claude_history::{
     last_exchanges, lines, millis, Quoted, Span, Standing, HEAD_KEEP, TAIL_KEEP,
 };
 
-/// How much of a line's start is searched for its time and its kind,
-/// which Codex writes ahead of the rest.
+/// How much of a line's start is searched for its kind, which Codex writes
+/// ahead of the rest.
 const LINE_HEAD: usize = 512;
+
+/// The kinds of line the standing is read from, as each names itself
+/// within its head: a count of a request's tokens, a turn's start, end and
+/// abort, and a compaction.
+const MARKS: [&[u8]; 7] = [
+    b"\"type\":\"token_count\"",
+    b"\"type\":\"task_started\"",
+    b"\"type\":\"task_complete\"",
+    b"\"type\":\"turn_aborted\"",
+    b"\"type\":\"compacted\"",
+    b"\"type\":\"context_compacted\"",
+    b"\"type\":\"ContextCompaction\"",
+];
+
+/// What a line says of how the conversation stands.
+enum Mark {
+    /// A request ended, its context holding these tokens.
+    Count(u64),
+    /// A turn started, ended or was cut off.
+    Turn,
+    /// The conversation compacted.
+    Compaction,
+}
 
 /// How the conversation stands at the end of its rollout: the tokens of
 /// context its last request held, by the last count of them Codex wrote,
-/// and the time of the rollout's last line. None where the end of the
-/// rollout holds no count, or a compaction comes after the last one, which
-/// then no longer says what the context is.
+/// and when its last request ended. None where the end of the rollout
+/// holds no count, or a compaction comes after the last one, which then no
+/// longer says what the context is.
 ///
-/// Codex writes down neither how long its prompt cache lasts nor when the
-/// last request ended, so the cautious reading of each is taken: the
-/// cache lasts an hour, longer than the half hour its provider holds a
-/// cache at least, and the conversation rested from its last line on,
-/// which comes after its last request.
+/// Codex writes a count as each request ends, and a line as each turn
+/// starts, ends or is cut off: the conversation rested from the last of
+/// these on. A turn's start counts too, so a turn cut off before its first
+/// count rests from when it began at the earliest. The lines Codex writes
+/// when a thread is opened or its settings change mark no request, and nor
+/// does any other line. Codex writes down nothing of how long its prompt
+/// cache lasts, so the cautious reading is taken: it lasts an hour, longer
+/// than the half hour its provider holds a cache at least. A line counts
+/// once it is whole, so one cut off as it was written says nothing.
 pub fn standing(rollout: &Path) -> Option<Standing> {
     let length = std::fs::metadata(rollout).ok()?.len();
     let span = Span {
@@ -35,24 +62,22 @@ pub fn standing(rollout: &Path) -> Option<Standing> {
     let mut context = None;
     let mut at = None;
     lines(rollout, Some(span), |bytes| {
-        if let Some(time) = time_of(bytes) {
-            at = Some(time);
-        }
-        if compaction(bytes) {
-            context = None;
-            return;
-        }
-        if !found(bytes, b"\"token_count\"") {
+        let head = &bytes[..bytes.len().min(LINE_HEAD)];
+        if !MARKS.iter().any(|kind| found(head, kind)) {
             return;
         }
         let Ok(entry) = serde_json::from_slice::<Value>(bytes) else {
             return;
         };
-        if entry["type"] != "event_msg" || entry["payload"]["type"] != "token_count" {
-            return;
-        }
-        if let Some(tokens) = tokens(&entry["payload"]["info"]["last_token_usage"]) {
-            context = Some(tokens);
+        let time = entry["timestamp"].as_str().and_then(millis);
+        match mark(&entry) {
+            Some(Mark::Compaction) => context = None,
+            Some(Mark::Count(tokens)) => {
+                context = Some(tokens);
+                at = time.or(at);
+            }
+            Some(Mark::Turn) => at = time.or(at),
+            None => {}
         }
     });
     Some(Standing {
@@ -60,6 +85,27 @@ pub fn standing(rollout: &Path) -> Option<Standing> {
         at: at?,
         hour: true,
     })
+}
+
+/// What a whole line marks: a count only where it holds a request's usage,
+/// which a count Codex writes before a turn's first request does not.
+fn mark(entry: &Value) -> Option<Mark> {
+    if entry["type"] == "compacted" {
+        return Some(Mark::Compaction);
+    }
+    if entry["type"] != "event_msg" {
+        return None;
+    }
+    let payload = &entry["payload"];
+    match payload["type"].as_str()? {
+        "context_compacted" => Some(Mark::Compaction),
+        "item_started" | "item_completed" if payload["item"]["type"] == "ContextCompaction" => {
+            Some(Mark::Compaction)
+        }
+        "token_count" => tokens(&payload["info"]["last_token_usage"]).map(Mark::Count),
+        "task_started" | "task_complete" | "turn_aborted" => Some(Mark::Turn),
+        _ => None,
+    }
 }
 
 /// The tokens a request's usage counts: its whole, or its input and
@@ -70,28 +116,6 @@ fn tokens(usage: &Value) -> Option<u64> {
         let input = usage["input_tokens"].as_u64()?;
         Some(input + usage["output_tokens"].as_u64().unwrap_or(0))
     })
-}
-
-/// Whether a line records the conversation compacted.
-fn compaction(bytes: &[u8]) -> bool {
-    let head = &bytes[..bytes.len().min(LINE_HEAD)];
-    [
-        b"\"type\":\"compacted\"".as_slice(),
-        b"\"type\":\"context_compacted\"",
-        b"\"type\":\"ContextCompaction\"",
-    ]
-    .iter()
-    .any(|kind| found(head, kind))
-}
-
-/// When a line was written, in milliseconds since the epoch.
-fn time_of(bytes: &[u8]) -> Option<u64> {
-    let head = &bytes[..bytes.len().min(LINE_HEAD)];
-    let key = b"\"timestamp\":\"";
-    let from = head.windows(key.len()).position(|window| window == key)? + key.len();
-    let rest = &head[from..];
-    let to = rest.iter().position(|&byte| byte == b'"')?;
-    millis(std::str::from_utf8(&rest[..to]).ok()?)
 }
 
 fn found(bytes: &[u8], what: &[u8]) -> bool {

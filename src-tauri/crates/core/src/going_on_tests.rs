@@ -378,7 +378,10 @@ fn a_conversation_held_at_a_point_is_briefed_from_that_point() {
 /// A Codex line as its rollout writes it, `seconds` after [`AT`].
 fn codex(seconds: u64, kind: &str, payload: serde_json::Value) -> String {
     format!(
-        "{{\"timestamp\":\"2026-11-19T08:00:{seconds:02}.000Z\",\"type\":\"{kind}\",\"payload\":{payload}}}"
+        "{{\"timestamp\":\"2026-11-19T{:02}:{:02}:{:02}.000Z\",\"type\":\"{kind}\",\"payload\":{payload}}}",
+        8 + seconds / 3600,
+        seconds / 60 % 60,
+        seconds % 60
     )
 }
 
@@ -399,8 +402,8 @@ fn codex_count(seconds: u64, tokens: u64) -> String {
 }
 
 /// A Codex conversation is judged from its rollout, its cache taken to
-/// last the hour and its rest to start at its last line, and briefed as a
-/// Claude Code one is.
+/// last the hour and its rest to start as its last request ended, and
+/// briefed as a Claude Code one is.
 #[test]
 fn a_cold_and_large_codex_conversation_goes_on_from_its_rollout() {
     let home = Scratch::new("going-on-codex");
@@ -438,12 +441,37 @@ fn a_cold_and_large_codex_conversation_goes_on_from_its_rollout() {
     assert!(briefing.contains("User:\n> Now the export."));
     assert!(briefing.contains("You:\n> Export done."));
     assert!(briefing.contains(&path.display().to_string()));
-    // Within the hour after its last line it is resumed whole.
+    // Within the hour after its last request it is resumed whole.
     let warm = judge_rollout(&path, |_| None, last + 50 * 60 * 1000, false);
     assert!(!warm.goes_on);
     assert_eq!(warm.briefing, None);
     // Asked to go on from its notes, it does however warm it is.
     assert!(judge_rollout(&path, |_| None, last, true).goes_on);
+}
+
+/// A thread opened again in Codex's own apps hours after its last request
+/// rests from that request still, and so goes on from its notes.
+#[test]
+fn a_codex_conversation_opened_again_without_a_request_goes_on_from_its_rollout() {
+    let home = Scratch::new("going-on-codex-reopened");
+    let path = transcript(
+        &home,
+        &[
+            codex_said(0, "UserMessage", "text", "Build the importer."),
+            codex_count(3, 240_000),
+            codex_said(3, "AgentMessage", "Text", "Importer built."),
+            codex(4, "event_msg", json!({ "type": "task_complete" })),
+            codex(
+                4 + 3 * 3600,
+                "event_msg",
+                json!({ "type": "thread_settings_applied", "thread_settings": { "model": "gpt" } }),
+            ),
+        ],
+    );
+    let rested = 3 * HOUR + HOUR / 2;
+    let judged = judge_rollout(&path, |_| None, AT + 4_000 + rested, false);
+    assert!(judged.goes_on);
+    assert_eq!(judged.idle, Some(rested / 1000));
 }
 
 #[test]

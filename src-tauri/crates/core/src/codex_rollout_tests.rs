@@ -9,9 +9,27 @@ const AT: u64 = 1_795_075_200_000;
 /// `seconds` after [`AT`].
 fn line(seconds: u64, kind: &str, payload: Value) -> String {
     format!(
-        "{{\"timestamp\":\"2026-11-19T08:{:02}:{:02}.000Z\",\"ordinal\":1,\"type\":\"{kind}\",\"payload\":{payload}}}",
-        seconds / 60,
+        "{{\"timestamp\":\"2026-11-19T{:02}:{:02}:{:02}.000Z\",\"ordinal\":1,\"type\":\"{kind}\",\"payload\":{payload}}}",
+        8 + seconds / 3600,
+        seconds / 60 % 60,
         seconds % 60
+    )
+}
+
+fn turn(seconds: u64, kind: &str) -> String {
+    line(
+        seconds,
+        "event_msg",
+        json!({ "type": kind, "turn_id": "t" }),
+    )
+}
+
+/// What Codex's own apps write as they open a thread, with no request.
+fn settings(seconds: u64) -> String {
+    line(
+        seconds,
+        "event_msg",
+        json!({ "type": "thread_settings_applied", "thread_id": "th", "thread_settings": { "model": "gpt", "approval_policy": "never" } }),
     )
 }
 
@@ -56,7 +74,7 @@ fn rollout(home: &Scratch, lines: &[String]) -> std::path::PathBuf {
 }
 
 #[test]
-fn the_standing_is_the_last_count_and_the_last_line() {
+fn the_standing_is_the_last_count_and_the_end_of_the_last_turn() {
     let home = Scratch::new("rollout-standing");
     let path = rollout(
         &home,
@@ -80,6 +98,88 @@ fn the_standing_is_the_last_count_and_the_last_line() {
             hour: true
         })
     );
+}
+
+#[test]
+fn opening_the_thread_again_or_a_late_item_leaves_its_rest_where_its_last_request_ended() {
+    let home = Scratch::new("rollout-reopened");
+    let path = rollout(
+        &home,
+        &[
+            total(5, 212_000),
+            turn(6, "task_complete"),
+            line(
+                138,
+                "event_msg",
+                json!({ "type": "item_completed", "item": { "type": "CommandExecution", "id": "x" } }),
+            ),
+            settings(6 + 3 * 3600),
+        ],
+    );
+    assert_eq!(
+        standing(&path),
+        Some(Standing {
+            context: 212_000,
+            at: AT + 6_000,
+            hour: true
+        })
+    );
+}
+
+#[test]
+fn a_turn_begun_or_cut_off_after_the_last_count_rests_from_then() {
+    let home = Scratch::new("rollout-turns");
+    let path = rollout(
+        &home,
+        &[
+            total(5, 212_000),
+            turn(6, "task_complete"),
+            turn(600, "task_started"),
+        ],
+    );
+    assert_eq!(
+        standing(&path).map(|standing| standing.at),
+        Some(AT + 600_000)
+    );
+
+    let path = rollout(
+        &home,
+        &[
+            total(5, 212_000),
+            turn(600, "task_started"),
+            turn(700, "turn_aborted"),
+            settings(900),
+        ],
+    );
+    assert_eq!(
+        standing(&path),
+        Some(Standing {
+            context: 212_000,
+            at: AT + 700_000,
+            hour: true
+        })
+    );
+}
+
+#[test]
+fn a_last_line_cut_off_as_it_was_written_says_nothing() {
+    let home = Scratch::new("rollout-cut-off");
+    let path = home.path().join("rollout.jsonl");
+    let whole = [total(5, 212_000), turn(6, "task_complete")].join("\n");
+    for cut in [
+        "{\"timestamp\":\"2026-11-19T10:00:00.000Z\",\"ordinal\":1,\"type\":\"compacted\",\"payload\":{\"message\":\"",
+        "{\"timestamp\":\"2026-11-19T10:00:00.000Z\",\"ordinal\":1,\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"tu",
+    ] {
+        std::fs::write(&path, format!("{whole}\n{cut}")).unwrap();
+        assert_eq!(
+            standing(&path),
+            Some(Standing {
+                context: 212_000,
+                at: AT + 6_000,
+                hour: true
+            })
+        );
+    }
 }
 
 #[test]

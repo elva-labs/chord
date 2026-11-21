@@ -1314,13 +1314,14 @@ seconds of five minutes; large is a context of a hundred thousand tokens
 or more, as its last request read it. Warm or small, it is resumed whole,
 as before, and so is one whose last request does not say when it was.
 A Codex conversation is read from the file Codex writes its thread to,
-which stands for its transcript here. Codex records neither how long its
-cache lasts nor when its last request ended, so the cautious reading of
-each is taken: the cache lasts an hour, longer than the half hour its
-provider keeps one at the least, and the rest is counted from the thread's
-last line, which comes after its last request. Its context is the one
-Codex last counted; a Codex conversation compacted after its last count,
-or with no count at all, is resumed whole.
+which stands for its transcript here. Its rest is counted from the end of
+the last request Codex recorded there, or the start or end of its last
+turn where that came later; opening the thread again, in Chord or in
+Codex's own apps, records no request and counts for nothing. Codex does
+not record how long its cache lasts, so the cautious reading is taken: an
+hour, longer than the half hour its provider keeps one at the least. Its
+context is the one Codex last counted; a Codex conversation compacted
+after its last count, or with no count at all, is resumed whole.
 A conversation held at a point it went back to is judged as it stands
 there, not by the turns it went back on. The same rule holds for the
 user's own sessions, the one on screen included, and for sessions another
