@@ -31,7 +31,7 @@ const starts = async (page: Page) => (await calls(page)).filter((call) => call.m
 
 /** A new integrated session in a project that follows no workflow, with
     the workflows given in the settings. */
-async function open(page: Page, list: unknown[] = [BUILD_AND_REVIEW, PLAN_WORK_REVIEW], extra: Record<string, unknown> = {}) {
+async function open(page: Page, list: unknown[] = [BUILD_AND_REVIEW, PLAN_WORK_REVIEW], extra: Record<string, unknown> = {}, bring = true) {
   await installFakeCore(page, {
     open: [PROJECT],
     settings: { integrated: ["claude-code"], workflows: { list, default: null, overrides: {} } },
@@ -42,6 +42,17 @@ async function open(page: Page, list: unknown[] = [BUILD_AND_REVIEW, PLAN_WORK_R
   // With two agents, New session asks which.
   if (extra.agents !== undefined) await page.getByTestId("start-agent-claude-code").click();
   await expect(page.getByTestId("model-chip")).toBeEnabled();
+  if (bring && list.length > 0) await reveal(page);
+}
+
+/** Brings the workflow chip up from behind the plus, and shuts the menu
+    that opens with it. */
+async function reveal(page: Page) {
+  await page.getByTestId("more-chip").click();
+  await page.getByTestId("more-option").filter({ hasText: "Workflow" }).click();
+  await expect(page.getByTestId("workflow-menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("workflow-menu")).toHaveCount(0);
 }
 
 const chip = (page: Page) => page.getByTestId("workflow-chip");
@@ -51,13 +62,12 @@ test("a new conversation offers the workflows beside the model, each saying what
   await open(page);
   await expect(chip(page)).toHaveText("No workflow");
   await expect(chip(page)).toHaveAccessibleName("Workflow: none");
-  // Beside the model and the mode, in that order, on one line.
+  // Beside the model, on one line.
   const boxes = await Promise.all(
-    ["model-chip", "mode-chip", "workflow-chip"].map(async (id) => (await page.getByTestId(id).boundingBox())!),
+    ["model-chip", "workflow-chip"].map(async (id) => (await page.getByTestId(id).boundingBox())!),
   );
   expect(boxes[0].x).toBeLessThan(boxes[1].x);
-  expect(boxes[1].x).toBeLessThan(boxes[2].x);
-  expect(Math.abs(boxes[0].y - boxes[2].y)).toBeLessThan(1);
+  expect(Math.abs(boxes[0].y - boxes[1].y)).toBeLessThan(1);
 
   await chip(page).click();
   const menu = page.getByTestId("workflow-menu");
@@ -70,12 +80,12 @@ test("a new conversation offers the workflows beside the model, each saying what
   ]);
   await expect(options(page).first()).toHaveAttribute("aria-checked", "true");
   await expect(menu).toContainText("Chosen before the first message, then kept.");
-  // With room to the chip's left, it opens over the composer from the
-  // chip's right edge.
+  // It opens over the composer, from the chip's right edge or as near as
+  // the composer's left edge lets it be.
   const box = (await menu.boundingBox())!;
   const chipBox = (await chip(page).boundingBox())!;
   const composer = (await page.getByTestId("composer").boundingBox())!;
-  expect(Math.abs(box.x + box.width - (chipBox.x + chipBox.width))).toBeLessThan(1);
+  expect(box.x + box.width).toBeGreaterThanOrEqual(chipBox.x + chipBox.width - 1);
   expect(box.y + box.height).toBeLessThan(chipBox.y);
   expect(box.x).toBeGreaterThanOrEqual(composer.x - 0.5);
   await page.keyboard.press("Escape");
@@ -90,6 +100,7 @@ test("offers the shipped workflows on a fresh install, Direct among them", async
   await page.goto("/");
   await page.getByTestId("start-agent").click();
   await expect(page.getByTestId("model-chip")).toBeEnabled();
+  await reveal(page);
   await expect(chip(page)).toHaveText("No workflow");
   await chip(page).click();
   await expect(options(page).locator(".name")).toHaveText(["No workflow", "Build and review", "Direct"]);
@@ -163,10 +174,8 @@ test("picking a workflow makes the session its orchestrator, as New session unde
   await expect(model).toHaveAttribute("aria-disabled", "true");
   await expect(model).toHaveAttribute("title", "Set by Build and review");
   await expect(model).toHaveAccessibleName("Model Fable, set by Build and review");
-  // The status bar names it as the composer does, and holds it too.
-  const readout = page.getByTestId("model-readout");
-  await expect(readout).toHaveText("Fable");
-  await expect(readout).toHaveAttribute("title", "Set by Build and review");
+  // The header names it as the composer does.
+  await expect(page.locator(`${AGENT} > header .meta`)).toHaveText("Fable");
   // A press on it opens nothing.
   await model.dispatchEvent("click");
   await expect(page.getByTestId("model-menu")).toHaveCount(0);
@@ -199,7 +208,7 @@ test("going back to no workflow starts the agent alone, on its own default model
   expect(last.instructions).toBeUndefined();
   expect(last.startOnly).toBeUndefined();
   expect(last.model).toBeUndefined();
-  await expect(page.getByTestId("model-chip")).toHaveText("Default · Sonnet");
+  await expect(page.getByTestId("model-chip")).toHaveText("Sonnet");
   await expect(page.getByTestId("model-chip")).toBeEnabled();
   await expect(page.getByTestId("thread-intro")).toContainText("with your login, settings, hooks and tools");
 });
@@ -235,13 +244,18 @@ test("a message sent while the session starts again waits for the new run", asyn
 });
 
 test("is picked by keyboard alone", async ({ page }) => {
-  await open(page);
+  await open(page, undefined, {}, false);
   const input = page.getByTestId("composer-input");
   await expect(input).toBeFocused();
-  for (const id of ["attach", "model-chip", "mode-chip", "workflow-chip"]) {
+  // Until one is set, the workflow waits behind the plus.
+  await expect(chip(page)).toHaveCount(0);
+  for (const id of ["attach", "model-chip", "more-chip"]) {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId(id)).toBeFocused();
   }
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("more-option").first()).toBeFocused();
+  await page.getByTestId("more-option").filter({ hasText: "Workflow" }).focus();
   await page.keyboard.press("Enter");
   // The keyboard on the workflow followed; the arrows walk, Enter picks.
   await expect(options(page).first()).toBeFocused();
@@ -261,18 +275,14 @@ test("is picked by keyboard alone", async ({ page }) => {
   await expect(page.getByTestId("model-menu")).toHaveCount(0);
   await expect(model).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByTestId("mode-chip")).toBeFocused();
+  await expect(chip(page)).toBeFocused();
 });
 
-test("opens its menu inside the conversation where the chip has wrapped to the bar's second line", async ({ page }) => {
-  // The window's three panes leave the conversation narrow, and before a
-  // workflow is picked the model chip is wide enough to push the workflow
-  // chip onto a line of its own, at the left.
-  await page.setViewportSize({ width: 1000, height: 800 });
+test("opens its menu inside the conversation in a narrow window", async ({ page }) => {
+  // The window's three panes leave the conversation narrow.
+  await page.setViewportSize({ width: 640, height: 800 });
   await open(page);
   const chipBox = (await chip(page).boundingBox())!;
-  const modelBox = (await page.getByTestId("model-chip").boundingBox())!;
-  expect(chipBox.y).toBeGreaterThan(modelBox.y + modelBox.height);
   await chip(page).click();
   const box = (await page.getByTestId("workflow-menu").boundingBox())!;
   const conversation = (await page.getByTestId("conversation").boundingBox())!;
@@ -313,7 +323,7 @@ test("starts the orchestrator on another agent that runs as a conversation", asy
   await expect.poll(async () => (await starts(page)).length).toBe(2);
   expect((await starts(page))[1].options).toMatchObject({ agent: "codex", startOnly: true });
   await expect(page.getByTestId("thread-intro")).toContainText("A new Codex session in demo, following Codex directs.");
-  await expect(page.getByTestId("composer-input")).toHaveAttribute("placeholder", /Tell Codex what to do/);
+  await expect(page.getByTestId("composer-input")).toHaveAttribute("placeholder", "Message Codex");
   await expect(page.getByTestId("session-row")).toHaveCount(1);
   // No workflow goes back to the agent the session was started on.
   await chip(page).click();
@@ -321,12 +331,13 @@ test("starts the orchestrator on another agent that runs as a conversation", asy
   await options(page).first().click();
   await expect.poll(async () => (await starts(page)).length).toBe(3);
   expect((await starts(page))[2].options).toMatchObject({ agent: "claude-code" });
-  await expect(page.getByTestId("composer-input")).toHaveAttribute("placeholder", /Tell Claude what to do/);
+  await expect(page.getByTestId("composer-input")).toHaveAttribute("placeholder", "Message Claude");
 });
 
 test("shows no chip where there is no workflow to choose", async ({ page }) => {
   await open(page, []);
-  await expect(page.getByTestId("mode-chip")).toBeVisible();
+  await page.getByTestId("more-chip").click();
+  await expect(page.getByTestId("more-option").filter({ hasText: "Workflow" })).toHaveCount(0);
   await expect(chip(page)).toHaveCount(0);
 });
 
