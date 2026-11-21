@@ -347,14 +347,36 @@ type Check = (value: string) => string | null;
 const ANY: Check = (value) => value;
 const HREF: Check = (value) => (LINK.test(value.trim()) ? value.trim() : null);
 const SRC: Check = (value) => (IMAGE.test(value.trim()) ? value.trim() : null);
-const ALIGN = new Map([["align", ANY]]);
+/** A value that is one of `values`, in any case, written in lower case. */
+const oneOf =
+  (...values: string[]): Check =>
+  (value) => {
+    const kept = value.trim().toLowerCase();
+    return values.includes(kept) ? kept : null;
+  };
+/** A size in whole pixels, at most 4096, or a percentage of at most 100. */
+const SIZE: Check = (value) => {
+  const size = /^(\d{1,4})(%?)$/.exec(value.trim());
+  if (size === null) return null;
+  const amount = Number(size[1]);
+  return amount > (size[2] === "%" ? 100 : 4096) ? null : `${amount}${size[2]}`;
+};
+/** The query of a source for one colour scheme, light or dark. Any other
+    would tell the image's host the window's width, density or settings,
+    and when they change. */
+const SCHEME: Check = (value) => {
+  const scheme = /^\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)$/i.exec(value.trim());
+  return scheme === null ? null : `(prefers-color-scheme: ${scheme[1].toLowerCase()})`;
+};
+const ALIGN = new Map([["align", oneOf("left", "right", "center", "justify")]]);
 const NONE = new Map<string, Check>();
 
-/** The HTML a document may draw, close to what GitHub draws in a README:
-    each element and the attributes it may carry. An image or a link points
-    only where one written in Markdown may. No `id`, `name` or `class`,
-    which could stand in for the app's own elements, no `style`, and no
-    `srcset` on an image, which would load what its `src` was checked not to. */
+/** The HTML a document may draw, a subset of what GitHub draws in a
+    README: each element and the attributes it may carry. An image or a
+    link points only where one written in Markdown may. No `id`, `name` or
+    `class`, which could stand in for the app's own elements, no `style`,
+    and no `srcset` on an image, which would load what its `src` was
+    checked not to. */
 const ALLOWED = new Map<string, Map<string, Check>>([
   ["p", ALIGN],
   ["div", ALIGN],
@@ -369,9 +391,9 @@ const ALLOWED = new Map<string, Map<string, Check>>([
     new Map([
       ["src", SRC],
       ["alt", ANY],
-      ["width", ANY],
-      ["height", ANY],
-      ["align", ANY],
+      ["width", SIZE],
+      ["height", SIZE],
+      ["align", oneOf("left", "right", "top", "middle", "bottom")],
     ]),
   ],
   [
@@ -381,14 +403,14 @@ const ALLOWED = new Map<string, Map<string, Check>>([
       ["title", ANY],
     ]),
   ],
-  ["details", new Map([["open", ANY]])],
+  ["details", new Map([["open", () => ""]])],
   ["summary", NONE],
   ["picture", NONE],
   [
     "source",
     new Map([
       ["srcset", sources],
-      ["media", ANY],
+      ["media", SCHEME],
     ]),
   ],
   ["br", NONE],

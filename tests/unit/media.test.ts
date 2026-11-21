@@ -656,9 +656,11 @@ describe("what Markdown may draw", () => {
     "<details open ontoggle=alert(1)><summary>a</summary></details>",
     "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></noscript>",
     "<textarea><img src=x onerror=1></textarea> <title><b>x</b></title> <xmp><img src=x onerror=1></xmp>",
+    '<picture><source media="(min-width: 1200px) and (prefers-color-scheme: dark)" srcset="https://track.example/wide-dark.png"><img src="https://track.example/else.png"></picture>',
+    '<div align="javascript:alert(1)">x</div> <img src="https://example.com/a.png" height="expression(alert(1))">',
   ];
 
-  it("draws nothing but Markdown's own elements, with no handlers and no scripted links", () => {
+  it("draws only the elements it allows, with no handlers and no scripted links", () => {
     for (const markdown of PAYLOADS)
       for (const [html, allowed] of [
         [render(markdown), DOCUMENT],
@@ -669,8 +671,12 @@ describe("what Markdown may draw", () => {
         for (const element of box.querySelectorAll("*")) {
           expect(allowed.has(element.tagName), `${element.tagName} from ${markdown}`).toBe(true);
           expect(element.hasAttribute("style"), `style from ${markdown}`).toBe(false);
-          const src = element.getAttribute("src") ?? element.getAttribute("srcset");
-          if (src !== null) expect(src, markdown).toMatch(/^(?:https?:|data:image\/)/);
+          const sources = [
+            element.getAttribute("src"),
+            ...(element.getAttribute("srcset")?.split(/,\s+/).map((candidate) => candidate.split(" ")[0]) ?? []),
+          ];
+          for (const src of sources)
+            if (src !== null) expect(src, markdown).toMatch(/^(?:https?:|data:image\/)/);
           const href = element.getAttribute("href");
           if (href !== null) expect(href, markdown).toMatch(/^(?:https?:|mailto:|#)/);
           for (const attribute of element.attributes) {
@@ -810,6 +816,59 @@ describe("the HTML a document may draw", () => {
     expect(box.textContent).toContain("</i> y");
     expect(box.querySelector("details")?.textContent).toContain("left open");
     expect(render("<details>\n<summary>s</summary>\n\nleft open")).toMatch(/<\/details>$/);
+  });
+
+  it("takes a size only in whole pixels or as a percentage, and an alignment only from its list", () => {
+    const box = drawn(
+      '<p align="CENTER"><img src="https://example.com/a.png" width="50%" height=" 64 " align="Middle"></p>',
+    );
+    const image = box.querySelector("p[align='center'] > img");
+    expect(image?.getAttribute("width")).toBe("50%");
+    expect(image?.getAttribute("height")).toBe("64");
+    expect(image?.getAttribute("align")).toBe("middle");
+    for (const tag of [
+      '<img src="https://example.com/a.png" width="-5">',
+      '<img src="https://example.com/a.png" width="12.5">',
+      '<img src="https://example.com/a.png" width="128px">',
+      '<img src="https://example.com/a.png" width="101%">',
+      '<img src="https://example.com/a.png" height="99999999">',
+      '<img src="https://example.com/a.png" height="expression(alert(1))">',
+      '<img src="https://example.com/a.png" align="center">',
+      "<p align>x</p>",
+      '<div align="javascript:alert(1)">x</div>',
+      '<h1 align="middle">x</h1>',
+    ]) {
+      const refused = drawn(`a ${tag} b`);
+      expect(refused.querySelectorAll("p *"), tag).toHaveLength(0);
+      expect(refused.textContent?.trim(), tag).toBe(`a ${tag} b`);
+    }
+  });
+
+  it("draws a source only for a light or a dark colour scheme", () => {
+    const box = drawn(
+      [
+        "<picture>",
+        '<source media="( PREFERS-COLOR-SCHEME : Dark )" srcset="https://example.com/dark.png">',
+        '<source media="(prefers-color-scheme: light)" srcset="https://example.com/light.png">',
+        '<img src="https://example.com/light.png" alt="logo">',
+        "</picture>",
+      ].join("\n"),
+    );
+    expect([...box.querySelectorAll("picture > source")].map((source) => source.getAttribute("media"))).toEqual([
+      "(prefers-color-scheme: dark)",
+      "(prefers-color-scheme: light)",
+    ]);
+    for (const media of [
+      "(min-width: 1200px) and (prefers-color-scheme: dark)",
+      "(prefers-color-scheme: dark), (min-width: 1px)",
+      "(prefers-color-scheme: no-preference)",
+      "(min-resolution: 2dppx)",
+      "screen",
+    ]) {
+      const refused = drawn(`<picture><source media="${media}" srcset="https://example.com/a.png"><img src="https://example.com/b.png"></picture>`);
+      expect(refused.querySelector("source"), media).toBeNull();
+      expect(refused.textContent, media).toContain(`<source media="${media}"`);
+    }
   });
 
   it("closes a link or other inline element left open at the end of its block", () => {

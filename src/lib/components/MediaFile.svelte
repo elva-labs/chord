@@ -116,7 +116,9 @@
     color: var(--ink-3);
   }
 
+  /* A block of its own, so an image floated left or right stays inside. */
   .document {
+    display: flow-root;
     padding: 4px 0;
     font-size: 13.5px;
     line-height: 1.6;
@@ -208,8 +210,15 @@
     color: var(--accent);
   }
 
+  /* An image is never wider than the document, and one given a width
+     draws in its own proportions, so narrowing it to fit never stretches
+     it. */
   .document :global(img) {
     max-width: 100%;
+  }
+
+  .document :global(img[width]) {
+    height: auto;
   }
 
   .diagram,
