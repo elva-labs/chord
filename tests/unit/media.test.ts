@@ -1037,6 +1037,34 @@ describe("the HTML a document may draw", () => {
     expect(project.reads.map((read) => read.file).sort()).toEqual(["docs/gone.png", "docs/icon.png"]);
   });
 
+  it("draws an image named thousands of times only while the 64 MB hold it, and reads it once", async () => {
+    project.documents.set("/one/docs.md", "![big](docs/big.png) ".repeat(5000));
+    project.files.set("docs/big.png", { size: 1024 * 1024, wait: 0 });
+    const box = await loaded("/one/docs.md");
+    expect(project.reads.map((read) => read.file)).toEqual(["docs/big.png"]);
+    expect(box.querySelectorAll("img")).toHaveLength(64);
+    expect(box.textContent).toContain("big");
+  });
+
+  it("draws the same images of a document whatever order their reads land in", async () => {
+    const megabytes: Record<string, number> = { a: 40, b: 30 };
+    project.documents.set("/one/docs.md", [..."abcdef"].map((name) => `![${name}](docs/${name}.png)`).join(" "));
+    const drawnWith = async (waits: Record<string, number>) => {
+      project.reads.length = 0;
+      for (const name of "abcdef") {
+        const size = (megabytes[name] ?? 1) * 1024 * 1024;
+        project.files.set(`docs/${name}.png`, { size, wait: waits[name] ?? 0 });
+      }
+      return (await loaded("/one/docs.md")).innerHTML;
+    };
+    const early = await drawnWith({ c: 10, d: 10 });
+    const late = await drawnWith({ a: 20, b: 20 });
+    expect(late).toBe(early);
+    const box = document.createElement("div");
+    box.innerHTML = early;
+    expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("alt"))).toEqual(["a"]);
+  });
+
   it("reads a tag as a browser does, its case, its entities and a quote in it", () => {
     const box = drawn('<IMG SRC="https://example.com/a.png?x=1&amp;y=2" ALT=\'say "hi" &lt;b&gt;\'> <A HREF=https://example.com>u</A>');
     const image = box.querySelector("img");

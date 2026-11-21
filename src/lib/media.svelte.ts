@@ -475,11 +475,24 @@ function sources(srcset: string): string | null {
   return refused || candidates.length === 0 ? null : candidates.join(", ");
 }
 
+/** A file of its project read for a document: the image as a data URL,
+    and its size in bytes. */
+interface ProjectImage {
+  src: string;
+  size: number;
+}
+
 /** The files of its project that a document's images are drawn from while
-    it renders, as data URLs by the address the document names them by,
-    and the addresses it names that are not among them. */
-let local: ReadonlyMap<string, string> = new Map();
+    it renders, by the address the document names them by, and the
+    addresses it names that are not among them. */
+let local: ReadonlyMap<string, ProjectImage> = new Map();
 let wanted = new Set<string>();
+
+/** How many bytes of the project's images the document has drawn so far,
+    an image counted every time it is drawn, and whether one did not fit
+    in `IMAGE_BYTES`, after which none of the project's is drawn. */
+let spent = 0;
+let full = false;
 
 /** For each `<picture>` drawn and still open, the innermost last, where
     its images come from: the web or the project, by the first it names,
@@ -500,7 +513,8 @@ function mixes(place: "web" | "project"): boolean {
 
 /** An image's address as it is drawn, or null when the image is shown as
     its text: an address `IMAGE` allows, or a path relative to the
-    document, drawn from the file of its project `load` read for it. In a
+    document, drawn from the file of its project `load` read for it while
+    the images of the project drawn before it leave room for it. In a
     picture, an image from the web or the project is drawn only when the
     picture's others come from the same place. */
 function image(address: string): string | null {
@@ -509,8 +523,14 @@ function image(address: string): string | null {
   if (IMAGE.test(src)) return mixes("web") ? null : src;
   if (src === "" || /^[a-z][a-z0-9+.-]*:|^[/\\#?]/i.test(src) || mixes("project")) return null;
   const read = local.get(src);
-  if (read === undefined) wanted.add(src);
-  return read ?? null;
+  if (read === undefined) {
+    wanted.add(src);
+    return null;
+  }
+  full ||= spent + read.size > IMAGE_BYTES;
+  if (full) return null;
+  spent += read.size;
+  return read.src;
 }
 
 /** The elements drawn from the document's HTML that are still open, the
@@ -696,11 +716,13 @@ class Scoped extends Parser {
   }
 }
 
-/** A document drawn as `render` draws it, and the addresses of the images
-    it names in its project that are not among `images`. */
+/** A document drawn as `render` draws it, except that an image named by a
+    path relative to it is drawn from `images`, the files of its project
+    read for it by that path, as far as `image` allows; and the addresses
+    of the images it names in its project that are not among them. */
 function drawDocument(
   markdown: string,
-  images: ReadonlyMap<string, string>,
+  images: ReadonlyMap<string, ProjectImage>,
 ): { html: string; wanted: string[] } {
   const clear = () => {
     opened = [];
@@ -708,6 +730,8 @@ function drawDocument(
     pictures = [];
     local = new Map();
     wanted = new Set();
+    spent = 0;
+    full = false;
   };
   clear();
   local = images;
@@ -724,13 +748,13 @@ function drawDocument(
     only as far as `ALLOWED` goes and shown as its text beyond that, and a
     link or an image may point only where `LINK` and `IMAGE` allow, since
     the document is the agent's and the window is the app's. An image
-    named by a path relative to the document is drawn from `images`, the
-    files of its project read for it by that path, and is shown as its
-    text when it is not there. A `<picture>` draws images from the web or
-    from the project, never both. An element the document leaves open is
-    closed at the end of its block, or of the document. */
-export function render(markdown: string, images: ReadonlyMap<string, string> = new Map()): string {
-  return drawDocument(markdown, images).html;
+    named by a path relative to the document is shown as its text here;
+    `load` draws it from the document's project. A `<picture>` draws
+    images from the web or from the project, never both. An element the
+    document leaves open is closed at the end of its block, or of the
+    document. */
+export function render(markdown: string): string {
+  return drawDocument(markdown, new Map()).html;
 }
 
 /** Markdown an agent wrote in a conversation, rendered as `render` does,
@@ -778,8 +802,11 @@ function decode(base64: string): string {
 }
 
 /** How many of the images a document names in its project are read for
-    it at most, and how much of them in all. Past either, an image shows
-    as its text. */
+    it at most, and how many bytes of them it draws in all, an image
+    counted every time it is named. Past the first, an image shows as its
+    text; past the second, so does every image of the project after it,
+    so which are drawn turns on the document and its files alone, never on
+    the order their reads land in. */
 const IMAGES_READ = 64;
 const IMAGE_BYTES = 64 * 1024 * 1024;
 
@@ -795,20 +822,23 @@ function named(address: string): string {
 }
 
 /** The images a document at `at` in the project at `root` names by
-    `addresses`, read where the project is, four at a time, as data URLs
-    by those addresses. One the document may not draw is left out. */
-async function readImages(root: string, at: string, addresses: string[]): Promise<Map<string, string>> {
-  const read = new Map<string, string>();
+    `addresses`, in the order it first names them, read where the project
+    is, four at a time, by those addresses. One the document may not draw
+    is left out. No read is begun once those read come to more than
+    `IMAGE_BYTES`: the document names each of them before any address not
+    yet begun, and `image` counts them as it draws them, so it can draw
+    none named after them. */
+async function readImages(root: string, at: string, addresses: string[]): Promise<Map<string, ProjectImage>> {
+  const read = new Map<string, ProjectImage>();
   const queue = addresses.slice(0, IMAGES_READ);
   let bytes = 0;
   const reader = async () => {
-    for (let address = queue.shift(); address !== undefined; address = queue.shift()) {
-      if (bytes >= IMAGE_BYTES) return;
+    for (let address = queue.shift(); address !== undefined && bytes <= IMAGE_BYTES; address = queue.shift()) {
       try {
         const found = await core().readDocumentImage(root, at, named(address));
+        if (!found.mime.startsWith("image/")) continue;
         bytes += found.size;
-        if (bytes > IMAGE_BYTES) return;
-        if (found.mime.startsWith("image/")) read.set(address, `data:${found.mime};base64,${found.data}`);
+        read.set(address, { src: `data:${found.mime};base64,${found.data}`, size: found.size });
       } catch {
         // Not an image the document may draw: it shows as its text.
       }
@@ -831,7 +861,7 @@ export async function load(path: string, root: string | null = null): Promise<Lo
       const at = root === null ? null : relativeTo(path, root);
       if (root === null || !at || first.wanted.length === 0) return { mime: found.mime, html: first.html };
       const images = await readImages(root, at, first.wanted);
-      return { mime: found.mime, html: images.size === 0 ? first.html : render(markdown, images) };
+      return { mime: found.mime, html: images.size === 0 ? first.html : drawDocument(markdown, images).html };
     }
     if (found.mime === "text/html") {
       return { mime: found.mime, page: decode(found.data) };
