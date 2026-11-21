@@ -408,7 +408,7 @@ test.describe("a started session's row", () => {
     // follows: session-1.
     await page.locator(`[data-row="project:${LEAD}"]`).getByTestId("project-new-session").click();
     await page.getByTestId("agent-option").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   });
 
   test("names its account after its name when it is not the project's", async ({ page }) => {

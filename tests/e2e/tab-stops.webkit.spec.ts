@@ -673,7 +673,7 @@ test("Delete on a shell's row closes the shell under the keyboard, and keeps the
   expect(await walk(page, "Tab", 1)).toEqual(["terminal-row"]);
   await page.keyboard.press("Backspace");
   await expect(page.getByTestId("terminal-row")).toHaveCount(0);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   await expect.poll(() => holder(page)).not.toBeNull();
 });
 

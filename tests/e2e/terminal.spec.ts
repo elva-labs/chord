@@ -31,7 +31,7 @@ test("slides up from the bottom with a shell in it and takes focus", async ({ pa
 
   await page.keyboard.press(`${MOD}+j`);
   await expect(page.locator(TERMINAL)).toBeVisible();
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: terminal");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "terminal");
   await expect(page.locator(ROW)).toHaveCount(1);
   await expect(page.locator(ROW)).toHaveText(/shell 1/);
 
@@ -57,7 +57,7 @@ test("closes again on the same key and hands focus back to the agent", async ({ 
 
   await page.keyboard.press(`${MOD}+j`);
   await expect(page.locator(TERMINAL)).toBeHidden();
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 
   // Reopening finds the same shell: hiding did not end anything.
   await page.keyboard.press(`${MOD}+j`);
@@ -100,10 +100,10 @@ test("slides with the panes above it taking and giving back the height", async (
 test("can be focused by number and hidden from its own bar", async ({ page }) => {
   await page.keyboard.press(`${MOD}+j`);
   await page.keyboard.press(`${MOD}+2`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 
   await page.keyboard.press(`${MOD}+4`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: terminal");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "terminal");
 
   await page.getByTestId("hide-terminal").click();
   await expect(page.locator(TERMINAL)).toBeHidden();

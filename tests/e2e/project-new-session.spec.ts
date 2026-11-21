@@ -62,7 +62,7 @@ async function open(page: Page, used?: Record<string, number>) {
     { here: PROJECT, other: OTHER },
   );
   await page.goto("/");
-  await expect(page.getByTestId("state-readout")).toHaveText("running");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   expect(await spawned(page)).toEqual(["on-screen"]);
 }
 

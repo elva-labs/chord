@@ -163,7 +163,7 @@ test.describe("the sessions pane's motion", () => {
     await page.mouse.click(column.x + column.width / 2, column.y + column.height / 2);
     await expect(unfold).toHaveCount(0);
     await expect.poll(() => page.locator(SESSIONS).boundingBox().then((b) => b!.width)).toBeGreaterThan(150);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
   });
 
   test("opens when the pane is focused by key", async ({ page }) => {
@@ -172,7 +172,7 @@ test.describe("the sessions pane's motion", () => {
 
     await page.keyboard.press("ControlOrMeta+1");
     await expect(page.getByTestId("unfold-sessions")).toHaveCount(0);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
   });
 
   // Reviewing is what folds it there, so opening it for real would close
@@ -221,7 +221,7 @@ test.describe("the sessions pane peeked over the agent", () => {
     await expect(page.getByTestId("unfold-sessions")).toHaveCount(0);
     await expect.poll(() => width(page, SESSIONS)).toBeGreaterThan(150);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     expect(await page.locator(CHANGES).boundingBox()).toEqual(viewer);
     expect(await page.locator(AGENT).boundingBox()).toEqual(agent);
     expect(await width(page, SLOT)).toBeLessThan(100);
@@ -237,7 +237,7 @@ test.describe("the sessions pane peeked over the agent", () => {
     await expect.poll(() => width(page, SESSIONS)).toBeGreaterThan(150);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
     // The pointer did not take the keyboard with it.
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
     expect(await page.locator(CHANGES).boundingBox()).toEqual(viewer);
 
     await page.mouse.move(viewer.x + viewer.width / 2, viewer.y + viewer.height / 2);
@@ -250,17 +250,17 @@ test.describe("the sessions pane peeked over the agent", () => {
   }) => {
     await page.keyboard.press("ControlOrMeta+1");
     await expect.poll(() => width(page, SESSIONS)).toBeGreaterThan(150);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     await page.keyboard.press("ControlOrMeta+1");
     await expect.poll(() => width(page, SESSIONS)).toBe(FOLDED);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
 
     await page.keyboard.press("ControlOrMeta+1");
     await expect.poll(() => width(page, SESSIONS)).toBeGreaterThan(150);
     await page.keyboard.press("Escape");
     await expect.poll(() => width(page, SESSIONS)).toBe(FOLDED);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
   });
 });

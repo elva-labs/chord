@@ -141,7 +141,7 @@ test("lists the past sessions last, behind a fold that opens and closes", async 
     { project: PROJECT, ids: rows.map(([id]) => id) },
   );
   await page.goto("/");
-  await expect(page.getByTestId("state-readout")).toHaveText("running");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
 
   const fold = page.getByTestId("quiet-more");
   await expect(fold).toHaveText("3 more from today");

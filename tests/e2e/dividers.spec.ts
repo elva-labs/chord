@@ -470,7 +470,7 @@ test("the peeked sessions pane stands over the agent's card as a sheet, with a s
 test("the headers' quiet text holds 4.5:1 on the light ground", async ({ page }) => {
   await open(page);
   await page.getByTestId("start-agent").click();
-  await expect(page.getByTestId("state-readout")).toHaveText("running");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
   // A session in a worktree, which the changes header names.
   await page.evaluate((project) => {
     (window as unknown as { __cwds: Record<string, string> }).__cwds = { "pty-1": `${project}/.claude/worktrees/feature` };

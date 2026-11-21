@@ -76,7 +76,7 @@ for (const platform of PLATFORMS) {
     await page.keyboard.press(platform.chord);
     await expect(page.locator(TERMINAL)).toBeVisible();
     await expect(page.locator(ROW)).toHaveCount(1);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: terminal");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "terminal");
     await expect.poll(() => holder(page)).toBe("Terminal input");
     const shell = await typeInto(page, "ls");
     expect(shell).not.toBe(agent);

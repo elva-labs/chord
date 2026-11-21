@@ -227,19 +227,19 @@ test("switches to the vim preset and the keys follow", async ({ page }) => {
   await expect(page.getByTestId("settings")).toBeHidden();
 
   await page.keyboard.press(`${MOD}+l`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
   await page.keyboard.press(`${MOD}+h`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
   await page.keyboard.press(`${MOD}+k`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   // The default chord for the same thing no longer does it.
   await page.keyboard.press(`${MOD}+3`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 
   await page.reload();
   await expect(page.locator(AGENT)).toBeVisible();
   await page.keyboard.press(`${MOD}+l`);
-  await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
 });
 
 test("records a chord of one's own", async ({ page }) => {

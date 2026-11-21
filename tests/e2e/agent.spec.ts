@@ -473,7 +473,7 @@ const startHere = (page: Page) =>
     is none: nothing starts by itself any more. */
 const running = async (page: Page) => {
   if ((await spawnCount(page)) === 0) await startHere(page);
-  await expect(page.getByTestId("state-readout")).toHaveText("running");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
 };
 const rows = (page: Page) => page.locator("[data-testid='session-row']");
 /** The row of the session with this name, wherever the order puts it: the
@@ -544,7 +544,7 @@ test.describe("one project", () => {
     expect(await spawnCount(page)).toBe(0);
 
     await page.getByTestId("start-agent").click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await expect(page.getByTestId("agent-status")).toHaveCount(0);
     expect(await spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(ONE);
@@ -647,13 +647,11 @@ test.describe("one project", () => {
     await expect(rows(page)).toHaveCount(2);
 
     await page.keyboard.press(`${MOD}+1`);
-    await expect(page.getByTestId("focus-readout")).toHaveText(
-      "focus: sessions",
-    );
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     // The second started last, so it is on top and the first is under it.
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await expect(page.locator(".session.on")).toContainText("session 1");
     // Typing goes into the terminal without a click.
     await page.keyboard.type("x");
@@ -677,11 +675,9 @@ test.describe("one project", () => {
   }) => {
     await running(page);
     await page.keyboard.press(`${MOD}+1`);
-    await expect(page.getByTestId("focus-readout")).toHaveText(
-      "focus: sessions",
-    );
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     await page.keyboard.press("Escape");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   });
 
   // A dropped file is its path, typed where the pointer is. Claude Code reads
@@ -954,7 +950,7 @@ test.describe("several sessions in one project", () => {
   }) => {
     await page.reload();
     await expect(rows(page)).toHaveCount(2);
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     expect((await spawns(page)).map((spawn) => spawn.session)).toEqual([
       "session-2",
     ]);
@@ -1000,7 +996,7 @@ test.describe("several sessions in one project", () => {
   }) => {
     await page.reload();
     await expect(rows(page)).toHaveCount(2);
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     const live = rows(page).filter({ has: page.locator(".dot.live") });
     const left = rows(page).filter({ has: page.locator(".dot.dormant") });
     // Measured once the rows have finished coming in, not while they move.
@@ -1044,7 +1040,7 @@ test.describe("several sessions in one project", () => {
     await expect(rows(page)).toHaveCount(1);
     await page.reload();
     await expect(rows(page)).toHaveCount(1);
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     expect((await spawns(page)).map((spawn) => spawn.session)).toEqual([
       "session-2",
     ]);
@@ -1098,7 +1094,7 @@ test.describe("working, and waiting for you", () => {
     await page.keyboard.press(`${MOD}+.`);
     await expect(page.getByTestId("flash-readout")).toHaveText("Nothing else needs you");
     await expect(page.locator(".session.on")).toContainText("session 1");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   });
 
   test("jumping to the session waiting leaves the keyboard in its terminal", async ({
@@ -1876,7 +1872,7 @@ test.describe("the palettes", () => {
       await page.keyboard.press(COMMANDS);
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
       await expect(page.locator(KEYBOARD).last()).toBeFocused();
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     });
 
     test("list the commands without a chord and the actions with theirs, and no sessions", async ({ page }) => {
@@ -1899,7 +1895,7 @@ test.describe("the palettes", () => {
       await page.keyboard.press(COMMANDS);
       await page.keyboard.press("Escape");
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
       await page.keyboard.type("x");
       await expect.poll(() => writtenTo(page, "pty-2")).toBe("x");
     });
@@ -1937,7 +1933,7 @@ test.describe("the palettes", () => {
       await page.keyboard.type("show hide terminal");
       await page.keyboard.press("Enter");
       await expect(page.locator("section[data-pane='terminal']")).toBeVisible();
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: terminal");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "terminal");
     });
 
     test("the sessions action ends on the sessions nav", async ({ page }) => {
@@ -1945,7 +1941,7 @@ test.describe("the palettes", () => {
       await page.keyboard.type("focus sessions");
       await page.keyboard.press("Enter");
       await expect(page.getByTestId("sessions-nav")).toBeFocused();
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
     });
 
     test("the settings action ends in the dialog, and Escape there returns to the pane", async ({ page }) => {
@@ -2114,7 +2110,7 @@ test.describe("the palettes", () => {
       await page.keyboard.press(GOTO);
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
       await expect(page.locator(KEYBOARD).last()).toBeFocused();
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     });
 
     test("lists the sessions with their project and time, then every open project", async ({ page }) => {
@@ -2165,7 +2161,7 @@ test.describe("the palettes", () => {
       await page.keyboard.press("Enter");
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
       await expect(page.locator(".session.on")).toContainText("session 1");
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
       await page.keyboard.type("x");
       await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
       expect(await writtenTo(page, "pty-2")).toBe("");
@@ -2193,7 +2189,7 @@ test.describe("the palettes", () => {
       await expect(page.locator(".project.on")).toContainText("two");
       // Project two has no session, so the keyboard waits in the sessions
       // pane and no terminal receives what is typed.
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
       await page.keyboard.type("y");
       await page.waitForTimeout(200);
       expect(await writtenTo(page, "pty-1")).toBe("");
@@ -2215,7 +2211,7 @@ test.describe("the palettes", () => {
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
       await expect(page.locator(".project.on")).toContainText("two");
       await expect(page.getByTestId("unfold-sessions")).toHaveCount(0);
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
       await expect.poll(() => inSessions(page)).toBe(true);
       await page.keyboard.type("y");
       await page.waitForTimeout(200);
@@ -2233,7 +2229,7 @@ test.describe("the palettes", () => {
       await expect(page.locator(".project.on")).toContainText("two");
       await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
       await expect(page.getByTestId("unfold-sessions")).toHaveCount(0);
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: sessions");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
       await expect.poll(() => inSessions(page)).toBe(true);
       await page.keyboard.type("y");
       await page.waitForTimeout(200);
@@ -2280,7 +2276,7 @@ test.describe("the palettes", () => {
       await page.keyboard.press("Escape");
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
       await expect(page.getByTestId("start-agent")).toBeFocused();
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     });
 
     test("narrowing the window past the sessions pane hands the keyboard to the agent pane, and the palette gives it back there", async ({ page }) => {
@@ -2289,7 +2285,7 @@ test.describe("the palettes", () => {
       await page.keyboard.press("Enter");
       await expect.poll(() => inSessions(page)).toBe(true);
       await page.setViewportSize({ width: 800, height: 800 });
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
       await page.keyboard.press(GOTO);
       await expect(field(page)).toBeFocused();
       await page.keyboard.press("Escape");
@@ -2310,7 +2306,7 @@ test.describe("the palettes", () => {
         await page.keyboard.press(GOTO);
         await expect(field(page)).toBeFocused();
         await page.setViewportSize({ width: 800, height: 800 });
-        await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+        await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
         await page.waitForTimeout(200);
         await expect(field(page)).toBeFocused();
         await page.keyboard.type("y");
@@ -2327,7 +2323,7 @@ test.describe("the palettes", () => {
       await page.keyboard.press(`${MOD}+,`);
       await expect(page.getByTestId("settings")).toBeFocused();
       await page.setViewportSize({ width: 800, height: 800 });
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
       await page.waitForTimeout(200);
       await expect(page.getByTestId("settings")).toBeFocused();
       await page.keyboard.type("y");
@@ -2346,7 +2342,7 @@ test.describe("the palettes", () => {
       await expect(page.getByTestId(PALETTE)).toHaveCount(0);
       await expect.poll(() => inSessions(page)).toBe(true);
       await page.keyboard.press(`${MOD}+2`);
-      await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+      await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
       await expect(page.getByTestId("start-agent")).toBeFocused();
     });
 
@@ -2542,7 +2538,7 @@ test.describe("a new session from the palette", () => {
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(ONE);
     await expect(page.locator(".session.on")).toContainText("session 1");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await page.keyboard.type("x");
     await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
   });
@@ -2596,7 +2592,7 @@ test.describe("a new session from the palette", () => {
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0].project).toBe(TWO);
     await expect(page.locator(".project.on")).toContainText("two");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await page.keyboard.type("y");
     await expect.poll(() => writtenTo(page, "pty-1")).toBe("y");
   });
@@ -2618,7 +2614,7 @@ test.describe("a new session from the palette", () => {
     expect((await spawns(page))[0].project).toBe(ONE);
     await expect(page.getByTestId("palette")).toHaveCount(0);
     expect(await page.evaluate(() => (window as unknown as { __paletteShown: boolean }).__paletteShown)).toBe(false);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await page.keyboard.type("x");
     await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
   });
@@ -2704,7 +2700,7 @@ test.describe("a new session from the palette", () => {
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawnCount(page)).toBe(1);
     expect((await spawns(page))[0]).toMatchObject({ project: ONE, agent: "codex" });
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
   });
 
   test("starts at once with one agent where no workflow was ever turned on, as before workflows", async ({ page }) => {
@@ -2828,7 +2824,7 @@ test.describe("a new session from the palette", () => {
     await open(page, { open: [ONE, TWO], codex: "/usr/local/bin/codex", noWorkflows: true });
     await startHere(page);
     await page.getByTestId("agent-option").first().click();
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     await page.keyboard.press(COMMANDS);
     await page.keyboard.type("new session");
     await page.keyboard.press("Enter");
@@ -2836,7 +2832,7 @@ test.describe("a new session from the palette", () => {
     await expect(chips(page)).toHaveCount(2);
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("palette")).toHaveCount(0);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     expect(await spawnCount(page)).toBe(1);
 
     // The commands chord puts it away too, and go to switches it.
@@ -2910,7 +2906,7 @@ test.describe("zoom", () => {
     await expect.poll(async () => (await grid(page, key)).size).toBe(14);
     // Still starting: the pty had not been spawned when the zoom happened.
     expect(await spawnCount(page)).toBe(0);
-    await expect(page.getByTestId("state-readout")).toHaveText("running");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
     const final = await grid(page, key);
     await expect.poll(() => page.evaluate(() => window.__fake.resizes.length)).toBe(1);
     // Long enough for a second resize to show up; the test asserts none did.

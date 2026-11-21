@@ -158,7 +158,7 @@ test.describe("starting an untitled file", () => {
     // The changes pane has the keyboard: on Windows and Linux the agent's
     // terminal keeps the chord.
     await page.keyboard.press(`${MOD}+3`);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: changes");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
     await page.keyboard.press(`${MOD}+n`);
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "editing");
     await expect(tab(page, "Untitled 2")).toHaveAttribute("aria-selected", "true");
@@ -418,7 +418,7 @@ test.describe("closing an untitled file by the chord", () => {
     await page.keyboard.press("Meta+n");
     await page.keyboard.type("draft");
     await page.keyboard.press("Meta+2");
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: agent");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
     await page.keyboard.press("Meta+w");
     const strip = page.getByTestId("close-unsaved");
     await expect(strip).toContainText("Close Untitled with unsaved edits?");
@@ -513,7 +513,7 @@ test.describe("on Windows and Linux", () => {
     await open(page);
     await page.keyboard.press("Control+j");
     await expect(page.getByTestId("terminal-row")).toHaveCount(1);
-    await expect(page.getByTestId("focus-readout")).toHaveText("focus: terminal");
+    await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "terminal");
     await expect(page.locator("section[data-pane='terminal'] .xterm-helper-textarea").first()).toBeFocused();
     await page.keyboard.press("Control+n");
     await expect
