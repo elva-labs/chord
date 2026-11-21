@@ -142,6 +142,21 @@ async function startHere(driver: WebDriver, agent: string) {
   await startFrom(driver, NEW_HERE, agent);
 }
 
+/** The height of every pane on screen, by its name, and the window's. The
+    panes divide the window between them, above the status bar. */
+function paneHeights(driver: WebDriver): Promise<Record<string, number>> {
+  return driver.executeScript(() => {
+    const out: Record<string, number> = {};
+    for (const pane of document.querySelectorAll<HTMLElement>(
+      "section[data-pane]",
+    )) {
+      out[pane.dataset.pane!] = pane.getBoundingClientRect().height;
+    }
+    out.window = window.innerHeight;
+    return out;
+  });
+}
+
 /** What the window held when a click did nothing: its size, the element's
     box, what sits at its middle, the sessions pane's fold, the saved layout,
     and whether a click from a script does what the driver's did not. */
@@ -247,7 +262,7 @@ afterAll(async () => {
 });
 
 describe("the real app", () => {
-  it("comes up with three panes filling the window", async () => {
+  it("comes up with the panes that show filling the window", async () => {
     const { driver } = app;
     await driver.wait(
       until.elementLocated(By.css("section[data-pane='agent']")),
@@ -256,19 +271,12 @@ describe("the real app", () => {
     await driver.manage().window().setRect({ width: 1440, height: 900 });
     await new Promise((r) => setTimeout(r, 500));
 
-    const heights: Record<string, number> = await driver.executeScript(() => {
-      const out: Record<string, number> = {};
-      for (const pane of document.querySelectorAll<HTMLElement>(
-        "section[data-pane]",
-      )) {
-        out[pane.dataset.pane!] = pane.getBoundingClientRect().height;
-      }
-      out.window = window.innerHeight;
-      return out;
-    });
-    // The panes divide the window between them, above the status bar.
+    // No project is open at first launch, which leaves the changes pane
+    // nothing to show: the sessions and the agent hold the window.
+    const heights = await paneHeights(driver);
     expect(heights.window).toBeGreaterThan(800);
-    for (const pane of ["sessions", "agent", "changes"]) {
+    expect(heights.changes, "changes").toBeUndefined();
+    for (const pane of ["sessions", "agent"]) {
       expect(heights[pane], pane).toBeGreaterThan(heights.window - 120);
     }
   });
@@ -279,6 +287,12 @@ describe("the real app", () => {
     await waitForPaneText(driver, SESSIONS, repo.split(/[\\/]/).pop()!);
     await waitForPaneText(driver, TREE, "lib.rs");
     expect(await textOf(driver, TREE)).not.toContain("README.md");
+    // With a project open the changes pane joins, and all three fill the
+    // window.
+    const heights = await paneHeights(driver);
+    for (const pane of ["sessions", "agent", "changes"]) {
+      expect(heights[pane], pane).toBeGreaterThan(heights.window - 120);
+    }
   });
 
   it("starts the agent in a pty, in the project, with the id it was given", async () => {
