@@ -19,6 +19,7 @@ import {
   hasName,
   historyLabel,
   rowName,
+  shownName,
   firstWords,
   earlierLabel,
   loadHistory,
@@ -2987,6 +2988,18 @@ describe("a name the agent or a caller gave", () => {
     // Nor is it a name a session can take.
     expect(nameTaken("Workbench")).toBe(true);
     expect(nameTaken("Workbench docs", row.key)).toBe(false);
+  });
+  it("holds a prompt's first words to the same rules, so a row never reads as the workbench or another session", () => {
+    const first = create("/p");
+    started(first.key, "pty-first", "sid-first");
+    first.title = "Fix it";
+    const workbench = create("/p", null, undefined, null, "Workbench");
+    expect(rowName(workbench)).toBeNull();
+    expect(shownName(workbench)).toBe("New session");
+    const copy = create("/p", null, undefined, null, "Fix it");
+    expect(shownName(copy)).toBe("New session");
+    const own = create("/p", null, undefined, null, "Tidy the docs");
+    expect(shownName(own)).toBe("Tidy the docs");
   });
 });
 

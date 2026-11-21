@@ -1310,12 +1310,15 @@ export function shownName(session: Session): string {
 }
 
 /** What a row reads as: its name, else the first words of the prompt it
-    started with. Null where neither says anything, for a row that reads
-    "New session"; a row never reads as its number. */
+    started with, held to the rules a name is: words that read as another
+    live session's, the user's, the workbench's or an agent's are no name.
+    Null where nothing says anything, for a row that reads "New session"; a
+    row never reads as its number. */
 export function rowName(session: Session): string | null {
   const name = knownName(session);
   if (name !== null) return shown(name);
-  return firstWords(session.prompt);
+  const words = firstWords(session.prompt);
+  return words === null || reservedName(words) || nameTaken(words, session.key) ? null : words;
 }
 
 /** The first line of a message, cut to fit a row. Null for nothing. */
@@ -1388,7 +1391,12 @@ export function nameTaken(name: string, except: string | null = null): boolean {
   if (mixesScripts(name) || readsAsWorkbench(name) || readsAsAgent(name)) return true;
   const bare = bareName(name);
   return sessions.all.some(
-    (session) => session.key !== except && isLive(session) && bareName(label(session)) === bare,
+    (session) =>
+      session.key !== except &&
+      isLive(session) &&
+      [label(session), knownName(session) === null ? firstWords(session.prompt) : null].some(
+        (taken) => taken !== null && bareName(taken) === bare,
+      ),
   );
 }
 
