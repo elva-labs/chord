@@ -1053,7 +1053,8 @@ starter can be folded, from the chevron at the end of its second line or
 with Left on the keyboard, and Right lets them out again: folded, its second
 line says what they are doing whatever the agent left, with a small dot for
 each where the model stands otherwise. Left on a started session moves the
-cursor up to its starter. Nothing about the fold is remembered.
+cursor up to its starter. The fold is kept by the starter's session id, so
+the pane looks the same after a restart.
 
 A session that started sessions has the board for them in a section at
 the foot of its changes pane, under the tree and beside Processes and

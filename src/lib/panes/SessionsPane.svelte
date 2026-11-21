@@ -96,6 +96,7 @@
   } from "$lib/layout.svelte";
   import { lastUsed, splitProjects, steady, touch } from "$lib/projects.svelte";
   import { unfoldSessions } from "$lib/viewers.svelte";
+  import { isStartedFolded, setStartedFolded } from "$lib/startedFolds.svelte";
   import { compact } from "$lib/compact.svelte";
   import { shown } from "$lib/unseen";
   import { beginNew, closePalette, openCommands, openGoTo } from "$lib/palette.svelte";
@@ -703,11 +704,6 @@
     if (outcome.type === "close") outcome.then();
   }
 
-  /** The sessions whose started sessions are folded into dots on their
-      own row rather than hanging under it. Open is how a parent starts,
-      and nothing about it is remembered. */
-  let collapsed = $state<Record<string, boolean>>({});
-
   /** What the sessions a session started are doing, in words, each counted
       once: how many run, how many ask for a permission, and how many are
       done. */
@@ -772,8 +768,15 @@
     return `${label(starter)} was idle, so the workbench sent it what happened: ${said}.`;
   }
 
-  function toggleKids(key: string) {
-    collapsed[key] = !collapsed[key];
+  /** Whether a session's started sessions are folded into dots on its own
+      row rather than hanging under it. Open is how a parent starts; a fold
+      is kept across a restart. */
+  function isCollapsed(session: Session): boolean {
+    return isStartedFolded(session);
+  }
+
+  function toggleKids(session: Session) {
+    setStartedFolded(session, !isStartedFolded(session));
   }
 
   /** Whether a session runs under another account than its project's,
@@ -1102,7 +1105,7 @@
       }
       const session = entry.session;
       out.push({ id: entry.id, run: () => choose(session.key) });
-      if (collapsed[session.key]) return;
+      if (isCollapsed(session)) return;
       for (const kid of childrenOf(session)) {
         out.push({ id: `session:${kid.key}`, run: () => choose(kid.key) });
       }
@@ -1398,7 +1401,7 @@
       return true;
     }
     if (childrenOf(session).length === 0) return false;
-    collapsed[session.key] = left;
+    setStartedFolded(session, left);
     return true;
   }
 
@@ -1696,7 +1699,7 @@
   {@const kids = childrenOf(session)}
   {@const news = unheard(session)}
   {@const woken = wokenBy(session)}
-  {@const folded = kids.length > 0 && collapsed[session.key] === true}
+  {@const folded = kids.length > 0 && isCollapsed(session)}
   {@const drawnSubs = subGroups.get(session.key) ?? []}
   <!-- Said of the rows drawn, so the line and the rows agree while they
        hold still. -->
@@ -1872,7 +1875,7 @@
       <button
         class="disclose"
         tabindex="-1"
-        onclick={() => toggleKids(session.key)}
+        onclick={() => toggleKids(session)}
         aria-expanded={!folded}
         aria-label={folded ? "Show the sessions it started" : "Fold the sessions it started"}
         title={folded ? "Show the sessions it started" : "Fold the sessions it started"}
@@ -2005,7 +2008,7 @@
 {#snippet rail(parent: Session)}
   {@const kids = childrenOf(parent)}
   {@const news = unheard(parent)}
-  {#if kids.length > 0 && !collapsed[parent.key]}
+  {#if kids.length > 0 && !isCollapsed(parent)}
     <div class="kids" class:after-subs={subGroups.has(parent.key)} data-testid="started-rail">
       {#each kids as kid, index (kid.key)}
         <!-- A session started for a step of its starter's workflow shows
@@ -2295,7 +2298,7 @@
 {#snippet entryRows(path: string, entry: Entry)}
   {#if entry.kind === "session"}
     {@render sessionRow(entry.session)}
-    {@render subagents(entry.session, false, false, childrenOf(entry.session).length > 0 && !collapsed[entry.session.key])}
+    {@render subagents(entry.session, false, false, childrenOf(entry.session).length > 0 && !isCollapsed(entry.session))}
     {@render rail(entry.session)}
   {:else}
     {@render pastRow(path, entry.transcript)}

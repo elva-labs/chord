@@ -192,8 +192,8 @@ recent session, so that one starts too; asking for a new session in it does
 not, as the project's header describes above. A session closed by hand
 before the quit stays closed, and a session whose project did not open
 again is left out. A session another session started comes back under its
-starter, where it stood among the others, with the starter unfolded
-whatever it was at the quit, and a line sent to it, by the user or by its
+starter, where it stood among the others, with the starter folded or
+open as it was at the quit, and a line sent to it, by the user or by its
 starter, starts it in its row. One the workbench had put away before the
 quit stays put away, one whose work was over at the quit is put away by
 the same rest as before it, and one the quit cut off at work stays until
