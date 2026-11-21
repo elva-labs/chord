@@ -2417,9 +2417,10 @@ mod tests {
     /// A cold and large Codex conversation is found by its thread in the
     /// account's index and goes on from its rollout; one the index does not
     /// hold is resumed whole.
-    #[test]
-    fn a_codex_conversation_is_taken_up_from_its_rollout() {
-        let home = Scratch::new("api-codex-taken-up");
+    /// A Codex account's folder holding a cold and large conversation's
+    /// rollout, and, made by `index` with `{dir}` for the folder, its thread
+    /// index; none where `index` is None.
+    fn codex_account(home: &Scratch, index: Option<&str>) -> (PathBuf, PathBuf) {
         let codex = home.path().join("codex-account");
         std::fs::create_dir_all(&codex).unwrap();
         let rollout = codex.join("rollout-thread.jsonl");
@@ -2429,14 +2430,22 @@ mod tests {
             r#"{"timestamp":"2026-01-02T08:00:06.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","content":[{"type":"Text","text":"Importer built."}]}}}"#,
         ];
         std::fs::write(&rollout, lines.join("\n") + "\n").unwrap();
-        rusqlite::Connection::open(codex.join("state_5.sqlite"))
-            .unwrap()
-            .execute_batch(&format!(
-                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
-                 INSERT INTO threads VALUES ('thread', '{}');",
-                rollout.display()
-            ))
-            .unwrap();
+        if let Some(index) = index {
+            rusqlite::Connection::open(codex.join("state_5.sqlite"))
+                .unwrap()
+                .execute_batch(&index.replace("{dir}", &codex.display().to_string()))
+                .unwrap();
+        }
+        (codex, rollout)
+    }
+
+    const CODEX_INDEX: &str = "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+                               INSERT INTO threads VALUES ('thread', '{dir}/rollout-thread.jsonl');";
+
+    #[test]
+    fn a_codex_conversation_is_taken_up_from_its_rollout() {
+        let home = Scratch::new("api-codex-taken-up");
+        let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
         let core = core_at(&home);
         let dir = codex.to_str();
         let judged = core
@@ -2453,6 +2462,62 @@ mod tests {
             .unwrap();
         assert!(!unknown.goes_on);
         assert_eq!(unknown.context, None);
+    }
+
+    /// A cold and large Codex conversation whose rollout the account's
+    /// thread index does not lead to is resumed whole.
+    fn resumed_whole_without_its_index(name: &str, index: Option<&str>) {
+        let home = Scratch::new(name);
+        let (codex, _) = codex_account(&home, index);
+        let judged = core_at(&home)
+            .taken_up(
+                "codex",
+                home.path(),
+                None,
+                "thread",
+                codex.to_str(),
+                "token",
+                false,
+            )
+            .unwrap();
+        assert!(!judged.goes_on);
+        assert_eq!(judged.context, None);
+        assert_eq!(judged.briefing, None);
+    }
+
+    #[test]
+    fn a_codex_conversation_without_a_thread_index_is_resumed_whole() {
+        resumed_whole_without_its_index("api-codex-no-index", None);
+    }
+
+    #[test]
+    fn a_codex_conversation_whose_index_has_no_threads_is_resumed_whole() {
+        resumed_whole_without_its_index(
+            "api-codex-no-threads",
+            Some("CREATE TABLE sessions (id TEXT PRIMARY KEY, rollout_path TEXT);"),
+        );
+    }
+
+    #[test]
+    fn a_codex_conversation_whose_index_does_not_say_where_it_is_is_resumed_whole() {
+        resumed_whole_without_its_index(
+            "api-codex-no-rollout-path",
+            Some(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, path TEXT NOT NULL); \
+                 INSERT INTO threads VALUES ('thread', '{dir}/rollout-thread.jsonl');",
+            ),
+        );
+    }
+
+    #[test]
+    fn a_codex_conversation_whose_rollout_is_gone_is_resumed_whole() {
+        resumed_whole_without_its_index(
+            "api-codex-rollout-gone",
+            Some(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+                 INSERT INTO threads VALUES ('thread', '{dir}/gone.jsonl');",
+            ),
+        );
     }
 
     #[test]
