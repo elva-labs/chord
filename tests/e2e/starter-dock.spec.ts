@@ -463,6 +463,7 @@ test.describe("two asks at once", () => {
     await installFakeCore(page, { open: [PROJECT, OTHER], settings: { integrated: ["claude-code"] } });
     await page.goto("/");
     await page.getByTestId("start-agent").click();
+    await startNew(page);
     await expect(input(page)).toBeEnabled();
     await conduct(page, {
       id: "c-other",
