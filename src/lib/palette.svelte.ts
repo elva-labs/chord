@@ -406,7 +406,7 @@ export function commandItems(query: string): PaletteItem[] {
           command(
             "newOther",
             other === "integrated"
-              ? `New integrated session in ${projectLabel(here!)}`
+              ? `New session in Chord in ${projectLabel(here!)}`
               : `New session in a terminal in ${projectLabel(here!)}`,
           ),
         ]),
