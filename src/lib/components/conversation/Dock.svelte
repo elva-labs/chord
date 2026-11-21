@@ -21,6 +21,7 @@
   } from "$lib/thread";
   import AskCard from "$lib/components/AskCard.svelte";
   import AskChoices, { SETTLE, type AskChoice } from "$lib/components/AskChoices.svelte";
+  import AskKey from "$lib/components/AskKey.svelte";
   import ConductCard from "$lib/components/ConductCard.svelte";
   import Icon from "./Icon.svelte";
   import Plain from "./Plain.svelte";
@@ -311,6 +312,11 @@
       run: () => choose(offer),
     }));
   }
+
+  /** The answer the deny words are sent with. */
+  let denySend = $derived<AskChoice[]>([
+    { id: "deny", label: "Don't allow", testid: "deny-send", run: () => denying && choose(denying) },
+  ]);
 
   /** What More shows, or that it hides them again once open. */
   function behindSaid(choices: AskChoice[]): string {
@@ -647,7 +653,7 @@
             aria-label="Why the call is not allowed"
             data-testid="deny-words"
           />
-          <button class="choice" tabindex="0" onclick={() => denying && choose(denying)} data-testid="deny-send">Don't allow</button>
+          <AskChoices choices={denySend} />
         </div>
       {:else}
         <AskChoices
@@ -796,11 +802,12 @@
                       class="option answer"
                       tabindex={index === 0 ? 0 : -1}
                       aria-disabled={takes(asking_) ? undefined : "true"}
+                      aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
                       data-option
                       data-testid="question-option"
                       onclick={() => pick(at, option.label, false, questions)}
                     >
-                      <span class="key">{index + 1}</span>
+                      <AskKey n={index + 1} />
                       <span class="label"><Plain text={option.label} /></span>
                       {#if option.description}<span class="hint"><Plain text={option.description} /></span>{/if}
                     </button>
@@ -1153,45 +1160,6 @@
     min-width: 180px;
   }
 
-  .choice {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: var(--radius);
-    background: none;
-    box-shadow: inset 0 0 0 1px var(--rule-strong);
-    font: inherit;
-    font-size: var(--conv-small);
-    font-weight: 500;
-    color: var(--ink);
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .choice:hover {
-    background: var(--surface-2);
-  }
-
-  .choice:active {
-    box-shadow: inset 0 0 0 1px var(--ink-3);
-  }
-
-  .key {
-    display: inline-grid;
-    place-items: center;
-    min-width: 15px;
-    height: 15px;
-    padding: 0 3px;
-    border-radius: 4px;
-    font-size: var(--label-size);
-    font-variant-numeric: tabular-nums;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent);
-    opacity: 1;
-  }
-
   .questions {
     gap: 10px;
     margin-left: var(--indent);
@@ -1251,7 +1219,7 @@
     box-shadow: inset 0 0 0 1px var(--divider, var(--rule));
   }
 
-  .option.answer .key {
+  .option.answer :global(.key) {
     align-self: center;
   }
 

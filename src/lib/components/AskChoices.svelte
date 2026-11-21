@@ -27,6 +27,7 @@
 
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import AskKey from "$lib/components/AskKey.svelte";
 
   /**
    * The answers of an ask, in a row: one stop for the keyboard, the arrows
@@ -160,7 +161,7 @@
     onclick={() => pick(choice)}
     onfocus={() => (pointed = choice.id)}
     onpointerenter={() => (pointed = choice.id)}
-    >{#if choice.key != null}<span class="key" aria-hidden="true">{choice.key}</span>{/if}<span class="label"
+    >{#if choice.key != null}<AskKey n={choice.key} />{/if}<span class="label"
       >{choice.label}</span
     ></button
   >
@@ -258,22 +259,9 @@
     transition: opacity 0.2s;
   }
 
-  .key {
-    flex: none;
-    display: inline-grid;
-    place-items: center;
-    min-width: 15px;
-    height: 15px;
-    padding: 0 3px;
-    border-radius: 4px;
-    font: 600 10px/1 var(--sans);
-    font-variant-numeric: tabular-nums;
-    background: color-mix(in srgb, currentColor 14%, transparent);
-  }
-
   /* On the accent the key is set off toward the ink, which takes it further
      from the button's text rather than nearer. */
-  .primary .key {
+  .primary :global(.key) {
     background: color-mix(in srgb, var(--ink) 16%, transparent);
   }
 
