@@ -1184,10 +1184,11 @@ impl Core {
     }
 
     /// How a session's conversation is taken up again: whole, or for a
-    /// Claude Code conversation that is cold and large, as a fresh one
-    /// from the briefing this answers with. With `always` it goes on from
-    /// the briefing whatever its size and however long it rested. Whole
-    /// for any other agent, and where no transcript of it is found.
+    /// Claude Code or Codex conversation that is cold and large, as a
+    /// fresh one from the briefing this answers with. With `always` it
+    /// goes on from the briefing whatever its size and however long it
+    /// rested. Whole for any other agent, and where no transcript or
+    /// rollout of it is found.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1208,10 +1209,19 @@ impl Core {
         let Some(home) = self.home.as_ref() else {
             return Ok(whole);
         };
+        let environment = env::environment();
+        let notes = |since| crate::notes::briefing_since(home, token, since);
+        let now = crate::notes::now() as u64 * 1000;
+        if agent == "codex" {
+            let codex_home = account::codex_home(home, config_dir, &environment.vars);
+            let Some(rollout) = crate::codex::rollout_path(&codex_home, session) else {
+                return Ok(whole);
+            };
+            return Ok(crate::going_on::judge_rollout(&rollout, notes, now, always));
+        }
         if agent != "claude-code" {
             return Ok(whole);
         }
-        let environment = env::environment();
         let dir = account::claude_dir(home, config_dir, &environment.vars);
         let Some(path) = crate::claude_history::find(&dir, project, cwd, session) else {
             return Ok(whole);
@@ -1220,8 +1230,6 @@ impl Core {
         // briefed as it stands there.
         let leaf = crate::claude_history::leaf(&path);
         let held = self.held.at(session, leaf.as_deref());
-        let notes = |since| crate::notes::briefing_since(home, token, since);
-        let now = crate::notes::now() as u64 * 1000;
         Ok(if always {
             crate::going_on::from_notes(&path, notes, now, held.as_deref())
         } else {
@@ -2404,6 +2412,47 @@ mod tests {
             runs: Arc::default(),
             held: Arc::new(crate::rewind::Held::new(Some(home))),
         }
+    }
+
+    /// A cold and large Codex conversation is found by its thread in the
+    /// account's index and goes on from its rollout; one the index does not
+    /// hold is resumed whole.
+    #[test]
+    fn a_codex_conversation_is_taken_up_from_its_rollout() {
+        let home = Scratch::new("api-codex-taken-up");
+        let codex = home.path().join("codex-account");
+        std::fs::create_dir_all(&codex).unwrap();
+        let rollout = codex.join("rollout-thread.jsonl");
+        let lines = [
+            r#"{"timestamp":"2026-01-02T08:00:00.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","content":[{"type":"text","text":"Build the importer."}]}}}"#,
+            r#"{"timestamp":"2026-01-02T08:00:05.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":239600,"output_tokens":400,"total_tokens":240000}}}}"#,
+            r#"{"timestamp":"2026-01-02T08:00:06.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","content":[{"type":"Text","text":"Importer built."}]}}}"#,
+        ];
+        std::fs::write(&rollout, lines.join("\n") + "\n").unwrap();
+        rusqlite::Connection::open(codex.join("state_5.sqlite"))
+            .unwrap()
+            .execute_batch(&format!(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+                 INSERT INTO threads VALUES ('thread', '{}');",
+                rollout.display()
+            ))
+            .unwrap();
+        let core = core_at(&home);
+        let dir = codex.to_str();
+        let judged = core
+            .taken_up("codex", home.path(), None, "thread", dir, "token", false)
+            .unwrap();
+        assert!(judged.goes_on);
+        assert_eq!(judged.context, Some(240_000));
+        let briefing = judged.briefing.unwrap();
+        assert!(briefing.contains("No notes were kept"));
+        assert!(briefing.contains("You:\n> Importer built."));
+        assert!(briefing.contains(&rollout.display().to_string()));
+        let unknown = core
+            .taken_up("codex", home.path(), None, "other", dir, "token", false)
+            .unwrap();
+        assert!(!unknown.goes_on);
+        assert_eq!(unknown.context, None);
     }
 
     #[test]

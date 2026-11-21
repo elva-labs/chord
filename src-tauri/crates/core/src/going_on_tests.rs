@@ -374,3 +374,101 @@ fn a_conversation_held_at_a_point_is_briefed_from_that_point() {
     // Held at an entry the transcript lacks, it resumes whole.
     assert!(!judge(&path, |_| None, AT + 3 * HOUR, Some("gone")).goes_on);
 }
+
+/// A Codex line as its rollout writes it, `seconds` after [`AT`].
+fn codex(seconds: u64, kind: &str, payload: serde_json::Value) -> String {
+    format!(
+        "{{\"timestamp\":\"2026-11-19T08:00:{seconds:02}.000Z\",\"type\":\"{kind}\",\"payload\":{payload}}}"
+    )
+}
+
+fn codex_said(seconds: u64, item: &str, part: &str, text: &str) -> String {
+    codex(
+        seconds,
+        "event_msg",
+        json!({ "type": "item_completed", "item": { "type": item, "content": [{ "type": part, "text": text }] } }),
+    )
+}
+
+fn codex_count(seconds: u64, tokens: u64) -> String {
+    codex(
+        seconds,
+        "event_msg",
+        json!({ "type": "token_count", "info": { "last_token_usage": { "input_tokens": tokens - 400, "output_tokens": 400, "total_tokens": tokens } } }),
+    )
+}
+
+/// A Codex conversation is judged from its rollout, its cache taken to
+/// last the hour and its rest to start at its last line, and briefed as a
+/// Claude Code one is.
+#[test]
+fn a_cold_and_large_codex_conversation_goes_on_from_its_rollout() {
+    let home = Scratch::new("going-on-codex");
+    let path = transcript(
+        &home,
+        &[
+            codex_said(0, "UserMessage", "text", "Build the importer."),
+            codex_said(1, "AgentMessage", "Text", "Importer built."),
+            codex_said(2, "UserMessage", "text", "Now the export."),
+            codex_count(3, 240_000),
+            codex_said(4, "AgentMessage", "Text", "Export done."),
+            codex(9, "event_msg", json!({ "type": "task_complete" })),
+        ],
+    );
+    let last = AT + 9_000;
+    let mut since = Some(0);
+    let judged = judge_rollout(
+        &path,
+        |given| {
+            since = given;
+            Some("Brief (2026-11-19):\n> The importer.".to_string())
+        },
+        last + HOUR - MARGIN,
+        false,
+    );
+    assert!(judged.goes_on);
+    assert_eq!(judged.context, Some(240_000));
+    assert_eq!(judged.idle, Some((HOUR - MARGIN) / 1000));
+    assert_eq!(since, None);
+    let briefing = judged.briefing.unwrap();
+    assert!(briefing.starts_with(HEAD));
+    assert!(briefing.ends_with(END));
+    assert!(briefing.contains("> The importer."));
+    assert!(briefing.contains("How it began, the user's first message:\n> Build the importer."));
+    assert!(briefing.contains("User:\n> Now the export."));
+    assert!(briefing.contains("You:\n> Export done."));
+    assert!(briefing.contains(&path.display().to_string()));
+    // Within the hour after its last line it is resumed whole.
+    let warm = judge_rollout(&path, |_| None, last + 50 * 60 * 1000, false);
+    assert!(!warm.goes_on);
+    assert_eq!(warm.briefing, None);
+    // Asked to go on from its notes, it does however warm it is.
+    assert!(judge_rollout(&path, |_| None, last, true).goes_on);
+}
+
+#[test]
+fn a_codex_rollout_that_does_not_say_how_it_stands_is_resumed_whole() {
+    let home = Scratch::new("going-on-codex-unknown");
+    let compacted = transcript(
+        &home,
+        &[
+            codex_said(0, "UserMessage", "text", "Build it."),
+            codex_count(3, 400_000),
+            codex(
+                4,
+                "compacted",
+                json!({ "message": "", "replacement_history": [] }),
+            ),
+        ],
+    );
+    let judged = judge_rollout(&compacted, |_| None, AT + 3 * HOUR, false);
+    assert!(!judged.goes_on);
+    assert_eq!(judged.context, None);
+    let gone = judge_rollout(
+        &home.path().join("gone.jsonl"),
+        |_| None,
+        AT + 3 * HOUR,
+        false,
+    );
+    assert!(!gone.goes_on);
+}

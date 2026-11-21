@@ -134,8 +134,9 @@ pub fn title_of(codex_home: &Path, id: &str) -> Option<String> {
         .flatten()
 }
 
-/// The rollout belongs to Codex; failures leave activity unknown.
-fn rollout_path(codex_home: &Path, id: &str) -> Option<PathBuf> {
+/// Where Codex writes a thread, by the thread index. None where the
+/// index or the thread is not there.
+pub fn rollout_path(codex_home: &Path, id: &str) -> Option<PathBuf> {
     open(codex_home)?
         .query_row(
             "SELECT rollout_path FROM threads WHERE id = ?1",
