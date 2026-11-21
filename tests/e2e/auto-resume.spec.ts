@@ -146,6 +146,59 @@ test("the row and the chip say when it resumes, until a turn begins or it is tur
   await expect(when).toHaveCount(0);
 });
 
+test("a turn the limit stops says so calmly over the composer, and waits for the reset from there", async ({ page }) => {
+  await open(page);
+  await windowed(page, H, 100);
+  await expect(chip(page)).toHaveText("Auto-resume off");
+  await refused(page, 3600);
+  const notice = page.locator("[data-testid='usage-limit-notice']:visible");
+  const said = notice.getByTestId("usage-limit-line");
+  await expect(said).toHaveText(/^Usage limit reached\. Resets in (59 min|1 h)\.$/);
+  await expect(notice.locator("button")).toHaveText(["Continue when it resets"]);
+  // The thread says where it stopped, without the red of a failure.
+  await expect(page.getByTestId("turn-outcome")).toHaveText("Stopped at the usage limit");
+  // Over the composer, and never taking the keyboard from it.
+  const [box, field] = await Promise.all([notice.boundingBox(), page.getByTestId("composer-input").boundingBox()]);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(field!.y);
+  await expect(page.getByTestId("composer-input")).toBeFocused();
+  await expect(page.getByRole("group", { name: /^Usage limit reached/ })).toBeVisible();
+
+  // Continuing turns auto-resume on and waits for this turn.
+  await notice.getByTestId("usage-limit-continue").click();
+  await expect(said).toHaveText(/^Continues in (59 min|1 h), when the limit resets\.$/);
+  await expect(notice.locator("button")).toHaveText(["Cancel"]);
+  await expect(chip(page)).toHaveText(/^Resumes \d{1,2}[:.]\d{2}/);
+  await expect(page.getByTestId("session-resumes")).toHaveText(/^resumes /);
+
+  // Cancelling turns it off, and the notice offers it again.
+  await notice.getByTestId("usage-limit-cancel").click();
+  await expect(chip(page)).toHaveText("Auto-resume off");
+  await expect(page.getByTestId("session-resumes")).toHaveCount(0);
+  await expect(notice.getByTestId("usage-limit-continue")).toBeVisible();
+
+  // A turn that begins puts the notice away.
+  await page.getByTestId("composer-input").fill("Try again");
+  await page.keyboard.press("Enter");
+  await agent(page, `f.startTurn("${H}");`);
+  await expect(notice).toHaveCount(0);
+});
+
+test("a week's limit, or an account with no session window, is said without the button", async ({ page }) => {
+  await open(page);
+  await agent(page, `f.limits("${H}", [{ kind: "weekly", percent: 100 }]);`);
+  await page.getByTestId("composer-input").fill("Build the thing");
+  await page.keyboard.press("Enter");
+  await agent(
+    page,
+    `f.startTurn("${H}");
+     f.emit("${H}", { type: "limitReached", window: "weekly", resetsAt: now + 3 * 86400 });
+     f.endTurn("${H}", "failed", "You've hit your weekly limit");`,
+  );
+  const notice = page.locator("[data-testid='usage-limit-notice']:visible");
+  await expect(notice.getByTestId("usage-limit-line")).toHaveText(/^Usage limit reached\. Resets \w+ \d{1,2}[:.]\d{2}/);
+  await expect(notice.locator("button")).toHaveCount(0);
+});
+
 test("goes on by itself from its notes once the usage reads open after the reset, and says so in the conversation", async ({
   page,
 }) => {

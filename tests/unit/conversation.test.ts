@@ -492,6 +492,23 @@ describe("a conversation, from the core's events", () => {
     ]);
   });
 
+  it("says a turn the usage limit stopped, with its window and reset, until the next turn begins", () => {
+    const { fake, conversation, id, send } = played();
+    send(M1, "go");
+    fake.startTurn(id);
+    fake.emit(id, { type: "limitReached", window: "session", resetsAt: 5000 });
+    fake.endTurn(id, "failed", "limit");
+    expect(conversation.turns[1]?.limit).toEqual({ window: "session", resetsAt: 5000 });
+    expect(conversation.stoppedAt).toEqual({ window: "session", resetsAt: 5000 });
+    send(M2, "again");
+    fake.startTurn(id);
+    expect(conversation.stoppedAt).toBeNull();
+    // A turn that fails without the limit is not said to be stopped by it.
+    fake.endTurn(id, "failed", "broke");
+    expect(conversation.turns[2]?.limit).toBeNull();
+    expect(conversation.stoppedAt).toBeNull();
+  });
+
   it("knows when the account is not signed in", () => {
     const { fake, conversation, id } = played();
     fake.emit(id, { type: "error", kind: "notLoggedIn", message: "Not logged in" });

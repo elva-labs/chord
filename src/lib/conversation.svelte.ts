@@ -222,6 +222,9 @@ export interface Turn {
   diff: { diff: string; truncated: boolean } | null;
   /** A request to the model failed and the agent tries again. */
   retrying: { message: string; attempt: number | null; attempts: number | null } | null;
+  /** The usage limit the agent said refused the turn, where it failed so:
+      the window used up and when it resets, in seconds. */
+  limit: { window: string | null; resetsAt: number | null } | null;
 }
 
 export type Entry =
@@ -289,6 +292,8 @@ export class Conversation {
   turns = $state<Record<number, Turn>>({});
   /** The running turn's id. */
   current = $state<number | null>(null);
+  /** The usage limit that refused the last turn, until another begins. */
+  stoppedAt = $state<Turn["limit"]>(null);
   requests = $state<Request[]>([]);
   /** Every task heard of, in the order they started. */
   tasks = $state<Task[]>([]);
@@ -343,6 +348,8 @@ export class Conversation {
   #calls = new Map<string, ToolCall>();
   #taskIndex = new Map<string, Task>();
   #turnCount = 0;
+  /** The usage limit the agent last said refused the running turn. */
+  #limitHeard: Turn["limit"] = null;
   /** Turns made for runs no turn of the agent's held: what a subagent this
       window never saw start said, or what a window that came late heard of
       a turn before it knew one ran. */
@@ -784,10 +791,14 @@ export class Conversation {
       }
       case "turnStarted":
         this.#goneOn();
+        this.#limitHeard = null;
         this.#startTurn(event.messages, now);
         break;
       case "turnEnded":
         this.#endTurn(event, now);
+        break;
+      case "limitReached":
+        this.#limitHeard = { window: event.window, resetsAt: event.resetsAt };
         break;
       case "text":
       case "thinking":
@@ -1235,6 +1246,7 @@ export class Conversation {
 
   #startTurn(messages: string[], now: number | null) {
     if (this.current !== null) this.#closeTurn(now ?? this.#clock());
+    this.stoppedAt = null;
     for (const id of messages) {
       let message = this.messages[id];
       if (message === undefined) {
@@ -1267,6 +1279,7 @@ export class Conversation {
       totalCostUsd: null,
       diff: null,
       retrying: null,
+      limit: null,
     };
     this.current = id;
     this.#push({ kind: "agent", key: "", turn: id, parts: [], at: now });
@@ -1306,6 +1319,9 @@ export class Conversation {
     turn.durationMs = event.durationMs;
     turn.usage = event.usage;
     turn.totalCostUsd = event.totalCostUsd;
+    turn.limit = event.outcome === "failed" ? this.#limitHeard : null;
+    this.stoppedAt = turn.limit;
+    this.#limitHeard = null;
     this.#closeTurn(now);
   }
 
@@ -1425,6 +1441,7 @@ export class Conversation {
       totalCostUsd: null,
       diff: null,
       retrying: null,
+      limit: null,
     };
     return id;
   }
