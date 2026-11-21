@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpawnOptions, Transcript, Workflow } from "$lib/core";
 import { applyDetect, resetAgent } from "$lib/agent.svelte";
 import { stash } from "$lib/exits";
+import { OUTCOME_ASK, OUTCOME_ASK_TERMINAL } from "$lib/instructions";
 import { resetZoom, zoom, zoomed } from "$lib/zoom.svelte";
 import { attention, resetAttention } from "$lib/attention.svelte";
 import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
@@ -3000,6 +3001,12 @@ describe("a name the agent or a caller gave", () => {
     expect(shownName(copy)).toBe("New session");
     const own = create("/p", null, undefined, null, "Tidy the docs");
     expect(shownName(own)).toBe("Tidy the docs");
+  });
+  it("reads a started session's prompt without the workbench's sentence after it", () => {
+    const kid = create("/p", null, undefined, null, `Bump the client ${OUTCOME_ASK_TERMINAL}`);
+    expect(shownName(kid)).toBe("Bump the client");
+    const bare = create("/p", null, undefined, null, OUTCOME_ASK);
+    expect(shownName(bare)).toBe("New session");
   });
 });
 

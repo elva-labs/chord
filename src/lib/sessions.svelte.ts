@@ -51,7 +51,7 @@ import {
   superseded as wentOnFromIt,
   takeUp as takeUpAgain,
 } from "$lib/goingOn.svelte";
-import { GOING_ON_WAIT } from "$lib/instructions";
+import { GOING_ON_WAIT, spoken } from "$lib/instructions";
 
 /**
  * Every session this window has, live or finished.
@@ -1317,8 +1317,14 @@ export function shownName(session: Session): string {
 export function rowName(session: Session): string | null {
   const name = knownName(session);
   if (name !== null) return shown(name);
-  const words = firstWords(session.prompt);
+  const words = promptWords(session);
   return words === null || reservedName(words) || nameTaken(words, session.key) ? null : words;
+}
+
+/** The first words of the prompt a session started with, without the
+    workbench's sentence after them. Null for nothing. */
+function promptWords(session: Session): string | null {
+  return session.prompt === null ? null : firstWords(spoken(session.prompt).text);
 }
 
 /** The first line of a message, cut to fit a row. Null for nothing. */
@@ -1394,7 +1400,7 @@ export function nameTaken(name: string, except: string | null = null): boolean {
     (session) =>
       session.key !== except &&
       isLive(session) &&
-      [label(session), knownName(session) === null ? firstWords(session.prompt) : null].some(
+      [label(session), knownName(session) === null ? promptWords(session) : null].some(
         (taken) => taken !== null && bareName(taken) === bare,
       ),
   );
