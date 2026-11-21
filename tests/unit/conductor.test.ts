@@ -99,6 +99,7 @@ import {
   toldFor,
   WORK_BYTES,
   WORK_WINDOWS,
+  wake,
   type Session,
 } from "$lib/sessions.svelte";
 import {
@@ -4711,6 +4712,33 @@ describe("starting in a workflow's shape", () => {
     );
   });
 
+  it("keeps a session's place and round when a line after a restart resumes it in its row", async () => {
+    orchestrating();
+    const work = await begun({ step: "Work", name: "Fix the cache" }, "w1");
+    const review = await begun({ step: "Review", work: "w1" }, "r1");
+    reviewed(review);
+    await sent("w1", "The reviewer asks for a smaller change");
+    expect(placeOf(work.key)?.round).toBe(2);
+
+    restarted();
+    orchestrating();
+    const back = reopened(B, "w1", "claude-code", null, null, null);
+    reopened(B, "r1", "claude-code", null, null, null);
+    flushSync();
+    expect(placeOf(back.key)).toMatchObject({ step: "Work", piece: "w1", round: 2 });
+    const answering = handle(call("send", { session: "w1", text: "Smaller still" }, { session: "orch" }));
+    await settle();
+    expect(back.status).toBe("starting");
+    started(back.key, "pty-w1b", "w1");
+    flushSync();
+    await vi.advanceTimersByTimeAsync(ENTER_AFTER);
+    await answering;
+    expect(last().error).toBeNull();
+    expect(forProject(B)[0]).toBe(back);
+    expect(placeOf(back.key)).toMatchObject({ step: "Work", piece: "w1", round: 2 });
+    expect(placeTextOf(back.key)?.short).toBe("Work, 2 of 4");
+  });
+
   it("puts work sent back in the round after its review's, for a line, a resume and a start that carries the piece on", async () => {
     orchestrating();
     const work = await begun({ step: "Work", name: "Fix the cache" }, "w1");
@@ -6527,6 +6555,48 @@ describe("a session the user closed or the app lost", () => {
     // The same rows, in the same order, under the same starter.
     expect(forProject(A)).toEqual([first, second]);
     expect(startedBy(caller.token)).toEqual([first, second]);
+  });
+
+  // A starter that has not run since the restart is not woken by what its
+  // sessions do meanwhile: their news waits for it.
+  it("keeps the news of a session the user woke for its starter while the starter has not run since the restart", async () => {
+    await startOne();
+    restarted();
+    const caller = reopened(C, "caller-1", "claude-code", null, null, null);
+    const kid = reopened(A, "sid-1", "claude-code", null, null, null);
+    flushSync();
+    expect(startedBy(caller.token)).toEqual([kid]);
+    wake(kid.key);
+    started(kid.key, "pty-9", "sid-1");
+    kid.working = true;
+    flushSync();
+    kid.working = false;
+    flushSync();
+    await vi.advanceTimersByTimeAsync(WAKE_AFTER + COLD_AFTER["claude-code"]);
+    expect(caller.status).toBe("dormant");
+    expect(written).toEqual([]);
+    // Up again, it has the rest to hear.
+    wake(caller.key);
+    started(caller.key, "pty-0", "caller-1");
+    flushSync();
+    expect(unheard(caller)).toEqual([kid]);
+  });
+
+  // The tools start one level only; the list is given a started session's
+  // own here, as the rows allow for.
+  it("brings back a started session's own sessions under its row", async () => {
+    await startOne();
+    const kept = JSON.parse(localStorage.getItem("chord.started")!);
+    kept[tok("sid-1")] = [{ id: "sid-2", project: B, worktree: null, agent: "claude-code", name: "Write the test" }];
+    localStorage.setItem("chord.started", JSON.stringify(kept));
+    restarted();
+    const middle = reopened(A, "sid-1", "claude-code", null, null, null);
+    const inner = reopened(B, "sid-2", "claude-code", null, null, null);
+    const caller = byToken(callerKey("caller-1"))!;
+    flushSync();
+    expect(startedBy(caller.token)).toEqual([middle]);
+    expect(startedBy(middle.token)).toEqual([inner]);
+    expect(inner.status).toBe("dormant");
   });
 
   // What was at work at the quit stays as it came back until it is woken,
