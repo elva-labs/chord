@@ -46,7 +46,7 @@
       data-testid="hooks-notice"
     >
       {#snippet what()}<b>Let agents talk to Chord?</b>{/snippet}
-      {#snippet fact()}Shows when an agent works, waits or asks.{/snippet}
+      {#snippet fact()}Shows when an agent works, waits or asks. In every project.{/snippet}
       {#snippet actions()}<AskChoices {choices} describedby="hooks-notice-fact" />{/snippet}
     </AskCard>
   </div>

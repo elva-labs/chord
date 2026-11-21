@@ -294,7 +294,7 @@ test.describe("the hooks notice", () => {
     const notice = page.getByTestId("hooks-notice");
     await expect(notice).toBeVisible();
     await expect(notice).toHaveAccessibleName("Let agents talk to Chord?");
-    await expect(notice).toContainText("Shows when an agent works, waits or asks.");
+    await expect(notice).toContainText("Shows when an agent works, waits or asks. In every project.");
     await page.getByTestId("hooks-notice-turn-on").click();
     await expect(notice).toHaveCount(0);
     await page.keyboard.press(`${MOD}+,`);
