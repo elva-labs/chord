@@ -97,7 +97,8 @@
       />{:else}<b><Plain text={who} /></b> wants to start a session{/if}
   {/snippet}
   {#snippet fact()}
-    {#if ask.round !== null}<span data-testid="conduct-round"><Plain text={roundQuestion(ask.round)} /></span
+    {#if ask.round !== null}{#if saysWhere || ask.worktree || ask.named !== null}{@render where()}{" "}{/if}<span
+        data-testid="conduct-round"><Plain text={roundQuestion(ask.round)} /></span
       >{:else if ask.outside !== null}<!-- A call that names no session: the
            workbench cannot tell which agent makes it, so each start it asks
            for is asked about. --><span data-testid="conduct-outside"
@@ -105,7 +106,7 @@
         workbench, or a session that left its name out. Each new session it asks for is put to you.</span
       >{:else}{@render where()}{/if}
   {/snippet}
-  {#if ask.round !== null || ask.outside !== null}
+  {#if ask.round === null && ask.outside !== null}
     {#if saysWhere || ask.worktree || ask.named !== null}<p class="where">{@render where()}</p>{/if}
   {/if}
   {#snippet actions()}

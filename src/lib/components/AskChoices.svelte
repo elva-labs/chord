@@ -239,6 +239,12 @@
     background: color-mix(in srgb, currentColor 14%, transparent);
   }
 
+  /* On the accent the key is set off toward the ink, which takes it further
+     from the button's text rather than nearer. */
+  .primary .key {
+    background: color-mix(in srgb, var(--ink) 16%, transparent);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .choice[aria-disabled="true"],
     .choice:disabled {

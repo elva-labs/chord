@@ -632,7 +632,6 @@
             class="exact"><Plain text={cut(what.object)} /></code
           >{@render cutOff(what.object)}{@render leadsTo(what.object)}{/if}{#if what.tail}<span class="tail">{" "}{what.tail}</span
           >{/if}{@render awayCount(away, headAway)}{@render truncated()}{/if}{/snippet}
-    {#snippet permissionFact()}<Plain text={cut(asked.description ?? "")} />{@render cutOff(asked.description ?? "")}{/snippet}
     {#snippet permissionAnswers()}
       {#if denying !== null}
         <div class="deny">
@@ -660,7 +659,6 @@
       data-asker={who === null ? "own" : "started"}
       what={permissionLine}
       aside={waiting}
-      fact={asked.description ? permissionFact : undefined}
       thing={what.object !== null ? permissionObject : undefined}
       code={!what.quoted}
       thingTestid="permission-object"
@@ -670,8 +668,9 @@
       error={asking_.error}
     >
       <!-- What the request holds scrolls under the thing asked; who asks and
-           the choices stay in sight whatever it holds. -->
-      {#if away.some((each) => !(headAway && each.path === what.object)) || command !== null || cutHead || lines_ !== null || full !== null}
+           the choices stay in sight whatever it holds. The agent's own words
+           stand after the paths outside the project, never before them. -->
+      {#if away.some((each) => !(headAway && each.path === what.object)) || asked.description || command !== null || cutHead || lines_ !== null || full !== null}
       <div class="body">
       {#each KINDS as kind (kind)}
         {@const these = away.filter((each) => each.where === kind && !(headAway && each.path === what.object))}
@@ -683,6 +682,9 @@
           </p>
         {/if}
       {/each}
+      {#if asked.description}
+        <p class="description"><Plain text={cut(asked.description)} />{@render cutOff(asked.description)}</p>
+      {/if}
       {#if command !== null || cutHead || lines_ !== null || full !== null}
         <div class="folds">
           {#if command !== null}
