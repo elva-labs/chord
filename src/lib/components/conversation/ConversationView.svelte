@@ -414,7 +414,7 @@
       }}
       onRun={(command) => void run(session.key, command)}
     />
-    <div class="foot" style:--conv-width={width > 0 ? `${width}px` : null}>
+    <div class="foot" data-foot style:--conv-width={width > 0 ? `${width}px` : null}>
       {#if over}
         <div class="ended" data-testid="session-ended">
           <span class="why"><Plain text={why} /></span>

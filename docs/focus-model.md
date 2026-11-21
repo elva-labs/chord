@@ -155,8 +155,8 @@ While the palette is up it has the keyboard and no other shortcut reaches past
 it, except that Settings opened from the app's menu puts the palette away
 first.
 
-While a dialog, or an agent's question at the foot of the window, is up, neither shortcut opens
-a palette and <kbd>Cmd</kbd><kbd>.</kbd> does nothing, so the keyboard stays
+While a dialog, or an agent's question over the window, is up, neither
+shortcut opens a palette and <kbd>Cmd</kbd><kbd>.</kbd> does nothing, so the keyboard stays
 where the dialog has it. A new shell, a new untitled file and the shortcut to
 the status bar do nothing either while a dialog or a question in a strip
 holds the keyboard.
@@ -310,8 +310,8 @@ control a stop as it is drawn, by one rule for the whole window:
   put in a pane before something is taken away, such as closing a tab with
   unsaved edits; it takes the keyboard when it opens, on Cancel, which is
   drawn ringed however the question came up. The questions an
-  agent puts, whether it may start a session or change a setting, at the
-  foot of the window or in the asking session's dock, take neither the
+  agent puts, whether it may start a session or change a setting, over
+  the window or in the asking session's dock, take neither the
   keyboard nor Tab: the keyboard stays with the
   agent, and their buttons are stops in reading order. A pane that is
   narrowed away, hidden, or under a dialog takes no Tab, and a peeked

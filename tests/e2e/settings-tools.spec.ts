@@ -97,8 +97,8 @@ test("puts a change to the user, makes it when allowed, and offers an undo", asy
   await expect(page.locator("html")).not.toHaveAttribute("data-palette", /.+/);
   expect(await answerTo(page, "c-1")).toBeNull();
 
-  // The ask floats low in the window's middle, where the asks dock over the
-  // composer, in view.
+  // With no conversation on screen, the ask floats low in the window's
+  // middle, in view.
   const box = (await ask.boundingBox())!;
   const view = page.viewportSize()!;
   expect(box.y + box.height).toBeLessThanOrEqual(view.height);

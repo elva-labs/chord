@@ -164,8 +164,8 @@ after the session on screen, or to the first when the session on screen is
 not among them, and round to the first again after the last. A project
 with a session waiting is active by then, so the shortcut never has to look
 under the fold. When no other session needs you, the status bar says so.
-While a dialog or an agent's question at the foot of the window is up, the shortcut does
-nothing.
+While a dialog or an agent's question over the window is up, the shortcut
+does nothing.
 
 ## After a restart
 

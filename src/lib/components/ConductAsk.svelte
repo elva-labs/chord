@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
   import { coversBrowser } from "$lib/browser.svelte";
+  import { aboveFoot } from "$lib/aboveFoot.svelte";
   import { conductor } from "$lib/conductor.svelte";
   import { returnFocus } from "$lib/layout.svelte";
   import { askDockedIn } from "$lib/docked.svelte";
@@ -10,7 +11,8 @@
   /**
    * A session's question to the user, over the window: one that asks to
    * start a session, or for a round of review past its limit, while the
-   * asking session is not on screen to dock it. It never takes the
+   * asking session is not on screen to dock it. It stands above the
+ * composer and dock of the session on screen, never takes the
    * keyboard, and takes no answer for a moment after it comes, so a click
    * or key meant for what was there before answers nothing.
    */
@@ -41,7 +43,7 @@
 
 {#if shown !== null}
   {#key shown}
-    <div class="over" data-card use:coversBrowser>
+    <div class="over" data-card use:coversBrowser use:aboveFoot>
       <ConductCard
         ask={shown}
         who={shown.caller}
@@ -57,8 +59,9 @@
 {/if}
 
 <style>
-  /* Over the window, low in its middle where the asks dock over the
-     composer, and over a peeked sessions pane. */
+  /* Over the window and a peeked sessions pane, standing above the
+     composer and dock of the conversation on screen. The left, bottom and
+     height here are where it starts. */
   .over {
     position: fixed;
     bottom: 28px;

@@ -411,10 +411,12 @@ test.describe("a round of review past the limit, for an orchestrator in a conver
     const header = (await page.locator("section[data-pane='agent'] .ph, section[data-pane='agent'] header").first().boundingBox())!;
     expect((await dock.boundingBox())!.y).toBeGreaterThan(header.y + header.height);
 
-    // Off the orchestrator, it is asked over the window.
+    // Off the orchestrator, it is asked over the window, standing above the
+    // composer of the session on screen.
     await goToNamed(page, "Fix the cache");
     await expect(page.getByTestId("conduct-ask")).toBeVisible();
     await expect(dock).toHaveCount(0);
+    await expect.poll(() => clearOfFoot(page, page.getByTestId("conduct-ask"))).toBe(true);
     await goToRow(page, starter);
     await expect(page.getByTestId("conduct-ask")).toHaveCount(0);
 
@@ -422,6 +424,64 @@ test.describe("a round of review past the limit, for an orchestrator in a conver
     await expect(shown(page).getByTestId("round-dock")).toHaveCount(0);
     await expect.poll(() => answerTo(page, "c-4")).not.toBeNull();
     expect((await answerTo(page, "c-4"))!.content).toContain('for step "Review" round 3');
+  });
+});
+
+/** Whether an ask that floats stands wholly above the foot of the
+    conversation on screen, its composer with the dock above, and inside the
+    window. */
+async function clearOfFoot(page: Page, ask: Locator): Promise<boolean> {
+  const card = await ask.boundingBox();
+  const foot = await shown(page).locator("[data-foot]").boundingBox();
+  if (card === null || foot === null) return false;
+  return card.y >= 0 && card.y + card.height <= foot.y;
+}
+
+/** An agent's call asking to change the window's settings. */
+function changeSettings(page: Page, id: string, args: Record<string, unknown>) {
+  return page.evaluate(
+    ({ project, id, args }) =>
+      (window as unknown as { __settingsRequest: (call: unknown) => void }).__settingsRequest({
+        id,
+        tool: "settings_change",
+        arguments: args,
+        cwd: project,
+        session: null,
+      }),
+    { project: PROJECT, id, args },
+  );
+}
+
+test.describe("two asks at once", () => {
+  /** A second open project: a start there is asked about. */
+  const OTHER = "/home/ada/dev/other";
+
+  test("an ask to change the settings waits while a start is asked in the dock, then stands above it", async ({
+    page,
+  }) => {
+    await installFakeCore(page, { open: [PROJECT, OTHER], settings: { integrated: ["claude-code"] } });
+    await page.goto("/");
+    await page.getByTestId("start-agent").click();
+    await expect(input(page)).toBeEnabled();
+    await conduct(page, {
+      id: "c-other",
+      tool: "start",
+      arguments: { project: OTHER, prompt: "Fix the flaky test" },
+      session: "integrated-session-1",
+    });
+    const start = shown(page).getByTestId("conduct-ask");
+    await expect(start).toBeVisible();
+    await changeSettings(page, "s-1", { palette: "amber" });
+    // The settings ask waits its turn rather than standing over the dock.
+    await expect(page.getByTestId("settings-ask")).toHaveCount(0);
+    await shown(page).getByTestId("conduct-no").click();
+    await expect(start).toHaveCount(0);
+    const ask = page.getByTestId("settings-ask");
+    await expect(ask).toBeVisible();
+    // It floats above the composer, never over it.
+    await expect.poll(() => clearOfFoot(page, ask)).toBe(true);
+    await page.getByTestId("settings-decline").click();
+    await expect(ask).toHaveCount(0);
   });
 });
 

@@ -805,8 +805,10 @@ puts the question to the user and holds the call while it is up, as under
 [a call that waits on the user](#a-call-that-waits-on-the-user): Allow
 once, Allow for this session, which allows it from now on, or Don't allow.
 It docks over the caller's composer while the conversation of a caller
-that runs in Chord is on screen, and otherwise stands at the foot of the window,
-in the middle. A round of
+that runs in Chord is on screen. Otherwise it stands over the window,
+centred above the composer and dock of the conversation on screen so that
+it covers neither, or low in the middle of the window while no conversation
+is on screen. A round of
 review past a workflow's limit is asked about every time, in the starter's
 own project too, however the project was allowed. It says who wants another
 round of which review, then the project the round runs in, and names the
@@ -816,8 +818,8 @@ more or Stop here. For a caller that runs
 in Chord, the round docks over its composer while its conversation is on
 screen, with the same two choices taken as the dock takes any request (see
 [sessions](sessions.md#sessions-in-chord)), so it never covers the
-header that says where the run stands; anywhere else it stands at the foot
-of the window as above, and it moves into the dock once the caller is on
+header that says where the run stands; anywhere else it stands over the
+window as above, and it moves into the dock once the caller is on
 screen. An allowed caller is
 remembered for that project and what the session ran on, for as long as the
 app runs: the account, and the agent too where the account keeps no
@@ -893,7 +895,7 @@ A call whose question was still in front of the user went with the window,
 and is told as not done; one the user had allowed that was still under way
 is told as perhaps done, with the `sessions` listing to see what runs.
 
-![The question at the foot of the window: which session wants to start one, in which project, the prompt it would give, and Allow once, Allow for this session or Don't allow.](orchestrator-ask.png)
+![The question over the window: which session wants to start one, in which project, the prompt it would give, and Allow once, Allow for this session or Don't allow.](orchestrator-ask.png)
 
 ## In the panes
 

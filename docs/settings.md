@@ -633,10 +633,13 @@ start of a session is asked about, the notifications and the chime are
 refused outright, as the user's to change. Compact mode is a matter of
 how the window looks, as the look is, and the agent may ask for it.
 
-A change that will do is put to the user in the asking session's dock
-while its conversation is on screen, and otherwise at the foot of the
-window: who is asking, the reason, and each setting from what it is to what
-it would be, with Allow and Don't allow.
+A change that will do is put to the user over the window, where a
+session's question to start another stands when it is not docked (see
+[the orchestrator](orchestrator.md#what-the-user-is-asked)), and never in a
+dock. It waits while a question to start a session or for another round of
+review is up, docked or not, so only one question is up at a time. It says
+who is asking, the reason, and each setting from what it is to what it
+would be, with Allow and Don't allow.
 Nothing changes unless they allow it, and the agent waits for the answer,
 which says which it was. An agent gives up on a call after a while, Codex
 after a minute, so one the user has not answered within forty seconds is

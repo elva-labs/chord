@@ -4,6 +4,7 @@
   import AskCard from "$lib/components/AskCard.svelte";
   import AskChoices, { SETTLE, type AskChoice } from "$lib/components/AskChoices.svelte";
   import { coversBrowser } from "$lib/browser.svelte";
+  import { aboveFoot } from "$lib/aboveFoot.svelte";
   import { conductor } from "$lib/conductor.svelte";
   import { askDockedIn } from "$lib/docked.svelte";
   import { DEFAULTS, type CustomTheme } from "$lib/customThemes";
@@ -18,14 +19,17 @@
 
   /**
    * An agent's ask to change the settings, in the place over the window
-   * where the asks float: what changes from what to what, and Allow or
-   * Don't allow. It waits while a session's own ask floats there, never
+   * where the asks float, above the composer and dock of the session on
+   * screen: what changes from what to what, and Allow or Don't allow. It
+   * waits while a session's own ask to start a session or for a round
+   * shows, docked or floating, so two asks never stand at once. It never
    * takes the keyboard, and takes no answer for a moment after it comes,
    * so a click or key meant for what was there before answers nothing.
    */
 
+  let ask = $derived(conductor.asking !== null ? null : settingsAsk.asking);
+  /** A session's own ask floats in the place the undo shows in. */
   let floating = $derived(conductor.asking !== null && askDockedIn() === null);
-  let ask = $derived(floating ? null : settingsAsk.asking);
   let undo = $derived(settingsAsk.undo);
 
   let pointed = $state<string | null>(null);
@@ -63,7 +67,7 @@
 
 {#if ask !== null}
   {#key ask}
-    <div class="over" data-card use:coversBrowser>
+    <div class="over" data-card use:coversBrowser use:aboveFoot>
       <AskCard
         class="floating"
         role="alertdialog"
@@ -134,9 +138,10 @@
   </ul>
 {/snippet}
 
-<!-- The two share a place: a question up hides the word until it is answered. -->
-{#if undo !== null && settingsAsk.asking === null}
-  <div class="over undo-over" data-card use:coversBrowser>
+<!-- The asks and the undo share a place: an ask there hides the undo until
+     it is answered. -->
+{#if undo !== null && settingsAsk.asking === null && !floating}
+  <div class="over undo-over" data-card use:coversBrowser use:aboveFoot>
     <div class="undo" role="status" data-testid="settings-undo">
       <span class="said">
         <Plain text={undo.caller} /> changed {undo.changes.length === 1
@@ -156,9 +161,10 @@
 {/if}
 
 <style>
-  /* Over the window, low in its middle where the asks dock over the
-     composer, and over a peeked sessions pane; the same place a session's
-     own ask floats. */
+  /* Over the window and a peeked sessions pane, standing above the
+     composer and dock of the conversation on screen, the same place a
+     session's own ask floats. The left, bottom and height here are where
+     it starts. */
   .over {
     position: fixed;
     bottom: 28px;
