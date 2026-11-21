@@ -154,8 +154,8 @@ with nothing to choose is not asked. Each
 answer stays in the field as a chip, and <kbd>Backspace</kbd> on an empty
 field takes the last one back, one step to a press however long the key is
 held; with none taken it goes back to the line of defaults, and from that
-line to the project, or to the commands with what was typed there still in
-the field. The last answer, or Enter on the line, brings the project forward and starts the
+line to the project, or to the list the session was asked for from, go to
+or the commands, with what was typed there still in the field. The last answer, or Enter on the line, brings the project forward and starts the
 session, and the keyboard goes to the new agent. Backing out starts nothing and
 changes nothing.
 

@@ -1036,6 +1036,20 @@ describe("a new session", () => {
     expect(palette.steps).toEqual([{ kind: "project", path: C }]);
   });
 
+  it("steps back out of a new session Cmd+Enter began to go to, with what was typed there", () => {
+    agent.installed = ["claude-code", "codex"];
+    openGoTo();
+    setQuery("thr");
+    const project = paletteItems().find((item) => item.kind === "project" && item.path === C)!;
+    pickItem(project, true);
+    expect(palette).toMatchObject({ mode: "new", ready: true, query: "" });
+    choose("Change");
+    stepBack();
+    expect(palette.ready).toBe(true);
+    stepBack();
+    expect(palette).toMatchObject({ mode: "goto", query: "thr", steps: [], ready: false });
+  });
+
   it("offers the defaults with Cmd+Enter when the project is all it needs", () => {
     openGoTo();
     const project = paletteItems().find((item) => item.kind === "project" && item.path === C)!;

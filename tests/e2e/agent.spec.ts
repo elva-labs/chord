@@ -2614,6 +2614,22 @@ test.describe("a new session from the palette", () => {
     await expect.poll(() => writtenTo(page, "pty-1")).toBe("x");
   });
 
+  test("steps back from a new session Cmd+Enter began in go to, to go to with what was typed", async ({ page }) => {
+    await open(page, { open: [ONE, TWO], noWorkflows: true });
+    await page.keyboard.press(GOTO);
+    await page.keyboard.type("two");
+    await expect(chosen(page)).toHaveAttribute("data-kind", "project");
+    await page.keyboard.press(`${MOD}+Enter`);
+    await expect(ready(page)).toBeVisible();
+    await expect(chips(page)).toHaveText(["New session", "two"]);
+    await page.keyboard.press("Backspace");
+    await expect(page.getByTestId("palette")).toHaveAttribute("data-mode", "goto");
+    await expect(chips(page)).toHaveCount(0);
+    await expect(field(page)).toHaveValue("two");
+    await expect(field(page)).toBeFocused();
+    expect(await spawnCount(page)).toBe(0);
+  });
+
   test("starts in another project that is typed", async ({ page }) => {
     await open(page, { open: [ONE, TWO], noWorkflows: true });
     await askNew(page);

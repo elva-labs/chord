@@ -193,8 +193,10 @@ export const palette = $state({
   /** A new session in a known project offers its defaults as one line,
       until Change or typing asks the questions instead. */
   ready: false,
-  /** What was typed in the commands when a new session was asked for from
-      there, which stepping back to them puts in the field again. */
+  /** The list a new session was asked for from, go to or the commands,
+      and what was typed in it, which stepping back out of the new session
+      opens again with the same text. */
+  from: "commands" as "commands" | "goto",
   came: "",
   /** Counts every time a list is opened, so a palette still fading out from
       the last close takes the keyboard again. */
@@ -219,6 +221,7 @@ export function openGoTo() {
   palette.query = "";
   palette.steps = [];
   palette.ready = false;
+  palette.from = "commands";
   palette.came = "";
   palette.opened += 1;
   stopLeaving();
@@ -230,6 +233,7 @@ export function openCommands() {
   palette.query = "";
   palette.steps = [];
   palette.ready = false;
+  palette.from = "commands";
   palette.came = "";
   palette.opened += 1;
   stopLeaving();
@@ -259,6 +263,7 @@ export function resetPalette() {
   palette.query = "";
   palette.steps = [];
   palette.ready = false;
+  palette.from = "commands";
   palette.came = "";
 }
 
@@ -792,8 +797,12 @@ export function beginNew(path: string | null): Outcome {
   if (!palette.open) {
     palette.opened += 1;
     stopLeaving();
+    palette.from = "commands";
     palette.came = "";
-  } else if (palette.mode !== "new") palette.came = palette.mode === "commands" ? palette.query : "";
+  } else if (palette.mode !== "new") {
+    palette.from = palette.mode;
+    palette.came = palette.query;
+  }
   const outcome = answer(project === null ? [] : [{ kind: "project", path: project }]);
   palette.open = true;
   return outcome;
@@ -807,8 +816,10 @@ export function openNew(path: string | null) {
 
 /** Goes back a step: from the questions Change asked, the last answer is
     taken back, and with none given the defaults' line is offered again.
-    From that line, the project is taken back where it was asked, and
-    otherwise the commands list is where the question came from. */
+    From that line, go to is where the question came from when it was asked
+    there, a project already picked in it; else the project is taken back
+    where it was asked, and otherwise the commands list is where the
+    question came from. */
 export function stepBack() {
   palette.query = "";
   if (palette.mode === "new" && !palette.ready && palette.steps.length > 1) {
@@ -817,6 +828,13 @@ export function stepBack() {
   }
   if (palette.mode === "new" && !palette.ready && palette.steps.length === 1) {
     palette.ready = true;
+    return;
+  }
+  if (palette.from === "goto") {
+    palette.steps = [];
+    palette.ready = false;
+    palette.mode = "goto";
+    palette.query = palette.came;
     return;
   }
   const only = workspace.open.length === 1;
