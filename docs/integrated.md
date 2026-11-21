@@ -226,8 +226,8 @@ A workflow and going on after a limit sit behind one `+` chip on the
 composer while they are at their default; each shows as a chip of its own
 once set. The `+` opens a menu of what it holds, which also brings up the
 mode. The composer's box says `Message` and the agent's name until
-something is typed. Mode, effort, workflow and going on keep their chords,
-and a change by chord to a value away from the default shows the chip. Every chip stays a stop on Tab.
+something is typed. Mode, effort, workflow and going on keep their shortcuts,
+and a change by shortcut to a value away from the default shows the chip. Every chip stays a stop on Tab.
 
 A thread gives its messages no time each. A quiet time stands between them
 where more than five minutes passed, or the day changed, before the next
