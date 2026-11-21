@@ -81,7 +81,7 @@ test("puts a change to the user, makes it when allowed, and offers an undo", asy
   });
   const ask = page.getByTestId("settings-ask");
   await expect(ask).toBeVisible();
-  await expect(ask).toContainText("wants to change the settings");
+  await expect(ask).toContainText("wants to change settings");
   await expect(page.getByTestId("settings-ask-reason")).toHaveText(
     "The user asked for warmer colours.",
   );
@@ -97,10 +97,13 @@ test("puts a change to the user, makes it when allowed, and offers an undo", asy
   await expect(page.locator("html")).not.toHaveAttribute("data-palette", /.+/);
   expect(await answerTo(page, "c-1")).toBeNull();
 
-  // The dialog sits over the agent pane, in view.
+  // The ask floats low in the window's middle, where the asks dock over the
+  // composer, in view.
   const box = (await ask.boundingBox())!;
-  const pane = (await page.locator(AGENT).boundingBox())!;
-  expect(box.y).toBeLessThan(pane.y + pane.height);
+  const view = page.viewportSize()!;
+  expect(box.y + box.height).toBeLessThanOrEqual(view.height);
+  expect(box.y + box.height).toBeGreaterThan(view.height - 80);
+  expect(Math.abs(box.x + box.width / 2 - view.width / 2)).toBeLessThan(2);
   expect(box.width).toBeGreaterThan(200);
 
   await page.getByTestId("settings-allow").click();

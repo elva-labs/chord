@@ -417,12 +417,20 @@ test.describe("the focused card's mark", () => {
     const ask = page.getByTestId("settings-ask");
     await expect(ask).toBeVisible();
     const question = (await ask.boundingBox())!;
-    const card = await box(page, `${AGENT} > .body`);
-    // The question straddles the card's top edge, where the mark runs.
-    expect(question.y).toBeLessThan(card.y);
-    expect(question.y + question.height).toBeGreaterThan(card.y + 2);
-    const under = await pixel(page, question.x + question.width / 2, card.y + 1);
-    expect(far(under, await accent(page))).toBeGreaterThan(40);
+    // Whatever pane or edge lies under the question, the question is what
+    // is on top at its corners and its middle.
+    const atop = await page.evaluate(
+      (points) =>
+        points.map(([x, y]) => document.elementFromPoint(x, y)?.closest("[data-testid='settings-ask']") != null),
+      [
+        [question.x + 12, question.y + 12],
+        [question.x + question.width - 12, question.y + 12],
+        [question.x + question.width / 2, question.y + question.height / 2],
+        [question.x + 12, question.y + question.height - 12],
+        [question.x + question.width - 12, question.y + question.height - 12],
+      ],
+    );
+    expect(atop).toEqual([true, true, true, true, true]);
   });
 
   for (const contrast of [false, true]) {

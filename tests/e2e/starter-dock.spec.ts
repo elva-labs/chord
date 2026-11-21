@@ -97,15 +97,16 @@ test.describe("a started session's request in the starter's dock", () => {
     await starterWithStarted(page);
     const request = await asks(page, "cargo test --workspace");
     const dock = shown(page).getByTestId("permission-dock");
-    await expect(dock).toContainText("Fix the cache asks to run cargo test --workspace");
+    await expect(dock).toContainText("Fix the cache wants to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("cargo test --workspace");
     await expect(dock.getByTestId("dock-session")).toHaveText("Fix the cache");
     await expect(dock.getByTestId("dock-step")).toHaveCount(0);
     await expect(dock.getByTestId("dock-open")).toHaveText("Open");
     await expect(dock.locator("[data-choice]")).toHaveText([
       "1Allow once",
       "2Allow for this session",
-      "3Deny",
-      "4Deny and stop",
+      "3Don't allow",
+      "More",
     ]);
     const means = shown(page).getByTestId("choice-means");
     await expect(means).toHaveText("Allows this call in Fix the cache and remembers nothing.");
@@ -113,6 +114,8 @@ test.describe("a started session's request in the starter's dock", () => {
     await expect(means).toHaveText(
       "Allows this call in Fix the cache and remembers Bash(cargo test:*) for the rest of that session.",
     );
+    await dock.getByTestId("choice-more").click();
+    await expect(dock.getByTestId("choice-cancel")).toHaveText("4Don't allow, and stop");
     await dock.getByTestId("choice-cancel").hover();
     await expect(means).toHaveText("Refuses this call and stops Fix the cache's turn.");
     // Over the composer, under the thread, and the composer says Up reaches it.
@@ -166,7 +169,8 @@ test.describe("a started session's request in the starter's dock", () => {
        f.emit("${STARTED}", { type: "permissionAsked", request: "sub-1", call: r, parent: t, tool: "Bash", input: { command: "lychee docs/" }, truncated: false, description: null, path: null, choices: [{ choice: "allow", remembers: null, message: false }, { choice: "deny", remembers: null, message: false }] });`,
     );
     const dock = shown(page).getByTestId("permission-dock");
-    await expect(dock).toContainText("The subagent for “Check every link” in Fix the cache asks to run lychee docs/");
+    await expect(dock).toContainText("The subagent for “Check every link” in Fix the cache wants to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("lychee docs/");
     await expect(dock).toHaveAttribute("aria-label", "The subagent for “Check every link” in Fix the cache is waiting for you");
   });
 
@@ -180,7 +184,8 @@ test.describe("a started session's request in the starter's dock", () => {
     await page.mouse.move(5, 5);
     const edit = `f.startTurn("${STARTER}"); f.ask("${STARTER}", "Edit", { file_path: "${PROJECT}/src/lib/sessions.svelte.ts" });`;
     await agent(page, edit);
-    await expect(dock).toContainText("Claude asks to use Edit on src/lib/sessions.svelte.ts");
+    await expect(dock).toContainText("Claude wants to use Edit on");
+    await expect(dock.getByTestId("permission-object")).toContainText("src/lib/sessions.svelte.ts");
     await expect(dock.getByTestId("dock-more")).toHaveText("1 more waiting, from Fix the cache");
     await dock.getByTestId("choice-allow").click();
     await expect(dock.getByTestId("dock-session")).toHaveText("Fix the cache");
@@ -203,7 +208,8 @@ test.describe("a started session's request in the starter's dock", () => {
     await dock.getByTestId("dock-open").click();
     await expect(shown(page)).not.toHaveAttribute("data-session", starter);
     const there = shown(page).getByTestId("permission-dock");
-    await expect(there).toContainText("Claude asks to run cargo test");
+    await expect(there).toContainText("Claude wants to run");
+    await expect(there.getByTestId("permission-object")).toContainText("cargo test");
     await there.getByTestId("choice-allow").click();
     expect((await calls(page)).filter((call) => call.method === "answer").at(-1)).toEqual(
       { method: "answer", id: STARTED, request, choice: "allow", message: null },
@@ -212,7 +218,8 @@ test.describe("a started session's request in the starter's dock", () => {
     // Back in the starter, the request answered there has gone, and its own is shown.
     await goToRow(page, starter);
     const own = shown(page).getByTestId("permission-dock");
-    await expect(own).toContainText("Claude asks to use Edit on src/lib/sessions.svelte.ts");
+    await expect(own).toContainText("Claude wants to use Edit on");
+    await expect(own.getByTestId("permission-object")).toContainText("src/lib/sessions.svelte.ts");
     await expect(own.getByTestId("dock-session")).toHaveCount(0);
     await expect(own.getByTestId("dock-more")).toHaveCount(0);
   });
@@ -221,10 +228,11 @@ test.describe("a started session's request in the starter's dock", () => {
     await starterWithStarted(page, {}, { name: `Fix the cache ${"and more ".repeat(470)}` });
     await asks(page, "rm -rf ~/.ssh");
     const dock = shown(page).getByTestId("permission-dock");
-    await expect(dock).toContainText("asks to run rm -rf ~/.ssh");
+    await expect(dock).toContainText("wants to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("rm -rf ~/.ssh");
     expect(Array.from((await dock.getByTestId("dock-session").textContent())!).length).toBeLessThanOrEqual(60);
     const pane = (await page.locator("section[data-pane='agent']").boundingBox())!;
-    for (const testid of ["choice-allow", "choice-cancel", "choice-means"]) {
+    for (const testid of ["choice-allow", "choice-deny", "choice-more", "choice-means"]) {
       const box = (await shown(page).getByTestId(testid).boundingBox())!;
       expect(box.y).toBeGreaterThanOrEqual(pane.y);
       expect(box.y + box.height).toBeLessThanOrEqual(pane.y + pane.height);
@@ -242,13 +250,15 @@ test.describe("a started session's request in the starter's dock", () => {
     const top = (await dock.boundingBox())!;
     await page.mouse.move(top.x + 40, top.y + 6);
     await agent(page, `f.expire("${STARTED}", "${tall}");`);
-    await expect(dock).toContainText("Fix the cache asks to run ls");
+    await expect(dock).toContainText("Fix the cache wants to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("ls");
     const now = (await dock.boundingBox())!;
     expect(now.y).toBeGreaterThan(top.y + 6);
     await page.mouse.move(top.x + 40, top.y - 40);
     // The starter's own agent asks: off the dock, its own comes first.
     await agent(page, `f.startTurn("${STARTER}"); f.ask("${STARTER}", "Bash", { command: "pwd" });`);
-    await expect(dock).toContainText("Claude asks to use Bash to run pwd");
+    await expect(dock).toContainText("Claude wants to use Bash to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("pwd");
     await expect(dock.getByTestId("dock-more")).toHaveText("1 more waiting, from Fix the cache");
   });
 
@@ -266,7 +276,8 @@ test.describe("a started session's request in the starter's dock", () => {
     await expect(dock.getByTestId("choice-allow")).toHaveAttribute("aria-disabled", "true");
     await expect(dock.getByTestId("choice-allow")).toBeFocused();
     await agent(page, "f.releaseAnswers();");
-    await expect(dock).toContainText("Fix the cache asks to run ls");
+    await expect(dock).toContainText("Fix the cache wants to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("ls");
     await expect(dock.getByTestId("choice-allow")).toBeFocused();
     // Once it settles in, its choices are whole at once, never faint while
     // they answer.
@@ -351,7 +362,7 @@ test.describe("a started session that runs in a terminal", () => {
       );
     await event("permission");
     const dock = shown(page).getByTestId("terminal-dock");
-    await expect(dock).toContainText("Fix the links asks for a permission in its terminal");
+    await expect(dock).toContainText("Fix the links wants a permission in its terminal");
     await expect(dock.locator("[data-choice]")).toHaveText(["Open Fix the links"]);
     await expect(dock).toContainText("It runs in a terminal, so it is answered there.");
     // Nothing to answer here, so the composer reads as it always does.
@@ -390,7 +401,7 @@ test.describe("a round of review past the limit, for an orchestrator in a conver
     }
     await start("c-4", { step: "Review", work: "integrated-session-2", prompt: "Look once more" });
     const dock = shown(page).getByTestId("round-dock");
-    await expect(dock).toContainText("Claude asks for another round of Review");
+    await expect(dock).toContainText("Claude wants another round of Review");
     await expect(dock.getByTestId("conduct-round")).toHaveText(
       "Review has run twice on Fix the cache, as many times as the workflow allows. Allow another round?",
     );
@@ -444,7 +455,8 @@ test.describe("a started session's request while the window is behind", () => {
     await expect(shown(page)).toHaveAttribute("data-session", starter);
     const dock = shown(page).getByTestId("permission-dock");
     await expect(dock).toBeVisible();
-    await expect(dock).toContainText("Fix the cache asks to run cargo test --workspace");
+    await expect(dock).toContainText("Fix the cache wants to run");
+    await expect(dock.getByTestId("permission-object")).toContainText("cargo test --workspace");
     expect(await notified(page)).toHaveLength(1);
   });
 

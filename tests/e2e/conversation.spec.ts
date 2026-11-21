@@ -352,11 +352,17 @@ test.describe("what the agent waits on the user for", () => {
     await openIntegrated(page);
     await agent(page, ASK);
     const dock = page.getByTestId("permission-dock");
-    await expect(dock).toContainText("Claude asks to run cargo test --workspace");
+    await expect(dock).toContainText("Claude wants to run cargo test --workspace");
     const choices = dock.locator("[data-choice]");
-    await expect(choices).toHaveText(["1Allow once", "2Allow for this session", "3Always allow", "4Deny", "5Deny and stop"]);
+    await expect(choices).toHaveText(["1Allow once", "2Allow for this session", "3Don't allow", "More"]);
     const means = page.getByTestId("choice-means");
     await expect(means).toHaveText("Allows this call and remembers nothing.");
+    // The yes is first and filled; nothing takes the keyboard from the composer.
+    await expect(page.getByTestId("choice-allow")).toHaveClass(/\bprimary\b/);
+    await expect(page.getByTestId("composer-input")).toBeFocused();
+    await page.getByTestId("choice-more").click();
+    await expect(choices).toHaveText(["1Allow once", "2Allow for this session", "3Don't allow", "4Always allow", "5Don't allow, and stop"]);
+    await expect(page.getByTestId("choice-allowAlways")).toBeFocused();
     await page.getByTestId("choice-allowAlways").hover();
     await expect(means).toHaveText(
       "Allows this call and remembers Bash(cargo test:*) in this project's uncommitted local settings.",
@@ -380,7 +386,12 @@ test.describe("what the agent waits on the user for", () => {
     await expect(page.getByTestId("choice-means")).toContainText("for the rest of this session");
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("ArrowLeft");
+    await expect(page.getByTestId("choice-more")).toBeFocused();
+    // A digit of an answer behind More shows it and answers nothing.
+    await page.keyboard.press("5");
     await expect(page.getByTestId("choice-cancel")).toBeFocused();
+    await expect(page.getByTestId("permission-dock")).toHaveCount(1);
+    expect((await calls(page)).find((call) => call.method === "answer")).toBeUndefined();
     await page.keyboard.press("2");
     await expect(page.getByTestId("permission-dock")).toHaveCount(0);
     expect((await calls(page)).find((call) => call.method === "answer")).toMatchObject({ choice: "allowSession" });
@@ -411,10 +422,12 @@ test.describe("what the agent waits on the user for", () => {
        f.ask("${H}", "Bash", { command: "ls" }, { call: b });`,
     );
     const dock = page.getByTestId("permission-dock");
-    await expect(dock).toContainText("The subagent for “Explore the history scan” asks to read src/a.ts");
+    await expect(dock).toContainText("The subagent for “Explore the history scan” wants to read");
+    await expect(dock.getByTestId("permission-object")).toHaveText("src/a.ts");
     await expect(dock).toContainText("1 more waiting");
     await page.getByTestId("choice-allow").click();
-    await expect(dock).toContainText("Claude asks to run ls");
+    await expect(dock).toContainText("Claude wants to run");
+    await expect(dock.getByTestId("permission-object")).toHaveText("ls");
   });
 
   test("docks a question, answered by picking one of its options", async ({ page }) => {
@@ -485,7 +498,7 @@ test.describe("a permission that could be misread", () => {
     await page.keyboard.press("Enter");
     await agent(page, `f.ask("${H}", "Edit", { file_path: "${PROJECT}/../other/.bashrc" }, { path: "${PROJECT}/../other/.bashrc" });`);
     // With no call to say what kind it is, the tool is named before the path.
-    await expect(dock).toContainText(`Claude asks to use Edit on a path outside the project: ${PROJECT}/../other/.bashrc`);
+    await expect(dock).toContainText(`Claude wants to use Edit on a path outside the project: ${PROJECT}/../other/.bashrc`);
     await expect(dock.locator("code").last()).toHaveText(`${PROJECT}/../other/.bashrc`);
     await expect(page.getByTestId("permission-outside")).toHaveText("a path outside the project:");
   });
@@ -766,7 +779,7 @@ test.describe("a session of an agent shaped as Codex is", () => {
     await expect(page.getByTestId("mode-menu")).toContainText("Changes anything and runs anything without asking");
     await page.keyboard.press("Escape");
     // A command as Codex wraps it, asked about as a command.
-    await expect(page.getByTestId("permission-dock")).toContainText("Codex asks to run /bin/zsh -lc 'npm test'");
+    await expect(page.getByTestId("permission-dock")).toContainText("Codex wants to run /bin/zsh -lc 'npm test'");
     await play(events.slice(asked));
     // The question resolved itself, and the approval was withdrawn at the
     // turn's end; the output came only when the command finished.
@@ -796,7 +809,8 @@ test.describe("a session of an agent shaped as Codex is", () => {
        f.ask("${H}", "commandExecution", { command: "/bin/zsh -lc 'touch made.txt'", cwd: "${PROJECT}" }, { call: c, session: "/bin/zsh -lc 'touch made.txt' for the rest of this session" });`,
     );
     const dock = page.getByTestId("permission-dock");
-    await expect(dock.locator(".what")).toHaveText("Codex asks to run /bin/zsh -lc 'touch made.txt'");
+    await expect(dock.locator(".what")).toHaveText("Codex wants to run");
+    await expect(dock.getByTestId("permission-object")).toHaveText("/bin/zsh -lc 'touch made.txt'");
     await expect(page.getByTestId("permission-details")).toHaveCount(0);
     await page.getByTestId("choice-allowSession").hover();
     await expect(page.getByTestId("choice-means")).toContainText("/bin/zsh -lc 'touch made.txt' for the rest of this session");
@@ -823,7 +837,8 @@ test.describe("a session of an agent shaped as Codex is", () => {
        f.ask("${H}", "fileChange", { changes: [{ path: "${PROJECT}/src/a.ts", diff: "@@ -1 +1 @@\\n-old\\n+new" }] }, { call: c, path: "${PROJECT}" });`,
     );
     const dock = page.getByTestId("permission-dock");
-    await expect(dock.locator(".what")).toHaveText("Codex asks to edit src/a.ts");
+    await expect(dock.locator(".what")).toHaveText("Codex wants to edit");
+    await expect(dock.getByTestId("permission-object")).toHaveText("src/a.ts");
     await page.getByTestId("permission-details").click();
     await expect(page.getByTestId("permission-details")).toHaveText("The change");
     await expect(dock.locator(".line.del")).toHaveText("−old");
@@ -1298,7 +1313,8 @@ test.describe("a permission is shown whole", () => {
        f.ask("${H}", "fileChange", { changes: [{ path: "${PROJECT}/src/a.ts", diff: "" }, { path: "/etc/hosts", diff: "" }] }, { call: c });`,
     );
     const dock = page.getByTestId("permission-dock");
-    await expect(dock.locator(".what")).toContainText("asks to edit src/a.ts and 1 more");
+    await expect(dock.locator(".what")).toContainText("wants to edit");
+    await expect(dock.getByTestId("permission-object")).toContainText("src/a.ts and 1 more");
     await expect(page.getByTestId("permission-outside-list")).toHaveText("Outside the project: /etc/hosts");
     const warn = page.getByTestId("permission-outside-list").locator(".warn");
     const colours = await warn.evaluate((node) => [getComputedStyle(node).color, getComputedStyle(document.documentElement).getPropertyValue("--accent")]);
@@ -1313,7 +1329,8 @@ test.describe("a permission is shown whole", () => {
        f.ask("${H}", "mcp__deploy__run", { command: "ls", target: "production" });`,
     );
     const dock = page.getByTestId("permission-dock");
-    await expect(dock.locator(".what")).toHaveText("Claude asks to use deploy's run");
+    await expect(dock.locator(".what")).toHaveText("Claude wants to use deploy's");
+    await expect(dock.getByTestId("permission-object")).toHaveText("run");
     await page.getByTestId("permission-whole").click();
     await expect(page.getByTestId("permission-whole-text")).toContainText("Tool: mcp__deploy__run");
     await expect(page.getByTestId("permission-whole-text")).toContainText('"target": "production"');
@@ -1323,7 +1340,8 @@ test.describe("a permission is shown whole", () => {
 test("offers the whole request when a tool that is not a command carries a command", async ({ page }) => {
   await openIntegrated(page);
   await agent(page, `f.send("${H}", crypto.randomUUID(), "deploy"); f.startTurn("${H}"); f.ask("${H}", "mcp__deploy__run", { command: "rm -rf /srv" });`);
-  await expect(page.getByTestId("permission-dock").locator(".what")).toHaveText("Claude asks to use deploy's run");
+  await expect(page.getByTestId("permission-dock").locator(".what")).toHaveText("Claude wants to use deploy's");
+  await expect(page.getByTestId("permission-object")).toHaveText("run");
   await page.getByTestId("permission-whole").click();
   await expect(page.getByTestId("permission-whole-text")).toContainText('"command": "rm -rf /srv"');
 });
@@ -2202,7 +2220,7 @@ test.describe("a permission cannot be disguised", () => {
   test("by a server's name that turns the words around", async ({ page }) => {
     await openIntegrated(page);
     await agent(page, String.raw`f.startTurn("${H}"); f.ask("${H}", "mcp__git‮buh__push", {});`);
-    await expect(dock(page)).toContainText("asks to use git⟨U+202E⟩buh's push");
+    await expect(dock(page)).toContainText("wants to use git⟨U+202E⟩buh's push");
     await expect(marks(page)).toHaveText(["⟨U+202E⟩"]);
     await page.getByTestId("choice-allow").click();
     await agent(page, String.raw`f.tool("${H}", "mcp__git‮buh__push", {}, "ok", { kind: "mcp" }); f.endTurn("${H}");`);
@@ -2218,7 +2236,7 @@ test.describe("a permission cannot be disguised", () => {
        const c = f.startTool("${H}", "Task", { description: "tidy ‮/ fr- mr‬ up" }, { kind: "agent" });
        f.emit("${H}", { type: "permissionAsked", request: "sub-1", call: null, parent: c, tool: "Bash", input: { command: "ls" }, truncated: false, description: null, path: null, choices: [{ choice: "allow", remembers: null, message: false }] });`,
     );
-    await expect(dock(page)).toContainText("The subagent for “tidy ⟨U+202E⟩/ fr- mr⟨U+202C⟩ up” asks to");
+    await expect(dock(page)).toContainText("The subagent for “tidy ⟨U+202E⟩/ fr- mr⟨U+202C⟩ up” wants to");
     await expect(marks(page)).toHaveText(["⟨U+202E⟩", "⟨U+202C⟩"]);
   });
 
@@ -2280,7 +2298,7 @@ test.describe("a permission cannot be disguised", () => {
   test("by a tool that is not a command carrying one, with no call to say which", async ({ page }) => {
     await openIntegrated(page);
     await agent(page, `f.startTurn("${H}"); f.ask("${H}", "DeleteRepository", { command: "ls" });`);
-    await expect(dock(page)).toContainText("asks to use DeleteRepository to run ls");
+    await expect(dock(page)).toContainText("wants to use DeleteRepository to run ls");
     await page.getByTestId("permission-whole").click();
     await expect(page.getByTestId("permission-whole-text")).toContainText("Tool: DeleteRepository");
   });
@@ -2537,8 +2555,7 @@ test.describe("a request too long for its line", () => {
     expect(await inSight(page, "permission-outside")).toBe(true);
     expect(await inSight(page, "choice-allow")).toBe(true);
     // The mark comes first, then the path, cut.
-    const head = page.getByTestId("permission-dock").locator(".what p");
-    const said = (await head.textContent())!;
+    const said = (await page.getByTestId("permission-object").textContent())!;
     expect(said.indexOf("a path outside the project:")).toBeLessThan(said.indexOf(PROJECT));
     expect(said.length).toBeLessThan(260);
     // Its whole is a fold away, and opened the choices stay in sight.
@@ -2577,8 +2594,8 @@ test.describe("a request too long for its line", () => {
          truncated: false, description: ${JSON.stringify("Because ".repeat(400))}, path: null,
          choices: [{ choice: "allow", remembers: null, message: false }, { choice: "deny", remembers: null, message: false }] });`,
     );
-    const line = page.getByTestId("permission-dock").locator(".what p");
-    await expect(line).toContainText("asks to edit src/a.ts and 1 more, with 1 path outside the project");
+    await expect(page.getByTestId("permission-dock").locator(".what p")).toHaveText("Claude wants to edit");
+    await expect(page.getByTestId("permission-object")).toHaveText("src/a.ts and 1 more, with 1 path outside the project");
     expect(await inSight(page, "permission-away-count")).toBe(true);
     expect(await inSight(page, "permission-outside-list")).toBe(true);
     // The list stands before the description, which is cut and counted.
