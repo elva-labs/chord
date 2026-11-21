@@ -1692,7 +1692,7 @@ test.describe("the file viewer", () => {
     expect(stored).toBeGreaterThan(0.3);
   });
 
-  // A document the agent drafted, rendered, with its own HTML shown as text.
+  // A document the agent drafted, rendered, the HTML it holds drawn too.
   test("presents a Markdown document rendered", async ({ page }) => {
     await page.evaluate(
       (project) =>
@@ -1714,8 +1714,7 @@ test.describe("the file viewer", () => {
     );
     await expect(document.locator("h1")).toHaveText("Draft");
     await expect(document.locator("em")).toHaveText("there");
-    await expect(document).toContainText("<b>plain</b>");
-    await expect(document.locator("b")).toHaveCount(0);
+    await expect(document.locator("b")).toHaveText("plain");
   });
 
   // A document worked on over many turns is one row, and what it shows

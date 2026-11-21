@@ -338,12 +338,12 @@ describe("presenting", () => {
     expect(layout.mode).toBe("reviewing");
   });
 
-  it("renders a Markdown document, its own HTML as text", async () => {
-    const html = render("# Draft\n\nHello *there*, <b>plain</b>.");
+  it("renders a Markdown document, the HTML a README may hold drawn and the rest as text", async () => {
+    const html = render("# Draft\n\nHello *there*, <b>bold</b> <span>plain</span>.");
     expect(html).toContain("<h1>Draft</h1>");
     expect(html).toContain("<em>there</em>");
-    expect(html).not.toContain("<b>");
-    expect(html).toContain("&lt;b");
+    expect(html).toContain("<b>bold</b>");
+    expect(html).toContain("&lt;span&gt;plain&lt;/span&gt;");
     const loaded = await load("/one/draft.md");
     expect("html" in loaded && loaded.html).toContain("<h1>");
   });
@@ -548,14 +548,20 @@ describe("code in Markdown", () => {
     }
   });
 
-  it("still draws raw HTML as its text, inline and as a block", () => {
-    for (const html of [renderSaid("Hi <b>there</b>\n\n<div onclick=x>block</div>"), render("Hi <b>there</b>\n\n<div onclick=x>block</div>")]) {
-      const box = document.createElement("div");
-      box.innerHTML = html;
-      expect(box.querySelector("b, div")).toBeNull();
-      expect(box.textContent).toContain("<b>there</b>");
-      expect(box.textContent).toContain("<div onclick=x>block</div>");
-    }
+  it("still draws raw HTML in a conversation as its text, inline and as a block", () => {
+    const box = document.createElement("div");
+    box.innerHTML = renderSaid("Hi <b>there</b>\n\n<div onclick=x>block</div>");
+    expect(box.querySelector("b, div")).toBeNull();
+    expect(box.textContent).toContain("<b>there</b>");
+    expect(box.textContent).toContain("<div onclick=x>block</div>");
+  });
+
+  it("draws allowed HTML in a document, and a tag with a handler as its text", () => {
+    const box = document.createElement("div");
+    box.innerHTML = render("Hi <b>there</b>\n\n<div onclick=x>block</div>");
+    expect(box.querySelector("b")?.textContent).toBe("there");
+    expect(box.querySelector("div")).toBeNull();
+    expect(box.textContent).toContain("<div onclick=x>block</div>");
   });
 });
 
@@ -611,6 +617,8 @@ describe("what Markdown may draw", () => {
   const ELEMENTS = new Set(
     "P,BR,EM,STRONG,DEL,CODE,PRE,A,IMG,UL,OL,LI,BLOCKQUOTE,H1,H2,H3,H4,H5,H6,HR,TABLE,THEAD,TBODY,TR,TH,TD,INPUT".split(","),
   );
+  /** A document draws a few more, from the HTML written in it. */
+  const DOCUMENT = new Set([...ELEMENTS, ..."DIV,DETAILS,SUMMARY,KBD,SUB,SUP,B,I,PICTURE,SOURCE".split(",")]);
   const PAYLOADS = [
     "x <code> <img/src=x onerror=alert(1)>",
     "<pre> <svg/onload=alert(1)>",
@@ -629,15 +637,42 @@ describe("what Markdown may draw", () => {
     "&#x3C;svg/onload=1&#x3E; <code> &lt;b onmouseover=1&gt;",
     "[a](&#106;avascript:alert(1)) [b](java&#115;cript:1)",
     "&amp;lt;img src=x onerror=1&amp;gt;",
+    // Raw HTML a document draws in part.
+    "<script>alert(1)</script>",
+    "<img src=https://example.com/a.png onerror=alert(1)>",
+    '<a href="javascript:alert(1)">a</a> <a href="java&#115;cript:alert(1)">b</a> <a href="javascript&colon;alert(1)">c</a>',
+    '<a href=" &#x09;javascript:alert(1)">a</a> <a href="vbscript:msgbox(1)">b</a> <a href="data:text/html,<script>alert(1)</script>">c</a>',
+    '<img src="https://example.com/a.png" srcset="javascript:alert(1) 1x, https://evil.example/b.png 2x">',
+    '<picture><source srcset="https://example.com/a.png 1x, javascript:alert(1) 2x"><img src="https://example.com/a.png"></picture>',
+    "<svg><script>alert(1)</script></svg> <svg/onload=alert(1)> <svg><a xlink:href=javascript:alert(1)>x</a></svg>",
+    "<math><mi xlink:href=javascript:alert(1)>x</mi></math>",
+    "<div>a</div></div></div><img src=x onerror=1>",
+    "<p align=center>a</p></p></body></html><script>alert(1)</script>",
+    '<b><i>x</b></i> <img alt="</p><script>alert(1)</script>" src=https://example.com/a.png>',
+    "<style>*{display:none}</style><iframe src=https://example.com></iframe><object data=x></object><embed src=x>",
+    "<form action=https://example.com><input name=a><button>go</button></form>",
+    '<p style="background:url(javascript:alert(1))">a</p> <div class=x id=y name=z>b</div>',
+    "<img src=https://example.com/a.png <script>alert(1)</script> <a href=https://example.com",
+    "<details open ontoggle=alert(1)><summary>a</summary></details>",
+    "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></noscript>",
+    "<textarea><img src=x onerror=1></textarea> <title><b>x</b></title> <xmp><img src=x onerror=1></xmp>",
   ];
 
   it("draws nothing but Markdown's own elements, with no handlers and no scripted links", () => {
     for (const markdown of PAYLOADS)
-      for (const html of [render(markdown), renderSaid(markdown)]) {
+      for (const [html, allowed] of [
+        [render(markdown), DOCUMENT],
+        [renderSaid(markdown), ELEMENTS],
+      ] as const) {
         const box = document.createElement("div");
         box.innerHTML = html;
         for (const element of box.querySelectorAll("*")) {
-          expect(ELEMENTS.has(element.tagName), `${element.tagName} from ${markdown}`).toBe(true);
+          expect(allowed.has(element.tagName), `${element.tagName} from ${markdown}`).toBe(true);
+          expect(element.hasAttribute("style"), `style from ${markdown}`).toBe(false);
+          const src = element.getAttribute("src") ?? element.getAttribute("srcset");
+          if (src !== null) expect(src, markdown).toMatch(/^(?:https?:|data:image\/)/);
+          const href = element.getAttribute("href");
+          if (href !== null) expect(href, markdown).toMatch(/^(?:https?:|mailto:|#)/);
           for (const attribute of element.attributes) {
             expect(attribute.name.startsWith("on"), `${attribute.name} from ${markdown}`).toBe(false);
             expect(/javascript:/i.test(attribute.value), `${attribute.value} from ${markdown}`).toBe(false);
@@ -668,5 +703,128 @@ describe("what Markdown may draw", () => {
     const box = document.createElement("div");
     box.innerHTML = renderSaid("x <code> a & b < c");
     expect(box.textContent?.trim()).toBe("x <code> a & b < c");
+    box.innerHTML = render("x <code> a & b < c <i");
+    expect(box.querySelector("code")?.textContent).toBe(" a & b < c <i");
+  });
+});
+
+describe("the HTML a document may draw", () => {
+  const drawn = (markdown: string) => {
+    const box = document.createElement("div");
+    box.innerHTML = render(markdown);
+    return box;
+  };
+  const HERO = '<p align="center">\n  <img src="https://example.com/icon.png" width="128" height="128" alt="">\n</p>';
+
+  it("draws a README's centred hero image at its width", () => {
+    const box = drawn(`${HERO}\n\n# Chord`);
+    const image = box.querySelector("p[align='center'] > img");
+    expect(image?.getAttribute("src")).toBe("https://example.com/icon.png");
+    expect(image?.getAttribute("width")).toBe("128");
+    expect(image?.getAttribute("height")).toBe("128");
+    expect(box.querySelector("h1")?.textContent).toBe("Chord");
+  });
+
+  it("draws each element it allows, with the attributes it allows", () => {
+    const box = drawn(
+      [
+        '<div align="right"><h2 align="center">Title</h2></div>',
+        "",
+        'Press <kbd>Ctrl</kbd>, H<sub>2</sub>O, x<sup>2</sup>, <b>b</b> <i>i</i> <strong>s</strong> <em>e</em> <code>c</code>,<br>next<br/>line',
+        "",
+        '<a href="https://example.com" title="Site">site</a> <a href="#usage">usage</a> <a href="mailto:a@b.c">mail</a>',
+        "",
+        "<hr>",
+        "",
+        "<details open>\n<summary>More</summary>\n\nSome **bold** words.\n\n</details>",
+        "",
+        "<pre>x < y</pre>",
+        "",
+        '<picture>\n<source media="(prefers-color-scheme: dark)" srcset="https://example.com/dark.png 1x,https://example.com/dark@2x.png 2x">\n<img src="data:image/png;base64,iVBORw0KGgo=" alt="logo" align="left">\n</picture>',
+      ].join("\n"),
+    );
+    expect(box.querySelector("div[align='right'] > h2[align='center']")?.textContent).toBe("Title");
+    for (const [selector, text] of [
+      ["kbd", "Ctrl"],
+      ["sub", "2"],
+      ["sup", "2"],
+      ["b", "b"],
+      ["i", "i"],
+      ["strong", "s"],
+      ["em", "e"],
+      ["p > code", "c"],
+      ["pre", "x < y"],
+    ])
+      expect(box.querySelector(selector)?.textContent, selector).toBe(text);
+    expect(box.querySelectorAll("br")).toHaveLength(2);
+    expect(box.querySelector("hr")).not.toBeNull();
+    const links = [...box.querySelectorAll("a")];
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["https://example.com", "#usage", "mailto:a@b.c"]);
+    expect(links[0].title).toBe("Site");
+    for (const link of links) expect(link.rel).toBe("noopener noreferrer");
+    const details = box.querySelector("details");
+    expect(details?.hasAttribute("open")).toBe(true);
+    expect(details?.querySelector("summary")?.textContent).toBe("More");
+    expect(details?.querySelector("p > strong")?.textContent).toBe("bold");
+    const source = box.querySelector("picture > source");
+    expect(source?.getAttribute("media")).toBe("(prefers-color-scheme: dark)");
+    expect(source?.getAttribute("srcset")).toBe("https://example.com/dark.png 1x, https://example.com/dark@2x.png 2x");
+    expect(box.querySelector("picture > img")?.getAttribute("align")).toBe("left");
+  });
+
+  it("shows a refused tag whole as its text, never in part and never dropped", () => {
+    for (const tag of [
+      "<script>alert(1)</script>",
+      '<img src="https://example.com/a.png" onerror="alert(1)">',
+      '<img src="https://example.com/a.png" srcset="https://evil.example/b.png 2x">',
+      '<img src="docs/icon.png" width="128">',
+      '<img src="https://example.com/a.png" src="javascript:alert(1)">',
+      '<a href="java&#115;cript:alert(1)">x</a>',
+      '<a href="data:text/html,x">x</a>',
+      '<p style="color: red">x</p>',
+      '<div class="x">x</div>',
+      '<a name="top">x</a>',
+      "<svg onload=alert(1)>",
+      "<input type=checkbox checked>",
+      "<span>x</span>",
+      "<!-- a note -->",
+      '<source srcset="https://example.com/a.png">',
+    ]) {
+      const box = drawn(`a ${tag} b`);
+      expect(box.querySelectorAll("p *"), tag).toHaveLength(0);
+      expect(box.textContent?.trim(), tag).toBe(`a ${tag.replace(/&#115;/g, "s")} b`);
+    }
+  });
+
+  it("shows a closing tag with nothing of its name open as its text, so it cannot break out", () => {
+    const box = drawn("<div>a</div></div></details><script>alert(1)</script>\n\nafter");
+    expect(box.querySelectorAll("div")).toHaveLength(1);
+    expect(box.querySelector("script")).toBeNull();
+    expect(box.textContent).toContain("</div></details><script>alert(1)</script>");
+    expect(box.lastElementChild?.textContent).toBe("after");
+  });
+
+  it("closes what is open when its tag closes, and what is left open at the end", () => {
+    const box = drawn("<b><i>x</b></i> y\n\n<details>\n<summary>s</summary>\n\nleft open");
+    expect(box.querySelector("b > i")?.textContent).toBe("x");
+    expect(box.textContent).toContain("</i> y");
+    expect(box.querySelector("details")?.textContent).toContain("left open");
+    expect(render("<details>\n<summary>s</summary>\n\nleft open")).toMatch(/<\/details>$/);
+  });
+
+  it("reads a tag as a browser does, its case, its entities and a quote in it", () => {
+    const box = drawn('<IMG SRC="https://example.com/a.png?x=1&amp;y=2" ALT=\'say "hi" &lt;b&gt;\'> <A HREF=https://example.com>u</A>');
+    const image = box.querySelector("img");
+    expect(image?.getAttribute("src")).toBe("https://example.com/a.png?x=1&y=2");
+    expect(image?.getAttribute("alt")).toBe('say "hi" <b>');
+    expect(box.querySelector("a")?.textContent).toBe("u");
+    expect(box.querySelector("b")).toBeNull();
+  });
+
+  it("keeps a document's HTML as text in a conversation", () => {
+    const box = document.createElement("div");
+    box.innerHTML = renderSaid(`${HERO}\n\n<details><summary>a</summary>b</details> <kbd>k</kbd>`);
+    expect(box.querySelector("img, details, kbd, p[align]")).toBeNull();
+    expect(box.textContent).toContain('<img src="https://example.com/icon.png" width="128" height="128" alt="">');
   });
 });

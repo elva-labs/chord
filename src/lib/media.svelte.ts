@@ -14,6 +14,7 @@
  * keeps listing what its earlier conversations presented.
  */
 
+import { Tokenizer, type TokenizerCallbacks } from "htmlparser2";
 import { marked } from "marked";
 import { runnable } from "$lib/bang";
 import { core, type Media, type PresentRequest } from "$lib/core";
@@ -340,11 +341,223 @@ said.codespan = function (this: typeof said, token) {
   return runnable(token.text) === null ? html : html.replace(/^<code>/, `<code ${RUN}>`);
 };
 
-/** Raw HTML in a document is shown as the text it is, never drawn. Text is
-    always escaped here: marked leaves text unescaped once it believes a raw
-    block such as `<code>` has opened, and since raw HTML is never drawn, no
-    such block ever has. Code is escaped by marked itself. */
-renderer.html = ({ text }) => escapeText(text);
+/** What an attribute's value may be: the value to write, or null when the
+    tag may not be drawn with it. */
+type Check = (value: string) => string | null;
+const ANY: Check = (value) => value;
+const HREF: Check = (value) => (LINK.test(value.trim()) ? value.trim() : null);
+const SRC: Check = (value) => (IMAGE.test(value.trim()) ? value.trim() : null);
+const ALIGN = new Map([["align", ANY]]);
+const NONE = new Map<string, Check>();
+
+/** The HTML a document may draw, close to what GitHub draws in a README:
+    each element and the attributes it may carry. An image or a link points
+    only where one written in Markdown may. No `id`, `name` or `class`,
+    which could stand in for the app's own elements, no `style`, and no
+    `srcset` on an image, which would load what its `src` was checked not to. */
+const ALLOWED = new Map<string, Map<string, Check>>([
+  ["p", ALIGN],
+  ["div", ALIGN],
+  ["h1", ALIGN],
+  ["h2", ALIGN],
+  ["h3", ALIGN],
+  ["h4", ALIGN],
+  ["h5", ALIGN],
+  ["h6", ALIGN],
+  [
+    "img",
+    new Map([
+      ["src", SRC],
+      ["alt", ANY],
+      ["width", ANY],
+      ["height", ANY],
+      ["align", ANY],
+    ]),
+  ],
+  [
+    "a",
+    new Map([
+      ["href", HREF],
+      ["title", ANY],
+    ]),
+  ],
+  ["details", new Map([["open", ANY]])],
+  ["summary", NONE],
+  ["picture", NONE],
+  [
+    "source",
+    new Map([
+      ["srcset", sources],
+      ["media", ANY],
+    ]),
+  ],
+  ["br", NONE],
+  ["hr", NONE],
+  ["kbd", NONE],
+  ["sub", NONE],
+  ["sup", NONE],
+  ["b", NONE],
+  ["i", NONE],
+  ["strong", NONE],
+  ["em", NONE],
+  ["code", NONE],
+  ["pre", NONE],
+]);
+
+/** The elements that have no content and so are never closed. */
+const VOID = new Set(["img", "br", "hr", "source"]);
+
+/** A `srcset` with every image in it one `IMAGE` allows, written anew as
+    the browser reads it: each address, and after it a width or a density
+    if it has one. Null when an address or a descriptor is anything else. */
+function sources(srcset: string): string | null {
+  const space = (at: number) => /[\t\n\f\r ]/.test(srcset[at]);
+  const candidates: string[] = [];
+  let at = 0;
+  for (;;) {
+    while (at < srcset.length && (space(at) || srcset[at] === ",")) at++;
+    if (at >= srcset.length) break;
+    let end = at;
+    while (end < srcset.length && !space(end)) end++;
+    let url = srcset.slice(at, end);
+    let descriptor = "";
+    if (url.endsWith(",")) {
+      url = url.replace(/,+$/, "");
+      at = end;
+    } else {
+      const comma = srcset.indexOf(",", end);
+      const stop = comma === -1 ? srcset.length : comma;
+      descriptor = srcset.slice(end, stop).trim();
+      at = stop + 1;
+    }
+    if (!IMAGE.test(url) || (descriptor !== "" && !/^\d+(?:\.\d+)?[wx]$/.test(descriptor))) return null;
+    candidates.push(descriptor === "" ? url : `${url} ${descriptor}`);
+  }
+  return candidates.length === 0 ? null : candidates.join(", ");
+}
+
+/** The elements drawn from the document's HTML that are still open, the
+    innermost last. Raw HTML comes to the renderer a piece at a time, a
+    `<details>` in one block and its `</details>` after the Markdown inside
+    it, so what is open is kept across the pieces of one `render`. */
+let opened: string[] = [];
+
+/** An opening tag as it is drawn, or null when it is shown as its text: an
+    element `ALLOWED` names, with no attribute it does not name, none
+    twice, and each value one its check keeps. A `<source>` is drawn only
+    directly in a `<picture>`. */
+function opening(name: string, attributes: [string, string][], closes: boolean): string | null {
+  const allowed = ALLOWED.get(name);
+  if (allowed === undefined) return null;
+  if (name === "source" && opened.at(-1) !== "picture") return null;
+  const seen = new Set<string>();
+  let tag = `<${name}`;
+  for (const [attribute, value] of attributes) {
+    const check = allowed.get(attribute);
+    if (check === undefined || seen.has(attribute)) return null;
+    seen.add(attribute);
+    const kept = check(value);
+    if (kept === null) return null;
+    tag += ` ${attribute}="${escapeAttribute(kept)}"`;
+  }
+  if (name === "a") tag += ' rel="noopener noreferrer"';
+  tag += ">";
+  if (VOID.has(name)) return tag;
+  // An element written as closing itself, `<b/>`, is drawn empty.
+  if (closes) return `${tag}</${name}>`;
+  opened.push(name);
+  return tag;
+}
+
+/** A closing tag as it is drawn, or null when it is shown as its text. It
+    closes an element drawn here that is still open, and any opened inside
+    it; `</br>` is a line break and the close of another empty element is
+    nothing, as a browser reads them. */
+function closing(name: string): string | null {
+  if (name === "br") return "<br>";
+  if (VOID.has(name)) return "";
+  const at = opened.lastIndexOf(name);
+  if (at === -1) return null;
+  return opened
+    .splice(at)
+    .reverse()
+    .map((open) => `</${open}>`)
+    .join("");
+}
+
+/** A piece of a document's raw HTML as HTML to draw. Each tag `opening`
+    or `closing` allows is written anew from what was read of it; every
+    other tag, a comment, and the text between are escaped and shown as
+    the letters they are. Nothing of the source passes through as markup,
+    so a malformed tag the tokenizer reads otherwise than a browser would
+    can change only what is shown, never what runs. */
+function markup(html: string): string {
+  let out = "";
+  /** Where the source not yet written out starts. */
+  let from = 0;
+  let tag: { start: number; name: string; attributes: [string, string][] } | null = null;
+  let attribute: [string, string] | null = null;
+
+  /** Writes the source up to `start` as text, then `drawn` for the tag
+      that ends at `end`. */
+  const draw = (start: number, end: number, drawn: string) => {
+    out += escapeText(html.slice(from, start)) + drawn;
+    from = end + 1;
+  };
+  const open = (end: number, closes: boolean) => {
+    const read = tag;
+    tag = null;
+    if (read === null) return;
+    const drawn = opening(read.name, read.attributes, closes);
+    if (drawn !== null) draw(read.start, end, drawn);
+  };
+
+  const callbacks: TokenizerCallbacks = {
+    onopentagname(start, end) {
+      tag = { start: start - 1, name: html.slice(start, end).toLowerCase(), attributes: [] };
+    },
+    onattribname(start, end) {
+      attribute = [html.slice(start, end).toLowerCase(), ""];
+    },
+    onattribdata(start, end) {
+      if (attribute !== null) attribute[1] += html.slice(start, end);
+    },
+    onattribentity(codepoint) {
+      if (attribute !== null) attribute[1] += String.fromCodePoint(codepoint);
+    },
+    onattribend() {
+      if (tag !== null && attribute !== null) tag.attributes.push(attribute);
+      attribute = null;
+    },
+    onopentagend: (end) => open(end, false),
+    onselfclosingtag: (end) => open(end, true),
+    onclosetag(start, end) {
+      // The tokenizer passes over whatever follows the name, to the `>`.
+      const close = html.indexOf(">", end);
+      if (close === -1) return;
+      const drawn = closing(html.slice(start, end).toLowerCase());
+      if (drawn !== null) draw(start - 2, close, drawn);
+    },
+    ontext() {},
+    ontextentity() {},
+    oncomment() {},
+    oncdata() {},
+    ondeclaration() {},
+    onprocessinginstruction() {},
+    onend() {},
+  };
+  const tokenizer = new Tokenizer({ decodeEntities: true }, callbacks);
+  tokenizer.write(html);
+  tokenizer.end();
+  return out + escapeText(html.slice(from));
+}
+
+/** Raw HTML in a document is drawn as far as `markup` allows, and in a
+    conversation is shown as the text it is, never drawn. Text is always
+    escaped here: marked leaves text unescaped once it believes a raw block
+    such as `<code>` has opened, and only what `markup` writes may be
+    markup. Code is escaped by marked itself. */
+renderer.html = ({ text }) => markup(text);
 said.html = ({ text }) => escapeText(text);
 renderer.text = (token) =>
   "tokens" in token && token.tokens ? renderer.parser.parseInline(token.tokens) : escapeText(token.text);
@@ -371,12 +584,20 @@ function escapeAttribute(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Markdown rendered for the viewer. Raw HTML in the document is shown as
-    the text it is, and a link or an image may point only where `LINK` and
-    `IMAGE` allow, since the document is the agent's and the window is the
-    app's. */
+/** Markdown rendered for the viewer. Raw HTML in the document is drawn
+    only as far as `ALLOWED` goes and shown as its text beyond that, and a
+    link or an image may point only where `LINK` and `IMAGE` allow, since
+    the document is the agent's and the window is the app's. An element
+    the document leaves open is closed at its end. */
 export function render(markdown: string): string {
-  return marked.parse(markdown, { async: false, gfm: true, renderer }) as string;
+  opened = [];
+  const html = marked.parse(markdown, { async: false, gfm: true, renderer }) as string;
+  const left = opened
+    .reverse()
+    .map((open) => `</${open}>`)
+    .join("");
+  opened = [];
+  return html + left;
 }
 
 /** Markdown an agent wrote in a conversation, rendered as `render` does,
