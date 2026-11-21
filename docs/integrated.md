@@ -198,7 +198,11 @@ A mode kept for a conversation is that conversation's own, and no
 conversation takes another's.
 Changing the mode on the composer's chip changes it at once and is kept
 the same way. The composer's chips are the model, the effort and the mode,
-in that order. The model's says Default before the model's name while no
+in that order. The model's chip is always there; the effort's and the mode's
+show only once set away from their default, the effort the session began on
+and the mode that asks before anything changes, or once the user has
+brought them up from the `+` chip (below) or changed them by key, which
+shows the chip. The model's says Default before the model's name while no
 model is chosen for the session, which then runs on the one the agent's
 own configuration names. In a Codex session given none, picking the model
 Codex already runs on chooses nothing, and the chip still says Default;
@@ -209,9 +213,22 @@ configured one. The effort's chip is there only while the model takes an
 effort, lists the efforts the agent says that model takes, from the least
 to the most and each with the line the agent gives for it, Codex's own
 words for ultra among them, and always names the one the status bar
-names. In a narrow pane it drops the word effort and keeps the level. An
+names. In a narrow pane it drops the word effort and keeps the level. The
+agent pane's header names the model by the same name the model's chip uses,
+never its id. An
 effort set with the agent's own command is shown but is not the one a new
 session starts on; only a pick on the chip or the status bar is.
+
+A workflow and going on after a limit sit behind one `+` chip on the
+composer until they are set; each then shows as a chip of its own. The `+`
+opens a menu of what it holds, which also brings up the mode and the
+effort. The composer's box says `Message` and the agent's name until
+something is typed. Mode, effort, workflow and going on keep their chords,
+and a change by chord shows the chip. Every chip stays a stop on Tab.
+
+A thread gives its messages no time each. A quiet time stands between them
+where more than five minutes passed, or the day changed, before the next
+one, and the exact time shows on hover.
 
 A mode the agent was asked to start in and did not, such as auto where the
 account or the model has none, is said in a notice, and the session runs in
@@ -890,8 +907,9 @@ had, and says nothing of it.
 
 A conversation whose turn the session window's limit cut short can go on
 by itself once that window starts over. It is the conversation's own
-choice, a chip on its composer beside the model, the effort and the mode,
-off unless the user turns it on. The last choice made is kept with the
+choice, kept behind the composer's `+` chip together with the workflow's
+until it is set, and then a chip of its own on the composer, off unless the
+user turns it on. The last choice made is kept with the
 settings, and a conversation takes it when its run first starts in the
 window. A session another session started has no choice of its own: it
 goes by the choice of the session that started it, for as long as the

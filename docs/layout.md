@@ -128,42 +128,30 @@ keyboard on it there.
 ## The status bar
 
 The status bar is the row along the window's foot, and it carries the
-state of the session on screen, so the pane headers carry only names and
-what is theirs to act on. From the left it names the pane that has the
-keyboard, then what the session is doing, in the words its row uses
-(`idle`, `working`, `a session working`, `asks you` and the rest), then
-the folder it works in and the branch checked out there, each after a
-small icon, then what it runs on, its model and its effort, then
-`account:` and the account it runs under, shown only once there is more
-than one account, with that account's allowance. A rule stands between
-each of these groups. At the right end stand how many sessions wait for
-you and, just before it, a word in passing, such as a new zoom, so they
-keep their place whatever the figures do. With no session on screen only
-the focus and those two remain. What the session is doing is said here and
-by the dot on its row, and the window's mode by the switch in [the
-corner](#the-corner), so the bar does not say it.
+what the account has left, so the pane headers carry only names and
+what is theirs to act on. From the left it names the branch checked out in
+the session's folder, after a small icon, then `account:` and the account
+it runs under, shown only once there is more than one account, with that
+account's allowance. A rule stands between the groups. At the right end
+stand how many sessions wait for you and, just before it, a word in
+passing, such as a new zoom, so they keep their place whatever the figures
+do. With no session on screen only those two remain. The pane that has the
+keyboard is marked on the pane itself, the session's state by the dot on
+its row, its folder by its row and its model by the composer's chip and
+the agent pane's header, and the window's mode by the switch in [the
+corner](#the-corner), so the bar does not say them. A plugin's additions to
+the bar keep their place.
 
-The state is plain text, so a screen reader reads it when it walks to the
-bar. A hidden polite region says it aloud only when the session starts asking,
-`asks you` or `waits for permission`, once for each time; working and idle
-changes are not said.
+The session's state is still carried by the bar for a screen reader, as an
+attribute on it, and a hidden polite region says aloud only when the
+session starts asking, `asks you` or `waits for permission`, once for each
+time; working and idle changes are not said.
 
 In the modern look the bar lies on the ground with no rule of its own, so
 its row is the whole band of ground from the cards' foot to the window's,
 and its words stand in the middle of that band. In the terminal look, and
 where the system asks for more contrast, the bar is a row of its own under
 its rule, and its words stand in the middle of that row.
-
-For an in-Chord session the model and the effort are what the agent last
-said it runs on. Each opens a small menu of the choices the agent offers,
-the same menu the composer's chip for it opens, and a choice there changes
-the session as it does from the composer. A model the agent offers with no
-efforts shows no effort at all; where nothing says which efforts the model
-takes, the effort the agent last named shows as plain text. A terminal
-session's model is the one
-the workbench started it on, as plain text, since the agent owns any change
-in its terminal; one started on the agent's own default shows none, and its
-effort is not known.
 
 The allowance is the share used of each limit window of the account, as
 text: `5h 11%  Week 34%  Fable 52%` for the five hour window, the week, and
@@ -197,12 +185,11 @@ it says how old each part is: `Some figures are from just now, the rest
 from 20 min ago`. How the bar's menus and the popover take the
 keyboard and give it back is in the [focus model](focus-model.md#the-status-bar).
 
-Short of room, the bar lets its parts go in this order: the focus, then
-the folder, then the word `account:`, then every figure but the one
-nearest its end, then the branch, then that figure's reset time. It
-measures what fits rather than going by the window's width, and only after
-all six are the model and the account's name cut short. What the session is
-doing and what waits for you are never cut. The word in
+Short of room, the bar lets its parts go in this order: the word
+`account:`, then every figure but the one nearest its end, then the branch,
+then that figure's reset time. It measures what fits rather than going by
+the window's width, and only after all four is the account's name cut
+short. What waits for you is never cut. The word in
 passing takes no room in that measure, so nothing gives way for it: where
 the space before what waits is shorter than the word, the word is drawn
 over the parts before it until it goes.

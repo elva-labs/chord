@@ -559,22 +559,16 @@ the editor or the tab row it came from.
 
 ## The status bar
 
-The model, the effort and the allowance in the [status
-bar](layout.md#the-status-bar) are window chrome: a press on one leaves the
-pane focus where it was. What it opens holds the keyboard while it is up: a
-menu starts on the choice in use and is walked with the arrows,
-<kbd>Home</kbd> and <kbd>End</kbd>, <kbd>Enter</kbd> picking, the choice
-under the pointer taking the keyboard as the composer's do, and the popover
-takes the keyboard itself. <kbd>Escape</kbd>, a pick, or a press elsewhere
-puts either away, and the keyboard goes back where it was before it opened,
-the composer or a terminal included; so do <kbd>Enter</kbd> and
-<kbd>Space</kbd> in the popover, as on its control. A shortcut that moves the
-keyboard elsewhere, such as one to another pane, puts either away and
-leaves the keyboard where the shortcut sent it. A change of the window's size
-leaves either open, above its control. <kbd>Tab</kbd> from a menu goes on
-to the next control of the bar, and from the popover stops on the
-allowance. The three are stops of their own, WebKit included, and open on
-<kbd>Enter</kbd> or <kbd>Space</kbd>.
+The allowance in the [status bar](layout.md#the-status-bar) is window
+chrome: a press on it leaves the pane focus where it was. The popover it
+opens takes the keyboard itself and holds it while it is up. <kbd>Escape</kbd>,
+<kbd>Enter</kbd>, <kbd>Space</kbd> or a press elsewhere puts it away, and the
+keyboard goes back where it was before it opened, the composer or a terminal
+included. A shortcut that moves the keyboard elsewhere, such as one to another
+pane, puts it away and leaves the keyboard where the shortcut sent it. A change
+of the window's size leaves it open, above its control. The allowance is a
+stop of its own, WebKit included, and opens on <kbd>Enter</kbd> or
+<kbd>Space</kbd>.
 
 The bar is drawn along the window's foot but comes after the panes and
 before the terminal panel in the walk: the panel ends in a shell, which
