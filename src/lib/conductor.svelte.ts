@@ -87,6 +87,7 @@ import {
   statusMessage,
   wake as wakeRow,
   type Session,
+  type SessionStatus,
 } from "$lib/sessions.svelte";
 import type { AgentId, ReviewStep, Workflow, WorkflowStep, WorkStep } from "$lib/core";
 import { CODEX_DEFAULT } from "$lib/models";
@@ -2844,9 +2845,12 @@ async function startFitted(
     const row = byKey(session.key);
     const reason =
       row === null ? "The session was closed before it started." : statusMessage(row);
-    // A start that failed leaves nothing behind. One still starting when
-    // the wait ran out may yet come up, and keeps what it made.
-    if (row === null || row.status !== "starting") await undoStart(session.key, project, startIn);
+    // A start that failed leaves nothing behind. One still starting or
+    // running when the wait ran out may yet be identified, and keeps what
+    // it made.
+    if (row === null || FAILED.has(row.status)) {
+      await undoStart(session.key, project, startIn);
+    }
     return refused(reason);
   }
   const row = byKey(session.key);
@@ -2897,6 +2901,9 @@ async function startFitted(
   );
 }
 
+/** The states of a row that never came up and will not. */
+const FAILED = new Set<SessionStatus>(["failed", "exited", "crashed"]);
+
 /** Takes back what a start that never came up made: its row, the row's
     place with its starter, and the worktree made for it, with its branch.
     A worktree the core will not part with stays, and the starter's list of
@@ -2907,9 +2914,12 @@ async function undoStart(key: string, project: string, tree: string | null) {
   close(key);
   if (tree === null) return;
   try {
-    const made = (await core().worktrees(project)).find((candidate) => candidate.path === tree);
-    if (made === undefined) return;
-    await core().worktreeRemove(project, made.name, dirsOf());
+    const made = (await core().worktrees(project)).find(
+      (candidate) => candidate.path === tree,
+    );
+    if (made !== undefined) {
+      await core().worktreeRemove(project, made.name, dirsOf());
+    }
   } catch {
     return;
   }
@@ -4660,7 +4670,7 @@ function idFor(key: string): Promise<string | null> {
         return;
       }
       if (session.id !== null) settle(session.id);
-      else if (session.status !== "starting") settle(null);
+      else if (session.status !== "starting" && session.status !== "running") settle(null);
     },
     START_WAIT,
     null,
