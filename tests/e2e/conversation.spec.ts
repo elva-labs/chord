@@ -361,8 +361,17 @@ test.describe("what the agent waits on the user for", () => {
     await expect(page.getByTestId("choice-allow")).toHaveClass(/\bprimary\b/);
     await expect(page.getByTestId("composer-input")).toBeFocused();
     await page.getByTestId("choice-more").click();
-    await expect(choices).toHaveText(["1Allow once", "2Allow for this session", "3Don't allow", "4Always allow", "5Don't allow, and stop"]);
-    await expect(page.getByTestId("choice-allowAlways")).toBeFocused();
+    await expect(choices).toHaveText([
+      "1Allow once",
+      "2Allow for this session",
+      "3Don't allow",
+      "More",
+      "4Always allow",
+      "5Don't allow, and stop",
+    ]);
+    // More stays where it was, open, with the keyboard on it.
+    await expect(page.getByTestId("choice-more")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByTestId("choice-more")).toBeFocused();
     await page.getByTestId("choice-allowAlways").hover();
     await expect(means).toHaveText(
       "Allows this call and remembers Bash(cargo test:*) in this project's uncommitted local settings.",
@@ -387,15 +396,41 @@ test.describe("what the agent waits on the user for", () => {
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("ArrowLeft");
     await expect(page.getByTestId("choice-more")).toBeFocused();
-    // A digit of an answer behind More shows it and answers nothing.
+    // A digit of an answer behind More shows it and answers nothing, and
+    // the keyboard stays where it was.
     await page.keyboard.press("5");
-    await expect(page.getByTestId("choice-cancel")).toBeFocused();
+    await expect(page.getByTestId("choice-cancel")).toBeVisible();
+    await expect(page.getByTestId("choice-more")).toBeFocused();
     await expect(page.getByTestId("permission-dock")).toHaveCount(1);
     expect((await calls(page)).find((call) => call.method === "answer")).toBeUndefined();
+    await expect(page.getByTestId("choice-allowSession")).not.toHaveAttribute("aria-disabled", "true");
     await page.keyboard.press("2");
     await expect(page.getByTestId("permission-dock")).toHaveCount(0);
     expect((await calls(page)).find((call) => call.method === "answer")).toMatchObject({ choice: "allowSession" });
   });
+
+  // The digits: 1 Allow once, 2 Allow for this session, 3 Don't allow, and
+  // behind More 4 Always allow and 5 Don't allow, and stop. A digit behind
+  // More only opens it; what follows at once answers nothing.
+  for (const [name, keys] of [
+    ["4 pressed twice", async (page: Page) => (await page.keyboard.press("4"), await page.keyboard.press("4"))],
+    ["4 held down", async (page: Page) => (await page.keyboard.down("4"), await page.keyboard.down("4"), await page.keyboard.up("4"))],
+    ["4 then Enter", async (page: Page) => (await page.keyboard.press("4"), await page.keyboard.press("Enter"))],
+    ["5 pressed twice", async (page: Page) => (await page.keyboard.press("5"), await page.keyboard.press("5"))],
+  ] as const) {
+    test(`answers nothing for ${name} while what More shows settles`, async ({ page }) => {
+      await openIntegrated(page);
+      await agent(page, ASK);
+      await page.getByTestId("choice-allow").focus();
+      await keys(page);
+      const always = page.getByTestId("choice-allowAlways");
+      await expect(always).toBeVisible();
+      await expect(page.getByTestId("choice-allow")).toBeFocused();
+      await expect(always).not.toHaveAttribute("aria-disabled", "true");
+      await expect(page.getByTestId("permission-dock")).toHaveCount(1);
+      expect((await calls(page)).find((call) => call.method === "answer")).toBeUndefined();
+    });
+  }
 
   test("takes the user's words with a denial", async ({ page }) => {
     await openIntegrated(page);

@@ -236,10 +236,14 @@ describe("the dock of a session that started others", () => {
     );
     // The answers that outlast the call wait behind More.
     expect(screen.queryByTestId("choice-cancel")).toBeNull();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     await fireEvent.click(screen.getByTestId("choice-more"));
     await fireEvent.pointerEnter(screen.getByTestId("choice-cancel"));
     expect(screen.getByTestId("choice-means").textContent?.trim()).toBe("Refuses this call and stops Fix the cache's turn.");
     expect(screen.getByTestId("dock-open")).toHaveTextContent("Open");
+    vi.advanceTimersByTime(500);
+    flushSync();
+    vi.useRealTimers();
     await fireEvent.click(screen.getByTestId("choice-allow"));
     await settle();
     expect(answers()).toEqual([
@@ -458,13 +462,31 @@ describe("the dock of a session that started others", () => {
     expect(shown).toEqual(["1Allow once", "2Allow for this session", "3Don't allow", "More"]);
     const allow = screen.getByTestId("choice-allow");
     allow.focus();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     await fireEvent.keyDown(allow, { key: "4" });
-    await settle();
+    flushSync();
     expect(answers()).toEqual([]);
-    expect(document.activeElement).toBe(screen.getByTestId("choice-allowAlways"));
+    // The keyboard stays where it was, and More stays open in its place.
+    expect(document.activeElement).toBe(allow);
+    expect(screen.getByTestId("choice-more")).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("choice-cancel")).toHaveTextContent("5Don't allow, and stop");
-    expect(screen.queryByTestId("choice-more")).toBeNull();
-    expect(screen.getByTestId("choice-means").textContent?.trim()).toMatch(/^Allows this call in Fix the cache and remembers/);
+    expect(screen.getByTestId("choice-means").textContent?.trim()).toBe(
+      "Allows this call in Fix the cache and remembers nothing.",
+    );
+    // Pressed again, held, or followed by Enter while the row settles, it
+    // answers nothing.
+    expect(screen.getByTestId("choice-allowAlways")).toHaveAttribute("aria-disabled", "true");
+    await fireEvent.keyDown(allow, { key: "4" });
+    await fireEvent.keyDown(allow, { key: "5" });
+    await fireEvent.click(allow);
+    expect(answers()).toEqual([]);
+    vi.advanceTimersByTime(500);
+    flushSync();
+    expect(screen.getByTestId("choice-allowAlways")).not.toHaveAttribute("aria-disabled");
+    await fireEvent.keyDown(allow, { key: "4", repeat: true });
+    expect(answers()).toEqual([]);
+    await fireEvent.keyDown(allow, { key: "4" });
+    expect(answers()).toMatchObject([{ choice: "allowAlways" }]);
   });
 
   it("keeps the keyboard on a request whose answer is on its way", async () => {

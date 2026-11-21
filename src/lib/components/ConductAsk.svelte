@@ -5,6 +5,7 @@
   import { returnFocus } from "$lib/layout.svelte";
   import { askDockedIn } from "$lib/docked.svelte";
   import ConductCard from "$lib/components/ConductCard.svelte";
+  import { SETTLE } from "$lib/components/AskChoices.svelte";
 
   /**
    * A session's question to the user, over the window: one that asks to
@@ -18,7 +19,6 @@
   let docked = $derived(askDockedIn() !== null);
   let shown = $derived(ask !== null && !docked ? ask : null);
 
-  const SETTLE = 500;
   let armed = $state(false);
   let settling: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {

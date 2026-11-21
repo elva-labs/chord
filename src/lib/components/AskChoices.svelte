@@ -19,20 +19,25 @@
     disabled?: boolean;
     run: () => void;
   }
+
+  /** How long an ask takes no answer after what it shows changed under the
+      user: a new ask in place of another, or More opened. */
+  export const SETTLE = 500;
 </script>
 
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onDestroy } from "svelte";
 
   /**
    * The answers of an ask, in a row: one stop for the keyboard, the arrows
    * and Home and End moving between them, and a digit picking the one it
    * is shown on. The first is the yes. Those behind More stay out of
-   * sight until it is opened, and a digit of one of them opens More and
-   * puts the keyboard on it without answering, so a key pressed out of
-   * habit never answers with a choice the user has not seen. While the ask
-   * takes no answer the buttons say so without being disabled, so the
-   * keyboard stays on them.
+   * sight until it is opened. A digit of one of them only opens More: the
+   * keyboard stays where it was, and the row takes no answer for a moment
+   * after, so a key pressed again, held down or followed by Enter answers
+   * nothing the user has not had time to see. A held digit answers once at
+   * most. While the ask takes no answer the buttons say so without being
+   * disabled, so the keyboard stays on them.
    */
   interface Props {
     choices: AskChoice[];
@@ -44,32 +49,52 @@
     pointed?: string | null;
     /** The row's name, for those who hear it. */
     label?: string;
+    /** Whether More is open. */
+    open?: boolean;
   }
 
-  let { choices, armed = true, describedby, pointed = $bindable(null), label }: Props = $props();
+  let { choices, armed = true, describedby, pointed = $bindable(null), label, open = $bindable(false) }: Props = $props();
 
   let row = $state<HTMLDivElement | null>(null);
-  let open = $state(false);
+  /** More was opened a moment ago, and the row takes no answer yet. */
+  let settling = $state(false);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  onDestroy(() => {
+    if (timer !== null) clearTimeout(timer);
+  });
+
+  let takes = $derived(armed && !settling);
 
   let shown = $derived(choices.filter((each) => !each.more));
   let behind = $derived(choices.filter((each) => each.more));
   /** The one the Tab key lands on. */
   let stop = $derived(
-    [...shown, ...(open ? behind : [])].some((each) => each.id === pointed) ? pointed : (shown[0]?.id ?? null),
+    pointed === "more" && behind.length > 0
+      ? "more"
+      : [...shown, ...(open ? behind : [])].some((each) => each.id === pointed)
+        ? pointed
+        : (shown[0]?.id ?? null),
   );
 
   function pick(choice: AskChoice) {
-    if (!armed || choice.disabled) return;
+    if (!takes || choice.disabled) return;
     choice.run();
   }
 
-  async function reveal(at: string | null) {
-    open = true;
-    await tick();
-    const target = at ?? behind[0]?.id ?? null;
-    if (target === null) return;
-    pointed = target;
-    row?.querySelector<HTMLButtonElement>(`[data-choice="${CSS.escape(target)}"]`)?.focus();
+  /** Opens or closes More. The keyboard stays where it was; once opened,
+      the row settles before it takes an answer. */
+  function toggle() {
+    open = !open;
+    if (!open) {
+      if (behind.some((each) => each.id === pointed)) pointed = "more";
+      return;
+    }
+    settling = true;
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      settling = false;
+    }, SETTLE);
   }
 
   function onKey(e: KeyboardEvent) {
@@ -84,7 +109,8 @@
       const choice = choices.find((each) => each.key === Number(e.key));
       if (choice === undefined) return;
       e.preventDefault();
-      if (choice.more && !open) void reveal(choice.id);
+      if (e.repeat) return;
+      if (choice.more && !open) toggle();
       else pick(choice);
       return;
     }
@@ -100,15 +126,15 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="choices" bind:this={row} role={label === undefined ? undefined : "group"} aria-label={label} onkeydown={onKey}>
   {#each shown as choice (choice.id)}{@render button(choice)}{/each}
-  {#if behind.length > 0 && !open}
+  {#if behind.length > 0}
     <button
       type="button"
-      class="choice quiet"
+      class="choice quiet more"
       tabindex={stop === "more" ? 0 : -1}
-      aria-expanded="false"
+      aria-expanded={open}
       data-choice="more"
       data-testid="choice-more"
-      onclick={() => void reveal(null)}
+      onclick={toggle}
       onfocus={() => (pointed = "more")}
       onpointerenter={() => (pointed = "more")}>More</button
     >
@@ -125,7 +151,7 @@
     class:keyed={choice.key != null}
     tabindex={choice.id === stop ? 0 : -1}
     disabled={choice.disabled}
-    aria-disabled={armed ? undefined : "true"}
+    aria-disabled={takes ? undefined : "true"}
     aria-describedby={describedby}
     aria-keyshortcuts={choice.key == null ? undefined : String(choice.key)}
     title={choice.title}
@@ -134,7 +160,7 @@
     onclick={() => pick(choice)}
     onfocus={() => (pointed = choice.id)}
     onpointerenter={() => (pointed = choice.id)}
-    >{#if choice.key != null}<span class="key">{choice.key}</span>{/if}<span class="label"
+    >{#if choice.key != null}<span class="key" aria-hidden="true">{choice.key}</span>{/if}<span class="label"
       >{choice.label}</span
     ></button
   >
@@ -200,6 +226,12 @@
   }
 
   .choice.quiet:hover:not([aria-disabled="true"], :disabled) {
+    color: var(--ink);
+  }
+
+  /* More open is drawn pressed, by the answers it shows. */
+  .choice.more[aria-expanded="true"] {
+    background: var(--surface-2);
     color: var(--ink);
   }
 

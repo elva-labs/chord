@@ -2,7 +2,7 @@
   import { onDestroy, untrack } from "svelte";
   import Plain from "$lib/components/conversation/Plain.svelte";
   import AskCard from "$lib/components/AskCard.svelte";
-  import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
+  import AskChoices, { SETTLE, type AskChoice } from "$lib/components/AskChoices.svelte";
   import { coversBrowser } from "$lib/browser.svelte";
   import { conductor } from "$lib/conductor.svelte";
   import { askDockedIn } from "$lib/docked.svelte";
@@ -30,7 +30,6 @@
 
   let pointed = $state<string | null>(null);
 
-  const SETTLE = 500;
   let armed = $state(false);
   let settling: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {

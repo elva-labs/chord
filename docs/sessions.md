@@ -828,9 +828,14 @@ Allow once allows the call once and remembers
 nothing; Allow for this session keeps it for the session, and Don't allow
 refuses it, with words for the agent if the user wants. Always allow and
 Don't allow, and stop, which refuses it and stops the turn, wait behind
-More; keys 1 to 5 reach them all, and a key for one behind More opens More
-and moves to it without answering. A line under the choices says what the one in focus or under
-the pointer does. A question docks the same way with its options, answered by
+More. The keys follow the order shown: 1 Allow once, 2 Allow for this
+session, 3 Don't allow, 4 Always allow and 5 Don't allow, and stop. A key
+for one behind More only opens More, leaving the keyboard where it was,
+and for half a second after the choices take no answer, so a key pressed
+again, held down or followed by Enter answers nothing; a held key answers
+once at most. More stays open where it was until it is pressed again. A
+line under the choices says what the one in focus or under the pointer
+does. A question docks the same way with its options, answered by
 picking one where one is all it takes, with room for the user's own words
 where it takes them; a secret answer is typed hidden. A
 permission the agent withdraws before it is answered says so on the step

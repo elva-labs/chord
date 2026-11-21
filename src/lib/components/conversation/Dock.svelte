@@ -20,7 +20,7 @@
     type Piece,
   } from "$lib/thread";
   import AskCard from "$lib/components/AskCard.svelte";
-  import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
+  import AskChoices, { SETTLE, type AskChoice } from "$lib/components/AskChoices.svelte";
   import ConductCard from "$lib/components/ConductCard.svelte";
   import Icon from "./Icon.svelte";
   import Plain from "./Plain.svelte";
@@ -35,10 +35,11 @@
    * with the way to it; a session that runs in a terminal is answered
    * there, so its request offers only the way. A question this session
    * put to the user, to start a session or for a round of review past the
-   * workflow's limit, docks with its own. One at a time: while the user is at the dock the one shown stays until it
-   * is answered or goes, whatever comes in meanwhile, and one that takes
-   * the place of another takes no answer for a moment, so nothing meant
-   * for the last one answers it.
+   * workflow's limit, docks with its own. One at a time: while the user
+   * is at the dock the one shown stays until it is answered or goes,
+   * whatever comes in meanwhile, and one that takes the place of another
+   * takes no answer for a moment, so nothing meant for the last one
+   * answers it.
    *
    * Each is drawn as every ask is. The choices are one stop for the
    * keyboard: the arrows move between them, a digit picks one, and the
@@ -142,11 +143,9 @@
 
   let dock = $state<HTMLDivElement | null>(null);
 
-  /** How long an entry that took another's place takes no answer: one
-      shown in place of another, or one shown this soon after the last
-      left the dock. */
-  const SETTLE = 500;
-  /** Whether the entry shown takes an answer yet. */
+  /** Whether the entry shown takes an answer yet: one shown in place of
+      another, or this soon after the last left the dock, waits out the
+      settle first. */
   let armed = $state(true);
   let last: string | null = null;
   /** When the dock last emptied. */
@@ -243,6 +242,8 @@
   /** Deny was picked, and waits for the user's words to go with it. */
   let denying = $state<PermissionOffer | null>(null);
   let words = $state("");
+  /** The answers behind More are shown. */
+  let moreOpen = $state(false);
 
   $effect(() => {
     entry?.id;
@@ -256,6 +257,7 @@
     showWhole = false;
     showLong = false;
     pointed = null;
+    moreOpen = false;
     denying = null;
     words = "";
     picked = [];
@@ -309,8 +311,9 @@
     }));
   }
 
-  /** What More shows. */
+  /** What More shows, or that it hides them again once open. */
   function behindSaid(choices: AskChoice[]): string {
+    if (moreOpen) return "Hides the answers it shows again.";
     const back = choices.filter((choice) => choice.more).map((choice) => choice.label);
     return `Shows ${back.length === 1 ? "one more answer" : `${back.length} more answers`}: ${back.join("; ")}.`;
   }
@@ -539,7 +542,8 @@
       const item = items[Number(e.key) - 1];
       if (item !== undefined) {
         e.preventDefault();
-        item.click();
+        // A held digit picks once.
+        if (!e.repeat) item.click();
       }
       return;
     }
@@ -645,7 +649,14 @@
           <button class="choice" tabindex="0" onclick={() => denying && choose(denying)} data-testid="deny-send">Don't allow</button>
         </div>
       {:else}
-        <AskChoices {choices} armed={takes(asking_)} bind:pointed describedby="means-{sessionKey}" />
+        <AskChoices
+          {choices}
+          armed={takes(asking_)}
+          bind:pointed
+          bind:open={moreOpen}
+          label="Answers"
+          describedby="means-{sessionKey}"
+        />
       {/if}
     {/snippet}
     {#snippet permissionSaid()}{#if pointed === "more"}{behindSaid(choices)}{:else if pointedOffer !== undefined}{#if who === null || whoName === null}{choiceMeans(
