@@ -640,6 +640,9 @@
                 </div>
               {/each}
             </div>
+            <p class="note quiet" data-testid="session-kind-when">
+              A change moves the sessions already open too. Reopen, from a right click on it, moves it now.
+            </p>
             <div class="hooks" class:lit bind:this={live} data-testid="settings-live">
               <UnreadEntries field="hooks" />
               <div class="row" data-testid="hooks-everywhere-row">

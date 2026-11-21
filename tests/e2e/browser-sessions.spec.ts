@@ -125,6 +125,9 @@ test("each session keeps its own tab in front", async ({ page }) => {
   await twoSessions(page);
   await openByHand(page, "example.com");
   await page.getByTestId("browser-new-tab").click();
+  // The address field is one input for every tab: typing before the new tab
+  // is in front would navigate the first tab instead.
+  await expect(page.getByTestId("browser-tab")).toHaveCount(2);
   const field = page.getByTestId("browser-address");
   await field.fill("example.org");
   await field.press("Enter");
@@ -220,6 +223,7 @@ test("a row carries one mark, the state dot, and says agent in its meta when an 
   await ask(page, "m1", "browser_open", "session-1", { url: "http://localhost:3000" });
   await page.getByTestId("browser-fold").click();
   await page.getByTestId("browser-new-tab").click();
+  await expect(page.getByTestId("browser-tab")).toHaveCount(2);
   const field = page.getByTestId("browser-address");
   await field.fill("example.com");
   await field.press("Enter");

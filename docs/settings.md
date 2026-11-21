@@ -305,7 +305,7 @@ and the tab says an agent that runs only in a terminal does. A session
 that follows a workflow runs the way its orchestrator's agent is set, as
 any other does. A change moves the sessions already open as well, each
 once it is at rest and opened, as [sessions](sessions.md#when-the-setting-is-switched)
-describes. A single new session can be
+describes, and the tab says so under the choice. A single new session can be
 started the other way from a project's ⋯ menu, the palette or the agent
 pane. What an in-Chord session is like is in
 [sessions](sessions.md#sessions-in-chord), and the mode it starts in,

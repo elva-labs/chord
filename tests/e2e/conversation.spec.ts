@@ -1150,7 +1150,8 @@ test.describe("how sessions run, in the settings", () => {
     const claude = page.locator("[data-testid='session-kind'][data-agent='claude-code']");
     const codex = page.locator("[data-testid='session-kind'][data-agent='codex']");
     await expect(claude.getByTestId("session-kind-terminal")).toHaveAttribute("aria-checked", "true");
-    await expect(codex.getByTestId("session-kind-only")).toHaveText("Codex sessions run in a terminal.");
+    await expect(codex.getByTestId("session-kind-only")).toHaveText("In a terminal");
+    await expect(codex.getByTestId("session-kind-only")).toHaveAttribute("title", "Runs only in a terminal");
     await claude.getByTestId("session-kind-integrated").click();
     await expect(claude.getByTestId("session-kind-integrated")).toHaveAttribute("aria-checked", "true");
     // Under the choice, in so many words: when it applies.
