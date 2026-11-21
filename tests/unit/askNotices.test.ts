@@ -252,7 +252,7 @@ describe("the other questions that wait on the user", () => {
     expect(told).toEqual([
       {
         title: "one · Theme work",
-        body: "Wants to change the look and the key chords",
+        body: "Wants to change the look and the shortcuts",
         name: told[0].name,
       },
     ]);

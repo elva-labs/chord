@@ -753,10 +753,10 @@ test.describe("the orchestrator folder", () => {
       );
 
     await page.keyboard.press(`${MOD}+,`);
-    await page.getByTestId("settings-tab-live").click();
+    await page.getByTestId("settings-tab-sessions").click();
     await page.getByTestId("hooks-overrides").click();
     const own = page.locator(`[data-testid='hooks-row'][data-project='${ORCHESTRATOR_FOLDER}']`);
-    await expect(own.locator(".project-name")).toHaveText("orchestrator");
+    await expect(own.locator(".name")).toHaveText("orchestrator");
     await own.getByTestId("hooks-on").click();
     await expect(own.getByTestId("hooks-on")).toHaveAttribute("aria-checked", "true");
     await expect
@@ -769,7 +769,7 @@ test.describe("the orchestrator folder", () => {
     await expect
       .poll(async () => (await calls()).filter((call) => call.project === ORCHESTRATOR_FOLDER).map((call) => call.kind))
       .toEqual(["install", "uninstall"]);
-    await page.getByTestId("hooks-everywhere-on").click();
+    await page.getByTestId("hooks-everywhere").click();
     await expect
       .poll(async () => (await calls()).filter((call) => call.project === ORCHESTRATOR_FOLDER).map((call) => call.kind))
       .toEqual(["install", "uninstall", "install"]);

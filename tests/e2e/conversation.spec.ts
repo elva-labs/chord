@@ -224,7 +224,7 @@ test.describe("an integrated session", () => {
     // the other way from the agent pane.
     await installFakeCore(page, { open: [PROJECT] });
     await page.goto("/");
-    await expect(page.getByTestId("start-other")).toHaveText("New integrated session");
+    await expect(page.getByTestId("start-other")).toHaveText("New session in Chord");
     await page.getByTestId("start-other").click();
     await expect(page.getByTestId("conversation")).toBeVisible();
     // Another session, in a terminal, which the fake names session-1.
@@ -986,7 +986,7 @@ test.describe("under a workflow, with Claude Code set to run integrated", () => 
     await page.getByTestId("palette-field").fill(">new");
     const rows = page.getByTestId("palette-label");
     await expect(rows.filter({ hasText: "New session in demo" })).toHaveCount(1);
-    await expect(rows.filter({ hasText: "New integrated session" })).toHaveCount(0);
+    await expect(rows.filter({ hasText: "New session in Chord" })).toHaveCount(0);
     await rows.filter({ hasText: "New session in a terminal in demo" }).click();
     await expect(page.locator(`${AGENT} .xterm`)).toBeVisible();
     await expect(page.getByTestId("workflow-tag")).toHaveCount(0);
@@ -2099,8 +2099,8 @@ test.describe("in the sessions pane, an integrated session", () => {
     await page.getByTestId("go-to").click();
     await page.getByTestId("palette-field").fill(">new");
     const rows = page.getByTestId("palette-label");
-    await expect(rows.filter({ hasText: "New integrated session in demo" })).toHaveCount(1);
-    await rows.filter({ hasText: "New integrated session in demo" }).click();
+    await expect(rows.filter({ hasText: "New session in Chord in demo" })).toHaveCount(1);
+    await rows.filter({ hasText: "New session in Chord in demo" }).click();
     await expect(page.getByTestId("conversation")).toBeVisible();
     await expect(page.getByTestId("session-row")).toHaveCount(1);
   });

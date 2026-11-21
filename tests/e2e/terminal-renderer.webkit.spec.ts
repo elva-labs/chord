@@ -70,6 +70,10 @@ test("swaps the terminals' renderer as the share is kept, not while it is picked
   await expect.poll(() => renderers(page)).toEqual({ gpu: 3, dom: 0 });
 
   await page.keyboard.press(`${MOD}+,`);
+  {
+    const more = page.getByTestId("appearance-more");
+    if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
+  }
   await expect(page.getByTestId("background-picker")).toBeVisible();
   await slide(page, "12");
   await expect(page.locator("html")).toHaveAttribute("data-cards", "");

@@ -71,6 +71,13 @@ test("lays the sheet over the app's only while it is on", async ({ page }) => {
   await expect.poll(() => spacing(page)).not.toBe("7px");
 });
 
+/** The custom styles switch, behind More until the sheet is in use. */
+async function stylesSwitch(page: Page) {
+  const more = page.getByTestId("appearance-more");
+  if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
+  return page.getByTestId("styles");
+}
+
 test("is set aside while the settings are open, where it is turned on and off", async ({
   page,
 }) => {
@@ -80,9 +87,10 @@ test("is set aside while the settings are open, where it is turned on and off", 
   expect(await spacing(page)).not.toBe("7px");
 
   await page.keyboard.press(`${MOD}+,`);
-  await expect(page.getByTestId("styles-off")).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByTestId("styles-note")).toContainText("It has 1 line.");
-  await page.getByTestId("styles-on").click();
+  const styles = await stylesSwitch(page);
+  await expect(styles).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByTestId("styles-note")).toContainText("has 1 line.");
+  await styles.click();
   await expect.poll(async () => (await file(page)).userStyles).toBe(true);
   // Still aside: the settings are open.
   expect(await spacing(page)).not.toBe("7px");
@@ -91,7 +99,7 @@ test("is set aside while the settings are open, where it is turned on and off", 
 
   await page.keyboard.press(`${MOD}+,`);
   await expect.poll(() => spacing(page)).not.toBe("7px");
-  await page.getByTestId("styles-off").click();
+  await (await stylesSwitch(page)).click();
   await page.keyboard.press("Escape");
   await expect.poll(async () => (await file(page)).userStyles).toBe(false);
   expect(await spacing(page)).not.toBe("7px");

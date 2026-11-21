@@ -99,11 +99,11 @@ test.describe("the workflows tab", () => {
     const told = (await page.getByTestId("workflow-told").boundingBox())!;
     const own = (await row.boundingBox())!;
     expect(own.y + own.height).toBeLessThanOrEqual(told.y + 1);
-    await row.click();
+    await box.click();
     await expect(box).not.toBeChecked();
     await expect(row).toContainText("keeps its own subagents");
     await expect.poll(async () => (await file(page)).workflows.list[0].startOnly).toBe(false);
-    await row.click();
+    await box.click();
     await expect.poll(async () => (await file(page)).workflows.list[0].startOnly).toBeUndefined();
   });
 
@@ -257,7 +257,7 @@ test.describe("the workflows tab", () => {
   test("is a tab among the others, and the arrows reach it", async ({ page }) => {
     await open(page);
     const tabs = page.getByTestId("settings").locator("nav button");
-    await expect(tabs.nth(3)).toHaveText("Workflows");
+    await expect(tabs.nth(2)).toHaveText("Workflows");
     await page.getByTestId("settings-tab-sessions").focus();
     await page.keyboard.press("ArrowDown");
     await expect(page.getByTestId("settings-tab-workflows")).toBeFocused();

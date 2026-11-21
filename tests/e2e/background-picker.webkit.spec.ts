@@ -47,13 +47,17 @@ async function open(page: Page, settings: Record<string, unknown> = {}) {
   await page.goto("/");
   await expect(page.locator("section[data-pane='agent']")).toBeVisible();
   await page.keyboard.press(`${MOD}+,`);
+  {
+    const more = page.getByTestId("appearance-more");
+    if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
+  }
   await expect(page.getByTestId("background-picker")).toBeVisible();
 }
 
 test("places a colour from the pad and moves it with the arrows", async ({ page }) => {
   await open(page);
-  // The tab before the pad: the pad is the next stop.
-  await page.getByTestId("palette-mono").focus();
+  // The tab before the pad is the fold that holds it.
+  await page.getByTestId("appearance-more").focus();
   await page.keyboard.press("Tab");
   expect(await focused(page)).toBe("background-pad");
   await page.keyboard.press("Enter");

@@ -1047,7 +1047,7 @@ describe("the real app", () => {
     );
 
     // On, after the question that comes with it, and started.
-    await clickEnabled(driver, `${SETTINGS_PLUGIN} [data-testid='plugin-on']`);
+    await clickEnabled(driver, `${SETTINGS_PLUGIN} [data-testid='plugin']`);
     await (await located(driver, "[data-testid='plugin-agree']")).click();
     await driver.wait(
       async () => {
@@ -1064,7 +1064,7 @@ describe("the real app", () => {
       textOf(driver, `${SETTINGS_BUILT} [data-testid='plugin-state']`);
     // The first plugin's row says starting before the core has answered,
     // and the controls take no click until it has.
-    await clickEnabled(driver, `${SETTINGS_BUILT} [data-testid='plugin-on']`);
+    await clickEnabled(driver, `${SETTINGS_BUILT} [data-testid='plugin']`);
     await (await located(driver, "[data-testid='plugin-agree']")).click();
     await driver.wait(
       async () => (await builtState()).includes("running 0.4.0"),
@@ -1225,7 +1225,7 @@ describe("the real app", () => {
       30_000,
       "the settings never said the plugin was running",
     );
-    await (await located(driver, `${SETTINGS_PLUGIN} [data-testid='plugin-off']`))
+    await (await located(driver, `${SETTINGS_PLUGIN} [data-testid='plugin']`))
       .click();
     await driver.wait(
       async () => (await pluginState()).includes("off"),

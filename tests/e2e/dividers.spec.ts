@@ -500,6 +500,10 @@ test("the headers' quiet text holds 4.5:1 on the light ground", async ({ page })
 test("the background picker's small window draws the ground with a card standing on it", async ({ page }) => {
   await open(page);
   await page.keyboard.press(`${MOD}+,`);
+  {
+    const more = page.getByTestId("appearance-more");
+    if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
+  }
   await expect(page.getByTestId("background-picker")).toBeVisible();
   const mini = page.locator("[data-testid='background-picker'] .mini").first();
   const window = (await mini.boundingBox())!;
