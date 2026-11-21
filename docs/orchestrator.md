@@ -487,7 +487,7 @@ and one for a call answered early that is now done, counted from when the
 window saw it done. While others are still at work, it waits
 thirty seconds after the last for more to come along, and never more than
 two minutes after the first. A starter that has rested long enough for its
-prompt cache to lapse, an hour for Claude Code and ten minutes for Codex,
+prompt cache to lapse, an hour for Claude Code and Codex alike,
 would read its conversation again at full price, so its wake waits until
 none of its sessions is at work, or twenty minutes after the first came to
 rest. While a wake is held so, the pointer text on the row's not heard yet

@@ -159,10 +159,11 @@ export const GATHER = 30_000;
 export const GATHER_MOST = 120_000;
 /** How long a starter has rested when its prompt cache has lapsed, by
     agent, so a wake reads its whole conversation again at full price: a
-    Claude Code conversation's cache lasts an hour, and Codex's is taken to
-    last ten minutes. A cold starter's wake waits until nothing it started
-    is at work, and at most COLD_MOST after the first came to rest. */
-export const COLD_AFTER: Record<AgentId, number> = { "claude-code": 58 * 60_000, codex: 10 * 60_000 };
+    Claude Code conversation's cache lasts an hour, and Codex's, which it
+    does not record, is taken to last an hour too. A cold starter's wake
+    waits until nothing it started is at work, and at most COLD_MOST after
+    the first came to rest. */
+export const COLD_AFTER: Record<AgentId, number> = { "claude-code": 58 * 60_000, codex: 58 * 60_000 };
 export const COLD_MOST = 20 * 60_000;
 /** How long the user's keys in a starter's terminal have been still
     before the workbench types into it. */
