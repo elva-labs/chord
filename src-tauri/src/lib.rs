@@ -551,6 +551,34 @@ async fn codex_models(
     .await
 }
 
+/// The agents installed for each harness, read on the machine the project
+/// is on, under the account whose directories are given.
+#[tauri::command]
+async fn installed_agents(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    claude_dir: Option<String>,
+    codex_home: Option<String>,
+) -> Result<Value, String> {
+    let for_local = (claude_dir.clone(), codex_home.clone());
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "installed_agents",
+        move |rest| json!({ "project": rest, "claudeDir": claude_dir, "codexHome": codex_home }),
+        move |core, project| {
+            Ok(core.installed_agents(
+                Path::new(project),
+                for_local.0.as_deref(),
+                for_local.1.as_deref(),
+            ))
+        },
+    )
+    .await
+}
+
 /// What a conversation said and did before, read on the machine the
 /// project is on, with the host put back on the paths it names for a
 /// project elsewhere. Null for an agent whose history is not read; an
@@ -2404,6 +2432,7 @@ pub fn run() {
             session_title,
             hook_status,
             hook_status_many,
+            installed_agents,
             hook_install,
             hook_uninstall,
             git_status,

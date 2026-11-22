@@ -1129,6 +1129,27 @@ impl Core {
         crate::codex_models::read(&environment.vars, config_dir.as_deref(), project)
     }
 
+    /// The agents installed for each harness: Claude Code's under the
+    /// account whose configuration directory is given, or its own, then the
+    /// project's, then Codex's roles under the account's home, or its own.
+    pub fn installed_agents(
+        &self,
+        project: &Path,
+        claude_dir: Option<&str>,
+        codex_home: Option<&str>,
+    ) -> Vec<crate::agents::InstalledAgent> {
+        let Some(home) = self.home.as_deref() else {
+            return Vec::new();
+        };
+        let vars = &env::environment().vars;
+        crate::agents::installed(
+            home,
+            project,
+            &account::claude_dir(home, claude_dir, vars),
+            &account::codex_home(home, codex_home, vars),
+        )
+    }
+
     /// What a conversation said and did before, read from where its agent
     /// keeps it under the account whose configuration directory is given,
     /// or the agent's own: Claude Code's transcript of the session in the

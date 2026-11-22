@@ -1412,6 +1412,21 @@ export interface OwnAgent {
   readsOnly: boolean;
 }
 
+/** An agent the user installed for a harness, read where the harness keeps
+    it and never written: Claude Code's under the account (`claude`) or in
+    the project (`project`), or one of Codex's roles (`codex`). `text` is
+    what a session is told, and `path` the file it came from. */
+export interface InstalledAgent {
+  source: "claude" | "project" | "codex";
+  name: string;
+  description: string;
+  model: string | null;
+  effort: string | null;
+  readsOnly: boolean;
+  text: string;
+  path: string;
+}
+
 /** The user's preferences, one set per machine, kept by the core. */
 export interface Settings {
   appearance: "system" | "light" | "dark";
@@ -1676,6 +1691,11 @@ export interface Core {
       history the core does not read. Rejects where the agent could not
       read it, as for a thread Codex does not know. */
   integratedHistory(options: IntegratedHistoryOptions): Promise<IntegratedHistory | null>;
+  /** The agents installed for each harness, read on the project's machine:
+      Claude Code's under the account whose directory is `claudeDir`, or
+      its own, then the project's, then Codex's roles under `codexHome`, or
+      its own. */
+  installedAgents(project: string, claudeDir?: string, codexHome?: string): Promise<InstalledAgent[]>;
   /** The models Codex offers the account whose home is `configDir`, read
       by a Codex of the core's own on the project's machine, which takes a
       second or two. Rejects where Codex cannot be started or will not list
@@ -2272,6 +2292,8 @@ const tauriCore: Core = {
   integratedSnapshot: (id) => invoke<IntegratedSnapshot>("integrated_snapshot", { id }),
   integratedHistory: (options) =>
     invoke<IntegratedHistory | null>("integrated_history", { ...options }),
+  installedAgents: (project, claudeDir, codexHome) =>
+    invoke<InstalledAgent[]>("installed_agents", { project, claudeDir, codexHome }),
   codexModels: (project, configDir) => invoke<CodexModels>("codex_models", { project, configDir }),
   accountLimits: (options) =>
     invoke<Extract<IntegratedEventBody, { type: "limits" }> | null>("account_limits", { ...options }),
@@ -2671,6 +2693,9 @@ const detachedCore: Core = {
   },
   async integratedHistory() {
     return null;
+  },
+  async installedAgents() {
+    return [];
   },
   async codexModels() {
     throw new Error("not connected to the workbench core");

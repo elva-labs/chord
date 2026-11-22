@@ -847,6 +847,12 @@ export async function installFakeCore(
           (w.__limitsAsked ??= []).push(asked);
           return w.__accountLimits?.[`${asked.agent} ${asked.configDir ?? ""}`] ?? null;
         },
+        installedAgents: async () => {
+          // A test puts the agents installed for each harness in
+          // __installedAgents. With none, nothing is installed.
+          const w = window as unknown as { __installedAgents?: unknown[] };
+          return w.__installedAgents ?? [];
+        },
         codexModels: async (project: string, configDir?: string) => {
           // A test puts the models Codex lists in __codexModels, and reads
           // what was asked in __codexModelsAsked. With none, Codex is not
