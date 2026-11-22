@@ -27,8 +27,8 @@ const profiles = $state<{
 
 const PICKED_KEY = "chord.pickedProfiles";
 
-/** A name as the core lists profiles by. */
-const NAME = /^[A-Za-z0-9_-]{1,64}$/;
+/** A name as the core lists profiles by: led by a letter, digit or `_`. */
+const NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
 
 /** Whether the text is a name a profile could go by. */
 export function isProfileName(text: string): boolean {

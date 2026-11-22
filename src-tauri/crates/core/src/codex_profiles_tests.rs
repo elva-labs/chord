@@ -26,6 +26,7 @@ fn lists_the_profile_files_by_name_with_what_each_sets() {
         "model = \"gpt-6.2-sol\"\n",
     );
     write(home.path(), "a.b.config.toml", "model = \"gpt-6.2-sol\"\n");
+    write(home.path(), "-x.config.toml", "model = \"gpt-6.2-sol\"\n");
     write(home.path(), "notes.txt", "model = \"gpt-6.2-sol\"\n");
     fs::create_dir(home.path().join("folder.config.toml")).unwrap();
 
@@ -81,9 +82,11 @@ long = "{long}"
 when = 1979-05-27
 roots = ["/tmp"]
 huge = inf
+--sandbox = "danger-full-access"
+-x = 1
 "two words" = "gpt-6.2-sol"
 "a.b" = "gpt-6.2-sol"
-tools = {{ web_search = true, view_image = "on" }}
+tools = {{ web_search = true, view_image = "on", -c = "x" }}
 
 [model_providers.lab]
 name = "Lab"
@@ -165,6 +168,7 @@ fn takes_a_profile_only_by_a_name_found_among_the_files() {
     let codex = home.path().join("codex");
     fs::create_dir(&codex).unwrap();
     write(&codex, "fast.config.toml", "model = \"gpt-6.1-terra\"\n");
+    write(&codex, "-x.config.toml", "model = \"gpt-6.2-sol\"\n");
     write(
         home.path(),
         "outside.config.toml",
@@ -178,6 +182,7 @@ fn takes_a_profile_only_by_a_name_found_among_the_files() {
         "../outside",
         "fast/../fast",
         "./fast",
+        "-x",
         "fast.config",
         "FAST",
     ] {

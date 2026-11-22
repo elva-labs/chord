@@ -69,7 +69,8 @@ describe("the Codex profiles an account has", () => {
 
   it("go by names of letters, digits, dashes and underscores alone", () => {
     expect(isProfileName("fast_2-b")).toBe(true);
-    for (const name of ["", "a b", "../a", "a.b", "a&b", "a%b", "x".repeat(65)]) expect(isProfileName(name)).toBe(false);
+    for (const name of ["", "a b", "../a", "a.b", "a&b", "a%b", "-x", "--sandbox", "x".repeat(65)])
+      expect(isProfileName(name)).toBe(false);
   });
 });
 

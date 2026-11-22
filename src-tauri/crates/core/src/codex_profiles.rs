@@ -130,10 +130,11 @@ fn plain_name(name: &str) -> bool {
     bare(name) && name.len() <= LONGEST_NAME
 }
 
-/// Letters, digits, `_` and `-`, at least one: a profile name to Codex,
-/// and a bare key to TOML.
+/// Letters, digits, `_` and `-`, at least one, led by other than `-`: a
+/// profile name to Codex, and a bare key to TOML that no command line
+/// reads as an option.
 fn bare(text: &str) -> bool {
-    !text.is_empty()
+    text.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
         && text
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
