@@ -554,11 +554,16 @@ export function isPicture(entry: FileEntry | null): boolean {
   );
 }
 
+/** The folder of the tree, on the machine the project is on. */
+export function treeRoot(): string | null {
+  const root = watchRoot();
+  return root === null ? null : pathOn(root).replace(/[\\/]+$/, "");
+}
+
 /** A file of the tree, absolute, on the machine the project is on. */
 export function absolute(path: string): string | null {
-  const root = watchRoot();
-  if (root === null) return null;
-  return `${pathOn(root).replace(/[\\/]+$/, "")}/${path}`;
+  const root = treeRoot();
+  return root === null ? null : `${root}/${path}`;
 }
 
 /** The views the selected file has, in the order the chord walks them. */

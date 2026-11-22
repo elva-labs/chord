@@ -1817,6 +1817,12 @@ export interface Core {
   goingOn(options: GoingOnOptions): Promise<GoingOn>;
   /** Reads an image or a PDF for the window, wherever the path is. */
   readMedia(path: string): Promise<Media>;
+  /** An image a Markdown document names by a path relative to itself,
+      read in the document's project where the project is: `root` is the
+      project, `document` the document's path in it and `file` the image's
+      path from the document. Refused unless it is an image in the project
+      and no hidden file. */
+  readDocumentImage(root: string, document: string, file: string): Promise<Media>;
   /** How big a file is, and whether it is a folder, read where it is. */
   fileInfo(path: string): Promise<FileInfo>;
   /** The address an HTML page's relative references resolve against:
@@ -2368,6 +2374,8 @@ const tauriCore: Core = {
     invoke<void>("usage_log", { project, token, entry, transcript: transcript ?? null }),
   goingOn: (options) => invoke<GoingOn>("going_on", { ...options }),
   readMedia: (path) => invoke<Media>("read_media", { path }),
+  readDocumentImage: (root, document, file) =>
+    invoke<Media>("read_document_image", { root, document, file }),
   fileInfo: (path) => invoke<FileInfo>("file_info", { path }),
   pageFilesBase: (page) => invoke<string>("page_files_base", { page }),
   checkPageFile: (page, file) =>
@@ -2762,6 +2770,9 @@ const detachedCore: Core = {
     return { context: null, idle: null, goesOn: false, briefing: null };
   },
   async readMedia() {
+    throw new Error("no core");
+  },
+  async readDocumentImage() {
     throw new Error("no core");
   },
   async fileInfo() {

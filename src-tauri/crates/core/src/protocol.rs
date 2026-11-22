@@ -356,6 +356,13 @@ struct PageFileParams {
     to: Option<u64>,
 }
 
+#[derive(Deserialize)]
+struct DocumentImageParams {
+    root: PathBuf,
+    document: String,
+    file: String,
+}
+
 /// A call's answer, however it is named: the conductor's tools and the
 /// browser's both answer through the one underlying method, which just
 /// writes where the tool server named `id` waits.
@@ -950,6 +957,10 @@ pub fn dispatch(
         "read_media" => {
             let p: PathParams = parse(params)?;
             value(core.read_media(&p.path)?)
+        }
+        "read_document_image" => {
+            let p: DocumentImageParams = parse(params)?;
+            value(core.read_document_image(&p.root, &p.document, &p.file)?)
         }
         "file_info" => {
             let p: PathParams = parse(params)?;

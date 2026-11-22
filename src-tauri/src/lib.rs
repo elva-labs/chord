@@ -1266,6 +1266,28 @@ async fn read_media(
     .await
 }
 
+/// An image a Markdown document names by a path relative to itself, read
+/// in the document's project where the project is.
+#[tauri::command]
+async fn read_document_image(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    root: String,
+    document: String,
+    file: String,
+) -> Result<Value, String> {
+    let (sent, named) = (document.clone(), file.clone());
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&root),
+        "read_document_image",
+        move |rest| json!({ "root": rest, "document": sent, "file": named }),
+        move |core, root| core.read_document_image(Path::new(root), &document, &file),
+    )
+    .await
+}
+
 /// How much a session keeps in its notes, read where its project is, and
 /// with `page`, the path of their readable copy as the window names it.
 #[tauri::command]
@@ -2366,6 +2388,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             agent_detect,
             read_media,
+            read_document_image,
             notes_kept,
             notes_briefing,
             notes_forget,

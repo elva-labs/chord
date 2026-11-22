@@ -27,6 +27,22 @@ import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetHeld, switched } from "$lib/show.svelte";
 import { resetGoingOn } from "$lib/goingOn.svelte";
 
+/** A README naming images of its project, and what was read for it. */
+const project = vi.hoisted(() => ({
+  readme: [
+    "# Readme",
+    "",
+    '<img src="docs/icon.png" width="128" height="128" alt="">',
+    "",
+    "![shot](docs/shot.png?raw=1) ![again](docs/icon.png) ![spaced](docs/my%20icon.png) ![gone](docs/gone.png) ![said](docs/said.png)",
+  ].join("\n"),
+  reads: [] as { root: string; document: string; file: string }[],
+  /** Other documents by their path, and other images of the project by
+      their path in it: how large each is and how long its read takes. */
+  documents: new Map<string, string>(),
+  files: new Map<string, { size: number; wait: number }>(),
+}));
+
 vi.mock("$lib/core", () => ({
   core: () => ({
     async setWindowTitle() {},
@@ -37,7 +53,11 @@ vi.mock("$lib/core", () => ({
       return null;
     },
     async readMedia(path: string) {
+      const written = project.documents.get(path);
+      if (written !== undefined) return { mime: "text/markdown", data: btoa(written), size: written.length };
       if (path.includes("missing")) throw new Error(`could not read ${path}`);
+      if (path.endsWith("README.md"))
+        return { mime: "text/markdown", data: btoa(project.readme), size: project.readme.length };
       if (path.endsWith(".md"))
         return { mime: "text/markdown", data: btoa("# Draft"), size: 7 };
       if (path.endsWith(".html"))
@@ -53,6 +73,18 @@ vi.mock("$lib/core", () => ({
         data: "AAAA",
         size: 3,
       };
+    },
+    async readDocumentImage(root: string, document: string, file: string) {
+      project.reads.push({ root, document, file });
+      const sized = project.files.get(file);
+      if (sized !== undefined) {
+        await new Promise((done) => setTimeout(done, sized.wait));
+        return { mime: "image/png", data: "AAAA", size: sized.size };
+      }
+      if (file === "docs/said.png") return { mime: "text/plain", data: "AAAA", size: 3 };
+      if (file.endsWith("icon.png") || file === "docs/shot.png")
+        return { mime: "image/png", data: "AAAA", size: 3 };
+      throw new Error(`${file} is not there`);
     },
   }),
 }));
@@ -72,6 +104,9 @@ const request = (
 
 beforeEach(() => {
   localStorage.clear();
+  project.reads.length = 0;
+  project.documents.clear();
+  project.files.clear();
   resetMedia();
   resetGoingOn();
   resetHeld();
@@ -338,12 +373,12 @@ describe("presenting", () => {
     expect(layout.mode).toBe("reviewing");
   });
 
-  it("renders a Markdown document, its own HTML as text", async () => {
-    const html = render("# Draft\n\nHello *there*, <b>plain</b>.");
+  it("renders a Markdown document, the HTML a README may hold drawn and the rest as text", async () => {
+    const html = render("# Draft\n\nHello *there*, <b>bold</b> <span>plain</span>.");
     expect(html).toContain("<h1>Draft</h1>");
     expect(html).toContain("<em>there</em>");
-    expect(html).not.toContain("<b>");
-    expect(html).toContain("&lt;b");
+    expect(html).toContain("<b>bold</b>");
+    expect(html).toContain("&lt;span&gt;plain&lt;/span&gt;");
     const loaded = await load("/one/draft.md");
     expect("html" in loaded && loaded.html).toContain("<h1>");
   });
@@ -372,6 +407,37 @@ describe("presenting", () => {
       mime: "text/vnd.mermaid",
       diagram: "graph TD; A-->B",
     });
+  });
+
+  it("draws a document's images from its project, each read once, and the rest as their text", async () => {
+    project.reads.length = 0;
+    const loaded = await load("/one/README.md", "/one");
+    expect(project.reads.map((read) => read.file).sort()).toEqual(
+      ["docs/gone.png", "docs/icon.png", "docs/my icon.png", "docs/said.png", "docs/shot.png"],
+    );
+    for (const read of project.reads) expect(read).toMatchObject({ root: "/one", document: "README.md" });
+    const box = document.createElement("div");
+    box.innerHTML = "html" in loaded ? loaded.html : "";
+    expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual(
+      Array(4).fill("data:image/png;base64,AAAA"),
+    );
+    expect(box.querySelector("img[width='128'][height='128']")).not.toBeNull();
+    expect(box.textContent).toContain("gone");
+    expect(box.textContent).toContain("said");
+  });
+
+  it("reads no image for a document with no project or outside its project", async () => {
+    project.reads.length = 0;
+    for (const [path, root] of [
+      ["/one/README.md", null],
+      ["/two/README.md", "/one"],
+      ["/one/README.md", "/one/README.md"],
+    ] as const) {
+      const loaded = await load(path, root);
+      expect("html" in loaded && loaded.html).toContain("<h1>Readme</h1>");
+      expect("html" in loaded && loaded.html).not.toContain("<img");
+    }
+    expect(project.reads).toEqual([]);
   });
 
   it("reads a file as a data URL, or says why it cannot", async () => {
@@ -548,14 +614,20 @@ describe("code in Markdown", () => {
     }
   });
 
-  it("still draws raw HTML as its text, inline and as a block", () => {
-    for (const html of [renderSaid("Hi <b>there</b>\n\n<div onclick=x>block</div>"), render("Hi <b>there</b>\n\n<div onclick=x>block</div>")]) {
-      const box = document.createElement("div");
-      box.innerHTML = html;
-      expect(box.querySelector("b, div")).toBeNull();
-      expect(box.textContent).toContain("<b>there</b>");
-      expect(box.textContent).toContain("<div onclick=x>block</div>");
-    }
+  it("still draws raw HTML in a conversation as its text, inline and as a block", () => {
+    const box = document.createElement("div");
+    box.innerHTML = renderSaid("Hi <b>there</b>\n\n<div onclick=x>block</div>");
+    expect(box.querySelector("b, div")).toBeNull();
+    expect(box.textContent).toContain("<b>there</b>");
+    expect(box.textContent).toContain("<div onclick=x>block</div>");
+  });
+
+  it("draws allowed HTML in a document, and a tag with a handler as its text", () => {
+    const box = document.createElement("div");
+    box.innerHTML = render("Hi <b>there</b>\n\n<div onclick=x>block</div>");
+    expect(box.querySelector("b")?.textContent).toBe("there");
+    expect(box.querySelector("div")).toBeNull();
+    expect(box.textContent).toContain("<div onclick=x>block</div>");
   });
 });
 
@@ -611,6 +683,8 @@ describe("what Markdown may draw", () => {
   const ELEMENTS = new Set(
     "P,BR,EM,STRONG,DEL,CODE,PRE,A,IMG,UL,OL,LI,BLOCKQUOTE,H1,H2,H3,H4,H5,H6,HR,TABLE,THEAD,TBODY,TR,TH,TD,INPUT".split(","),
   );
+  /** A document draws a few more, from the HTML written in it. */
+  const DOCUMENT = new Set([...ELEMENTS, ..."DIV,DETAILS,SUMMARY,KBD,SUB,SUP,B,I,PICTURE,SOURCE".split(",")]);
   const PAYLOADS = [
     "x <code> <img/src=x onerror=alert(1)>",
     "<pre> <svg/onload=alert(1)>",
@@ -629,15 +703,49 @@ describe("what Markdown may draw", () => {
     "&#x3C;svg/onload=1&#x3E; <code> &lt;b onmouseover=1&gt;",
     "[a](&#106;avascript:alert(1)) [b](java&#115;cript:1)",
     "&amp;lt;img src=x onerror=1&amp;gt;",
+    // Raw HTML a document draws in part.
+    "<script>alert(1)</script>",
+    "<img src=https://example.com/a.png onerror=alert(1)>",
+    '<a href="javascript:alert(1)">a</a> <a href="java&#115;cript:alert(1)">b</a> <a href="javascript&colon;alert(1)">c</a>',
+    '<a href=" &#x09;javascript:alert(1)">a</a> <a href="vbscript:msgbox(1)">b</a> <a href="data:text/html,<script>alert(1)</script>">c</a>',
+    '<img src="https://example.com/a.png" srcset="javascript:alert(1) 1x, https://evil.example/b.png 2x">',
+    '<picture><source srcset="https://example.com/a.png 1x, javascript:alert(1) 2x"><img src="https://example.com/a.png"></picture>',
+    "<svg><script>alert(1)</script></svg> <svg/onload=alert(1)> <svg><a xlink:href=javascript:alert(1)>x</a></svg>",
+    "<math><mi xlink:href=javascript:alert(1)>x</mi></math>",
+    "<div>a</div></div></div><img src=x onerror=1>",
+    "<p align=center>a</p></p></body></html><script>alert(1)</script>",
+    '<b><i>x</b></i> <img alt="</p><script>alert(1)</script>" src=https://example.com/a.png>',
+    "<style>*{display:none}</style><iframe src=https://example.com></iframe><object data=x></object><embed src=x>",
+    "<form action=https://example.com><input name=a><button>go</button></form>",
+    '<p style="background:url(javascript:alert(1))">a</p> <div class=x id=y name=z>b</div>',
+    "<img src=https://example.com/a.png <script>alert(1)</script> <a href=https://example.com",
+    "<details open ontoggle=alert(1)><summary>a</summary></details>",
+    "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></noscript>",
+    "<textarea><img src=x onerror=1></textarea> <title><b>x</b></title> <xmp><img src=x onerror=1></xmp>",
+    '<picture><source media="(min-width: 1200px) and (prefers-color-scheme: dark)" srcset="https://track.example/wide-dark.png"><img src="https://track.example/else.png"></picture>',
+    '<div align="javascript:alert(1)">x</div> <img src="https://example.com/a.png" height="expression(alert(1))">',
+    '<img src="/etc/hosts.png"> <img src="file:///etc/a.png"> <img src="//evil.example/a.png"> ![a](../../.ssh/id.png)',
   ];
 
-  it("draws nothing but Markdown's own elements, with no handlers and no scripted links", () => {
+  it("draws only the elements it allows, with no handlers and no scripted links", () => {
     for (const markdown of PAYLOADS)
-      for (const html of [render(markdown), renderSaid(markdown)]) {
+      for (const [html, allowed] of [
+        [render(markdown), DOCUMENT],
+        [renderSaid(markdown), ELEMENTS],
+      ] as const) {
         const box = document.createElement("div");
         box.innerHTML = html;
         for (const element of box.querySelectorAll("*")) {
-          expect(ELEMENTS.has(element.tagName), `${element.tagName} from ${markdown}`).toBe(true);
+          expect(allowed.has(element.tagName), `${element.tagName} from ${markdown}`).toBe(true);
+          expect(element.hasAttribute("style"), `style from ${markdown}`).toBe(false);
+          const sources = [
+            element.getAttribute("src"),
+            ...(element.getAttribute("srcset")?.split(/,\s+/).map((candidate) => candidate.split(" ")[0]) ?? []),
+          ];
+          for (const src of sources)
+            if (src !== null) expect(src, markdown).toMatch(/^(?:https?:|data:image\/)/);
+          const href = element.getAttribute("href");
+          if (href !== null) expect(href, markdown).toMatch(/^(?:https?:|mailto:|#)/);
           for (const attribute of element.attributes) {
             expect(attribute.name.startsWith("on"), `${attribute.name} from ${markdown}`).toBe(false);
             expect(/javascript:/i.test(attribute.value), `${attribute.value} from ${markdown}`).toBe(false);
@@ -668,5 +776,315 @@ describe("what Markdown may draw", () => {
     const box = document.createElement("div");
     box.innerHTML = renderSaid("x <code> a & b < c");
     expect(box.textContent?.trim()).toBe("x <code> a & b < c");
+    box.innerHTML = render("x <code> a & b < c <i");
+    expect(box.querySelector("code")?.textContent).toBe(" a & b < c <i");
+  });
+});
+
+describe("the HTML a document may draw", () => {
+  const drawn = (markdown: string) => {
+    const box = document.createElement("div");
+    box.innerHTML = render(markdown);
+    return box;
+  };
+  /** A document of the project at /one loaded as the viewer loads it,
+      its images read from the project. */
+  const loaded = async (path: string) => {
+    const read = await load(path, "/one");
+    const box = document.createElement("div");
+    box.innerHTML = "html" in read ? read.html : "";
+    return box;
+  };
+  const HERO = '<p align="center">\n  <img src="https://example.com/icon.png" width="128" height="128" alt="">\n</p>';
+
+  it("draws a README's centred hero image at its width", () => {
+    const box = drawn(`${HERO}\n\n# Chord`);
+    const image = box.querySelector("p[align='center'] > img");
+    expect(image?.getAttribute("src")).toBe("https://example.com/icon.png");
+    expect(image?.getAttribute("width")).toBe("128");
+    expect(image?.getAttribute("height")).toBe("128");
+    expect(box.querySelector("h1")?.textContent).toBe("Chord");
+  });
+
+  it("draws each element it allows, with the attributes it allows", () => {
+    const box = drawn(
+      [
+        '<div align="right"><h2 align="center">Title</h2></div>',
+        "",
+        'Press <kbd>Ctrl</kbd>, H<sub>2</sub>O, x<sup>2</sup>, <b>b</b> <i>i</i> <strong>s</strong> <em>e</em> <code>c</code>,<br>next<br/>line',
+        "",
+        '<a href="https://example.com" title="Site">site</a> <a href="#usage">usage</a> <a href="mailto:a@b.c">mail</a>',
+        "",
+        "<hr>",
+        "",
+        "<details open>\n<summary>More</summary>\n\nSome **bold** words.\n\n</details>",
+        "",
+        "<pre>x < y</pre>",
+        "",
+        '<picture>\n<source media="(prefers-color-scheme: dark)" srcset="https://example.com/dark.png 1x,https://example.com/dark@2x.png 2x">\n<img src="data:image/png;base64,iVBORw0KGgo=" alt="logo" align="left">\n</picture>',
+      ].join("\n"),
+    );
+    expect(box.querySelector("div[align='right'] > h2[align='center']")?.textContent).toBe("Title");
+    for (const [selector, text] of [
+      ["kbd", "Ctrl"],
+      ["sub", "2"],
+      ["sup", "2"],
+      ["b", "b"],
+      ["i", "i"],
+      ["strong", "s"],
+      ["em", "e"],
+      ["p > code", "c"],
+      ["pre", "x < y"],
+    ])
+      expect(box.querySelector(selector)?.textContent, selector).toBe(text);
+    expect(box.querySelectorAll("br")).toHaveLength(2);
+    expect(box.querySelector("hr")).not.toBeNull();
+    const links = [...box.querySelectorAll("a")];
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["https://example.com", "#usage", "mailto:a@b.c"]);
+    expect(links[0].title).toBe("Site");
+    for (const link of links) expect(link.rel).toBe("noopener noreferrer");
+    const details = box.querySelector("details");
+    expect(details?.hasAttribute("open")).toBe(true);
+    expect(details?.querySelector("summary")?.textContent).toBe("More");
+    expect(details?.querySelector("p > strong")?.textContent).toBe("bold");
+    const source = box.querySelector("picture > source");
+    expect(source?.getAttribute("media")).toBe("(prefers-color-scheme: dark)");
+    expect(source?.getAttribute("srcset")).toBe("https://example.com/dark.png 1x, https://example.com/dark@2x.png 2x");
+    expect(box.querySelector("picture > img")?.getAttribute("align")).toBe("left");
+  });
+
+  it("shows a refused tag whole as its text, never in part and never dropped", () => {
+    for (const tag of [
+      "<script>alert(1)</script>",
+      '<img src="https://example.com/a.png" onerror="alert(1)">',
+      '<img src="https://example.com/a.png" srcset="https://evil.example/b.png 2x">',
+      '<img src="docs/icon.png" width="128">',
+      '<img src="https://example.com/a.png" src="javascript:alert(1)">',
+      '<a href="java&#115;cript:alert(1)">x</a>',
+      '<a href="data:text/html,x">x</a>',
+      '<p style="color: red">x</p>',
+      '<div class="x">x</div>',
+      '<a name="top">x</a>',
+      "<svg onload=alert(1)>",
+      "<input type=checkbox checked>",
+      "<span>x</span>",
+      "<!-- a note -->",
+      '<source srcset="https://example.com/a.png">',
+    ]) {
+      const box = drawn(`a ${tag} b`);
+      expect(box.querySelectorAll("p *"), tag).toHaveLength(0);
+      expect(box.textContent?.trim(), tag).toBe(`a ${tag.replace(/&#115;/g, "s")} b`);
+    }
+  });
+
+  it("shows a closing tag with nothing of its name open as its text, so it cannot break out", () => {
+    const box = drawn("<div>a</div></div></details><script>alert(1)</script>\n\nafter");
+    expect(box.querySelectorAll("div")).toHaveLength(1);
+    expect(box.querySelector("script")).toBeNull();
+    expect(box.textContent).toContain("</div></details><script>alert(1)</script>");
+    expect(box.lastElementChild?.textContent).toBe("after");
+  });
+
+  it("closes what is open when its tag closes, and what is left open at the end", () => {
+    const box = drawn("<b><i>x</b></i> y\n\n<details>\n<summary>s</summary>\n\nleft open");
+    expect(box.querySelector("b > i")?.textContent).toBe("x");
+    expect(box.textContent).toContain("</i> y");
+    expect(box.querySelector("details")?.textContent).toContain("left open");
+    expect(render("<details>\n<summary>s</summary>\n\nleft open")).toMatch(/<\/details>$/);
+  });
+
+  it("takes a size only in whole pixels or as a percentage, and an alignment only from its list", () => {
+    const box = drawn(
+      '<p align="CENTER"><img src="https://example.com/a.png" width="50%" height=" 64 " align="Middle"></p>',
+    );
+    const image = box.querySelector("p[align='center'] > img");
+    expect(image?.getAttribute("width")).toBe("50%");
+    expect(image?.getAttribute("height")).toBe("64");
+    expect(image?.getAttribute("align")).toBe("middle");
+    for (const tag of [
+      '<img src="https://example.com/a.png" width="-5">',
+      '<img src="https://example.com/a.png" width="12.5">',
+      '<img src="https://example.com/a.png" width="128px">',
+      '<img src="https://example.com/a.png" width="101%">',
+      '<img src="https://example.com/a.png" height="99999999">',
+      '<img src="https://example.com/a.png" height="expression(alert(1))">',
+      '<img src="https://example.com/a.png" align="center">',
+      "<p align>x</p>",
+      '<div align="javascript:alert(1)">x</div>',
+      '<h1 align="middle">x</h1>',
+    ]) {
+      const refused = drawn(`a ${tag} b`);
+      expect(refused.querySelectorAll("p *"), tag).toHaveLength(0);
+      expect(refused.textContent?.trim(), tag).toBe(`a ${tag} b`);
+    }
+  });
+
+  it("draws a source only for a light or a dark colour scheme", () => {
+    const box = drawn(
+      [
+        "<picture>",
+        '<source media="( PREFERS-COLOR-SCHEME : Dark )" srcset="https://example.com/dark.png">',
+        '<source media="(prefers-color-scheme: light)" srcset="https://example.com/light.png">',
+        '<img src="https://example.com/light.png" alt="logo">',
+        "</picture>",
+      ].join("\n"),
+    );
+    expect([...box.querySelectorAll("picture > source")].map((source) => source.getAttribute("media"))).toEqual([
+      "(prefers-color-scheme: dark)",
+      "(prefers-color-scheme: light)",
+    ]);
+    for (const media of [
+      "(min-width: 1200px) and (prefers-color-scheme: dark)",
+      "(prefers-color-scheme: dark), (min-width: 1px)",
+      "(prefers-color-scheme: no-preference)",
+      "(min-resolution: 2dppx)",
+      "screen",
+    ]) {
+      const refused = drawn(`<picture><source media="${media}" srcset="https://example.com/a.png"><img src="https://example.com/b.png"></picture>`);
+      expect(refused.querySelector("source"), media).toBeNull();
+      expect(refused.textContent, media).toContain(`<source media="${media}"`);
+    }
+  });
+
+  it("closes a link or other inline element left open at the end of its block", () => {
+    const box = drawn(
+      '<a href="https://evil.example">\n\n# Heading\n\nSome paragraph.\n\n- item\n\n[real link](https://ok.example)',
+    );
+    for (const selector of ["h1", "p", "li"])
+      expect(box.querySelector(selector)?.closest("a"), selector).toBeNull();
+    expect([...box.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
+      "https://evil.example",
+      "https://ok.example",
+    ]);
+    expect(box.querySelector("a[href='https://ok.example']")?.textContent).toBe("real link");
+    const inline = drawn('one <b>two <a href="https://evil.example">three\n\n# four\n\nx <i>y</i foo="a>b"> z\n\nfive');
+    expect(inline.querySelector("p > b > a")?.textContent).toBe("three");
+    for (const element of inline.querySelectorAll("h1, p"))
+      expect(element.closest("b, a, i"), element.textContent ?? "").toBeNull();
+    expect(inline.lastElementChild?.textContent).toBe("five");
+  });
+
+  it("draws at most a hundred elements open at once, and an opening tag past them as its text", () => {
+    const box = drawn(`${"<div>".repeat(101)}deep`);
+    expect(box.querySelectorAll("div")).toHaveLength(100);
+    expect(box.textContent).toBe("<div>deep");
+    expect(drawn(`${"<b>".repeat(100)}<br><img src="https://example.com/a.png"><i/>x`).querySelector("i")).not.toBeNull();
+  });
+
+  it("refuses a closing tag with nothing of its name open at once, however many there are", () => {
+    const markdown = `x ${"<b>".repeat(100_000)}${"</i>".repeat(100_000)}`;
+    const started = performance.now();
+    const html = render(markdown);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(html.match(/<b>/g)).toHaveLength(100);
+  });
+
+  it("draws an image of the project once it is read, every one of a source's too, and as its text before", async () => {
+    const DATA = "data:image/png;base64,AAAA";
+    const markdown = [
+      '<img src="docs/icon.png" width="128" height="128" alt="">',
+      "",
+      "![logo](docs/icon.png)",
+      "",
+      '<picture><source media="(prefers-color-scheme: dark)" srcset="docs/dark.png 1x, docs/dark2.png 2x, docs/icon.png 3x"><img src="docs/icon.png"></picture>',
+      "",
+      "![other](docs/other.png)",
+    ].join("\n");
+    expect(drawn(markdown).querySelector("img, source")).toBeNull();
+    project.documents.set("/one/docs.md", markdown);
+    project.files.set("docs/dark.png", { size: 3, wait: 0 });
+    project.files.set("docs/dark2.png", { size: 3, wait: 0 });
+    const box = await loaded("/one/docs.md");
+    expect(project.reads.map((read) => read.file).sort()).toEqual(
+      ["docs/dark.png", "docs/dark2.png", "docs/icon.png", "docs/other.png"],
+    );
+    expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual([DATA, DATA, DATA]);
+    expect(box.querySelector("source")?.getAttribute("srcset")).toBe(`${DATA} 1x, ${DATA} 2x, ${DATA} 3x`);
+    expect(box.textContent).toContain("other");
+  });
+
+  // A picture's fallback from the web would otherwise load only when the
+  // project's file was not there, and so tell the web whether it is.
+  it("draws a picture's images from the web or from the project, never both", async () => {
+    project.documents.set(
+      "/one/docs.md",
+      [
+        '<picture><source srcset="docs/icon.png"><img src="https://evil.example/miss.png" alt="here"></picture>',
+        '<picture><source srcset="docs/gone.png"><img src="https://evil.example/miss.png" alt="gone"></picture>',
+        '<picture><source srcset="https://evil.example/a.png"><img src="docs/icon.png" alt="web"></picture>',
+        '<picture><source srcset="docs/icon.png 1x, https://evil.example/b.png 2x"><img src="data:image/gif;base64,R0lGOD" alt="mixed"></picture>',
+        '<picture><source srcset="https://evil.example/c.png"> ![markdown](docs/shot.png)</picture>',
+      ].join("\n\n"),
+    );
+    const box = await loaded("/one/docs.md");
+    const drawn = [...box.querySelectorAll("picture")].map((picture) =>
+      [...picture.querySelectorAll("source, img")].flatMap((element) =>
+        (element.getAttribute("srcset") ?? element.getAttribute("src") ?? "")
+          .split(/,\s+/)
+          .map((candidate) => candidate.split(" ")[0]),
+      ),
+    );
+    expect(drawn).toEqual([
+      ["data:image/png;base64,AAAA"],
+      [],
+      ["https://evil.example/a.png"],
+      ["data:image/gif;base64,R0lGOD"],
+      ["https://evil.example/c.png"],
+    ]);
+    expect(box.textContent).toContain('<img src="https://evil.example/miss.png" alt="here">');
+    expect(box.textContent).toContain("markdown");
+    // An image of the project in a picture from the web is not even read.
+    expect(project.reads.map((read) => read.file).sort()).toEqual(["docs/gone.png", "docs/icon.png"]);
+  });
+
+  it("draws an image named thousands of times only while the 64 MB hold it, and reads it once", async () => {
+    project.documents.set("/one/docs.md", "![big](docs/big.png) ".repeat(5000));
+    project.files.set("docs/big.png", { size: 1024 * 1024, wait: 0 });
+    const box = await loaded("/one/docs.md");
+    expect(project.reads.map((read) => read.file)).toEqual(["docs/big.png"]);
+    expect(box.querySelectorAll("img")).toHaveLength(64);
+    expect(box.textContent).toContain("big");
+  });
+
+  it("draws the same images of a document whatever order their reads land in", async () => {
+    const megabytes: Record<string, number> = { a: 40, b: 30 };
+    project.documents.set("/one/docs.md", [..."abcdef"].map((name) => `![${name}](docs/${name}.png)`).join(" "));
+    const drawnWith = async (waits: Record<string, number>) => {
+      project.reads.length = 0;
+      for (const name of "abcdef") {
+        const size = (megabytes[name] ?? 1) * 1024 * 1024;
+        project.files.set(`docs/${name}.png`, { size, wait: waits[name] ?? 0 });
+      }
+      return (await loaded("/one/docs.md")).innerHTML;
+    };
+    const early = await drawnWith({ c: 10, d: 10 });
+    const late = await drawnWith({ a: 20, b: 20 });
+    expect(late).toBe(early);
+    const box = document.createElement("div");
+    box.innerHTML = early;
+    expect([...box.querySelectorAll("img")].map((image) => image.getAttribute("alt"))).toEqual(["a"]);
+  });
+
+  it("reads no more of a document's images once it is no longer wanted", async () => {
+    project.documents.set("/one/docs.md", "![a](docs/icon.png) ![b](docs/shot.png)");
+    const read = await load("/one/docs.md", "/one", () => true);
+    expect(project.reads).toEqual([]);
+    expect("html" in read && read.html).not.toContain("<img");
+  });
+
+  it("reads a tag as a browser does, its case, its entities and a quote in it", () => {
+    const box = drawn('<IMG SRC="https://example.com/a.png?x=1&amp;y=2" ALT=\'say "hi" &lt;b&gt;\'> <A HREF=https://example.com>u</A>');
+    const image = box.querySelector("img");
+    expect(image?.getAttribute("src")).toBe("https://example.com/a.png?x=1&y=2");
+    expect(image?.getAttribute("alt")).toBe('say "hi" <b>');
+    expect(box.querySelector("a")?.textContent).toBe("u");
+    expect(box.querySelector("b")).toBeNull();
+  });
+
+  it("keeps a document's HTML as text in a conversation", () => {
+    const box = document.createElement("div");
+    box.innerHTML = renderSaid(`${HERO}\n\n<details><summary>a</summary>b</details> <kbd>k</kbd>`);
+    expect(box.querySelector("img, details, kbd, p[align]")).toBeNull();
+    expect(box.textContent).toContain('<img src="https://example.com/icon.png" width="128" height="128" alt="">');
   });
 });

@@ -1342,6 +1342,19 @@ export async function installFakeCore(
             size: 70,
           };
         },
+        // A document's image is one a test put in `__images` by the path the
+        // document names it by, and is not there otherwise. Each read is
+        // kept in `__imageReads`.
+        readDocumentImage: async (root: string, document: string, file: string) => {
+          const w = window as unknown as {
+            __images?: Record<string, { mime: string; data: string; size: number }>;
+            __imageReads?: { root: string; document: string; file: string }[];
+          };
+          (w.__imageReads ??= []).push({ root, document, file });
+          const found = w.__images?.[file];
+          if (found === undefined) throw new Error(`${file} is not there`);
+          return found;
+        },
 
         // A page's folder at an address of its own for each drawing, as the
         // app serves it on Windows, so a test can answer for its files with

@@ -1888,6 +1888,17 @@ impl Core {
         crate::show::read_media(path)
     }
 
+    /// An image a Markdown document in the project at `root` names by a
+    /// path relative to itself, when the document may draw it.
+    pub fn read_document_image(
+        &self,
+        root: &Path,
+        document: &str,
+        file: &str,
+    ) -> Result<crate::show::Media, String> {
+        crate::document_images::read(root, document, file, home_directory().as_deref())
+    }
+
     pub fn file_info(&self, path: &Path) -> Result<crate::show::FileInfo, String> {
         crate::show::file_info(path)
     }

@@ -18,6 +18,9 @@
     path: string;
     /** What an image is called when it cannot be shown. */
     alt: string;
+    /** The project the file is in, on the same machine: a document draws
+        the images it names in it. */
+    root?: string | null;
     /** Changes when the file may have: a later call for it, or the
         working tree moving under it. */
     reload?: string;
@@ -28,7 +31,7 @@
     again?: string;
   }
 
-  let { path, alt, reload = "", again = "" }: Props = $props();
+  let { path, alt, root = null, reload = "", again = "" }: Props = $props();
 
   let loaded = $state<Loaded | null>(null);
 
@@ -36,14 +39,15 @@
   let drawn = $state<{ svg: string } | { error: string } | null>(null);
 
   /** Which read is the current one: a slow read of an earlier state must
-      not land over a newer one. */
+      not land over a newer one, and stops reading a document's images. */
   let read = 0;
 
   $effect(() => {
     const file = path;
+    const project = root;
     reload;
     const current = ++read;
-    void load(file).then((result) => {
+    void load(file, project, () => current !== read).then((result) => {
       if (current !== read) return;
       const before = untrack(() => loaded);
       if (before !== null && JSON.stringify(before) === JSON.stringify(result)) return;
@@ -116,7 +120,9 @@
     color: var(--ink-3);
   }
 
+  /* A block of its own, so an image floated left or right stays inside. */
   .document {
+    display: flow-root;
     padding: 4px 0;
     font-size: 13.5px;
     line-height: 1.6;
@@ -208,8 +214,15 @@
     color: var(--accent);
   }
 
+  /* An image is never wider than the document, and one given a width
+     draws in its own proportions, so narrowing it to fit never stretches
+     it. */
   .document :global(img) {
     max-width: 100%;
+  }
+
+  .document :global(img[width]) {
+    height: auto;
   }
 
   .diagram,
