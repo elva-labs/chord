@@ -134,7 +134,8 @@ export function open(key: string, project: string) {
 
 /** A plugin's notification that names no session, for a project open
     here: told as any notification is, as the settings allow, titled with
-    the project and the plugin's name. Its text is the body, which the
+    the project and "The <name> plugin", so it never reads as a session's,
+    whose title is the session's name. Its text is the body, which the
     system shows as text. One again with the same target takes the place
     of the last. A click brings the project forward and opens the plugin's
     page there, handed the target; a plugin with no page for the project
@@ -144,7 +145,7 @@ export function pluginNotified(event: PluginNotifyEvent) {
   if (!workspace.open.some((open) => open.path === project)) return;
   const key = keyOf(event);
   const name = JSON.stringify(["plugin", event.source, event.plugin, project, event.target ?? ""]);
-  tell(name, `${projectLabel(project)} · ${event.plugin}`, event.text, () =>
+  tell(name, `${projectLabel(project)} · The ${event.plugin} plugin`, event.text, () =>
     openAt(key, project, event.target),
   );
 }

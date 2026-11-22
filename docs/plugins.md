@@ -553,8 +553,8 @@ session's: it shows on the session's row, as a line from the agent's own
 notify tool does, and is dropped when no running session answers to the
 id. A line that names no session is the plugin's own, told as the app's
 other notifications are and only as the settings allow them: titled with
-the project and the plugin's name, "orbit-api · github", with the text as
-its body. The project must be one open in the app. The text is one line of
+the project and the plugin's name, "orbit-api · The github plugin", so it
+never passes for a session's, with the text as its body. The project must be one open in the app. The text is one line of
 120 characters at most, shown as plain text, with every character that
 shows nothing or reorders others taken out; a text with nothing left is
 dropped. A plugin gives three such lines a minute at most; the rest are

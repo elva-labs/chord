@@ -275,7 +275,7 @@ describe("a plugin's notification that names no session", () => {
     openBoth();
     pluginNotified(told());
     expect(notified).toHaveLength(1);
-    expect(notified[0].title).toBe("orbit-api · github");
+    expect(notified[0].title).toBe("orbit-api · The github plugin");
     expect(notified[0].body).toBe("A review was asked of you");
   });
 
