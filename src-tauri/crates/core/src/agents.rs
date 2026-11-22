@@ -15,7 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use toml_edit::{DocumentMut, TableLike};
 
 use crate::workflow::AGENTS as HARNESSES;
@@ -39,17 +39,20 @@ pub const SHIPPED_TITLES: &[&str] = &[
     "Docs writer",
 ];
 
-/// A model on one harness.
+/// A model on one harness. A field this version does not know is kept as
+/// written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct AgentModel {
     pub harness: String,
     pub model: String,
+    #[serde(flatten)]
+    pub later: Map<String, Value>,
 }
 
-/// One of the user's own agents.
+/// One of the user's own agents. A field this version does not know is
+/// kept as written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct Agent {
     pub title: String,
     pub description: String,
@@ -59,10 +62,24 @@ pub struct Agent {
     pub effort: Option<String>,
     #[serde(default)]
     pub reads_only: bool,
+    #[serde(flatten)]
+    pub later: Map<String, Value>,
 }
 
-const SHAPE: &str =
-    "agents is a list of agents, each a title, a description, a model or none, an effort or none, and whether it reads only";
+/// An agent in the settings file that does not read or keep the rules,
+/// with the rule it breaks, its title where it has one, and where it
+/// stands in the file's list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SetAside {
+    pub at: usize,
+    pub title: String,
+    pub reason: String,
+    pub entry: Value,
+}
+
+const SHAPE: &str = "agents is a list of agents";
+const ONE_SHAPE: &str =
+    "an agent is a title, a description, a model or none, an effort or none, and whether it reads only";
 
 /// A model's name or an effort: one word, short, with nothing unprintable.
 fn is_word(text: &str) -> bool {
@@ -121,8 +138,25 @@ fn check(agent: &Agent) -> Result<(), String> {
     Ok(())
 }
 
-/// The agents a value holds, their titles and descriptions trimmed, or the
-/// reason one will not do. Titles are unique, ignoring case.
+/// The agent an entry holds, its title and description trimmed, or the
+/// reason it will not do beside the agents read before it. Titles are
+/// unique, ignoring case.
+fn one(entry: &Value, earlier: &[Agent]) -> Result<Agent, String> {
+    let mut agent: Agent = serde_json::from_value(entry.clone()).map_err(|_| ONE_SHAPE)?;
+    check(&agent)?;
+    agent.title = agent.title.trim().to_string();
+    agent.description = agent.description.trim().to_string();
+    if earlier
+        .iter()
+        .any(|kept| kept.title.eq_ignore_ascii_case(&agent.title))
+    {
+        return Err(format!("there is already an agent called {}", agent.title));
+    }
+    Ok(agent)
+}
+
+/// The agents a value holds, or the reason one will not do. A change sets
+/// the agents this way, whole or not at all.
 pub fn read(value: &Value) -> Result<Vec<Agent>, String> {
     let list = value.as_array().ok_or(SHAPE)?;
     if list.len() > MOST_AGENTS {
@@ -130,19 +164,37 @@ pub fn read(value: &Value) -> Result<Vec<Agent>, String> {
     }
     let mut agents: Vec<Agent> = Vec::with_capacity(list.len());
     for entry in list {
-        let mut agent: Agent = serde_json::from_value(entry.clone()).map_err(|_| SHAPE)?;
-        check(&agent)?;
-        agent.title = agent.title.trim().to_string();
-        agent.description = agent.description.trim().to_string();
-        if agents
-            .iter()
-            .any(|earlier| earlier.title.eq_ignore_ascii_case(&agent.title))
-        {
-            return Err(format!("there is already an agent called {}", agent.title));
-        }
+        let agent = one(entry, &agents)?;
         agents.push(agent);
     }
     Ok(agents)
+}
+
+/// The agents a settings file's list holds, read one at a time: each one
+/// that does not read or keep the rules, one whose title an earlier one
+/// has and one past the most the settings hold is set aside with the
+/// reason, and the rest are used.
+pub fn read_lenient(list: &[Value]) -> (Vec<Agent>, Vec<SetAside>) {
+    let mut agents: Vec<Agent> = Vec::new();
+    let mut aside = Vec::new();
+    for (at, entry) in list.iter().enumerate() {
+        let reason = match one(entry, &agents) {
+            Ok(agent) if agents.len() < MOST_AGENTS => {
+                agents.push(agent);
+                continue;
+            }
+            Ok(_) => format!("the settings hold {MOST_AGENTS} agents at most"),
+            Err(reason) => reason,
+        };
+        let title = entry.get("title").and_then(Value::as_str).unwrap_or("");
+        aside.push(SetAside {
+            at,
+            title: title.trim().to_string(),
+            reason,
+            entry: entry.clone(),
+        });
+    }
+    (agents, aside)
 }
 
 /// Where an installed agent comes from: Claude Code's own folder under the
@@ -574,13 +626,70 @@ mod tests {
         assert!(
             with("model", json!({ "harness": "codex", "model": "two words" })).contains("one word")
         );
-        assert!(
-            with("model", json!({ "agent": "codex", "model": "gpt" })).contains("agents is a list")
-        );
+        assert!(with("model", json!({ "agent": "codex", "model": "gpt" })).contains("an agent is"));
         assert!(with("effort", json!("very high")).contains("effort"));
-        assert!(with("readsOnly", json!("yes")).contains("agents is a list"));
-        assert!(with("colour", json!("red")).contains("agents is a list"));
-        assert!(read(&json!({ "Migrations": {} })).is_err());
+        assert!(with("readsOnly", json!("yes")).contains("an agent is"));
+        assert!(read(&json!({ "Migrations": {} }))
+            .unwrap_err()
+            .contains("agents is a list"));
+    }
+
+    #[test]
+    fn a_field_a_later_version_adds_is_kept_as_written() {
+        let written = json!({
+            "title": "Migrations",
+            "description": "Checks migrations.",
+            "model": { "harness": "codex", "model": "gpt-5.5", "profile": "fast" },
+            "effort": null,
+            "readsOnly": false,
+            "colour": "red",
+        });
+        let read = one(written.clone()).unwrap();
+        assert_eq!(read[0].later["colour"], json!("red"));
+        assert_eq!(
+            read[0].model.as_ref().unwrap().later["profile"],
+            json!("fast")
+        );
+        assert_eq!(serde_json::to_value(&read[0]).unwrap(), written);
+    }
+
+    #[test]
+    fn a_files_agents_are_read_one_at_a_time_and_the_rest_set_aside() {
+        let agent = |title: &str| json!({ "title": title, "description": "Does it." });
+        let mut list = vec![
+            agent("Migrations"),
+            json!({ "title": "Broken", "description": "Does it.", "model": "opus" }),
+            agent("Tester"),
+            agent("migrations"),
+            json!(7),
+        ];
+        list.extend((0..MOST_AGENTS).map(|n| agent(&format!("Agent {n}"))));
+        let (kept, aside) = read_lenient(&list);
+        assert_eq!(kept.len(), MOST_AGENTS);
+        assert_eq!(kept[0].title, "Migrations");
+        assert_eq!(
+            kept[MOST_AGENTS - 1].title,
+            format!("Agent {}", MOST_AGENTS - 2)
+        );
+        let set: Vec<(usize, &str)> = aside
+            .iter()
+            .map(|entry| (entry.at, entry.title.as_str()))
+            .collect();
+        assert_eq!(
+            set,
+            [
+                (1, "Broken"),
+                (2, "Tester"),
+                (3, "migrations"),
+                (4, ""),
+                (list.len() - 1, &*format!("Agent {}", MOST_AGENTS - 1)),
+            ]
+        );
+        assert!(aside[0].reason.contains("an agent is"));
+        assert!(aside[1].reason.contains("Chord ships"));
+        assert!(aside[2].reason.contains("already"));
+        assert!(aside[4].reason.contains("at most"));
+        assert_eq!(aside[0].entry, list[1]);
     }
 
     #[test]

@@ -380,8 +380,10 @@ user's own opens the same form with what it holds. A title is one line of
 40 characters at most, no other agent's, ignoring case, and none of the
 shipped agents'; a description is needed, of 8000 characters at most; and
 the settings hold 32 agents of the user's own at most. A save that breaks
-a rule says which under the form and keeps nothing. The agents are the
-user's to change, and an agent's settings tools refuse them.
+a rule says which under the form and keeps nothing. An agent the file
+holds that breaks a rule is named under the list with the rule, not used,
+and kept as written. The agents are the user's to change, and an agent's
+settings tools refuse them.
 
 Under them, the agents the user installed for the harnesses in the
 active project are listed under where each was found. From Claude Code
@@ -775,9 +777,11 @@ background. A value that is not used is named in
 the section of its setting. Workflows say so in their own tab, as
 [workflows](#workflows) describes. A setting that is not the shape it should
 be at all is kept whole in the same way.
-Your own agents are read as one list: where one of them breaks a rule,
-none is used, and the file keeps the list as written until a change sets
-the agents again.
+Your own agents are read one at a time: one that breaks a rule is not
+used, and the file keeps it as written, in its place in the list, until a
+change names an agent of its title. The agents tab says which one it is and
+why. A list that is not a list is kept whole until a change sets the agents
+again.
 
 A read finds the file in one of three states: there is none, it is whole, or
 it is there and cannot be read, because it is empty, cut short or not

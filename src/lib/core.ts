@@ -1471,6 +1471,9 @@ export interface Settings {
     reason: string;
     /** The entry as the file holds it. */
     entry?: unknown;
+    /** Where it stands in the field's list, for an entry of a list: one of
+        the user's own agents, named by its title. */
+    at?: number;
   }[];
   /** How long a past session stays listed under its project before it
       goes behind the fold with the rest of the history. */

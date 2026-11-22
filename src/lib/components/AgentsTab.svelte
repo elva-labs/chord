@@ -14,6 +14,7 @@
   import type { HarnessId, InstalledAgent, OwnAgent } from "$lib/core";
   import Icon from "$lib/components/conversation/Icon.svelte";
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
+  import UnreadEntries from "$lib/components/UnreadEntries.svelte";
   import {
     type Agent,
     agentByKey,
@@ -200,6 +201,7 @@
         <span></span>
       </button>
     </div>
+    <UnreadEntries field="agents" />
     {#if agents.refused !== null}
       <p class="error" role="alert" data-testid="agent-refused">{agents.refused}</p>
     {/if}

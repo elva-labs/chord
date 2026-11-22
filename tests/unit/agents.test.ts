@@ -120,6 +120,12 @@ describe("the user's own agents", () => {
     expect(agents.refused).toBeNull();
   });
 
+  it("keep a field a later version wrote when one is changed", () => {
+    adoptAgents([{ ...mine("Migrations"), colour: "red" } as OwnAgent]);
+    expect(saveAgent({ ...mine("Migrations"), effort: "max" }, "Migrations")).toBeNull();
+    expect(agents.own[0]).toEqual({ ...mine("Migrations"), effort: "max", colour: "red" });
+  });
+
   it("are trimmed when kept", () => {
     saveAgent({ ...mine("  Migrations "), description: "\n Checks.\n" }, null);
     expect(agents.own[0].title).toBe("Migrations");

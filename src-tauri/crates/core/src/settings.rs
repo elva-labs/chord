@@ -182,11 +182,12 @@ pub struct Hooks {
 }
 
 /// What the file holds and the app does not use, with the rule it breaks: an
-/// entry of the keys, the hooks, the accounts or the themes, a choice of
-/// account that names one, a value of a setting, or a field that is not a
-/// setting. It is written back where it stood by every save, until a change
-/// names the entry again, sets the choice to something else, sets the
-/// setting, or replaces the field it belongs to.
+/// entry of the keys, the hooks, the accounts or the themes, one of the
+/// user's agents, a choice of account that names one, a value of a
+/// setting, or a field that is not a setting. It is written back where it
+/// stood by every save, until a change names the entry again, sets the
+/// choice to something else, sets the setting, or replaces the field it
+/// belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnreadEntry {
     /// The field of the file it is in, as the file spells it.
@@ -200,6 +201,10 @@ pub struct UnreadEntry {
     pub reason: String,
     /// The entry as the file holds it.
     pub entry: Value,
+    /// Where it stands in the field's list, for an entry of a list: an
+    /// agent, whose name is its title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<usize>,
 }
 
 /// What the user last chose for one harness's sessions, each left out where
@@ -508,7 +513,29 @@ fn unused(
         name: name.into(),
         reason,
         entry: entry.clone(),
+        at: None,
     });
+}
+
+/// The user's agents that read, each on its own; the rest are unread.
+fn agents_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> Vec<crate::agents::Agent> {
+    let Some(list) = value.as_array() else {
+        let reason = "agents is a list of agents".into();
+        unused(unread, "agents", "", "", reason, value);
+        return Vec::new();
+    };
+    let (agents, aside) = crate::agents::read_lenient(list);
+    for entry in aside {
+        unread.push(UnreadEntry {
+            field: "agents".into(),
+            section: String::new(),
+            name: entry.title,
+            reason: entry.reason,
+            entry: entry.entry,
+            at: Some(entry.at),
+        });
+    }
+    agents
 }
 
 /// The chords that read, each entry on its own; the rest are unread.
@@ -689,6 +716,7 @@ const TABLES: &[&str] = &[
     "backgrounds",
     "cards",
     "workflows",
+    "agents",
 ];
 
 /// Whether the settings hold again the entry an unread one stands for. A
@@ -704,6 +732,13 @@ fn holds(settings: &Settings, entry: &UnreadEntry) -> bool {
         ("hooks", "overrides") => settings.hooks.overrides.contains_key(name),
         ("accounts", "list") => settings.accounts.list.contains_key(name),
         ("accounts", "overrides") => settings.accounts.overrides.contains_key(name),
+        ("agents", "") if entry.at.is_some() => {
+            !name.is_empty()
+                && settings
+                    .agents
+                    .iter()
+                    .any(|agent| agent.title.eq_ignore_ascii_case(name))
+        }
         _ => true,
     }
 }
@@ -1247,7 +1282,11 @@ fn set_field(settings: &mut Settings, field: &str, value: &Value) -> Result<(), 
             settings.workflows = workflow::read(value)?;
             mend(&before, settings, "workflows");
         }
-        "agents" => settings.agents = crate::agents::read(value)?,
+        "agents" => {
+            let before = settings.clone();
+            settings.agents = crate::agents::read(value)?;
+            mend(&before, settings, "agents");
+        }
         "pastSessions" => settings.past_sessions = one_of(field, value, PAST_SESSIONS)?,
         "integrated" => settings.integrated = integrated(value)?,
         "inactiveAfter" => settings.inactive_after = one_of(field, value, INACTIVE_AFTER)?,
@@ -1294,9 +1333,9 @@ fn settle_palette(settings: &mut Settings) {
 
 /// The settings a file's text holds. Each value that does not read is left
 /// at its default and set aside with the rule it breaks, as is each key,
-/// hook, account or theme entry that does not read, each choice of account
-/// that names one, and each field that is not a setting; each workflow that
-/// does not read is left out and kept by the workflows. None when the text
+/// hook, account, theme entry or agent that does not read, each choice of
+/// account that names one, and each field that is not a setting; each
+/// workflow that does not read is left out and kept by the workflows. None when the text
 /// is not a JSON object at all.
 pub fn parse(text: &str) -> Option<Settings> {
     let fields: Map<String, Value> = serde_json::from_str(text).ok()?;
@@ -1315,6 +1354,8 @@ pub fn parse(text: &str) -> Option<Settings> {
             settings.backgrounds = backgrounds_lenient(value, &mut unread);
         } else if field == "cards" {
             settings.cards = cards_lenient(value, &mut unread);
+        } else if field == "agents" {
+            settings.agents = agents_lenient(value, &mut unread);
         } else if field == "workflows" {
             if value.is_object() && value.get("list").is_none_or(Value::is_array) {
                 settings.workflows = workflow::read_lenient(value);
@@ -1433,6 +1474,15 @@ fn is_choice(entry: &UnreadEntry) -> bool {
 
 /// Writes an unread entry back where the file had it.
 fn put_back(fields: &mut Map<String, Value>, entry: &UnreadEntry) {
+    if let Some(at) = entry.at {
+        let field = fields
+            .entry(entry.field.clone())
+            .or_insert_with(|| Value::Array(Vec::new()));
+        if let Some(list) = field.as_array_mut() {
+            list.insert(at.min(list.len()), entry.entry.clone());
+        }
+        return;
+    }
     if entry.section.is_empty() && entry.name.is_empty() {
         fields.insert(entry.field.clone(), entry.entry.clone());
         return;
@@ -1464,7 +1514,11 @@ fn render(settings: &Settings) -> String {
     if let Some(fields) = value.as_object_mut() {
         fields.insert("workflows".into(), workflow::for_file(&settings.workflows));
         fields.remove("unreadEntries");
-        for entry in &settings.unread_entries {
+        // An entry of a list goes back in order, so each lands where it
+        // stood.
+        let mut entries: Vec<&UnreadEntry> = settings.unread_entries.iter().collect();
+        entries.sort_by_key(|entry| entry.at);
+        for entry in entries {
             put_back(fields, entry);
         }
     }
@@ -3183,7 +3237,7 @@ mod tests {
     }
 
     #[test]
-    fn the_users_own_agents_are_kept_whole_and_one_that_does_not_read_is_kept_as_written() {
+    fn the_users_own_agents_are_set_by_a_change_whole_and_kept_as_written() {
         assert!(Settings::default().agents.is_empty());
         let agent = json!({
             "title": "Migrations",
@@ -3205,17 +3259,59 @@ mod tests {
         )
         .is_err());
         assert!(apply(&next, &json!({ "agents": {} })).is_err());
-        // A file from before has none, and a list that does not read is kept
-        // as written until a change sets the agents again.
         assert!(parse(r#"{ "chime": true }"#).unwrap().agents.is_empty());
-        let unread =
-            parse(r#"{ "agents": [{ "title": "Tester", "description": "Mine." }] }"#).unwrap();
-        assert!(unread.agents.is_empty());
-        assert_eq!(unread.unread_entries[0].field, "agents");
-        let written: Value = serde_json::from_str(&render(&unread)).unwrap();
-        assert_eq!(written["agents"][0]["title"], "Tester");
-        let mended = apply(&unread, &json!({ "agents": [] })).unwrap();
-        assert!(mended.unread_entries.is_empty());
+        // A field this version does not know survives a round trip.
+        let mut later = agent.clone();
+        later["colour"] = json!("red");
+        let read = parse(&json!({ "agents": [later.clone()] }).to_string()).unwrap();
+        assert!(read.unread_entries.is_empty());
+        let written: Value = serde_json::from_str(&render(&read)).unwrap();
+        assert_eq!(written["agents"], json!([later]));
+    }
+
+    #[test]
+    fn an_agent_in_the_file_that_does_not_read_is_set_aside_and_kept_across_a_save() {
+        let good = json!({ "title": "Migrations", "description": "Checks migrations." });
+        let shipped = json!({ "title": "Tester", "description": "Mine." });
+        let broken = json!({ "title": "Broken", "description": "Mine.", "model": "opus" });
+        let file = json!({ "agents": [shipped.clone(), good.clone(), broken.clone()] });
+        let read = parse(&file.to_string()).unwrap();
+        assert_eq!(read.agents.len(), 1);
+        assert_eq!(read.agents[0].title, "Migrations");
+        let aside: Vec<(&str, Option<usize>)> = read
+            .unread_entries
+            .iter()
+            .map(|entry| (entry.name.as_str(), entry.at))
+            .collect();
+        assert_eq!(aside, [("Tester", Some(0)), ("Broken", Some(2))]);
+        assert!(read.unread_entries[0].reason.contains("Chord ships"));
+        // A save of the agents that read keeps the others where they stood.
+        let added = json!({ "title": "Docs", "description": "Writes docs." });
+        let saved = apply(&read, &json!({ "agents": [good.clone(), added.clone()] })).unwrap();
+        assert_eq!(saved.unread_entries.len(), 2);
+        let written: Value = serde_json::from_str(&render(&saved)).unwrap();
+        let titles: Vec<&str> = written["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|agent| agent["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, ["Tester", "Migrations", "Broken", "Docs"]);
+        assert_eq!(written["agents"][2], broken);
+        // An agent the change names again takes the place of the one set
+        // aside, and a list that is not a list is set aside whole.
+        let mended = json!({ "title": "broken", "description": "Mended." });
+        let next = apply(&saved, &json!({ "agents": [good, mended] })).unwrap();
+        assert_eq!(next.unread_entries.len(), 1);
+        assert_eq!(next.unread_entries[0].name, "Tester");
+        let whole = parse(r#"{ "agents": { "Tester": {} } }"#).unwrap();
+        assert_eq!(whole.unread_entries[0].at, None);
+        let written: Value = serde_json::from_str(&render(&whole)).unwrap();
+        assert_eq!(written["agents"], json!({ "Tester": {} }));
+        assert!(apply(&whole, &json!({ "agents": [] }))
+            .unwrap()
+            .unread_entries
+            .is_empty());
     }
 
     #[test]

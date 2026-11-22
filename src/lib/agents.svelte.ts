@@ -271,18 +271,20 @@ export function agentProblem(draft: OwnAgent, editing: string | null): string | 
 }
 
 /** Keeps an agent of the user's: a new one at the end, or one already kept
-    in its place. Answers why not when it will not do. */
+    in its place, with any field a later version wrote kept as it was.
+    Answers why not when it will not do. */
 export function saveAgent(draft: OwnAgent, editing: string | null): string | null {
   const problem = agentProblem(draft, editing);
   if (problem !== null) return problem;
+  const at = editing === null ? -1 : agents.own.findIndex((agent) => agent.title === editing);
   const kept: OwnAgent = {
+    ...(at < 0 ? {} : clone($state.snapshot(agents.own[at]))),
     title: draft.title.trim(),
     description: draft.description.trim(),
     model: draft.model === null ? null : { ...draft.model },
     effort: draft.effort,
     readsOnly: draft.readsOnly,
   };
-  const at = editing === null ? -1 : agents.own.findIndex((agent) => agent.title === editing);
   if (at < 0) agents.own.push(kept);
   else agents.own[at] = kept;
   keep();
