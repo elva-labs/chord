@@ -186,6 +186,11 @@ impl Activity {
     }
 }
 
+/// The longest model a turn is taken to run on. A longer one, or one with
+/// a space or a control character in it, is not a model's id, and the model
+/// heard before it stands.
+const LONGEST_MODEL: usize = 128;
+
 /// The model a turn runs on, from the context Codex writes as the turn
 /// begins, just after the turn's start.
 fn turn_model(line: &str) -> Option<String> {
@@ -197,7 +202,10 @@ fn turn_model(line: &str) -> Option<String> {
         return None;
     }
     let model = value.get("payload")?.get("model")?.as_str()?.trim();
-    (!model.is_empty()).then(|| model.to_string())
+    let named = !model.is_empty()
+        && model.chars().count() <= LONGEST_MODEL
+        && !model.chars().any(|c| c.is_control() || c.is_whitespace());
+    named.then(|| model.to_string())
 }
 
 fn turn_event(line: &str) -> Option<&'static str> {
@@ -369,6 +377,22 @@ mod tests {
         assert_eq!(
             turn_model(r#"{"type":"turn_context","payload":{"model":""}}"#),
             None
+        );
+        // A line that names no model's id leaves the one before it.
+        let long = "m".repeat(129);
+        let bell = r#"{"type":"turn_context","payload":{"model":"gpt\u0007bell"}}"#;
+        writeln!(
+            file,
+            "{start}\n{}\n{bell}\n{}",
+            context(&long),
+            context("two words")
+        )
+        .unwrap();
+        assert_eq!(activity.poll(&home), Some("prompt"));
+        assert_eq!(activity.model.as_deref(), Some("gpt-6.2-sol"));
+        assert_eq!(
+            turn_model(&context(&"m".repeat(128))).map(|model| model.len()),
+            Some(128)
         );
     }
 
