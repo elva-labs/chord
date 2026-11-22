@@ -649,7 +649,12 @@ starts, and the plugin is told nothing.
   not a string, or a `worktree` that is not true or false, asks nothing.
 - `purpose` says what the session is for. The one the app knows is
   `review`: the card then begins on the agent the user picked for the last
-  review, none included, and keeps the pick on a yes. Any other value is
+  review, none included, and keeps the pick on a yes. An agent picked
+  that has since been deleted gives way to the plugin's `agent`. An agent
+  installed for a project is kept by its name, so a review in any project
+  begins on the installed agent of that name there. The pick is kept on a
+  yes when the session runs in a terminal too, which works as no agent,
+  and the next review in a conversation begins on it. Any other value is
   no purpose.
 - `agent` suggests the agent by its title, as listed in Settings, ignoring
   the case of A to Z: the user's own first, then those Chord ships, then
