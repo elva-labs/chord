@@ -82,6 +82,8 @@ import {
   statusLabel,
   onForgotten,
   resumeWithout,
+  resumeWithoutProfile,
+  profileGone,
   statusMessage,
   disown,
   HISTORY_EVERY,
@@ -135,9 +137,11 @@ let givenNames: Record<string, string> = {};
 let unreadable: string | null = null;
 const spawned: SpawnOptions[] = [];
 vi.mock("$lib/core", () => ({
+  isHeld: () => false,
   core: () => ({
     spawn: async (options: SpawnOptions) => {
       spawned.push(options);
+      if (options.profile === "gone") throw new Error('there is no Codex profile "gone" in /home/.codex');
       return { ptyId: `pty-${spawned.length}`, sessionId: options.session ?? `sid-${spawned.length}` };
     },
     kill: async (id: string) => {
@@ -3607,5 +3611,36 @@ describe("what a row says of its model", () => {
     expect(rowModelLine(row)).toBe("fast");
     row.profile = null;
     expect(rowModelLine(row)).toBeNull();
+  });
+});
+
+describe("a session whose Codex profile is gone", () => {
+  it("goes on under the account's configuration on the user's word, in place of the row", async () => {
+    const row = create(A, "old", "codex");
+    row.profile = "gone";
+    expect(await launch(row.key, 80, 24, () => {})).toBe(false);
+    expect(byKey(row.key)?.status).toBe("failed");
+    expect(profileGone(byKey(row.key)!)).toBe(true);
+    const shell = createShell({ project: A, session: row.key });
+    shellStarted(shell.key, "pty-beside");
+    const without = resumeWithoutProfile(row.key)!;
+    expect(byKey(row.key)).toBeNull();
+    expect(without.profile).toBeNull();
+    expect(shellByKey(shell.key)).toMatchObject({ session: without.key });
+    expect(await launch(without.key, 80, 24, () => {})).toBe(true);
+    expect(spawned.at(-1)).toMatchObject({ session: "old" });
+    expect(spawned.at(-1)?.profile).toBeUndefined();
+  });
+
+  it("is offered for no other failure, nor for a row without a conversation", async () => {
+    const other = create(A, "old", "codex");
+    other.profile = "fast";
+    failed(other.key, "codex is not installed");
+    expect(profileGone(byKey(other.key)!)).toBe(false);
+    expect(resumeWithoutProfile(other.key)).toBeNull();
+    const fresh = create(A, null, "codex");
+    fresh.profile = "gone";
+    failed(fresh.key, 'there is no Codex profile "gone" in /home/.codex');
+    expect(profileGone(byKey(fresh.key)!)).toBe(false);
   });
 });

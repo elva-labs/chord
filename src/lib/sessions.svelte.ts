@@ -1953,6 +1953,35 @@ export function resumeWithout(key: string): Session | null {
   return next;
 }
 
+/** The words the core refuses a start with when the Codex profile a session
+    runs under is no longer among its account's files. */
+const PROFILE_GONE = "there is no Codex profile";
+
+/** Whether a row failed to start because the Codex profile it runs under is
+    gone, and its conversation is one it can go on with. */
+export function profileGone(session: Session): boolean {
+  return (
+    session.status === "failed" &&
+    session.profile !== null &&
+    session.id !== null &&
+    (session.error ?? "").includes(PROFILE_GONE)
+  );
+}
+
+/** Resumes a session whose Codex profile is gone, under its account's own
+    configuration, in place of the row that asked. */
+export function resumeWithoutProfile(key: string): Session | null {
+  const session = byKey(key);
+  if (session === null || !profileGone(session) || session.id === null) return null;
+  const { project, id, agent, startIn, model, account, kind, ownWay, madeTree } = session;
+  close(key, true);
+  const next = create(project, id, agent, startIn, null, model, account, null, kind);
+  next.ownWay = ownWay;
+  next.madeTree = madeTree;
+  handOver(key, { project, session: next.key });
+  return next;
+}
+
 /** Whether a new session has nothing to pick between: one agent to run
     and no accounts to run it under. */
 function nothingToPick(): boolean {
