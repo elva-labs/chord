@@ -107,7 +107,9 @@ pub fn settings(home: &Path, name: &str) -> Result<Vec<String>, String> {
     read(home, &found)
 }
 
-/// The names of the profile files in `home`, sorted.
+/// The names of the profile files in `home`, sorted. A link is followed,
+/// so a profile kept with other dotfiles is listed where it points at a
+/// file.
 fn names(home: &Path) -> Vec<String> {
     let Ok(entries) = fs::read_dir(home) else {
         return vec![];

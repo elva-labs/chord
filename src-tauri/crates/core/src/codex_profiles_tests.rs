@@ -194,6 +194,29 @@ fn takes_a_profile_only_by_a_name_found_among_the_files() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn follows_a_linked_profile_file() {
+    let home = Scratch::new("codex-profiles-linked");
+    let codex = home.path().join("codex");
+    fs::create_dir(&codex).unwrap();
+    write(home.path(), "fast.toml", "model = \"gpt-6.1-terra\"\n");
+    std::os::unix::fs::symlink(
+        home.path().join("fast.toml"),
+        codex.join("fast.config.toml"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        home.path().join("gone.toml"),
+        codex.join("gone.config.toml"),
+    )
+    .unwrap();
+
+    let names: Vec<_> = list(&codex).into_iter().map(|p| p.name).collect();
+    assert_eq!(names, ["fast"]);
+    assert_eq!(settings(&codex, "fast").unwrap(), ["model=gpt-6.1-terra"]);
+}
+
 #[test]
 fn refuses_a_profile_too_large_or_not_toml_and_still_lists_it() {
     let home = Scratch::new("codex-profiles-unread");
