@@ -1418,6 +1418,8 @@ export type InactiveAfter = "day" | "week" | "month" | "never";
     says what it does, and what it runs on. A model or an effort that is
     null leaves the session's own. */
 export interface OwnAgent {
+  /** The title a shipped agent the user changed ships under. */
+  shipped?: string;
   title: string;
   description: string;
   model: { harness: HarnessId; model: string } | null;
@@ -1484,6 +1486,9 @@ export interface Settings {
     reason: string;
     /** The entry as the file holds it. */
     entry?: unknown;
+    /** Where it stands in the field's list, for an entry of a list: one of
+        the user's own agents, named by its title. */
+    at?: number;
   }[];
   /** How long a past session stays listed under its project before it
       goes behind the fold with the rest of the history. */

@@ -285,9 +285,9 @@ among them. Class names are the app's own and change without notice.
 
 ## Live updates
 
-Shown in the Sessions tab as Let agents talk to Chord, with the line
-Shows when an agent works, waits or asks. Off is the watcher only, on is
-agent hooks, chosen once for every project; each project you open follows
+Shown in the Sessions tab as Let sessions talk to Chord, with the line
+Shows when a session works, waits or asks. Off is the watcher only, on is
+the harness's hooks, chosen once for every project; each project you open follows
 it, and a project that should go the other way can say so under By project. The `orchestrator` folder is among those projects while the
 sessions pane lists it (see [orchestrator](../orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
 choice existed starts with them off, and is told once, in a word over the
@@ -366,36 +366,49 @@ whether it reads only or changes files.
 The tab lists the agents Chord ships first, Researcher, Developer,
 Debugger, Tester, Reviewer, Security reviewer, Cloud architect and Docs
 writer, then the user's own in the order they were made, and New agent at
-the foot. A lock marks an agent that reads only. Opening a shipped agent
-shows its description and what it runs on, and says Chord ships it and it
-cannot be changed there.
+the foot. A lock marks an agent that reads only.
 
 New agent opens a form: the title, the description, and the line of what
 it runs on, which opens to choose the model, the effort, and Reads only or
-Changes files. A new agent starts on Sonnet on Claude Code, at high effort,
-reading only. The models are those the [workflows](#workflows) offer, by
-harness. Save keeps the agent, Cancel goes back without it, and Remove, on
-an agent already kept, asks once and takes it away. Opening one of the
-user's own opens the same form with what it holds. A title is one line of
-40 characters at most, no other agent's, ignoring case, and none of the
-shipped agents'; a description is needed, of 8000 characters at most; and
-the settings hold 32 agents of the user's own at most. A save that breaks
-a rule says which under the form and keeps nothing. The agents are the
-user's to change, and an agent's settings tools refuse them.
+Changes files. A new agent starts on Sonnet on Claude Code, at high
+effort, reading only. The models are those the [workflows](#workflows)
+offer, by harness. Save keeps the agent, Cancel goes back without it, and
+Remove, on an agent already kept, asks once and takes it away. Opening one
+of the user's own opens the same form with what it holds. Opening a
+shipped agent opens the same form too: a shipped agent the user saved
+changed is kept in the settings among the user's own, naming the agent it
+ships as, and stands in that agent's place in every list, under the
+shipped agent's name as well as its own, so whatever names the shipped
+agent finds it changed. Reset to shipped, on one changed, asks once and
+puts it back as Chord ships it, as does saving it as it ships. A title is
+one line of 40 characters at most and no other agent's, ignoring case, a
+shipped agent's among them, though a changed shipped agent may keep the
+title it ships under; a description is needed, of 8000 characters at most;
+and the settings hold 32 agents of the user's own at most, the shipped
+ones changed not counted. A save that breaks a rule says which under the
+form and keeps nothing. An agent the file holds that breaks a rule is
+named under the list with the rule, not used, and kept as written. The
+agents are the user's to change, and an agent's settings tools refuse
+them.
 
-Under them, the agents the user installed for the harnesses in the
-active project are listed under where each was found. From Claude Code
-reads the Markdown files in the `agents` folder of the configuration
-directory of the project's [account](#accounts), and From this project
-those in the project's `.claude/agents`: a file's frontmatter gives the
-name, the description and the model, and its body how it works; one whose
-`tools` leave out every tool that changes files reads only. From Codex
-reads the roles in the `[agents.<name>]` tables of the `config.toml` in
-the home of the project's account, each with a file of its own giving its
-model, its reasoning effort and its instructions; one with a read-only
-sandbox reads only. Opening one shows what was read and the file it came
-from. Chord never writes them: they are changed where they are kept, and a
-group with nothing in it is not shown.
+Under them, the agents the user installed for the harnesses in the active
+project are listed under where each was found. From Claude Code reads the
+Markdown files in the `agents` folder of the configuration directory of
+the project's [account](#accounts), and From this project those in the
+project's `.claude/agents`: a file's frontmatter gives the name, the
+description and the model, and its body how it works; one whose `tools`
+name only tools that read, Read, Grep, Glob, LS, NotebookRead, WebFetch,
+WebSearch and TodoWrite, reads only, and any other tool, Bash or a
+server's among them, changes files. Of files that give the same name,
+ignoring case, the first by file name is listed. Each place lists 64
+agents at most and skips a file over 256 KB, and a file in the project
+that links out of the project is not read. From Codex reads the roles in
+the `[agents.<name>]` tables of the `config.toml` in the home of the
+project's account, each with a file of its own giving its model, its
+reasoning effort and its instructions; one with a read-only sandbox reads
+only. Opening one shows its description, how it works, what it runs on and
+the file it came from. Chord never writes them: they are changed where
+they are kept, and a group with nothing in it is not shown.
 
 ## Workflows
 
@@ -775,9 +788,11 @@ background. A value that is not used is named in
 the section of its setting. Workflows say so in their own tab, as
 [workflows](#workflows) describes. A setting that is not the shape it should
 be at all is kept whole in the same way.
-Your own agents are read as one list: where one of them breaks a rule,
-none is used, and the file keeps the list as written until a change sets
-the agents again.
+Your own agents are read one at a time: one that breaks a rule is not
+used, and the file keeps it as written, in its place in the list, until a
+change names an agent of its title. The agents tab says which one it is and
+why. A list that is not a list is kept whole until a change sets the agents
+again.
 
 A read finds the file in one of three states: there is none, it is whole, or
 it is there and cannot be read, because it is empty, cut short or not

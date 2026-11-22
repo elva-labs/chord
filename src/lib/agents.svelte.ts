@@ -15,13 +15,16 @@ import { effortName } from "$lib/settingChoices";
  * the agent leaves out.
  *
  * Three kinds are listed, in this order: the eight Chord ships, which are
- * the window's and never stored or changed; the user's own, kept in the
- * settings and checked here with the rules the core holds them to; and the
- * ones the user installed for a harness, read from where the harness keeps
- * them for a project and never written.
+ * the window's; the user's own, kept in the settings and checked here with
+ * the rules the core holds them to; and the ones the user installed for a
+ * harness, read from where the harness keeps them for a project and never
+ * written. A shipped agent the user changed is kept among the user's own,
+ * naming the title it ships under, and is listed in the shipped one's
+ * place under the shipped one's key, so whatever names it still finds it.
  */
 
-/** What the core holds the user's own agents to. */
+/** What the core holds the user's own agents to; the shipped ones changed
+    are not counted. */
 export const MOST_AGENTS = 32;
 export const LONGEST_TITLE = 40;
 export const LONGEST_DESCRIPTION = 8000;
@@ -33,11 +36,13 @@ export interface AgentModel {
 }
 
 /** An agent as a menu or the settings page lists it. `key` names it across
-    the kinds, `text` is what a session is told, and `source` says where an
-    installed one was read. */
+    the kinds, `text` is what a session is told, `changed` says the user
+    changed a shipped one, and `source` says where an installed one was
+    read. */
 export interface Agent {
   key: string;
   kind: "shipped" | "own" | "installed";
+  changed?: boolean;
   title: string;
   firstLine: string;
   text: string;
@@ -51,8 +56,8 @@ export interface Agent {
 const sonnet: AgentModel = { harness: "claude-code", model: "sonnet" };
 const opus: AgentModel = { harness: "claude-code", model: "opus" };
 
-/** The agents Chord ships. The core holds their titles too, so no agent of
-    the user's takes one. */
+/** The agents Chord ships, as they ship. The core holds their titles too,
+    so no other agent of the user's takes one. */
 export const SHIPPED: readonly OwnAgent[] = [
   {
     title: "Researcher",
@@ -121,7 +126,8 @@ export const SHIPPED: readonly OwnAgent[] = [
 ];
 
 export const agents = $state({
-  /** The user's own, in the order the user keeps them. */
+  /** The user's own and the shipped ones changed, in the order the user
+      keeps them. */
   own: [] as OwnAgent[],
   /** The agents installed for each project's harnesses, by project, once
       read. */
@@ -152,8 +158,9 @@ export function firstLine(description: string): string {
 
 function fromOwn(agent: OwnAgent, kind: "shipped" | "own"): Agent {
   return {
-    key: `${kind === "shipped" ? "chord" : "own"}:${agent.title}`,
+    key: kind === "shipped" ? `chord:${agent.shipped ?? agent.title}` : `own:${agent.title}`,
     kind,
+    ...(agent.shipped === undefined ? {} : { changed: true }),
     title: agent.title,
     firstLine: firstLine(agent.description),
     text: agent.description.trim(),
@@ -184,14 +191,19 @@ function fromInstalled(agent: InstalledAgent): Agent {
   };
 }
 
-/** The agents Chord ships, as listed. */
+/** The change the user made to a shipped agent, if any. */
+export function changeOf(shipped: string): OwnAgent | undefined {
+  return agents.own.find((agent) => agent.shipped === shipped);
+}
+
+/** The agents Chord ships, as listed: each as the user changed it, if so. */
 export function shippedAgents(): Agent[] {
-  return SHIPPED.map((agent) => fromOwn(agent, "shipped"));
+  return SHIPPED.map((agent) => fromOwn(changeOf(agent.title) ?? agent, "shipped"));
 }
 
 /** The user's own agents, as listed. */
 export function ownAgents(): Agent[] {
-  return agents.own.map((agent) => fromOwn(agent, "own"));
+  return agents.own.filter((agent) => agent.shipped === undefined).map((agent) => fromOwn(agent, "own"));
 }
 
 /** The agents installed for a project's harnesses, as listed; none before
@@ -214,11 +226,14 @@ export function agentByKey(key: string | null | undefined, project: string | nul
 }
 
 /** The agent a title names, as the start tool takes it: the user's own
-    first, then shipped, then installed, ignoring the case of A to Z. */
+    first, then shipped, by the title it has or the one it ships under, then
+    installed, ignoring the case of A to Z. */
 export function agentByTitle(title: string, project: string | null): Agent | undefined {
+  const named = (agent: Agent) =>
+    sameTitle(agent.title, title) || (agent.kind === "shipped" && sameTitle(agent.key.slice("chord:".length), title));
   const lists = [ownAgents(), shippedAgents(), installedAgents(project)];
   for (const list of lists) {
-    const found = list.find((agent) => sameTitle(agent.title, title));
+    const found = list.find(named);
     if (found !== undefined) return found;
   }
   return undefined;
@@ -246,52 +261,91 @@ export async function loadInstalled(project: string): Promise<void> {
 const asciiLower = (title: string) => title.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 const sameTitle = (a: string, b: string) => asciiLower(a) === asciiLower(b);
 
-/** Why an agent of the user's will not do among the others, or null when
-    it will. `editing` is the title it had, for one already kept. */
+/** The user's own agents counted against the most the settings hold. */
+const ownCount = () => agents.own.filter((agent) => agent.shipped === undefined).length;
+
+/** Why an agent of the user's, or a shipped one changed, will not do among
+    the others, or null when it will. `editing` is the title one of the
+    user's own had, for one already kept; a shipped one is found by the
+    title it ships under. */
 export function agentProblem(draft: OwnAgent, editing: string | null): string | null {
   const title = draft.title.trim();
   if (title === "") return "A title is needed.";
   if ([...title].length > LONGEST_TITLE) return `A title is ${LONGEST_TITLE} characters at most.`;
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f-\u009f]/u.test(title)) return "A title is one line.";
-  if (SHIPPED.some((shipped) => sameTitle(shipped.title, title))) {
+  if (SHIPPED.some((shipped) => sameTitle(shipped.title, title) && shipped.title !== draft.shipped)) {
     return `${title} is an agent Chord ships.`;
   }
-  const others = agents.own.filter((agent) => editing === null || agent.title !== editing);
+  const others = agents.own.filter((agent) =>
+    draft.shipped === undefined
+      ? agent.shipped !== undefined || editing === null || agent.title !== editing
+      : agent.shipped !== draft.shipped,
+  );
   if (others.some((other) => sameTitle(other.title, title))) return `${title} is taken already.`;
   const description = draft.description.trim();
   if (description === "") return "A description is needed; its first line says what the agent does.";
   if ([...description].length > LONGEST_DESCRIPTION) {
     return `A description is ${LONGEST_DESCRIPTION} characters at most.`;
   }
-  if (editing === null && agents.own.length >= MOST_AGENTS) {
-    return `The settings hold ${MOST_AGENTS} agents at most.`;
+  if (draft.shipped === undefined && editing === null && ownCount() >= MOST_AGENTS) {
+    return `The settings hold ${MOST_AGENTS} agents of your own at most.`;
   }
   return null;
 }
 
 /** Keeps an agent of the user's: a new one at the end, or one already kept
-    in its place. Answers why not when it will not do. */
+    in its place, with any field a later version wrote kept as it was. A
+    shipped one changed is kept the same way, found by the title it ships
+    under, and is dropped when it is as it ships again. Answers why not
+    when it will not do. */
 export function saveAgent(draft: OwnAgent, editing: string | null): string | null {
   const problem = agentProblem(draft, editing);
   if (problem !== null) return problem;
+  const shipped = draft.shipped;
+  const at = agents.own.findIndex((agent) =>
+    shipped === undefined ? agent.shipped === undefined && agent.title === editing : agent.shipped === shipped,
+  );
   const kept: OwnAgent = {
+    ...(shipped === undefined ? {} : { shipped }),
+    ...(at < 0 ? {} : clone($state.snapshot(agents.own[at]))),
     title: draft.title.trim(),
     description: draft.description.trim(),
     model: draft.model === null ? null : { ...draft.model },
     effort: draft.effort,
     readsOnly: draft.readsOnly,
   };
-  const at = editing === null ? -1 : agents.own.findIndex((agent) => agent.title === editing);
-  if (at < 0) agents.own.push(kept);
+  const original = SHIPPED.find((agent) => agent.title === shipped);
+  if (original !== undefined && same(kept, { shipped, ...original })) {
+    if (at >= 0) agents.own.splice(at, 1);
+  } else if (at < 0) agents.own.push(kept);
   else agents.own[at] = kept;
   keep();
   return null;
 }
 
+/** Whether two plain values hold the same, whatever order their fields are
+    in. */
+function same(a: unknown, b: unknown): boolean {
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return a === b;
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => same((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]))
+  );
+}
+
 /** Removes an agent of the user's. */
 export function removeAgent(title: string) {
-  const at = agents.own.findIndex((agent) => agent.title === title);
+  const at = agents.own.findIndex((agent) => agent.shipped === undefined && agent.title === title);
+  if (at < 0) return;
+  agents.own.splice(at, 1);
+  keep();
+}
+
+/** Puts a shipped agent back as it ships. */
+export function resetShipped(shipped: string) {
+  const at = agents.own.findIndex((agent) => agent.shipped === shipped);
   if (at < 0) return;
   agents.own.splice(at, 1);
   keep();

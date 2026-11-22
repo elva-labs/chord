@@ -6,27 +6,36 @@
    * installed for the active project's harnesses, a list for each place
    * they are read from, shown only when there are some.
    *
-   * A row opens its agent in place of the lists. One of the user's own
-   * opens to edit: its title, its description and, folded into one line,
-   * what it runs on, kept on Save and left as it was on Cancel. The others
-   * open to read.
+   * A row opens its agent in place of the lists. A shipped one and one of
+   * the user's own open to edit: its title, its description and, folded
+   * into one line, what it runs on, kept on Save and left as it was on
+   * Cancel. A shipped one the user changed is put back as it ships with
+   * Reset to shipped, where one of the user's own has Remove. An installed
+   * one opens to read: its description, how it works, what it runs on and
+   * where it is kept.
    */
+  import { tick } from "svelte";
   import type { HarnessId, InstalledAgent, OwnAgent } from "$lib/core";
   import Icon from "$lib/components/conversation/Icon.svelte";
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
+  import UnreadEntries from "$lib/components/UnreadEntries.svelte";
   import {
     type Agent,
     agentByKey,
     agentEfforts,
     agentFacts,
     agents,
+    changeOf,
     initials,
     installedAgents,
+    LONGEST_TITLE,
     loadInstalled,
     newAgent,
     ownAgents,
     removeAgent,
+    resetShipped,
     saveAgent,
+    SHIPPED,
     shippedAgents,
   } from "$lib/agents.svelte";
   import { installed } from "$lib/harness.svelte";
@@ -60,8 +69,12 @@
   });
 
   /** What the tab shows: the lists, one of the user's agents being made
-      (`editing` null) or edited, or another agent to read. */
-  type View = { kind: "list" } | { kind: "edit"; editing: string | null } | { kind: "read"; key: string };
+      (`editing` null) or edited, a shipped one edited (`shipped` the title
+      it ships under), or an installed one to read. */
+  type View =
+    | { kind: "list" }
+    | { kind: "edit"; editing: string | null; shipped?: string }
+    | { kind: "read"; key: string };
   let view = $state<View>({ kind: "list" });
   /** The agent last opened or kept, marked in the list. */
   let last = $state<string | null>(null);
@@ -69,33 +82,68 @@
   let draft = $state<OwnAgent>(newAgent());
   let folded = $state(true);
   let problem = $state<string | null>(null);
+  /** Remove, or Reset to shipped, asked and not yet confirmed. */
   let removing = $state(false);
 
   const reading = $derived(view.kind === "read" ? agentByKey(view.key, project) : undefined);
   const editing = $derived(view.kind === "edit" ? view.editing : null);
+  const shipped = $derived(view.kind === "edit" ? (view.shipped ?? null) : null);
+  const changed = $derived(shipped !== null && changeOf(shipped) !== undefined);
+  /** The button in the foot that asks before it acts, if any. */
+  const asker = $derived(shipped !== null ? "agent-reset" : "agent-remove");
 
-  function show(next: View) {
+  let section: HTMLElement;
+
+  /** Shows a view and puts the keyboard in it: the title of a form, Back
+      over an agent read, and in the lists the agent last opened or kept,
+      else New agent. */
+  async function show(next: View, focus = true) {
     view = next;
     folded = true;
     problem = null;
     removing = false;
+    if (!focus) return;
+    await tick();
+    const marked = last === null ? null : `[data-testid="agent-row"][data-agent="${CSS.escape(last)}"]`;
+    const target =
+      next.kind === "edit"
+        ? section.querySelector<HTMLElement>('[data-testid="agent-title"]')
+        : next.kind === "read"
+          ? section.querySelector<HTMLElement>('[data-testid="agent-back"]')
+          : ((marked === null ? null : section.querySelector<HTMLElement>(marked)) ??
+            section.querySelector<HTMLElement>('[data-testid="agent-new"]'));
+    target?.focus();
+  }
+
+  /** Back to the lists, as when the tab is picked again; the keyboard
+      stays where it is. */
+  export function home() {
+    void show({ kind: "list" }, false);
   }
 
   function open(agent: Agent) {
     last = agent.key;
-    if (agent.kind !== "own") {
-      show({ kind: "read", key: agent.key });
+    if (agent.kind === "installed") {
+      void show({ kind: "read", key: agent.key });
       return;
     }
-    const own = agents.own.find((one) => one.title === agent.title);
+    if (agent.kind === "shipped") {
+      const title = agent.key.slice("chord:".length);
+      const as = changeOf(title) ?? SHIPPED.find((one) => one.title === title);
+      if (as === undefined) return;
+      draft = { shipped: title, ...JSON.parse(JSON.stringify(as)) };
+      void show({ kind: "edit", editing: agent.title, shipped: title });
+      return;
+    }
+    const own = agents.own.find((one) => one.shipped === undefined && one.title === agent.title);
     if (own === undefined) return;
     draft = $state.snapshot(own);
-    show({ kind: "edit", editing: own.title });
+    void show({ kind: "edit", editing: own.title });
   }
 
   function create() {
     draft = newAgent();
-    show({ kind: "edit", editing: null });
+    void show({ kind: "edit", editing: null });
   }
 
   function save() {
@@ -104,15 +152,27 @@
       problem = said;
       return;
     }
-    last = `own:${draft.title.trim()}`;
-    show({ kind: "list" });
+    last = shipped !== null ? `chord:${shipped}` : `own:${draft.title.trim()}`;
+    void show({ kind: "list" });
   }
 
   function remove() {
-    if (editing === null) return;
-    removeAgent(editing);
-    last = null;
-    show({ kind: "list" });
+    if (shipped !== null) {
+      resetShipped(shipped);
+      last = `chord:${shipped}`;
+    } else if (editing !== null) {
+      removeAgent(editing);
+      last = null;
+    }
+    void show({ kind: "list" });
+  }
+
+  /** Remove or Reset to shipped asked and not confirmed: the keyboard goes
+      back to the button that asked. */
+  async function keep() {
+    removing = false;
+    await tick();
+    section.querySelector<HTMLElement>(`[data-testid="${asker}"]`)?.focus();
   }
 
   // The harnesses whose models the editor offers: those installed, and the
@@ -154,9 +214,10 @@
     return agent.model === null ? "the session's model" : modelLabel(agent.model.harness, agent.model.model);
   }
 
-  /** An agent's whole description: an installed one keeps its first line apart from its text. */
-  function described(agent: Pick<Agent, "firstLine" | "text">): string {
-    return agent.text.startsWith(agent.firstLine) ? agent.text : `${agent.firstLine}\n\n${agent.text}`;
+  /** How an installed agent works: its text, less the first line where the
+      text starts with it. */
+  function workings(agent: Pick<Agent, "firstLine" | "text">): string {
+    return agent.text.startsWith(agent.firstLine) ? agent.text.slice(agent.firstLine.length).trim() : agent.text;
   }
 </script>
 
@@ -187,7 +248,7 @@
   </button>
 {/snippet}
 
-<section class="agents" data-testid="settings-agents">
+<section class="agents" data-testid="settings-agents" bind:this={section}>
   {#if view.kind === "list"}
     <h3>Agents</h3>
     <div class="alist" data-testid="agent-list">
@@ -200,6 +261,7 @@
         <span></span>
       </button>
     </div>
+    <UnreadEntries field="agents" />
     {#if agents.refused !== null}
       <p class="error" role="alert" data-testid="agent-refused">{agents.refused}</p>
     {/if}
@@ -214,7 +276,7 @@
     {/each}
   {:else if view.kind === "edit"}
     <div class="pg-h">
-      <button type="button" class="back" onclick={() => show({ kind: "list" })} data-testid="agent-back"
+      <button type="button" class="back" onclick={() => void show({ kind: "list" })} data-testid="agent-back"
         >Agents /</button
       >
       <h4>{editing ?? "New agent"}</h4>
@@ -225,7 +287,7 @@
       <input
         type="text"
         bind:value={draft.title}
-        maxlength={80}
+        maxlength={LONGEST_TITLE}
         spellcheck="false"
         autocomplete="off"
         data-testid="agent-title"
@@ -298,23 +360,37 @@
       <p class="error" role="alert" data-testid="agent-problem">{problem}</p>
     {/if}
 
-    {#if removing && editing !== null}
+    {#if removing && shipped !== null}
+      <ConfirmStrip
+        question={`Put "${shipped}" back as Chord ships it?`}
+        action="Reset"
+        onConfirm={remove}
+        onCancel={keep}
+        testid="agent-reset-ask"
+      />
+    {:else if removing && editing !== null}
       <ConfirmStrip
         question={`Remove the agent "${editing}"?`}
         action="Remove"
         onConfirm={remove}
-        onCancel={() => (removing = false)}
+        onCancel={keep}
         testid="agent-remove-ask"
       />
     {:else}
       <div class="foot">
-        {#if editing !== null}
+        {#if shipped !== null}
+          {#if changed}
+            <button type="button" class="btn quiet" onclick={() => (removing = true)} data-testid="agent-reset"
+              >Reset to shipped</button
+            >
+          {/if}
+        {:else if editing !== null}
           <button type="button" class="btn danger" onclick={() => (removing = true)} data-testid="agent-remove"
             >Remove</button
           >
         {/if}
         <span class="acts">
-          <button type="button" class="btn quiet" onclick={() => show({ kind: "list" })} data-testid="agent-cancel"
+          <button type="button" class="btn quiet" onclick={() => void show({ kind: "list" })} data-testid="agent-cancel"
             >Cancel</button
           >
           <button type="button" class="btn pri" onclick={save} data-testid="agent-save">Save</button>
@@ -323,26 +399,28 @@
     {/if}
   {:else if reading !== undefined}
     <div class="pg-h">
-      <button type="button" class="back" onclick={() => show({ kind: "list" })} data-testid="agent-back"
+      <button type="button" class="back" onclick={() => void show({ kind: "list" })} data-testid="agent-back"
         >Agents /</button
       >
       <h4>{reading.title}</h4>
     </div>
     <div class="f">
       <span class="lab">Description</span>
-      <div class="ro" data-testid="agent-text">{described(reading)}</div>
+      <div class="ro" data-testid="agent-lead">{reading.firstLine}</div>
     </div>
+    {#if workings(reading) !== ""}
+      <div class="f">
+        <span class="lab">How it works</span>
+        <div class="ro" data-testid="agent-text">{workings(reading)}</div>
+      </div>
+    {/if}
     <p class="runs" data-testid="agent-facts">{@render facts(reading)}</p>
-    <p class="foot note" data-testid="agent-whence">
-      {#if reading.kind === "shipped"}
-        Chord ships this agent; it cannot be changed here.
-      {:else}
-        Read from <code>{reading.path}</code>; it is changed where it is kept.
-      {/if}
+    <p class="whence note" data-testid="agent-whence">
+      Read from <code>{reading.path}</code>; it is changed where it is kept.
     </p>
   {:else}
     <div class="pg-h">
-      <button type="button" class="back" onclick={() => show({ kind: "list" })} data-testid="agent-back"
+      <button type="button" class="back" onclick={() => void show({ kind: "list" })} data-testid="agent-back"
         >Agents /</button
       >
     </div>
@@ -641,6 +719,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--divider, var(--rule));
+  }
+
+  /* Under a rule as the form's foot is, but running as one line of text. */
+  .whence {
     padding-top: 12px;
     border-top: 1px solid var(--divider, var(--rule));
   }

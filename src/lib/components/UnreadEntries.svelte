@@ -22,12 +22,15 @@
 
   /** What an entry is called to the user. */
   function called(entry: UnreadEntry): string {
+    if (entry.name === "" && entry.at !== undefined) {
+      return `Entry ${entry.at + 1} of the ${entry.field} in the file`;
+    }
     if (entry.name === "") return `The ${NAMES[entry.field] ?? entry.field} in the file`;
     return entry.section === "" ? `${entry.name}` : `${entry.name} (${entry.section})`;
   }
 </script>
 
-{#each entries as entry (`${entry.field}/${entry.section}/${entry.name}`)}
+{#each entries as entry (`${entry.field}/${entry.section}/${entry.name}/${entry.at ?? ""}`)}
   <p class="unread" role="status" data-testid="unread-entry" data-field={entry.field}>
     <b>{called(entry)}</b> is not used: {entry.reason}. The file keeps it as written until it is
     mended or the setting is chosen again.

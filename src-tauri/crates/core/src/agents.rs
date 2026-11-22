@@ -7,21 +7,24 @@
 //! A session keeps its own for each one the agent leaves out.
 //!
 //! The settings file holds the user's own agents. The agents Chord ships
-//! are the window's and are never stored; their titles are here so no
-//! agent of the user's takes one. The agents installed for a harness are
-//! the harness's own, and are read here, never written.
+//! are the window's; one the user changed is held among the user's own,
+//! naming the title it ships under, and stands in its place. The shipped
+//! titles are here so no other agent of the user's takes one. The agents
+//! installed for a harness are the harness's own, and are read here, never
+//! written.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use toml_edit::{DocumentMut, TableLike};
 
 use crate::workflow::AGENTS as HARNESSES;
 
-/// How many agents the settings may hold, how long a title may be, how
-/// long a description, and how long a model's name or an effort.
+/// How many agents of the user's own the settings may hold besides the
+/// shipped ones changed, how long a title may be, how long a description,
+/// and how long a model's name or an effort.
 pub const MOST_AGENTS: usize = 32;
 pub const LONGEST_TITLE: usize = 40;
 pub const LONGEST_DESCRIPTION: usize = 8000;
@@ -39,18 +42,24 @@ pub const SHIPPED_TITLES: &[&str] = &[
     "Docs writer",
 ];
 
-/// A model on one harness.
+/// A model on one harness. A field this version does not know is kept as
+/// written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct AgentModel {
     pub harness: String,
     pub model: String,
+    #[serde(flatten)]
+    pub later: Map<String, Value>,
 }
 
-/// One of the user's own agents.
+/// One of the user's own agents, or a shipped one the user changed, which
+/// names the title it ships under in `shipped`. A field this version does
+/// not know is kept as written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct Agent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shipped: Option<String>,
     pub title: String,
     pub description: String,
     #[serde(default)]
@@ -59,10 +68,24 @@ pub struct Agent {
     pub effort: Option<String>,
     #[serde(default)]
     pub reads_only: bool,
+    #[serde(flatten)]
+    pub later: Map<String, Value>,
 }
 
-const SHAPE: &str =
-    "agents is a list of agents, each a title, a description, a model or none, an effort or none, and whether it reads only";
+/// An agent in the settings file that does not read or keep the rules,
+/// with the rule it breaks, its title where it has one, and where it
+/// stands in the file's list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SetAside {
+    pub at: usize,
+    pub title: String,
+    pub reason: String,
+    pub entry: Value,
+}
+
+const SHAPE: &str = "agents is a list of agents";
+const ONE_SHAPE: &str =
+    "an agent is a title, a description, a model or none, an effort or none, and whether it reads only";
 
 /// A model's name or an effort: one word, short, with nothing unprintable.
 fn is_word(text: &str) -> bool {
@@ -82,12 +105,19 @@ fn check(agent: &Agent) -> Result<(), String> {
             agent.title
         ));
     }
-    if SHIPPED_TITLES
-        .iter()
-        .any(|shipped| shipped.eq_ignore_ascii_case(title))
-    {
+    if let Some(shipped) = &agent.shipped {
+        if !SHIPPED_TITLES.contains(&shipped.as_str()) {
+            return Err(format!(
+                "{shipped:?} is not an agent Chord ships, which are {}",
+                SHIPPED_TITLES.join(", ")
+            ));
+        }
+    }
+    if let Some(taken) = SHIPPED_TITLES.iter().find(|shipped| {
+        shipped.eq_ignore_ascii_case(title) && agent.shipped.as_deref() != Some(**shipped)
+    }) {
         return Err(format!(
-            "{title} is an agent Chord ships, so no agent of your own can be called that"
+            "{taken} is an agent Chord ships, so no other agent can be called that"
         ));
     }
     let description = agent.description.trim();
@@ -121,28 +151,84 @@ fn check(agent: &Agent) -> Result<(), String> {
     Ok(())
 }
 
-/// The agents a value holds, their titles and descriptions trimmed, or the
-/// reason one will not do. Titles are unique, ignoring case.
+/// The agent an entry holds, its title and description trimmed, or the
+/// reason it will not do beside the agents read before it. Titles are
+/// unique, ignoring case, and a shipped agent is changed once.
+fn one(entry: &Value, earlier: &[Agent]) -> Result<Agent, String> {
+    let mut agent: Agent = serde_json::from_value(entry.clone()).map_err(|_| ONE_SHAPE)?;
+    check(&agent)?;
+    agent.title = agent.title.trim().to_string();
+    agent.description = agent.description.trim().to_string();
+    if earlier
+        .iter()
+        .any(|kept| kept.title.eq_ignore_ascii_case(&agent.title))
+    {
+        return Err(format!("there is already an agent called {}", agent.title));
+    }
+    if let Some(shipped) = &agent.shipped {
+        if earlier
+            .iter()
+            .any(|kept| kept.shipped.as_ref() == Some(shipped))
+        {
+            return Err(format!("{shipped} is changed once already"));
+        }
+    }
+    Ok(agent)
+}
+
+/// How many of the agents are the user's own rather than shipped ones
+/// changed.
+fn own_count(agents: &[Agent]) -> usize {
+    agents
+        .iter()
+        .filter(|agent| agent.shipped.is_none())
+        .count()
+}
+
+/// The agents a value holds, or the reason one will not do. A change sets
+/// the agents this way, whole or not at all.
 pub fn read(value: &Value) -> Result<Vec<Agent>, String> {
     let list = value.as_array().ok_or(SHAPE)?;
-    if list.len() > MOST_AGENTS {
-        return Err(format!("the settings hold {MOST_AGENTS} agents at most"));
+    let most = format!("the settings hold {MOST_AGENTS} agents of your own at most");
+    if list.len() > MOST_AGENTS + SHIPPED_TITLES.len() {
+        return Err(most);
     }
     let mut agents: Vec<Agent> = Vec::with_capacity(list.len());
     for entry in list {
-        let mut agent: Agent = serde_json::from_value(entry.clone()).map_err(|_| SHAPE)?;
-        check(&agent)?;
-        agent.title = agent.title.trim().to_string();
-        agent.description = agent.description.trim().to_string();
-        if agents
-            .iter()
-            .any(|earlier| earlier.title.eq_ignore_ascii_case(&agent.title))
-        {
-            return Err(format!("there is already an agent called {}", agent.title));
-        }
+        let agent = one(entry, &agents)?;
         agents.push(agent);
     }
+    if own_count(&agents) > MOST_AGENTS {
+        return Err(most);
+    }
     Ok(agents)
+}
+
+/// The agents a settings file's list holds, read one at a time: each one
+/// that does not read or keep the rules, one whose title or shipped agent
+/// an earlier one has, and one of the user's own past the most the
+/// settings hold is set aside with the reason, and the rest are used.
+pub fn read_lenient(list: &[Value]) -> (Vec<Agent>, Vec<SetAside>) {
+    let mut agents: Vec<Agent> = Vec::new();
+    let mut aside = Vec::new();
+    for (at, entry) in list.iter().enumerate() {
+        let reason = match one(entry, &agents) {
+            Ok(agent) if agent.shipped.is_some() || own_count(&agents) < MOST_AGENTS => {
+                agents.push(agent);
+                continue;
+            }
+            Ok(_) => format!("the settings hold {MOST_AGENTS} agents of your own at most"),
+            Err(reason) => reason,
+        };
+        let title = entry.get("title").and_then(Value::as_str).unwrap_or("");
+        aside.push(SetAside {
+            at,
+            title: title.trim().to_string(),
+            reason,
+            entry: entry.clone(),
+        });
+    }
+    (agents, aside)
 }
 
 /// Where an installed agent comes from: Claude Code's own folder under the
@@ -176,9 +262,23 @@ pub struct InstalledAgent {
 const MOST_INSTALLED: usize = 64;
 const LARGEST_FILE: u64 = 256 * 1024;
 
-/// The tools that change files. A Claude Code agent whose tools leave all
-/// of them out reads only.
+/// The tools that write files, which a Claude Code session reading only is
+/// refused.
 pub(crate) const CHANGING_TOOLS: &[&str] = &["Edit", "Write", "MultiEdit", "NotebookEdit"];
+
+/// The tools that only read. A Claude Code agent reads only when it names
+/// its tools and each is one of these; any other tool, Bash and a server's
+/// tools among them, may change files.
+const READING_TOOLS: &[&str] = &[
+    "Read",
+    "Grep",
+    "Glob",
+    "LS",
+    "NotebookRead",
+    "WebFetch",
+    "WebSearch",
+    "TodoWrite",
+];
 
 /// The agents installed for each harness, in the order a list shows them:
 /// Claude Code's own under `claude_dir`, the project's, then Codex's roles
@@ -190,10 +290,11 @@ pub fn installed(
     claude_dir: &Path,
     codex_home: &Path,
 ) -> Vec<InstalledAgent> {
-    let mut agents = claude_agents(&claude_dir.join("agents"), Source::Claude);
+    let mut agents = claude_agents(&claude_dir.join("agents"), Source::Claude, None);
     agents.extend(claude_agents(
         &project.join(".claude").join("agents"),
         Source::Project,
+        Some(project),
     ));
     agents.extend(codex_agents(home, codex_home));
     agents
@@ -207,10 +308,20 @@ fn read_small(path: &Path) -> Option<String> {
     fs::read_to_string(path).ok()
 }
 
+/// Whether a file, its links followed, is inside a folder.
+fn lies_within(path: &Path, folder: &Path) -> bool {
+    match (fs::canonicalize(path), fs::canonicalize(folder)) {
+        (Ok(path), Ok(folder)) => path.starts_with(folder),
+        _ => false,
+    }
+}
+
 /// Claude Code's agents in a folder: each a Markdown file whose
 /// frontmatter names it and says what it does, and whose body is what the
-/// session is told.
-fn claude_agents(dir: &Path, source: Source) -> Vec<InstalledAgent> {
+/// session is told. Of files that give the same name, ignoring case, the
+/// first by path is read. A file that links out of `within`, where one is
+/// given, is left out.
+fn claude_agents(dir: &Path, source: Source, within: Option<&Path>) -> Vec<InstalledAgent> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -220,11 +331,25 @@ fn claude_agents(dir: &Path, source: Source) -> Vec<InstalledAgent> {
         .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
         .collect();
     paths.sort();
-    let mut agents: Vec<InstalledAgent> = paths
-        .into_iter()
-        .filter_map(|path| claude_agent(path, source))
-        .take(MOST_INSTALLED)
-        .collect();
+    let mut agents: Vec<InstalledAgent> = Vec::new();
+    for path in paths {
+        if agents.len() == MOST_INSTALLED {
+            break;
+        }
+        if within.is_some_and(|folder| !lies_within(&path, folder)) {
+            continue;
+        }
+        let Some(agent) = claude_agent(path, source) else {
+            continue;
+        };
+        if agents
+            .iter()
+            .any(|kept| kept.name.eq_ignore_ascii_case(&agent.name))
+        {
+            continue;
+        }
+        agents.push(agent);
+    }
     agents.sort_by_key(|agent| agent.name.to_lowercase());
     agents
 }
@@ -257,12 +382,12 @@ fn claude_agent(path: PathBuf, source: Source) -> Option<InstalledAgent> {
                 Field::List(list) => list.clone(),
             });
     let reads_only = tools.is_some_and(|tools| {
-        !tools.iter().any(|tool| {
-            tool == "*"
-                || CHANGING_TOOLS
+        !tools.is_empty()
+            && tools.iter().all(|tool| {
+                READING_TOOLS
                     .iter()
-                    .any(|changing| tool == changing || tool.starts_with(&format!("{changing}(")))
-        })
+                    .any(|reading| tool == reading || tool.starts_with(&format!("{reading}(")))
+            })
     });
     Some(InstalledAgent {
         source,
@@ -574,13 +699,70 @@ mod tests {
         assert!(
             with("model", json!({ "harness": "codex", "model": "two words" })).contains("one word")
         );
-        assert!(
-            with("model", json!({ "agent": "codex", "model": "gpt" })).contains("agents is a list")
-        );
+        assert!(with("model", json!({ "agent": "codex", "model": "gpt" })).contains("an agent is"));
         assert!(with("effort", json!("very high")).contains("effort"));
-        assert!(with("readsOnly", json!("yes")).contains("agents is a list"));
-        assert!(with("colour", json!("red")).contains("agents is a list"));
-        assert!(read(&json!({ "Migrations": {} })).is_err());
+        assert!(with("readsOnly", json!("yes")).contains("an agent is"));
+        assert!(read(&json!({ "Migrations": {} }))
+            .unwrap_err()
+            .contains("agents is a list"));
+    }
+
+    #[test]
+    fn a_field_a_later_version_adds_is_kept_as_written() {
+        let written = json!({
+            "title": "Migrations",
+            "description": "Checks migrations.",
+            "model": { "harness": "codex", "model": "gpt-5.5", "profile": "fast" },
+            "effort": null,
+            "readsOnly": false,
+            "colour": "red",
+        });
+        let read = one(written.clone()).unwrap();
+        assert_eq!(read[0].later["colour"], json!("red"));
+        assert_eq!(
+            read[0].model.as_ref().unwrap().later["profile"],
+            json!("fast")
+        );
+        assert_eq!(serde_json::to_value(&read[0]).unwrap(), written);
+    }
+
+    #[test]
+    fn a_files_agents_are_read_one_at_a_time_and_the_rest_set_aside() {
+        let agent = |title: &str| json!({ "title": title, "description": "Does it." });
+        let mut list = vec![
+            agent("Migrations"),
+            json!({ "title": "Broken", "description": "Does it.", "model": "opus" }),
+            agent("Tester"),
+            agent("migrations"),
+            json!(7),
+        ];
+        list.extend((0..MOST_AGENTS).map(|n| agent(&format!("Agent {n}"))));
+        let (kept, aside) = read_lenient(&list);
+        assert_eq!(kept.len(), MOST_AGENTS);
+        assert_eq!(kept[0].title, "Migrations");
+        assert_eq!(
+            kept[MOST_AGENTS - 1].title,
+            format!("Agent {}", MOST_AGENTS - 2)
+        );
+        let set: Vec<(usize, &str)> = aside
+            .iter()
+            .map(|entry| (entry.at, entry.title.as_str()))
+            .collect();
+        assert_eq!(
+            set,
+            [
+                (1, "Broken"),
+                (2, "Tester"),
+                (3, "migrations"),
+                (4, ""),
+                (list.len() - 1, &*format!("Agent {}", MOST_AGENTS - 1)),
+            ]
+        );
+        assert!(aside[0].reason.contains("an agent is"));
+        assert!(aside[1].reason.contains("Chord ships"));
+        assert!(aside[2].reason.contains("already"));
+        assert!(aside[4].reason.contains("at most"));
+        assert_eq!(aside[0].entry, list[1]);
     }
 
     #[test]
@@ -598,6 +780,47 @@ mod tests {
         let mut over = most;
         over.push(agent("One more"));
         assert!(read(&Value::Array(over)).unwrap_err().contains("at most"));
+    }
+
+    #[test]
+    fn a_shipped_agent_the_user_changed_stands_in_its_place() {
+        let changed = |shipped: &str, title: &str| json!({ "shipped": shipped, "title": title, "description": "Mine." });
+        let kept = one(changed("Reviewer", "Code reviewer")).unwrap();
+        assert_eq!(kept[0].shipped.as_deref(), Some("Reviewer"));
+        assert_eq!(
+            serde_json::to_value(&kept[0]).unwrap()["shipped"],
+            json!("Reviewer")
+        );
+        assert!(one(changed("Reviewer", "reviewer")).is_ok());
+        assert!(one(changed("Reviewer", "Tester"))
+            .unwrap_err()
+            .contains("Chord ships"));
+        assert!(one(changed("Planner", "Planner"))
+            .unwrap_err()
+            .contains("not an agent Chord ships"));
+        let twice = read(&json!([
+            changed("Reviewer", "Reviewer"),
+            changed("Reviewer", "Second look")
+        ]))
+        .unwrap_err();
+        assert!(twice.contains("changed once"), "{twice}");
+        // The shipped agents changed are not counted among the user's own.
+        let mut list: Vec<Value> = (0..MOST_AGENTS)
+            .map(|n| json!({ "title": format!("Agent {n}"), "description": "Does it." }))
+            .collect();
+        list.extend(SHIPPED_TITLES.iter().map(|title| changed(title, title)));
+        assert_eq!(
+            read(&Value::Array(list.clone())).unwrap().len(),
+            MOST_AGENTS + SHIPPED_TITLES.len()
+        );
+        let (kept, aside) = read_lenient(&list);
+        assert_eq!((kept.len(), aside.len()), (list.len(), 0));
+        list.push(json!({ "title": "One more", "description": "Does it." }));
+        assert!(read(&Value::Array(list.clone()))
+            .unwrap_err()
+            .contains("at most"));
+        let (_, aside) = read_lenient(&list);
+        assert_eq!(aside[0].title, "One more");
     }
 
     fn write(path: &Path, text: &str) {
@@ -662,6 +885,94 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&agents[2]).unwrap()["source"],
             json!("project")
+        );
+    }
+
+    #[test]
+    fn an_agent_reads_only_when_each_tool_it_names_only_reads() {
+        let home = crate::scratch::Scratch::new("agents-tools-home");
+        let claude = home.join(".claude");
+        let reads = |tools: &str| {
+            let file = format!("---\nname: one\ndescription: Does it.\n{tools}---\nBody.\n");
+            write(&claude.join("agents").join("one.md"), &file);
+            installed(&home, &home.join("project"), &claude, &home.join("none"))[0].reads_only
+        };
+        assert!(reads("tools: Read, Grep, Glob, WebFetch, WebSearch\n"));
+        assert!(reads("tools:\n  - Read(src/**)\n  - LS\n"));
+        assert!(!reads("tools: Read, Bash\n"));
+        assert!(!reads("tools: Read, mcp__github__create_issue\n"));
+        assert!(!reads("tools: Read, Task\n"));
+        assert!(!reads("tools: Read, Edit\n"));
+        assert!(!reads("tools: \"\"\n"));
+        assert!(!reads(""));
+    }
+
+    #[test]
+    fn the_installed_agents_of_a_place_are_bounded_and_unique_by_name() {
+        let home = crate::scratch::Scratch::new("agents-bounds-home");
+        let claude = home.join(".claude");
+        let place = claude.join("agents");
+        let agent = |name: &str, body: &str| {
+            format!("---\nname: {name}\ndescription: Does it.\n---\n{body}\n")
+        };
+        for n in 0..=MOST_INSTALLED {
+            write(
+                &place.join(format!("agent-{n:03}.md")),
+                &agent(&format!("agent-{n:03}"), "First."),
+            );
+        }
+        // Read after agent-000.md by path, so the first of the name stands.
+        write(&place.join("agent-000x.md"), &agent("Agent-000", "Copy."));
+        write(
+            &place.join("aaa-large.md"),
+            &agent("large", &"x".repeat(LARGEST_FILE as usize)),
+        );
+        let agents = installed(&home, &home.join("project"), &claude, &home.join("none"));
+        assert_eq!(agents.len(), MOST_INSTALLED);
+        assert_eq!(agents[0].name, "agent-000");
+        assert_eq!(agents[0].text, "First.");
+        assert_eq!(
+            agents[MOST_INSTALLED - 1].name,
+            format!("agent-{:03}", MOST_INSTALLED - 1)
+        );
+        assert!(agents.iter().all(|agent| agent.name != "large"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_project_agent_that_links_out_of_the_project_is_left_out() {
+        use std::os::unix::fs::symlink;
+        let home = crate::scratch::Scratch::new("agents-links-home");
+        let project = home.join("project");
+        let place = project.join(".claude").join("agents");
+        let agent = |name: &str| format!("---\nname: {name}\ndescription: Does it.\n---\nBody.\n");
+        write(&home.join("outside.md"), &agent("outside"));
+        write(&project.join("docs").join("inside.md"), &agent("inside"));
+        write(&place.join("plain.md"), &agent("plain"));
+        symlink(home.join("outside.md"), place.join("outside.md")).unwrap();
+        symlink(
+            project.join("docs").join("inside.md"),
+            place.join("inside.md"),
+        )
+        .unwrap();
+        let claude = home.join(".claude");
+        fs::create_dir_all(claude.join("agents")).unwrap();
+        symlink(
+            home.join("outside.md"),
+            claude.join("agents").join("mine.md"),
+        )
+        .unwrap();
+        let names: Vec<(String, Source)> = installed(&home, &project, &claude, &home.join("none"))
+            .into_iter()
+            .map(|agent| (agent.name, agent.source))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("outside".to_string(), Source::Claude),
+                ("inside".to_string(), Source::Project),
+                ("plain".to_string(), Source::Project),
+            ]
         );
     }
 

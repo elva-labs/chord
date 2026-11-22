@@ -1153,7 +1153,7 @@
   let more = $derived.by(() => {
     const list: { value: Setting; name: string; about: string }[] = [];
     if (modes.length > 0 && mode !== null && !showMode)
-      list.push({ value: "mode", name: "Mode", about: "What the agent may do without asking" });
+      list.push({ value: "mode", name: "Mode", about: "What the session may do without asking" });
     if (choosable && !showWorkflow)
       list.push({ value: "workflow", name: "Workflow", about: "Who directs, works and reviews" });
     if (resumable && resumeFollows === null && !showResume)
@@ -1603,7 +1603,7 @@
           disabled={modes.length === 0 || !ready}
           aria-haspopup="menu"
           aria-expanded={menu === "mode"}
-          title="What the agent may do without asking"
+          title="What the session may do without asking"
           data-testid="mode-chip"><Plain text={modeLabel} /><Icon name="down" size={12} /></button
         >
         {#if menu === "mode"}
@@ -1737,7 +1737,7 @@
         <span class="ctx" title={context?.title}>{context?.text ?? ""}</span>
       {/if}
       {#if running}
-        <button class="round stop" tabindex="0" onclick={stop} aria-label="Stop" title="Stop the agent (Esc)" data-testid="stop"
+        <button class="round stop" tabindex="0" onclick={stop} aria-label="Stop" title="Stop the turn (Esc)" data-testid="stop"
           ><Icon name="stop" size={12} /></button
         >
       {/if}

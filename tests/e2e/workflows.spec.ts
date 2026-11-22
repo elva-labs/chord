@@ -257,8 +257,8 @@ test.describe("the workflows tab", () => {
   test("is a tab among the others, and the arrows reach it", async ({ page }) => {
     await open(page);
     const tabs = page.getByTestId("settings").locator("nav button");
-    await expect(tabs.nth(2)).toHaveText("Workflows");
-    await page.getByTestId("settings-tab-sessions").focus();
+    await expect(tabs.nth(3)).toHaveText("Workflows");
+    await page.getByTestId("settings-tab-agents").focus();
     await page.keyboard.press("ArrowDown");
     await expect(page.getByTestId("settings-tab-workflows")).toBeFocused();
     await expect(page.getByTestId("settings-workflows")).toBeVisible();
