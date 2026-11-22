@@ -127,6 +127,19 @@ describe("the last agent picked", () => {
     expect(store.lastAgent("review")).toBe("shipped:builder");
   });
 
+  it("tells none picked on purpose from nothing picked yet", async () => {
+    const store = await fresh();
+    expect(store.lastPick("review")).toBeUndefined();
+    store.keepLastAgent("review", null);
+    expect(store.lastPick("review")).toBeNull();
+    expect(store.lastAgent("review")).toBeNull();
+    expect(store.lastPick("composer")).toBeUndefined();
+    store.keepLastAgent("review", "chord:Reviewer");
+    expect(store.lastPick("review")).toBe("chord:Reviewer");
+    localStorage.setItem("chord.lastAgents", JSON.stringify({ review: 3 }));
+    expect(store.lastPick("review")).toBeUndefined();
+  });
+
   it("reads none from a kept value of another shape", async () => {
     const store = await fresh();
     localStorage.setItem("chord.lastAgents", JSON.stringify(["own:reviewer"]));

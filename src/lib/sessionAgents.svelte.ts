@@ -151,12 +151,14 @@ export function forgetAgentRow(key: string) {
   startsAt.delete(key);
 }
 
-function readLast(): Partial<Record<AgentPurpose, string>> {
+/** The last pick for each purpose: an agent's key, or null where none was
+    picked on purpose. A purpose with no entry was never picked for. */
+function readLast(): Partial<Record<AgentPurpose, string | null>> {
   try {
     const raw = localStorage.getItem(LAST_KEY);
     const stored: unknown = raw === null ? null : JSON.parse(raw);
     if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return {};
-    return Object.fromEntries(Object.entries(stored).filter(([, key]) => typeof key === "string"));
+    return Object.fromEntries(Object.entries(stored).filter(([, key]) => typeof key === "string" || key === null));
   } catch {
     return {};
   }
@@ -167,11 +169,16 @@ export function lastAgent(purpose: AgentPurpose): string | null {
   return readLast()[purpose] ?? null;
 }
 
+/** The agent last picked for `purpose`, by its key; null where none was
+    picked, and undefined where nothing was picked for it yet. */
+export function lastPick(purpose: AgentPurpose): string | null | undefined {
+  return readLast()[purpose];
+}
+
 /** `key` is the agent last picked for `purpose`, or null for none. */
 export function keepLastAgent(purpose: AgentPurpose, key: string | null) {
   const last = readLast();
-  if (key === null) delete last[purpose];
-  else last[purpose] = key;
+  last[purpose] = key;
   try {
     localStorage.setItem(LAST_KEY, JSON.stringify(last));
   } catch {

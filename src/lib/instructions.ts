@@ -79,8 +79,10 @@ export function holdsAgentNote(text: string): boolean {
 }
 
 /** The agent note at the start of `words`, the agent it names with its
-    description, and the words after it; null where it is not there whole. */
-function agentAt(words: string): { agent: { title: string; text: string }; rest: string } | null {
+    description, and the words after it; null where it is not there whole.
+    A plugin's words never hold a line of one, so a note ahead of a
+    plugin's start prompt is the workbench's. */
+export function agentAt(words: string): { agent: { title: string; text: string }; rest: string } | null {
   const lines = words.split("\n");
   const head = AGENT_HEAD.exec(lines[0]);
   if (head === null) return null;

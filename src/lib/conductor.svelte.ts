@@ -50,7 +50,8 @@ import {
   namesOwn,
   OWN_LABEL,
 } from "$lib/accounts.svelte";
-import { harnessLabel } from "$lib/harness.svelte";
+import { harnessLabel, installed } from "$lib/harness.svelte";
+import { offeredHarnesses } from "$lib/models";
 import { untrack } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { keepMode } from "$lib/sessionModes";
@@ -126,7 +127,7 @@ import { logUsage } from "$lib/usageLog";
 import { defaultModelOf } from "$lib/lastChosen.svelte";
 import { failureOnScreen, type Failure } from "$lib/turnFailure";
 import { agentNote, atWorkLine, holdsAgentNote, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
-import { agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
+import { agentByKey, agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
 import { startAs } from "$lib/sessionAgents.svelte";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
 import { pluginMark, pluginStarted, pluginStartOf } from "$lib/pluginStarts.svelte";
@@ -4707,24 +4708,77 @@ function askUser(
 
 /** What a plugin's start runs on: the harness, kept as `agent` as a
     workflow's model keeps it, and its model by name, or `default` for the
-    one the harness picks itself. */
+    one the harness picks itself; and the agent it works as, by its key, or
+    null for none. */
 export interface PluginPick {
   agent: HarnessId;
   model: string;
+  role: string | null;
 }
 
-/** The pick on each plugin's question up or waiting, by the question's id. */
-const picks = new SvelteMap<string, PluginPick>();
+/** A plugin's question up or waiting: the harness and model it began on
+    before any agent's, its pick, and whether the user picked the agent and
+    the model on the card. */
+interface Picking {
+  began: Omit<PluginPick, "role">;
+  pick: PluginPick;
+  role: boolean;
+  model: boolean;
+}
+
+/** Each plugin's question up or waiting, by the question's id. */
+const picks = new SvelteMap<string, Picking>();
 
 /** What a plugin's question has picked to run the session on. */
 export function pluginPickOf(ask: Ask): PluginPick | null {
-  return picks.get(ask.request.id) ?? null;
+  return picks.get(ask.request.id)?.pick ?? null;
 }
 
-/** Picks what a plugin's question runs the session on, while it is up. */
-export function pickForPlugin(ask: Ask, pick: PluginPick) {
-  if (ask.plugin === undefined || !picks.has(ask.request.id)) return;
-  picks.set(ask.request.id, { agent: pick.agent, model: pick.model });
+/** Picks the harness and model a plugin's question runs the session on,
+    while it is up. The agent picked stays, and so does this model when the
+    agent changes. */
+export function pickForPlugin(ask: Ask, pick: { agent: HarnessId; model: string }) {
+  const now = picks.get(ask.request.id);
+  if (ask.plugin === undefined || now === undefined) return;
+  picks.set(ask.request.id, { ...now, pick: { ...now.pick, agent: pick.agent, model: pick.model }, model: true });
+}
+
+/** `pick` working as `role`: on the agent's model too, where it names one
+    on a harness that is here and runs as a conversation, as the composer's
+    chip puts it. A harness that runs in a terminal is never told an
+    agent's description. */
+export function pickAs(pick: Omit<PluginPick, "role">, role: Agent | null): PluginPick {
+  const model = role?.model ?? null;
+  const runs =
+    model !== null &&
+    offeredHarnesses(installed(), [pick.agent]).includes(model.harness) &&
+    kindFor(model.harness) !== "terminal";
+  return runs
+    ? { agent: model.harness, model: model.model, role: role!.key }
+    : { agent: pick.agent, model: pick.model, role: role?.key ?? null };
+}
+
+/** A plugin's question working as `role`: on the model the user picked on
+    the card, if they did, or else on the one it began on, or the agent's. */
+function workingAs(now: Picking, role: Agent | null): PluginPick {
+  return now.model ? { ...now.pick, role: role?.key ?? null } : pickAs(now.began, role);
+}
+
+/** Picks the agent a plugin's question starts the session as, by its key,
+    or none, while it is up. */
+export function roleForPlugin(ask: Ask, key: string | null) {
+  const now = picks.get(ask.request.id);
+  if (ask.plugin === undefined || now === undefined) return;
+  picks.set(ask.request.id, { ...now, pick: workingAs(now, agentByKey(key, ask.project) ?? null), role: true });
+}
+
+/** Puts the agent a plugin's question begins on, `role`, once it can be
+    told: while the question is up or waiting, and until the user picks an
+    agent on the card. */
+export function suggestForPlugin(request: string, role: Agent | null) {
+  const now = picks.get(request);
+  if (now === undefined || now.role) return;
+  picks.set(request, { ...now, pick: workingAs(now, role) });
 }
 
 /** A plugin's start, as it is put to the user. */
@@ -4747,14 +4801,20 @@ const putBy = (ask: Ask, source: string, plugin: string) =>
  * Puts a plugin's start to the user, always: a plugin never has a
  * standing answer, nor is given one. The question waits behind any other
  * that is up, and the answer comes with what the user picked to run the
- * session on, starting from `pick`. A plugin has one question up or
- * waiting at most: another start it asks for meanwhile is a no.
+ * session on, beginning on `began` working as `role`, and whether the user
+ * picked the model themselves. A plugin has one question up or waiting at
+ * most: another start it asks for meanwhile is a no.
  */
-export function askForPlugin(asked: PluginAsk, pick: PluginPick): Promise<{ choice: Choice; pick: PluginPick }> {
+export function askForPlugin(
+  asked: PluginAsk,
+  began: Omit<PluginPick, "role">,
+  role: Agent | null,
+): Promise<{ choice: Choice; pick: PluginPick; chose: boolean }> {
+  const pick = pickAs(began, role);
   const waiting =
     (conductor.asking !== null && putBy(conductor.asking, asked.source, asked.plugin)) ||
     queue.some((item) => putBy(item.ask, asked.source, asked.plugin));
-  if (waiting) return Promise.resolve({ choice: "no", pick });
+  if (waiting) return Promise.resolve({ choice: "no", pick, chose: false });
   const request: Placed = {
     id: asked.request,
     tool: "start",
@@ -4776,15 +4836,15 @@ export function askForPlugin(asked: PluginAsk, pick: PluginPick): Promise<{ choi
     once: true,
     plugin: { source: asked.source, plugin: asked.plugin },
   };
-  picks.set(request.id, { agent: pick.agent, model: pick.model });
+  picks.set(request.id, { began: { ...began }, pick, role: false, model: false });
   return new Promise((settle) => {
     queue.push({
       ask,
       settle: (choice) => {
-        const picked = picks.get(request.id) ?? pick;
+        const picked = picks.get(request.id);
         picks.delete(request.id);
         // Only this one session is ever allowed.
-        settle({ choice: choice === "no" ? "no" : "once", pick: picked });
+        settle({ choice: choice === "no" ? "no" : "once", pick: picked?.pick ?? pick, chose: picked?.model ?? false });
       },
     });
     nextAsk();

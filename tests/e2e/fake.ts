@@ -1103,8 +1103,10 @@ export async function installFakeCore(
           return () => {};
         },
         onPluginStart: async (handler: (event: unknown) => void) => {
-          (window as unknown as Record<string, unknown>).__pluginStart =
-            handler;
+          (window as unknown as Record<string, unknown>).__pluginStart = (
+            asked: Record<string, unknown>,
+          ) =>
+            handler({ name: null, worktree: false, purpose: null, agent: null, ...asked });
           return () => {};
         },
         onPluginSend: async (handler: (event: unknown) => void) => {

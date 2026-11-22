@@ -217,6 +217,125 @@ for (const look of ["modern", "terminal"] as const) {
   });
 }
 
+/** A project agent installed beside the eight shipped. */
+async function withInstalled(page: Page) {
+  await page.addInitScript((project) => {
+    (window as unknown as { __installedAgents: unknown[] }).__installedAgents = [
+      {
+        source: "project",
+        name: "pr-checker",
+        description: "Checks a pull request.",
+        model: null,
+        effort: null,
+        readsOnly: true,
+        text: "You check pull requests.",
+        path: `${project}/.claude/agents/pr-checker.md`,
+      },
+      {
+        source: "project",
+        name: "Pull request reviewer for the payments service and its many migrations",
+        description: "Reviews the payments service.",
+        model: null,
+        effort: null,
+        readsOnly: false,
+        text: "You review the payments service.",
+        path: `${project}/.claude/agents/payments.md`,
+      },
+    ];
+  }, PROJECT);
+}
+
+/** A plugin asks to start a review of a pull request. */
+async function askReview(page: Page, request: string) {
+  await page.waitForFunction(() => "__pluginStart" in window);
+  await page.evaluate(
+    ({ project, request }) =>
+      (window as unknown as { __pluginStart: (event: unknown) => void }).__pluginStart({
+        source: "src-1",
+        plugin: "github",
+        project,
+        request,
+        prompt: "Review pull request #12: Add session marks",
+        name: "Review #12",
+        purpose: "review",
+        agent: "Reviewer",
+      }),
+    { project: PROJECT, request },
+  );
+}
+
+for (const [appearance, look] of [
+  ["dark", "terminal"],
+  ["light", "modern"],
+] as const) {
+  test(`asks which agent a plugin's review works as, beside its model, and remembers the pick (${appearance}, ${look})`, async ({ page }) => {
+    await withInstalled(page);
+    await installFakeCore(page, { open: [PROJECT], settings: { appearance, look, integrated: ["claude-code"] } });
+    await page.goto("/");
+    await askReview(page, "req-1");
+    const ask = page.getByTestId("conduct-ask");
+    const role = ask.getByTestId("conduct-agent");
+    const model = ask.getByTestId("conduct-model");
+    await expect(ask).toBeVisible();
+
+    // The plugin's suggestion, on the agent's own model, with every agent
+    // and none to pick from.
+    await expect(role).toHaveValue("chord:Reviewer");
+    await expect(model).toHaveValue("claude-code:opus");
+    const options = await role.locator("option").allTextContents();
+    expect(options[0]).toBe("No agent");
+    expect(options).toContain("Security reviewer");
+    expect(options).toContain("pr-checker");
+
+    // Both selects sit on one line, the agent's first, in the card's own type.
+    const roleBox = (await role.boundingBox())!;
+    const modelBox = (await model.boundingBox())!;
+    expect(Math.abs(roleBox.y - modelBox.y)).toBeLessThan(2);
+    expect(roleBox.x).toBeLessThan(modelBox.x);
+    expect(await role.evaluate((el) => getComputedStyle(el).font)).toBe(await model.evaluate((el) => getComputedStyle(el).font));
+    // A long title in the list keeps the agent's select inside the card.
+    const cardBox = (await ask.boundingBox())!;
+    expect(roleBox.x + roleBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    expect(modelBox.x + modelBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    // The reviewer reads only, and the card says so with the composer's lock.
+    await expect(ask.getByTestId("conduct-agent-lock")).toHaveAttribute("title", "Reads only");
+    if (SHOTS !== undefined) await ask.screenshot({ path: `${SHOTS}/start-card-${appearance}-${look}.png` });
+
+    // Picked, the long title is cut short inside the select.
+    await role.selectOption("project:Pull request reviewer for the payments service and its many migrations");
+    const longBox = (await role.boundingBox())!;
+    expect(longBox.x + longBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    expect(Math.abs(longBox.y - (await model.boundingBox())!.y)).toBeLessThan(2);
+    if (SHOTS !== undefined) await ask.screenshot({ path: `${SHOTS}/start-card-long-${appearance}-${look}.png` });
+    await expect(ask.getByTestId("conduct-agent-lock")).toHaveCount(0);
+
+    await role.selectOption("chord:Security reviewer");
+    await expect(model).toHaveValue("claude-code:opus");
+    await ask.getByTestId("conduct-once").click();
+    await expect(ask).toHaveCount(0);
+
+    // The session starts out of sight, working as the agent picked.
+    const started = page.locator(ROW).filter({ hasText: "Review #12" });
+    await expect(started).toHaveCount(1);
+    await started.click();
+    await expect
+      .poll(async () =>
+        (await page.evaluate(() => (window as unknown as { __integrated: { calls: { method: string; text?: string }[] } }).__integrated.calls))
+          .find((call) => call.method === "send")?.text ?? "",
+      )
+      .toMatch(/^From the workbench, not the user: from this message on, work as the agent "Security reviewer"/);
+    const said = page.getByTestId("user-message").first();
+    await expect(said).toHaveAttribute("data-from", "plugin");
+    await expect(said.locator(".bubble > p")).toHaveText("Review pull request #12: Add session marks");
+    await expect(said.getByTestId("workbench-agent")).toContainText("As Security reviewer");
+
+    // The next review begins as the one picked last.
+    await askReview(page, "req-2");
+    await expect(role).toHaveValue("chord:Security reviewer");
+    await ask.getByTestId("conduct-no").click();
+  });
+}
+
 test("opens a plugin's web address in the user's browser", async ({ page }) => {
   await installFakeCore(page, { open: [PROJECT] });
   await page.goto("/");
