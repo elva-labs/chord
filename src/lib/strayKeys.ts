@@ -1,60 +1,63 @@
-// WebKit on macOS names the arrow, Home, End, Page and function keys with
-// characters from the control range (U+001C to U+001F for the arrows) and
-// from the private-use range (U+F700 to U+F8FF), and a text field can take
-// one in as typed text. No key inserts such a character here: it is stopped
-// where it would be typed, in every field, and cut from any text sent on.
+// WebKit on macOS can type the character a navigation key is named by into a
+// field: a control character for an arrow (U+001C to U+001F) or a function
+// key code point (U+F700 to U+F7FF). The guard acts only on a text insert
+// that follows such a key going down, and only when the insert is one such
+// character. Text that is pasted, dropped or typed with any other key is
+// never touched, so the Apple logo (U+F8FF), icon-font glyphs and escape
+// sequences in a paste arrive as they are.
 
-const TERMINAL = ".xterm";
+/** Fields whose keys are their own: a terminal sends them to the program,
+    and a code editor takes what it is given. */
+const OWN_KEYS = ".xterm, .cm-editor";
 
-/** Every C0 control but tab and newline, DEL, the C1 controls and the
-    private-use block the system keys are named in. */
-// eslint-disable-next-line no-control-regex
-const STRAY = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\uf700-\uf8ff]/g;
+/** The keys that move the caret or scroll, with no character of their own. */
+const NAVIGATION = /^(Arrow(Up|Down|Left|Right)|Home|End|PageUp|PageDown|F([1-9]|1[0-9]|20))$/;
 
-/** The text without a character no key should type. A carriage return
-    that ends a line is a newline; every other control goes. */
-export function withoutStray(text: string): string {
-  return text.replace(/\r\n?/g, "\n").replace(STRAY, "");
+/** The four controls an arrow is named by. */
+const ARROW_CONTROLS = /[\u001c-\u001f]/g;
+
+/** The text without the controls an arrow is named by, nothing else. */
+export function withoutArrowControls(text: string): string {
+  return text.replace(ARROW_CONTROLS, "");
 }
 
-/** Whether `text` holds a character a key must not type. */
-export function hasStray(text: string): boolean {
-  STRAY.lastIndex = 0;
-  const found = STRAY.test(text);
-  STRAY.lastIndex = 0;
-  return found;
+/** Whether `data` is the one character a navigation key can be typed as. */
+export function isKeyName(data: string): boolean {
+  const points = [...data];
+  if (points.length !== 1) return false;
+  const code = points[0].codePointAt(0)!;
+  if (code === 0x09 || code === 0x0a) return false;
+  return code <= 0x1f || (code >= 0x7f && code <= 0x9f) || (code >= 0xf700 && code <= 0xf7ff);
 }
 
-function inTerminal(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(TERMINAL) !== null;
+let armed = false;
+
+function onKeyDown(e: KeyboardEvent) {
+  armed = NAVIGATION.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey;
 }
 
-/** A key's own character, refused before it is typed. */
+function onKeyUp() {
+  armed = false;
+}
+
 function onBeforeInput(e: Event) {
   const event = e as InputEvent;
-  if (!event.cancelable || event.data == null || event.data === "" || inTerminal(event.target)) return;
-  if (event.inputType !== "insertText" && event.inputType !== "insertReplacementText") return;
-  if (withoutStray(event.data) === "" && hasStray(event.data)) event.preventDefault();
-}
-
-/** A character that got in by a path that gave no chance to refuse it is
-    taken out again, the caret kept where it was. */
-function onInput(e: Event) {
-  const field = e.target;
-  if (!(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) || inTerminal(field)) return;
-  if (!hasStray(field.value)) return;
-  const at = field.selectionStart;
-  const kept = at === null ? null : withoutStray(field.value.slice(0, at)).length;
-  field.value = withoutStray(field.value);
-  if (kept !== null) field.setSelectionRange(kept, kept);
+  const was = armed;
+  armed = false;
+  if (!was || !event.cancelable || event.inputType !== "insertText" || event.data == null) return;
+  if (event.target instanceof Element && event.target.closest(OWN_KEYS) !== null) return;
+  if (isKeyName(event.data)) event.preventDefault();
 }
 
 /** Starts the guard on the whole document; the returned function stops it. */
 export function followStrayKeys(): () => void {
+  armed = false;
+  document.addEventListener("keydown", onKeyDown, true);
+  document.addEventListener("keyup", onKeyUp, true);
   document.addEventListener("beforeinput", onBeforeInput, true);
-  document.addEventListener("input", onInput, true);
   return () => {
+    document.removeEventListener("keydown", onKeyDown, true);
+    document.removeEventListener("keyup", onKeyUp, true);
     document.removeEventListener("beforeinput", onBeforeInput, true);
-    document.removeEventListener("input", onInput, true);
   };
 }

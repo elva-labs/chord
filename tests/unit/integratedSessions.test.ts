@@ -753,11 +753,13 @@ describe("an integrated session behind its row", () => {
     expect(conversationOf(session.key).messages[failed]).toMatchObject({ state: "failed", error: "no such session" });
   });
 
-  it("never sends a control character other than a tab or a newline", async () => {
+  it("cuts the four arrow controls from a message and nothing else", async () => {
     const { session } = await started();
-    send(session.key, "go\u001d on\u001c\n\tnow\u007f\r\nok");
+    send(session.key, "go\u001d on\u001c\n\tnow\f\u0085\u001b[31mok\uf8ff");
     await settled();
-    expect(fake.calls.filter((call) => call.method === "send").at(-1)).toMatchObject({ text: "go on\n\tnow\nok" });
+    expect(fake.calls.filter((call) => call.method === "send").at(-1)).toMatchObject({
+      text: "go on\n\tnow\f\u0085\u001b[31mok\uf8ff",
+    });
   });
 
   it("sends the first prompt of a session another session started", async () => {
