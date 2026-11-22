@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { installed } from "$lib/harness.svelte";
-  import { allAgents } from "$lib/agents.svelte";
+  import { agentByKey, allAgents } from "$lib/agents.svelte";
   import {
     accountWords,
     answerConduct,
@@ -18,6 +18,7 @@
   import AskCard from "$lib/components/AskCard.svelte";
   import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
   import Plain from "$lib/components/conversation/Plain.svelte";
+  import Icon from "$lib/components/conversation/Icon.svelte";
 
   /**
    * A session's question to the user: to start a session, or to let a
@@ -114,6 +115,10 @@
   let roles = $derived(pick === null ? [] : allAgents(ask.project));
   /** A terminal is never told an agent's description. */
   let roleless = $derived(pick !== null && kindFor(pick.agent) === "terminal");
+  /** Whether the picked agent starts the session reading only. */
+  let readsOnly = $derived(
+    pick !== null && !roleless && agentByKey(pick.role, ask.project)?.readsOnly === true,
+  );
 
   function pickedRole(event: Event) {
     const key = (event.currentTarget as HTMLSelectElement).value;
@@ -178,6 +183,9 @@
             <option value={role.key}>{role.title}</option>
           {/each}
         </select>
+        {#if readsOnly}<span class="lock" title="Reads only" data-testid="conduct-agent-lock"
+            ><Icon name="lock" size={11} /></span
+          >{/if}
       </label>
       <label>
         <span>Runs on</span>
@@ -245,6 +253,12 @@
     min-width: 0;
     max-width: 14em;
     text-overflow: ellipsis;
+  }
+
+  .lock {
+    display: flex;
+    margin-left: -2px;
+    color: var(--ink-3);
   }
 
   .runs select:disabled {
