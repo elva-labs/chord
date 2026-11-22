@@ -19,6 +19,7 @@ import {
   pickAs,
   runsShell,
   slashLed,
+  suggestForPlugin,
   treeStands,
   typeLine,
   withdrawPlugin,
@@ -130,14 +131,17 @@ function roleToStart(asked: PluginStartEvent): Agent | null {
 
 async function startFor(asked: PluginStartEvent): Promise<string | null> {
   if (startRefusal(asked) !== null) return null;
-  // The card lists the project's installed agents too.
-  await loadInstalled(asked.project);
   const agent = defaultAgent(asked.project);
   const begins = pickAs(
     { agent, model: modelToStart(agent, accountToStart(asked.project)) ?? OWN_DEFAULT },
     roleToStart(asked),
   );
-  const { choice, pick } = await askForPlugin(asked, begins);
+  // The card goes up at once, so a plugin turned off meanwhile takes it
+  // down; the project's installed agents join its list once read, and the
+  // agent it begins on is told again from them.
+  const answer = askForPlugin(asked, begins);
+  void loadInstalled(asked.project).then(() => suggestForPlugin(asked.request, roleToStart(asked)));
+  const { choice, pick } = await answer;
   if (choice === "no") return null;
   // The project may have closed while the card waited.
   if (!startable(asked.project)) return null;

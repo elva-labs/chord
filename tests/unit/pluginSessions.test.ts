@@ -57,6 +57,8 @@ const sent: { project: string; request: string; outcome: PluginSentOutcome }[] =
 const settledStarts: { project: string; request: string; started: boolean }[] = [];
 let standing: string[] = [];
 let installedHere: InstalledAgent[] = [];
+/** Holds the project's installed agents back until it settles. */
+let installedHeld: Promise<void> | null = null;
 let treeFails = false;
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -135,6 +137,7 @@ beforeEach(async () => {
   settledStarts.length = 0;
   standing = [];
   installedHere = [];
+  installedHeld = null;
   resetAgents();
   treeFails = false;
   workspace.open.push(
@@ -166,7 +169,10 @@ beforeEach(async () => {
     pluginStartSettled: async (project: string, request: string, started: boolean) => {
       settledStarts.push({ project, request, started });
     },
-    installedAgents: async () => installedHere,
+    installedAgents: async () => {
+      if (installedHeld !== null) await installedHeld;
+      return installedHere;
+    },
   };
   stop = await listenIntegrated();
 });
@@ -483,9 +489,18 @@ describe("the agent a plugin's start works as", () => {
     installedHere = [
       { source: "project", name: "pr-checker", description: "Checks a pull request.", model: null, effort: null, readsOnly: true, text: "Check the pull request.", path: `${A}/.claude/agents/pr-checker.md` },
     ];
-    const { starting } = await asked(start({ agent: "PR-checker" }));
+    let read = () => {};
+    installedHeld = new Promise((resolve) => (read = resolve));
+    const { starting, ask } = await asked(start({ agent: "PR-checker" }));
+    // The card is up before the installed agents are read, and begins on
+    // the agent the plugin suggests once they are.
+    expect(pluginPickOf(ask)?.role).toBeNull();
     const card = render(ConductAsk);
     const select = card.getByTestId("conduct-agent") as HTMLSelectElement;
+    expect([...select.options].map((option) => option.text)).not.toContain("pr-checker");
+    read();
+    await until(() => pluginPickOf(ask)?.role === "project:pr-checker");
+    flushSync();
     expect([...select.options].map((option) => option.text)).toContain("pr-checker");
     expect(select.options[0].text).toBe("No agent");
     expect(select.value).toBe("project:pr-checker");
@@ -496,6 +511,37 @@ describe("the agent a plugin's start works as", () => {
     expect(row.model).toBeNull();
     expect(agentStartsAt(row.key)).toBeNull();
     expect(agentOfRow(row.key, null)).toEqual({ key: "project:pr-checker", title: "pr-checker", readsOnly: true });
+  });
+
+  it("takes the card down for a plugin turned off while its installed agents are read, and starts nothing", async () => {
+    installedHere = [
+      { source: "project", name: "pr-checker", description: "Checks a pull request.", model: null, effort: null, readsOnly: true, text: "Check the pull request.", path: `${A}/.claude/agents/pr-checker.md` },
+    ];
+    let read = () => {};
+    installedHeld = new Promise((resolve) => (read = resolve));
+    const { starting } = await asked(start({ agent: "PR-checker" }));
+    takeDownCardsOf({ source: "local", name: "github", state: "off", detail: null, hello: null });
+    read();
+    expect(await starting).toBeNull();
+    await settle();
+    expect(conductor.asking).toBeNull();
+    expect(sessions.all).toHaveLength(0);
+  });
+
+  it("does not move the user's pick when the installed agents arrive after it", async () => {
+    installedHere = [
+      { source: "project", name: "pr-checker", description: "Checks a pull request.", model: null, effort: null, readsOnly: true, text: "Check the pull request.", path: `${A}/.claude/agents/pr-checker.md` },
+    ];
+    let read = () => {};
+    installedHeld = new Promise((resolve) => (read = resolve));
+    const { starting, ask } = await asked(start({ agent: "PR-checker" }));
+    roleForPlugin(ask, "chord:Tester");
+    read();
+    await settle();
+    await settle();
+    expect(pluginPickOf(ask)?.role).toBe("chord:Tester");
+    once();
+    expect(agentOfRow((await starting)!, null)).toMatchObject({ key: "chord:Tester" });
   });
 
   it("is none in a terminal, which is never told an agent's description", async () => {

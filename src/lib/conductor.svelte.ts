@@ -4716,12 +4716,19 @@ export interface PluginPick {
   role: string | null;
 }
 
-/** The pick on each plugin's question up or waiting, by the question's id. */
-const picks = new SvelteMap<string, PluginPick>();
+/** A plugin's question up or waiting: its pick, and whether the user
+    picked the agent on the card. */
+interface Picking {
+  pick: PluginPick;
+  role: boolean;
+}
+
+/** Each plugin's question up or waiting, by the question's id. */
+const picks = new SvelteMap<string, Picking>();
 
 /** What a plugin's question has picked to run the session on. */
 export function pluginPickOf(ask: Ask): PluginPick | null {
-  return picks.get(ask.request.id) ?? null;
+  return picks.get(ask.request.id)?.pick ?? null;
 }
 
 /** Picks the harness and model a plugin's question runs the session on,
@@ -4729,7 +4736,7 @@ export function pluginPickOf(ask: Ask): PluginPick | null {
 export function pickForPlugin(ask: Ask, pick: { agent: HarnessId; model: string }) {
   const now = picks.get(ask.request.id);
   if (ask.plugin === undefined || now === undefined) return;
-  picks.set(ask.request.id, { ...now, agent: pick.agent, model: pick.model });
+  picks.set(ask.request.id, { ...now, pick: { ...now.pick, agent: pick.agent, model: pick.model } });
 }
 
 /** `pick` working as `role`: on the agent's model too, where it names one
@@ -4752,7 +4759,16 @@ export function pickAs(pick: Omit<PluginPick, "role">, role: Agent | null): Plug
 export function roleForPlugin(ask: Ask, key: string | null) {
   const now = picks.get(ask.request.id);
   if (ask.plugin === undefined || now === undefined) return;
-  picks.set(ask.request.id, pickAs(now, agentByKey(key, ask.project) ?? null));
+  picks.set(ask.request.id, { ...now, pick: pickAs(now.pick, agentByKey(key, ask.project) ?? null), role: true });
+}
+
+/** Puts the agent a plugin's question begins on, `role`, once it can be
+    told: while the question is up or waiting, and until the user picks an
+    agent on the card. */
+export function suggestForPlugin(request: string, role: Agent | null) {
+  const now = picks.get(request);
+  if (now === undefined || now.role) return;
+  picks.set(request, { ...now, pick: pickAs(now.pick, role) });
 }
 
 /** A plugin's start, as it is put to the user. */
@@ -4804,15 +4820,15 @@ export function askForPlugin(asked: PluginAsk, pick: PluginPick): Promise<{ choi
     once: true,
     plugin: { source: asked.source, plugin: asked.plugin },
   };
-  picks.set(request.id, { ...pick });
+  picks.set(request.id, { pick: { ...pick }, role: false });
   return new Promise((settle) => {
     queue.push({
       ask,
       settle: (choice) => {
-        const picked = picks.get(request.id) ?? pick;
+        const picked = picks.get(request.id);
         picks.delete(request.id);
         // Only this one session is ever allowed.
-        settle({ choice: choice === "no" ? "no" : "once", pick: picked });
+        settle({ choice: choice === "no" ? "no" : "once", pick: picked?.pick ?? pick });
       },
     });
     nextAsk();
