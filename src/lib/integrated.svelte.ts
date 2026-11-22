@@ -344,6 +344,7 @@ function isWork(body: IntegratedEventBody): boolean {
     case "state":
     case "ready":
     case "configured":
+    case "readsOnly":
     case "commands":
     case "titled":
     case "limits":

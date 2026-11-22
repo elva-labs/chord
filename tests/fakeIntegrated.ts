@@ -12,6 +12,7 @@ import type {
   IntegratedPoints,
   IntegratedPreview,
   IntegratedQuestion,
+  IntegratedRunsOn,
   IntegratedSentNow,
   IntegratedSettings,
   IntegratedSnapshot,
@@ -46,7 +47,7 @@ export type IntegratedCall =
   | {
       method: "configure";
       id: string;
-      settings: { model?: string; mode?: string; effort?: string };
+      settings: { model?: string; mode?: string; effort?: string; readsOnly?: boolean };
     }
   | { method: "snapshot"; id: string }
   | { method: "history"; options: IntegratedHistoryOptions }
@@ -162,8 +163,8 @@ export interface FakeIntegrated {
   reply(id: string, request: string, answers: string[][] | null): void;
   configure(
     id: string,
-    settings: { model?: string; mode?: string; effort?: string },
-  ): IntegratedSettings;
+    settings: { model?: string; mode?: string; effort?: string; readsOnly?: boolean },
+  ): IntegratedRunsOn;
   snapshot(id: string): IntegratedSnapshot;
   /** What the agent wrote down of a conversation, as the core reads it
       back: the messages it took, its turns with the model each ran on,
@@ -393,6 +394,7 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
     started: IntegratedStartOptions;
     sessionId: string | null;
     settings: IntegratedSettings;
+    readsOnly: boolean;
     efforts: string[];
     ready: Extract<IntegratedEventBody, { type: "ready" }> | null;
     /** The ready event, held until the test says the agent is ready. */
@@ -823,7 +825,9 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
         next.effort !== session.settings.effort
       )
         fake.emit(id, { type: "configured", ...next, efforts: efforts(next.model) });
-      return { ...session.settings };
+      if (settings.readsOnly !== undefined && settings.readsOnly !== session.readsOnly)
+        fake.emit(id, { type: "readsOnly", on: settings.readsOnly });
+      return { ...session.settings, readsOnly: session.readsOnly };
     },
 
     snapshot(id) {
@@ -832,7 +836,7 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
       return {
         state: (session.state as IntegratedSnapshot["state"] | null) ?? "idle",
         turn: session.turn,
-        settings: { ...session.settings },
+        settings: { ...session.settings, readsOnly: session.readsOnly },
         efforts: [...session.efforts],
         ready: session.ready,
         requests: [...session.asked.values()].map((asked) => asked.event),
@@ -1032,6 +1036,9 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
           session.efforts = body.efforts;
           if (body.type === "ready") session.ready = body;
           break;
+        case "readsOnly":
+          session.readsOnly = body.on;
+          break;
         case "commands":
           if (session.ready !== null) session.ready = { ...session.ready, commands: body.commands };
           break;
@@ -1179,6 +1186,8 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
         release(id);
         settle(id);
       }
+      // A session started reading only says so right after it is ready.
+      if (body.type === "ready" && session.readsOnly) fake.emit(id, { type: "readsOnly", on: true });
     },
 
     startTurn(id, messages) {
@@ -1403,6 +1412,7 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
       codex,
       sessionId,
       settings,
+      readsOnly: startOptions.readsOnly ?? false,
       efforts: [],
       ready: null,
       heldReady: null,

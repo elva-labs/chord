@@ -57,7 +57,7 @@ describe("the seam's integrated sessions", () => {
     await seam.integratedReply("int-1", "q-1", [["Red"], ["my own words"]]);
     await seam.integratedReply("int-1", "q-2", null);
     await seam.integratedConfigure("int-1", { model: "sonnet" });
-    await seam.integratedConfigure("int-1", { mode: "acceptEdits", effort: "low" });
+    await seam.integratedConfigure("int-1", { mode: "acceptEdits", effort: "low", readsOnly: true });
     await seam.integratedSnapshot("int-1");
     await seam.integratedHistory({
       agent: "claude-code",
@@ -116,10 +116,10 @@ describe("the seam's integrated sessions", () => {
         { id: "int-1", request: "q-1", answers: [["Red"], ["my own words"]] },
       ],
       ["integrated_reply", { id: "int-1", request: "q-2", answers: null }],
-      ["integrated_configure", { id: "int-1", model: "sonnet", mode: null, effort: null }],
+      ["integrated_configure", { id: "int-1", model: "sonnet", mode: null, effort: null, readsOnly: null }],
       [
         "integrated_configure",
-        { id: "int-1", model: null, mode: "acceptEdits", effort: "low" },
+        { id: "int-1", model: null, mode: "acceptEdits", effort: "low", readsOnly: true },
       ],
       ["integrated_snapshot", { id: "int-1" }],
       [
@@ -604,6 +604,7 @@ describe("the scripted integrated session", () => {
       model: "sonnet",
       mode: "default",
       effort: "high",
+      readsOnly: false,
     });
     expect(fake.configure(id, { mode: "plan" }).mode).toBe("plan");
     expect(heard.filter((event) => event.type === "configured")).toMatchObject([
