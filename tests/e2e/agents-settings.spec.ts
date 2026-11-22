@@ -95,3 +95,47 @@ test("reads the shipped and installed agents without changing them", async ({ pa
   );
   await expect(page.getByTestId("agent-whence")).toContainText(".claude/agents/release-notes.md");
 });
+
+test("keeps the keyboard in the page as it changes, so Escape still closes Settings", async ({ page }) => {
+  await page.addInitScript((path) => {
+    (window as unknown as { __installedAgents: unknown[] }).__installedAgents = [
+      {
+        source: "project",
+        name: "release-notes",
+        description: "Writes the release notes.",
+        model: null,
+        effort: null,
+        readsOnly: true,
+        text: "You write release notes.",
+        path,
+      },
+    ];
+  }, `${PROJECT}/.claude/agents/release-notes.md`);
+  await installFakeCore(page);
+  await page.goto("/");
+  await openAgents(page);
+
+  const notes = page.locator("[data-agent='project:release-notes']");
+  await notes.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("agent-back")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(notes).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("settings")).toBeHidden();
+
+  await page.keyboard.press("ControlOrMeta+,");
+  await notes.click();
+  await page.getByTestId("settings-tab-agents").click();
+  await expect(page.getByTestId("agent-list")).toBeVisible();
+
+  await page.getByTestId("agent-new").click();
+  await expect(page.getByTestId("agent-title")).toBeFocused();
+  await page.keyboard.type("Migrations checker");
+  await page.getByTestId("agent-description").fill("Checks migrations for locks.");
+  await page.getByTestId("agent-save").click();
+  await expect(page.locator("[data-agent='own:Migrations checker']")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("settings")).toBeHidden();
+});

@@ -127,7 +127,11 @@
   let tabs: HTMLElement;
   let tab = $state<Tab>(remembered);
 
+  let agentsTab: AgentsTab | undefined = $state();
+
+  /** The tab picked again goes back to its top: the Agents tab to its lists. */
   function show(next: Tab) {
+    if (next === tab && next === "agents") agentsTab?.home();
     tab = next;
     remembered = next;
   }
@@ -771,7 +775,7 @@
             </div>
           </section>
         {:else if tab === "agents"}
-          <AgentsTab />
+          <AgentsTab bind:this={agentsTab} />
         {:else if tab === "workflows"}
           <WorkflowsTab />
         {:else if tab === "accounts"}

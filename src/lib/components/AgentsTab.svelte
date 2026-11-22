@@ -11,6 +11,7 @@
    * what it runs on, kept on Save and left as it was on Cancel. The others
    * open to read.
    */
+  import { tick } from "svelte";
   import type { HarnessId, InstalledAgent, OwnAgent } from "$lib/core";
   import Icon from "$lib/components/conversation/Icon.svelte";
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
@@ -75,28 +76,50 @@
   const reading = $derived(view.kind === "read" ? agentByKey(view.key, project) : undefined);
   const editing = $derived(view.kind === "edit" ? view.editing : null);
 
-  function show(next: View) {
+  let section: HTMLElement;
+
+  /** Shows a view and puts the keyboard in it: the title of a form, Back
+      over an agent read, and in the lists the agent last opened or kept,
+      else New agent. */
+  async function show(next: View, focus = true) {
     view = next;
     folded = true;
     problem = null;
     removing = false;
+    if (!focus) return;
+    await tick();
+    const marked = last === null ? null : `[data-testid="agent-row"][data-agent="${CSS.escape(last)}"]`;
+    const target =
+      next.kind === "edit"
+        ? section.querySelector<HTMLElement>('[data-testid="agent-title"]')
+        : next.kind === "read"
+          ? section.querySelector<HTMLElement>('[data-testid="agent-back"]')
+          : ((marked === null ? null : section.querySelector<HTMLElement>(marked)) ??
+            section.querySelector<HTMLElement>('[data-testid="agent-new"]'));
+    target?.focus();
+  }
+
+  /** Back to the lists, as when the tab is picked again; the keyboard
+      stays where it is. */
+  export function home() {
+    void show({ kind: "list" }, false);
   }
 
   function open(agent: Agent) {
     last = agent.key;
     if (agent.kind !== "own") {
-      show({ kind: "read", key: agent.key });
+      void show({ kind: "read", key: agent.key });
       return;
     }
     const own = agents.own.find((one) => one.title === agent.title);
     if (own === undefined) return;
     draft = $state.snapshot(own);
-    show({ kind: "edit", editing: own.title });
+    void show({ kind: "edit", editing: own.title });
   }
 
   function create() {
     draft = newAgent();
-    show({ kind: "edit", editing: null });
+    void show({ kind: "edit", editing: null });
   }
 
   function save() {
@@ -106,14 +129,21 @@
       return;
     }
     last = `own:${draft.title.trim()}`;
-    show({ kind: "list" });
+    void show({ kind: "list" });
   }
 
   function remove() {
     if (editing === null) return;
     removeAgent(editing);
     last = null;
-    show({ kind: "list" });
+    void show({ kind: "list" });
+  }
+
+  /** Remove asked and not confirmed: the keyboard goes back to Remove. */
+  async function keep() {
+    removing = false;
+    await tick();
+    section.querySelector<HTMLElement>('[data-testid="agent-remove"]')?.focus();
   }
 
   // The harnesses whose models the editor offers: those installed, and the
@@ -188,7 +218,7 @@
   </button>
 {/snippet}
 
-<section class="agents" data-testid="settings-agents">
+<section class="agents" data-testid="settings-agents" bind:this={section}>
   {#if view.kind === "list"}
     <h3>Agents</h3>
     <div class="alist" data-testid="agent-list">
@@ -216,7 +246,7 @@
     {/each}
   {:else if view.kind === "edit"}
     <div class="pg-h">
-      <button type="button" class="back" onclick={() => show({ kind: "list" })} data-testid="agent-back"
+      <button type="button" class="back" onclick={() => void show({ kind: "list" })} data-testid="agent-back"
         >Agents /</button
       >
       <h4>{editing ?? "New agent"}</h4>
@@ -305,7 +335,7 @@
         question={`Remove the agent "${editing}"?`}
         action="Remove"
         onConfirm={remove}
-        onCancel={() => (removing = false)}
+        onCancel={keep}
         testid="agent-remove-ask"
       />
     {:else}
@@ -316,7 +346,7 @@
           >
         {/if}
         <span class="acts">
-          <button type="button" class="btn quiet" onclick={() => show({ kind: "list" })} data-testid="agent-cancel"
+          <button type="button" class="btn quiet" onclick={() => void show({ kind: "list" })} data-testid="agent-cancel"
             >Cancel</button
           >
           <button type="button" class="btn pri" onclick={save} data-testid="agent-save">Save</button>
@@ -325,7 +355,7 @@
     {/if}
   {:else if reading !== undefined}
     <div class="pg-h">
-      <button type="button" class="back" onclick={() => show({ kind: "list" })} data-testid="agent-back"
+      <button type="button" class="back" onclick={() => void show({ kind: "list" })} data-testid="agent-back"
         >Agents /</button
       >
       <h4>{reading.title}</h4>
@@ -344,7 +374,7 @@
     </p>
   {:else}
     <div class="pg-h">
-      <button type="button" class="back" onclick={() => show({ kind: "list" })} data-testid="agent-back"
+      <button type="button" class="back" onclick={() => void show({ kind: "list" })} data-testid="agent-back"
         >Agents /</button
       >
     </div>
