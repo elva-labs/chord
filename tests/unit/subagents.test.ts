@@ -172,10 +172,11 @@ describe("subagentsOf", () => {
       truncated: false,
       description: null,
       path: null,
+      readsOnly: false,
       choices: [],
     });
     play(...agentCall("c2", { description: "Check the names" }));
-    play({ type: "permissionAsked", request: "r2", call: "c2", parent: null, tool: "Agent", input: {}, truncated: false, description: null, path: null, choices: [] });
+    play({ type: "permissionAsked", request: "r2", call: "c2", parent: null, tool: "Agent", input: {}, truncated: false, description: null, path: null, readsOnly: false, choices: [] });
     expect(subagentsOf(conversation).map((one) => [one.call, one.state, one.at])).toEqual([
       ["c1", "asking", 4000],
       ["c2", "asking", 4000],
@@ -279,6 +280,7 @@ describe("subagentsOf", () => {
           truncated: false,
           description: null,
           path: null,
+          readsOnly: false,
           choices: [],
         },
       ],

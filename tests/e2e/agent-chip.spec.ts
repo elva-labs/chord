@@ -76,7 +76,7 @@ test("lists the agents before the first message, narrows them as the user types,
     settings: { model: "opus", effort: "high", readsOnly: true },
   });
   // The mode chip says the session reads only, with the lock.
-  await expect(chip(page, "mode")).toHaveText("Reads only");
+  await expect(chip(page, "mode")).toHaveText("Reads only · Default");
   await expect(chip(page, "mode")).toHaveAttribute("data-reads-only", "");
 
   await page.getByTestId("composer-input").fill("Look at the cache change");
@@ -91,6 +91,12 @@ test("lists the agents before the first message, narrows them as the user types,
   await mine.getByTestId("workbench-agent").click();
   await expect(mine.getByTestId("workbench-agent-text")).toBeVisible();
   await expect(page.getByTestId("agent-run-as").last()).toHaveText("Reviewer");
+
+  // An ask reading only made says so.
+  await agent(page, `f.ask("${H}", "Bash", { command: "git commit -am x" }, { readsOnly: true });`);
+  await expect(page.getByTestId("permission-reads-only")).toHaveText(
+    "This session reads only. Allowing this lets it change files.",
+  );
 });
 
 test("offers only agents mid-session, from the next message, and picking a mode ends reading only", async ({ page }) => {
@@ -116,13 +122,13 @@ test("offers only agents mid-session, from the next message, and picking a mode 
 
   await chip(page, "agent").click();
   await page.getByTestId("agent-option").filter({ hasText: /^Security reviewer/ }).click();
-  await expect(chip(page, "mode")).toHaveText("Reads only");
+  await expect(chip(page, "mode")).toHaveText("Reads only · Default");
   await chip(page, "mode").click();
   await page.getByTestId("mode-option").first().click();
   expect((await calls(page)).filter((call) => call.method === "configure").at(-1)).toMatchObject({
     settings: { readsOnly: false },
   });
-  await expect(chip(page, "mode")).not.toHaveText("Reads only");
+  await expect(chip(page, "mode")).not.toHaveText("Reads only · Default");
 });
 
 test("opens Settings on a new agent from the list", async ({ page }) => {

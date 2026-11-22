@@ -325,6 +325,8 @@ pub enum Event {
     /// made it ask, when there is one; `choices` the answers it takes, each
     /// with what it remembers. `truncated` says a string in `input` was
     /// cut short; the answer carries the whole input back regardless.
+    /// `reads_only` says it asks because the session reads only, and that
+    /// allowing it lets the session change files.
     PermissionAsked {
         request: String,
         call: Option<String>,
@@ -334,6 +336,7 @@ pub enum Event {
         truncated: bool,
         description: Option<String>,
         path: Option<String>,
+        reads_only: bool,
         choices: Vec<Offer>,
     },
     /// The agent asks the user something, answered with `reply`: each
@@ -4506,6 +4509,7 @@ mod tests {
             truncated: false,
             description: None,
             path: None,
+            reads_only: false,
             choices: vec![],
         }
     }

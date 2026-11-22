@@ -247,10 +247,14 @@ session.
 
 Apart from its mode, a session can read only, as the agent it works as
 sets it. Claude Code is then refused its own tools that change files,
-Edit, Write, MultiEdit and NotebookEdit, whatever the mode allows, while a
-command it runs is still left to the mode. Codex runs each turn in its
-read-only sandbox, and its asks to change files are turned down without
-asking the user. Reading only can be turned on and off while the session
+Edit, Write, MultiEdit and NotebookEdit, whatever the mode allows. Its
+tools that only read, and a subagent, whose own calls are held to the same,
+are left to the mode. Any other tool, a command, a server's tool or the
+workbench's own start and send among them, is put to the user whatever
+the mode or the allow rules say, and the ask says the session reads only
+and that allowing it lets the session change files. Codex runs each turn
+in its read-only sandbox, and its asks to change files are turned down
+without asking the user. Reading only can be turned on and off while the session
 runs, and the window hears which.
 
 ## What a new session starts on

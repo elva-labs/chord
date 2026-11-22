@@ -991,8 +991,9 @@ its model where that is on the session's harness, its effort, lowered to
 the nearest the model takes, and whether the session reads only. Its
 description goes ahead of the next message once, behind a fold that reads
 As and the agent's title, and the run that answers is headed by the title.
-While the session reads only, the mode chip says Reads only with a lock,
-and picking a mode there ends it. An agent and a workflow are not both
+While the session reads only, the mode chip says Reads only with a lock
+ahead of the mode, which still decides what reading only leaves to it, and
+picking a mode there ends it. An agent and a workflow are not both
 chosen: either one takes the other off the plus. The chip waits while the
 session is not ready.
 

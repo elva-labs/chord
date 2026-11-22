@@ -1697,15 +1697,13 @@
           aria-haspopup="menu"
           aria-expanded={menu === "mode"}
           title={readsOnly
-            ? working?.readsOnly
-              ? `Set by ${working.title}`
-              : "Reads only: no file is changed"
+            ? `${working?.readsOnly ? `Set by ${working.title}. ` : ""}Reads only: file edits are refused, and anything else that could change files asks you first. ${modeLabel} decides the rest.`
             : "What the session may do without asking"}
           data-testid="mode-chip"
           data-reads-only={readsOnly ? "" : undefined}
-          >{#if readsOnly}<span class="lock"><Icon name="lock" size={12} /></span>Reads only{:else}<Plain
-              text={modeLabel}
-            />{/if}<Icon name="down" size={12} /></button
+          >{#if readsOnly}<span class="lock"><Icon name="lock" size={12} /></span>Reads only{" · "}{/if}<Plain
+            text={modeLabel}
+          /><Icon name="down" size={12} /></button
         >
         {#if menu === "mode"}
           <ChoiceMenu

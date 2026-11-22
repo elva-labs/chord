@@ -282,6 +282,8 @@ export interface FakeIntegrated {
       always?: string | null;
       path?: string | null;
       call?: string | null;
+      /** It asks because the session reads only. */
+      readsOnly?: boolean;
     },
   ): string;
   /** Asks questions; returns the request's id. A question takes the
@@ -1243,6 +1245,7 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
         truncated: false,
         description: null,
         path: askOptions.path ?? null,
+        readsOnly: askOptions.readsOnly ?? false,
         choices,
       });
       return request;

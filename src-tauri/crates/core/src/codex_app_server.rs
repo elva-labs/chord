@@ -2647,6 +2647,7 @@ impl AppServer {
                     truncated: false,
                     description: text(&params["message"]),
                     path: None,
+                    reads_only: false,
                     choices: asked.offers(),
                 });
                 self.asked.insert(key, asked);
@@ -2688,6 +2689,7 @@ impl AppServer {
             truncated: false,
             description,
             path,
+            reads_only: false,
             choices: asked.offers(),
         });
         self.asked.insert(key, asked);

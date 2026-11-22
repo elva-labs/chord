@@ -269,7 +269,7 @@ pub(crate) const CHANGING_TOOLS: &[&str] = &["Edit", "Write", "MultiEdit", "Note
 /// The tools that only read. A Claude Code agent reads only when it names
 /// its tools and each is one of these; any other tool, Bash and a server's
 /// tools among them, may change files.
-const READING_TOOLS: &[&str] = &[
+pub(crate) const READING_TOOLS: &[&str] = &[
     "Read",
     "Grep",
     "Glob",

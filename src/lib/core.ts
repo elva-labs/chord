@@ -576,6 +576,9 @@ export type IntegratedEventBody =
       truncated: boolean;
       description: string | null;
       path: string | null;
+      /** It asks because the session reads only: allowing it lets the
+          session change files. */
+      readsOnly: boolean;
       choices: PermissionOffer[];
     }
   /** Answered with `integratedReply`. */
