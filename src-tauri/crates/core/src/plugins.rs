@@ -699,8 +699,9 @@ struct Inner {
     acts: Mutex<HashMap<String, Act>>,
     /// The sessions plugins asked to start, by request: on disk once a
     /// session runs under one, until the plugin's source is removed or
-    /// added afresh, the window says its start began none, or the plugin
-    /// has `OWNED_MOST` newer that began one.
+    /// added afresh, the window says its start began none or its row was
+    /// closed for good, or the plugin has `OWNED_MOST` newer that began
+    /// one.
     owned: Mutex<HashMap<String, Owned>>,
     /// The lines plugins sent to sessions, by request, until the window
     /// says what came of each.
@@ -1348,8 +1349,9 @@ impl Plugins {
     /// Whether a plugin's start began a session. One that did is kept
     /// among the plugin's `OWNED_MOST`, past which the start that ran
     /// longest ago goes. One that did not, the user's no, a start the
-    /// window refused or one that failed, is the plugin's no longer. The
-    /// plugin hears nothing of it.
+    /// window refused or one that failed, is the plugin's no longer, and
+    /// so is one whose session's row was closed for good. The plugin hears
+    /// nothing of it.
     pub fn start_settled(&self, request: &str, started: bool) {
         self.inner.start_settled(request, started);
     }
@@ -3389,7 +3391,8 @@ impl Inner {
     }
 
     /// A start that began a session takes its place among its plugin's
-    /// `OWNED_MOST`; one that began none is the plugin's no longer.
+    /// `OWNED_MOST`; one that began none, or whose row was closed for
+    /// good, is the plugin's no longer.
     fn start_settled(&self, request: &str, started: bool) {
         let mut owned = self.owned.lock().expect("plugins lock");
         let changed = if started {
@@ -6579,6 +6582,11 @@ run = ["sh", "main.sh"]
         assert_eq!(ids.len(), IDS_MOST);
         assert_eq!(ids.first().map(String::as_str), Some("t-3"));
         assert_eq!(ids.last().map(String::as_str), Some("t-2"));
+
+        // A start whose row was closed for good is the plugin's no longer,
+        // its ids with it.
+        plugins.start_settled(&started, false);
+        assert!(!owned().contains_key(&started));
     }
 
     #[test]

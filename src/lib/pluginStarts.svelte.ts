@@ -29,6 +29,13 @@ export function pluginStartOf(key: string): PluginStart | null {
   return starts.byKey[key] ?? null;
 }
 
+/** The row is no plugin's start from here: what it was, when it was one. */
+export function forgetPluginStart(key: string): PluginStart | null {
+  const start = starts.byKey[key] ?? null;
+  delete starts.byKey[key];
+  return start;
+}
+
 /** The row a plugin started for a request, when it did. */
 export function rowOfRequest(source: string, plugin: string, request: string): string | null {
   return (
