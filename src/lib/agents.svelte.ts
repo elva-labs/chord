@@ -370,6 +370,10 @@ export function agentEfforts(harness: HarnessId | null): string[] {
   return EFFORTS_ON[harness ?? "claude-code"];
 }
 
+/** What reading only does to an agent's session, where a lock says it. */
+export const READS_ONLY_ABOUT =
+  "Reads only: file edits are refused and the agent is told to change nothing. A command it runs is left to the mode.";
+
 /** The line under an agent: what it runs on, at what effort, and whether
     it only reads. */
 export function agentFacts(agent: Pick<Agent, "model" | "effort" | "readsOnly">): string[] {

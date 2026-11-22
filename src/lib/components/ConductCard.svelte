@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { installed } from "$lib/harness.svelte";
-  import { agentByKey, allAgents } from "$lib/agents.svelte";
+  import { agentByKey, allAgents, READS_ONLY_ABOUT } from "$lib/agents.svelte";
   import {
     accountWords,
     answerConduct,
@@ -183,7 +183,7 @@
             <option value={role.key}>{role.title}</option>
           {/each}
         </select>
-        {#if readsOnly}<span class="lock" title="Reads only" data-testid="conduct-agent-lock"
+        {#if readsOnly}<span class="lock" title={READS_ONLY_ABOUT} data-testid="conduct-agent-lock"
             ><Icon name="lock" size={11} /></span
           >{/if}
       </label>
