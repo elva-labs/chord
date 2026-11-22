@@ -8,7 +8,8 @@
  *
  * Messages between the page and the plugin pass through here: data from the
  * plugin reaches the frame that is open on it, and what the frame sends
- * goes back to the plugin by its source and name.
+ * goes back to the plugin by its source and name. The page is also told
+ * what is around it: the session on screen and the theme it is painted in.
  */
 
 import {
@@ -18,8 +19,11 @@ import {
   type PluginViewEvent,
 } from "$lib/core";
 import { closeViewer, files, showPluginView } from "$lib/files.svelte";
+import { wentOnFrom } from "$lib/goingOn.svelte";
 import { tell } from "$lib/notify.svelte";
-import { activate, projectLabel, workspace } from "$lib/workspace.svelte";
+import { activeSession, sessions } from "$lib/sessions.svelte";
+import { resolvedTheme, theme, type LookName } from "$lib/theme.svelte";
+import { activate, goTo, projectLabel, workspace } from "$lib/workspace.svelte";
 
 /** A page as one project has it. */
 export interface PluginPage {
@@ -204,6 +208,73 @@ export function spendAct(key: string, project: string, activated: boolean, now =
 /** The user left a page: their next click in it is a new act. */
 export function leftPage(key: string, project: string) {
   actedAt.delete(actKey(key, project));
+}
+
+/** The theme's tokens a page is handed, named without their dashes. */
+export const TOKENS = [
+  "bg",
+  "surface",
+  "surface-2",
+  "well",
+  "ink",
+  "ink-2",
+  "ink-3",
+  "rule",
+  "rule-strong",
+  "accent",
+  "accent-soft",
+  "add",
+  "del",
+  "mono",
+  "sans",
+  "radius",
+  "radius-sm",
+] as const;
+
+/** The most a token's value or a session's id holds, in characters. */
+export const TOKEN_MOST = 200;
+export const SESSION_MOST = 128;
+
+/** What a page is told of what is around it. */
+export interface PageContext {
+  /** The agent's id for the session on screen, while it is one of the
+      page's project; null otherwise. */
+  session: string | null;
+  scheme: "light" | "dark";
+  look: LookName;
+  tokens: Record<string, string>;
+}
+
+/** What a page of `project` is told now, with the tokens as `read` reads
+    them off the window. A value past its most is told as empty. */
+export function contextFor(project: string, read: (token: string) => string): PageContext {
+  const row = activeSession();
+  const id = row !== null && row.project === project ? row.id : null;
+  const tokens: Record<string, string> = {};
+  for (const name of TOKENS) {
+    const value = read(`--${name}`).trim();
+    tokens[name] = value.length > TOKEN_MOST ? "" : value;
+  }
+  return {
+    session: id !== null && id.length <= SESSION_MOST ? id : null,
+    scheme: resolvedTheme(),
+    look: theme.look,
+    tokens,
+  };
+}
+
+/** A page asks to bring a session on screen. It is brought only on the
+    user's act in the page, only while the page's project is the one on
+    screen, and only for a session of that project the page names by its
+    id, or by the id of a conversation that went on to it. Whether it was
+    brought is all the page could learn, and it is told nothing. */
+export function showAsked(project: string, session: unknown, acted: boolean): boolean {
+  if (!acted || workspace.active !== project) return false;
+  if (typeof session !== "string" || session === "" || session.length > SESSION_MOST) return false;
+  const row = sessions.all.find(
+    (row) => row.project === project && row.id !== null && (row.id === session || wentOnFrom(session) === row.id),
+  );
+  return row !== undefined && goTo(row.key);
 }
 
 /** Test seam. */
