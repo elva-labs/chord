@@ -922,7 +922,7 @@ pub fn start_tool() -> Value {
                 "prompt": { "type": "string", "description": "What the session is to do, whole: it knows nothing of this conversation. Never a placeholder to fill in with send afterwards, and nothing of your own housekeeping: no session links, attribution lines or footers, since every session reads the user's instruction files as you do. Every session is asked to end with a short report, so the prompt need not ask for one." },
                 "name": { "type": "string", "description": "A few words naming the work, the way a commit subject reads: the session's row and its worktree take the name." },
                 "harness": { "type": "string", "enum": ["claude-code", "codex"], "description": "Which harness to run the session in, Claude Code or Codex. Required with a model, since a model's name belongs to one harness. The one this project last used when left out otherwise." },
-                "agent": { "type": "string", "enum": ["claude-code", "codex"], "description": "The harness by the argument's earlier name, taken for one more release. Name it with harness instead." },
+                "agent": { "type": "string", "description": "An agent of the user's for the session to work as, by its title, such as Reviewer: the session is told the agent's description ahead of the prompt, reads only where the agent does, and runs on the agent's model and effort unless the start or its step names another harness or model. Only for a harness that runs as a conversation in the workbench; a title there is no agent of is refused with the ones there are. Left out, the session works as none. A harness's name, claude-code or codex, is still read as harness for one more release." },
                 "model": { "type": "string", "description": "The model to run the session on, by the name the harness takes on its command line: an alias such as sonnet or opus, or a model's full name. The harness is named with it, since a model's name belongs to one harness. Chosen here, before the session's first turn, rather than sent to it afterwards. The harness's own default when left out." },
                 "account": { "type": "string", "description": "The account to run the session under, by the name the user gave it in the workbench's settings, or Default for the harnesses' own login: a login kept apart from the others. Left out, it is the one you run under when the user started you under an account other than your project's, and the project's own otherwise. Name one only when the user asked for the work under a particular account, or to move work to the other login once the one you run under has reached its usage limit; a start under another account than yours is put to the user." },
                 "worktree": { "type": "boolean", "description": "True to run in a worktree of its own, on a branch named after it, so its changes stay off the branch the user is on." },
@@ -2782,15 +2782,17 @@ mod tests {
         assert!(wait(false).contains("answer them, then call wait again"));
         assert!(!wait(false).contains("end the turn without calling wait again"));
         assert!(!wait(false).contains("the workbench writes to you"));
-        // The harness is named with harness, and with agent, its earlier
-        // name, for one more release.
-        for field in ["harness", "agent"] {
-            assert_eq!(
-                start["inputSchema"]["properties"][field]["enum"],
-                json!(["claude-code", "codex"]),
-                "{field}"
-            );
-        }
+        // The harness is named with harness; agent names an agent by its
+        // title, so it takes any words.
+        assert_eq!(
+            start["inputSchema"]["properties"]["harness"]["enum"],
+            json!(["claude-code", "codex"])
+        );
+        assert!(start["inputSchema"]["properties"]["agent"]["enum"].is_null());
+        assert!(start["inputSchema"]["properties"]["agent"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("by its title"));
         assert_eq!(
             start["inputSchema"]["properties"]["worktree"]["type"],
             "boolean"

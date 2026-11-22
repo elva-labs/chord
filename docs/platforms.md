@@ -1,7 +1,7 @@
 # Platforms
 
 The app runs on macOS, Linux and Windows. The core has no platform-only
-paths that matter to the panes; what differs is the window, how agents are
+paths that matter to the panes; what differs is the window, how harnesses are
 started, and what the platform will not say.
 
 ## macOS
@@ -38,10 +38,10 @@ does what the desktop does, and the app does not take it away.
 
 ## Windows
 
-WebView2 renders the window, undecorated, with app-drawn controls. Agents
+WebView2 renders the window, undecorated, with app-drawn controls. Harnesses
 installed by npm are `claude.cmd` and `codex.cmd`, which the core runs
 through `cmd /c`; a project path is handed to it in the plain form, since
-`cmd` refuses the verbatim `\\?\` form and would start the agent in the
+`cmd` refuses the verbatim `\\?\` form and would start the harness in the
 Windows directory. `cmd` ends a command at its first line break, so a
 workflow's instructions reach Claude Code by file, and a Codex session under
 a workflow is refused there; see [harnesses](adapters.md#under-a-workflow). The

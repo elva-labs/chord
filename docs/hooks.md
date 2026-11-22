@@ -1,23 +1,23 @@
 # Hooks
 
-Both agents can run commands of the user's at points in a session: when a
+Both harnesses can run commands of the user's at points in a session: when a
 tool finishes, when a prompt is sent, when a turn ends, when permission is
 asked. The app can install a few of its own, chosen once in the settings for
 every project, with a word for any project that should go the other way.
 Each project is brought to that choice as it is opened. A fresh install has
 them on; a setup from before the choice keeps them off until asked, since
-they write into the project's own agent configuration. Such a setup is
+they write into the project's own harness configuration. Such a setup is
 told once, in an offer over the agent pane, what turning them on gives. Turn
 on there turns them on for every project, as the settings do; the offer goes
 for good on Not now or once hooks are turned on anywhere.
 
 The projects the window opens with are checked together: the machine here
-is asked once whether its daemon is in place, and each account's agent state
+is asked once whether its daemon is in place, and each account's harness state
 is read once for all of its projects. The projects on another machine are
 checked once they have all arrived, in a single request to that machine, so
 local projects never wait on a remote one. A project opened later is checked
 on its own. Installs and removals made by one app or daemon take turns
-writing the agents' per-project state, so several at once keep every
+writing the harnesses' per-project state, so several at once keep every
 project's entry; two programs writing that state at the same moment, such
 as two computers connected to one machine, do not take turns.
 
@@ -63,11 +63,11 @@ first, and for the Codex file, which Codex leaves alone. The two lines stay
 in the exclude list when the hooks are turned off, where they do nothing.
 
 A worktree the workbench makes for a session is a checkout of its own, and
-each agent reads its local settings from the directory it runs in, so the
+each harness reads its local settings from the directory it runs in, so the
 project's files do not reach a session there. When the project has the
 hooks, the worktree is given the same entries, and the same pointer to the
 tool server, when it is made and again whenever a session starts or
-resumes in it, so a worktree that lacks them gets them before its agent
+resumes in it, so a worktree that lacks them gets them before its harness
 starts. Turning the hooks on or off for the project does the same in each
 of its worktrees at once. The lines the exclude list holds for the
 project's own files cover the worktree's too, and no line is added for
@@ -80,7 +80,7 @@ written is made all the same; a session there is read off its output.
 
 A project that is a folder inside its repository gives its worktrees
 nothing. Each of them is a checkout of the whole repository, with the
-agent run at its top rather than in the project's folder, and files there
+harness run at its top rather than in the project's folder, and files there
 could be kept out of git's view only by lines that every checkout of the
 repository reads, the main one included. A session in such a worktree is
 read off its output.
@@ -89,7 +89,7 @@ read off its output.
 
 The changes pane hears the moment a tool finishes, and hears what the agent
 did rather than inferring it from the filesystem. A session's row follows
-the agent's own word for working, waiting and asking for permission, in
+the harness's own word for working, waiting and asking for permission, in
 place of the reading off its output. [Sessions](sessions.md) describes both.
 
 The session log holds a line per event and is trimmed once it grows past
@@ -106,10 +106,10 @@ was not on screen. The daemon tells the agent when to reach for it as it
 connects: when the user asks where something is, or an answer points at a
 place in a file, once, for the place being talked about. Claude Code is
 pointed at the server in its own per-project state, the state file of
-every account in the settings as well as the agent's own, so a session
+every account in the settings as well as the harness's own, so a session
 under any of them has the tools; Codex in the project's
 `.codex/config.toml`, kept out of the repository like the hooks file. Such
-a file is the agent's own: the core changes its one entry and writes the
+a file is the harness's own: the core changes its one entry and writes the
 rest back as it found it, comments, headers, dotted keys, inline tables,
 line breaks and a byte order mark included, and one it cannot parse or
 whose servers are not a table it leaves alone rather than replaces.
@@ -141,7 +141,7 @@ it acts:
   and moves the keyboard there;
 - `start`, for which the window asks before the first session in
   another project unless the user let the caller start more there, and
-  never before a resume; a start in the caller's own project on its agent
+  never before a resume; a start in the caller's own project on its harness
   and account, which begins in no more than the caller's mode, is not
   asked by the window where the window knows that mode, or the caller is a
   Codex terminal, unless a setting says to, so Codex's question, where its

@@ -688,8 +688,13 @@
       <!-- What the request holds scrolls under the thing asked; who asks and
            the choices stay in sight whatever it holds. The agent's own words
            stand after the paths outside the project, never before them. -->
-      {#if away.some((each) => !(headAway && each.path === what.object)) || asked.description || command !== null || cutHead || lines_ !== null || full !== null}
+      {#if asked.readsOnly || away.some((each) => !(headAway && each.path === what.object)) || asked.description || command !== null || cutHead || lines_ !== null || full !== null}
       <div class="body">
+      {#if asked.readsOnly}
+        <p class="reads-only" data-testid="permission-reads-only">
+          <span class="lock"><Icon name="lock" size={12} /></span>This session reads only. Allowing this lets it change files.
+        </p>
+      {/if}
       {#each KINDS as kind (kind)}
         {@const these = away.filter((each) => each.where === kind && !(headAway && each.path === what.object))}
         {#if these.length > 0}
@@ -1065,6 +1070,19 @@
   .description {
     margin: -4px 0 0 var(--indent);
     color: var(--ink-2);
+  }
+
+  .reads-only {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -4px 0 0 var(--indent);
+    color: var(--ink-2);
+  }
+
+  .reads-only .lock {
+    display: flex;
+    color: var(--accent);
   }
 
   .reveal {

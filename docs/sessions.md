@@ -4,7 +4,7 @@ A session is one agent at work in one project. Open a folder as a project and st
 
 ## Starting and closing
 
-- Every new session starts in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. A project's New session and the + open it there with the project chosen. One line says what the session starts on, such as `Claude Code · Work`, and <kbd>Enter</kbd> starts it. Change picks another agent, account or workflow, and for Codex a [profile](reference/sessions.md#codex-profiles) where the account has any.
+- Every new session starts in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. A project's New session and the + open it there with the project chosen. One line says what the session starts on, such as `Claude Code · Work`, and <kbd>Enter</kbd> starts it. Change picks another harness, account or workflow, and for Codex a [profile](reference/sessions.md#codex-profiles) where the account has any.
 - <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project.
 - New session in Chord or New session in a terminal, in the project's ⋯ menu and the palette, starts one the other way from the setting.
 - The × on a live row stops the session and keeps it in the project's past sessions. Closing a project stops everything running in it.
@@ -24,7 +24,7 @@ The dot says what the agent is doing:
 
 When the agent leaves a line for you, it shows under the row's name, with the model the session runs on and the Codex profile it runs under, if any. A session you have not looked at since it changed is marked unread. With the window in the background, a system notification says when a session starts waiting for you ([notifications](settings.md#notifications)). <kbd>Cmd</kbd><kbd>.</kbd> goes to the next session that needs you.
 
-How well the dot keeps up depends on the agent and on whether [hooks](hooks.md) are on: [what a row says](reference/sessions.md#what-a-row-says) has the detail.
+How well the dot keeps up depends on the harness and on whether [hooks](hooks.md) are on: [what a row says](reference/sessions.md#what-a-row-says) has the detail.
 
 ## Active and inactive
 
@@ -42,9 +42,9 @@ The changes pane follows the session on screen. When the agent moves into a git 
 
 ## Sessions in Chord
 
-A session runs either in a terminal, with the agent's own interface, or in Chord, as a conversation the window draws itself. Which one is a setting for each agent, [sessions](settings.md#sessions), in a terminal to begin with. Either way the agent's own login, settings, skills and MCP servers apply, and the conversation is the same one: a session started one way resumes the other.
+A session runs either in a terminal, with the harness's own interface, or in Chord, as a conversation the window draws itself. Which one is a setting for each harness, [sessions](settings.md#sessions), in a terminal to begin with. Either way the harness's own login, settings, skills and MCP servers apply, and the conversation is the same one: a session started one way resumes the other.
 
-In Chord, the agent's questions dock over the composer. A permission offers Allow once, Allow for this session and Don't allow, each answered by its number key, with more behind More. Its slash commands work, and images and files can go with a message. A turn stopped at the usage limit says when the limit resets, and a Claude Code conversation can Continue when it resets. The [reference](reference/sessions.md#sessions-in-chord) has the detail, and [sessions in Chord](integrated.md) how the agents are driven.
+In Chord, the agent's questions dock over the composer. A permission offers Allow once, Allow for this session and Don't allow, each answered by its number key, with more behind More. Its slash commands work, and images and files can go with a message. A turn stopped at the usage limit says when the limit resets, and a Claude Code conversation can Continue when it resets. The [reference](reference/sessions.md#sessions-in-chord) has the detail, and [sessions in Chord](integrated.md) how the harnesses are driven. The + on the composer picks an [agent](settings.md#agents) for the session to work as.
 
 ### When the setting is switched
 
@@ -56,7 +56,7 @@ A Claude Code session in Chord shows its subagents under its row while they run,
 
 ## Names
 
-A row reads `New session` until something names it: the agent's title, a name you give it through the agent's rename command, or the first words of your first message. See [names](reference/sessions.md#names).
+A row reads `New session` until something names it: the harness's title, a name you give it through the harness's rename command, or the first words of your first message. See [names](reference/sessions.md#names).
 
 ## Accounts
 

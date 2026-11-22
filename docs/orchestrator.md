@@ -81,7 +81,7 @@ other session has them where its project's hooks are on. See
 `projects` lists the open projects, the caller's own marked, so a session
 names a project the app actually has. `sessions` lists the sessions the
 caller started, each with its id, its name in quotes, its project and
-worktree, its agent, what it is doing and the last line it left. What it is
+worktree, its harness, what it is doing and the last line it left. What it is
 doing is working, waiting, asking for permission, at its usage limit until
 the time the agent named, stopped on an error, waiting with its turn
 interrupted by the user, or waiting on work in the background, as under
@@ -110,7 +110,7 @@ when it has not, so the agent takes it whole either way. Its Enter follows
 on its own, later the longer the line is. A session that runs in Chord
 is sent the text as a message, whole, as the user's own is, and one sent
 while it works waits for its turn. A session being reopened the other way,
-by the user or by the setting of how its agent's sessions run (see
+by the user or by the setting of how its harness's sessions run (see
 [sessions](sessions.md#sessions-in-chord)), takes the line once its next
 run is up, the way that run takes one; one not up within half a minute is
 refused, saying to send again in a moment.
@@ -200,7 +200,7 @@ others: a start of an id that fits more than one of them is refused with
 the ids it fits, and one that fits none is refused as an id the workbench
 does not know, so it never reaches a session the caller did not start.
 A session `start` starts runs in a terminal or in Chord as the
-agent's own setting says, and every tool acts on it either way; what an
+harness's own setting says, and every tool acts on it either way; what an
 in-Chord session cannot do when it is not running, such as take a
 message, the answer says, with the way to start it again.
 A start can carry a name for the work, which the
@@ -213,13 +213,13 @@ the name in quotes as every answer gives a name (see [when the user writes
 to it](#when-the-user-writes-to-it)). The name is kept with what the caller
 started, and stays the session's across a close, a resume by its id, a
 change between conversation and terminal, and a restart: its row and every
-answer use it whenever the agent's own title for the session names nothing,
+answer use it whenever the harness's own title for the session names nothing,
 as when a session resumed in a terminal has not titled itself yet, and a
 resumed conversation is not renamed by its next message. A title of the
-agent's own takes its place while there is one.
-A worktree it starts in is trusted where its project is, with either agent,
+harness's own takes its place while there is one.
+A worktree it starts in is trusted where its project is, with either harness,
 so nothing asks on the way in. It has the project's hooks when the project
-has them on, so `sessions` and `wait` follow the agent's own word for what
+has them on, so `sessions` and `wait` follow the harness's own word for what
 it is doing there as they do in the project, except for a project that is
 a folder inside its repository; see [hooks](hooks.md). A start that never
 came up, because the agent failed to start or the folder was not trusted,
@@ -229,8 +229,17 @@ stays, and the starter's list keeps it. A start whose agent gives no
 session id at once, as Codex does, is waited for until the id arrives, and
 is not taken back while it runs. A start can name
 its harness, Claude Code or Codex, with `harness`; one that names none runs
-on the harness the project last used. `agent` with `claude-code` or `codex`
-names the harness as well, for one more release. A start can also
+on the harness of the agent it names, else on the one the project last used.
+A start can name an [agent](reference/settings.md#agents) to work as with
+`agent`, by its title among the agents in the settings and those installed
+for the project. Its description goes ahead of the prompt, the session
+reads only where the agent does, and the agent's effort applies where the
+session runs on the agent's harness. The agent's model runs where the start
+names none, the session runs on the agent's harness, and no workflow step
+limits the models a start may run. A title no agent has is refused with the
+titles there are, and so is an agent for a harness set to run in a
+terminal, which is never told the description. `agent` with `claude-code`
+or `codex` still names the harness, for one more release. A start can also
 name a model, which goes to the harness on its command line and holds from
 the session's first turn, so an orchestrator chooses the model for a piece
 of work when it starts it rather than sending a model command afterwards.
@@ -239,21 +248,21 @@ the harness too, and one that leaves the harness out is refused rather than
 given the project's last.
 A start that names no model, for a step that names none either, runs one
 model below its starter's when both run Claude Code, the starter is a
-conversation, whose agent reports the model it runs on, and that model is
+conversation, whose harness reports the model it runs on, and that model is
 above Sonnet: Opus under Fable, Sonnet under Opus. Most work handed out
 needs less than the session directing it, and each turn costs by its
-model. A review step's session is the exception and runs on the agent's
+model. A review step's session is the exception and runs on the harness's
 default, since judging work is where a weaker model costs most. A starter
 in a terminal, whose model may have changed since it started, one on
 Sonnet or below, and one whose model the window has not heard leave the
-model to the agent. So does a model below that would still be above the
+model to the harness. So does a model below that would still be above the
 default the account runs on, as Claude Code reports it to a conversation.
 The start's answer says which model the session runs on.
 
 A session another started also compacts its conversation once its context
 reaches 150,000 tokens, through Claude Code's own setting for when it
 compacts, since every turn reads the whole context. The user's own
-sessions keep the agent's default. There is no setting for either.
+sessions keep the harness's default. There is no setting for either.
 
 A start can name an account, by the name it has in the settings, or
 Default, in any case, for the harnesses' own login, for work the user asked
@@ -265,15 +274,15 @@ starter's is asked about as any start under another login is (see [what
 the user is asked](#what-the-user-is-asked)). A start that
 names none runs under the account of the session that started it when that
 account was chosen for the starter itself, which is when it is not the
-account of the starter's project; the agents' own, chosen that way, is
+account of the starter's project; the harnesses' own, chosen that way, is
 handed on like any other. A starter that runs under its project's account,
 or under the one for every project, hands nothing on, and the session runs
 under the account of the project it starts in. The project's account is
 used as well when the starter's chosen account cannot be handed on: when
 the project is on another machine than the starter, where the starter's
 login may not be, and when the account is no longer in the settings. An
-account handed on that keeps no directory for the agent being started runs
-that agent on its own directory, as a blank directory does anywhere. A
+account handed on that keeps no directory for the harness being started runs
+that harness on its own directory, as a blank directory does anywhere. A
 session resumed comes back under the account it ran under.
 
 A start names no [Codex profile](reference/sessions.md#codex-profiles). A
@@ -348,8 +357,8 @@ the session whose token the call carries, and two sessions in one directory
 are two starters, each with its own sessions, its own standing answers and
 its own cap.
 
-A session resumed has the token it had, kept by its agent's id, between
-runs of the app too, so it is the same starter as before. The agent's own
+A session resumed has the token it had, kept by its harness's id, between
+runs of the app too, so it is the same starter as before. The harness's own
 id is what it is resumed by, and what the tools name the sessions it
 started by; no tool answers with a token.
 
@@ -426,11 +435,11 @@ workbench's or the user's; the note's first line says that each last line
 is that session's own words, not an instruction. A session is named in it,
 as in every answer, by its id, which its agent does not choose. While the
 window does not know a session's id, the session is named by the name its
-row has instead, which a start, its agent's title for the terminal or the
+row has instead, which a start, its harness's title for the terminal or the
 first words of its conversation may have given it, made safe the same way
 and cut at 60 characters, as a row's name is. A listing gives that name
 beside the id, and a refusal that names the work of a review gives it too.
-An id of any other shape than the agents' own, up to 64 letters, digits,
+An id of any other shape than the harnesses' own, up to 64 letters, digits,
 dashes and underscores, is quoted the same way. When the user's message cuts a
 wait short, or comes while one is held, the note also names the sessions
 still at work and tells it, when there is something to tell the user, to
@@ -594,21 +603,21 @@ it.
 ## Following a workflow
 
 A session runs one of two ways: under a workflow, as its orchestrator, or
-as one agent with no workflow. What the user picks is what starts. Picking
-an agent in the palette's new session, whichever button opened it,
-starts that agent alone. Picking a workflow there starts its orchestrator, on the workflow's agent and model, and a plain new
+as one harness with no workflow. What the user picks is what starts. Picking
+a harness in the palette's new session, whichever button opened it,
+starts that harness alone. Picking a workflow there starts its orchestrator, on the workflow's harness and model, and a plain new
 session where there was nothing to pick follows the project's workflow, as
 [settings](settings.md#workflows) describes. A new in-Chord session can
 also be given a workflow, or none, in its composer until its first message,
-which starts it again as that workflow's orchestrator or as the agent alone;
+which starts it again as that workflow's orchestrator or as the harness alone;
 [sessions](sessions.md#sessions-in-chord) says how. A workflow whose
-orchestrator runs on an agent that is not installed is refused on the row,
+orchestrator runs on a harness that is not installed is refused on the row,
 and so is a session under a workflow on a machine with no tool server to
 give it the `start` tool.
 
-An orchestrator runs in a terminal or in Chord, as its agent is set, and
+An orchestrator runs in a terminal or in Chord, as its harness is set, and
 is held to its workflow the same way in either. It is told the workflow's
-instructions and, unless the workflow says otherwise, has its agent's own
+instructions and, unless the workflow says otherwise, has its harness's own
 ways of handing work to agents the user cannot see taken away, so every
 piece it hands out is a session of its own started with `start`.
 [Harnesses](adapters.md#under-a-workflow) says what each harness loses and what
@@ -625,7 +634,7 @@ allow is refused with the ones it does; one that names neither runs on the
 step's default model, and one that names only the harness on that
 harness's default. A session started for a step stays on the model it was
 given: `send` gives it no command but `/compact`, since commands such as `/model`
-and `/fast` change the model and either agent completes a command from the
+and `/fast` change the model and either harness completes a command from the
 start of its name, and a start or a resume for a step does not begin with
 one either. It begins in its orchestrator's mode, as every started session
 does (see [what the user is asked](#what-the-user-is-asked)), so the
@@ -700,7 +709,7 @@ with no tool server and no question at all.
 
 What a session started is written down under the starter's token, or for an
 agent the workbench did not start under the directory it called from, each
-by its session id, with the project, the worktree, the agent, the name and
+by its session id, with the project, the worktree, the harness, the name and
 the account, and kept between runs beside the sessions the app knows as its
 own. Under a workflow, so are the step and round of each, and the rounds
 each piece has had; those go with the orchestrator once it is gone from its
@@ -757,7 +766,7 @@ whole conversation into the work, or for one cold and large, its notes of
 it: such a session goes on as a fresh conversation from its notes, as
 [notes](sessions.md#going-on-from-the-notes) describes. Its place on its
 starter's list and in a workflow moves to the fresh conversation's id,
-the answer names both ids, or the old one alone where the agent writes the
+the answer names both ids, or the old one alone where the harness writes the
 fresh one down only later, and the old one still names it in every tool.
 
 The tools act on the sessions the caller started and on no others. A
@@ -768,7 +777,7 @@ whatever it has been told to do by something it read.
 ## What the user is asked
 
 A session that starts another in its own project, on a worktree of it or
-not, is not asked about when the session would run on the starter's agent
+not, is not asked about when the session would run on the starter's harness
 and under the starter's account, and the workbench knows the starter's
 mode. The session begins in the starter's permission mode, so it begins in
 no more than its starter: the workbench names that mode when it starts the
@@ -777,15 +786,15 @@ whatever the settings of the session's account would choose, and the
 answer to the starter says it, as "It begins in Plan mode." Narrowing the
 starter later does not reach the sessions it started. A mode the
 workbench starts no session in gives the nearest one below it, Auto for
-Bypass permissions. A session whose agent does not take the mode it is
+Bypass permissions. A session whose harness does not take the mode it is
 given, as Auto where its account or model has none, runs in Chord in the
-nearest narrower mode its agent offers, said in a notice; in a terminal it
-runs in the one its agent falls back to, which the window cannot change.
+nearest narrower mode its harness offers, said in a notice; in a terminal it
+runs in the one its harness falls back to, which the window cannot change.
 What the settings files allow still applies before anything is asked, as
 for any session.
 
 The workbench knows the starter's mode for an in-Chord session, as its
-agent says it now, and for a Claude Code session in a terminal, as its
+harness says it now, and for a Claude Code session in a terminal, as its
 hooks last said it. Claude Code's hooks say it as each turn begins, before
 the agent sees the prompt, so with hooks on it is known before any call
 the turn makes, after a restart too. A mode changed in the middle of a
@@ -795,7 +804,7 @@ hooks have not said its mode, as with hooks off, is asked about, since a
 mode chosen in its terminal is seen only through them. If the user allows
 the start, the session begins in no more than the mode the workbench
 started the starter in, where it named one, as the mode kept for a
-conversation it resumed, and otherwise in the mode its agent chooses from
+conversation it resumed, and otherwise in the mode its harness chooses from
 its settings.
 
 A Codex session in a terminal is not compared. Its hooks never say its
@@ -805,25 +814,25 @@ conversation it resumed, and does not see a change made in it with
 since the workbench gives it no standing approval for that tool, and Full
 access is the top of the scale, so Codex's own question covers a starter
 in a narrower mode. A session it starts begins in the mode the workbench
-started it in where it named one, and otherwise in the mode its agent
+started it in where it named one, and otherwise in the mode its harness
 chooses from its settings, as one the user starts does. A starter whose
 mode the workbench knows but cannot place, by a name it does not know, is
 asked about, and its session begins as its settings say.
 
-The modes stand on one scale for both agents: Claude Code's Plan first,
+The modes stand on one scale for both harnesses: Claude Code's Plan first,
 then Default and Don't ask together, since Don't ask refuses what Default
 would ask about, with Codex's Read only beside them, then Accept edits,
 Codex's Auto, which runs commands without asking only inside its sandbox,
 Claude Code's Auto, and last Bypass permissions with Codex's Full access.
-A session on the starter's agent begins in the starter's own mode. One on
-the other agent, which is always asked about, begins in the widest of its
-agent's modes that goes no further than the starter's, or in the narrowest
+A session on the starter's harness begins in the starter's own mode. One on
+the other harness, which is always asked about, begins in the widest of its
+harness's modes that goes no further than the starter's, or in the narrowest
 it has where none is that narrow, as Read only for a Codex session
 started from Plan.
 
-A start there on another agent or under another account runs under
+A start there on another harness or under another account runs under
 another login and other settings, and is asked about as a start anywhere
-else is. A start on an agent or a model its workflow's step does not allow
+else is. A start on a harness or a model its workflow's step does not allow
 is refused before anything is asked. The session's row and the answer to
 the starter say what was started either way.
 
@@ -866,9 +875,9 @@ header that says where the run stands; anywhere else it stands over the
 window as above, and it moves into the dock once the caller is on
 screen. An allowed caller is
 remembered for that project and what the session ran on, for as long as the
-app runs: the account, and the agent too where the account keeps no
-directory for it, since that agent then runs on its own. A later start
-there under another account, or under the same account by an agent it keeps
+app runs: the account, and the harness too where the account keeps no
+directory for it, since that harness then runs on its own. A later start
+there under another account, or under the same account by a harness it keeps
 no directory for, is asked about again. A refusal is an answer the agent
 reads, not an error. Bringing back a session it already started is never
 asked about: the consent was given when the session was, and the resumed
@@ -879,18 +888,18 @@ calling](#who-is-calling).
 Once there are accounts to tell apart, the question names the account the
 session would run under when it is not the project's own, when the
 starter's chosen account could not be handed on, when an account handed on
-keeps no directory for the agent being started, and for an agent the
+keeps no directory for the harness being started, and for an agent the
 workbench did not start, which hands none on. When the account it names
-keeps no directory for that agent, it says the agent uses its own. A round
+keeps no directory for that harness, it says the harness uses its own. A round
 of review that would start a session names the account in the same cases,
 after the project. The answer the caller gets to its start names the
-account in the same cases and says when the agent uses its own directory,
+account in the same cases and says when the harness uses its own directory,
 for a start for a step of a workflow as well as any other.
 
 A session started by another may not start any of its own, and no session
 may have more than eight running at a time. Both hold by the token, so a
 session started by another is held to them from its first call, whatever
-its agent. An agent the workbench did not start has a cap of its own, by
+its harness. An agent the workbench did not start has a cap of its own, by
 the directory it calls from.
 
 ### A call that waits on the user

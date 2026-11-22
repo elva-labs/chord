@@ -89,6 +89,27 @@ pub(crate) const PLAN_TOOL: &str = "ExitPlanMode";
 /// The tool that keeps the agent's list of steps.
 pub(crate) const TODO_TOOL: &str = "TodoWrite";
 
+/// The id of the hook the stream registers for the tools that change files,
+/// which the agent calls back before each use: refused while the session
+/// reads only, left to the mode otherwise.
+const READS_ONLY_HOOK: &str = "chord_reads_only";
+
+/// Why the reads-only hook puts a tool to the user, as the harness hands it
+/// back on the ask.
+const READS_ONLY_ASK: &str = "This session reads only. Allowing this lets it change files.";
+
+/// The tools the reads-only hook leaves to the mode besides those that
+/// only read: a subagent's own tool calls pass the same hook, the
+/// question and the plan go to the user anyway, and a tool search only
+/// loads tools.
+const LEFT_TO_MODE: &[&str] = &[
+    "Agent",
+    "Task",
+    "AskUserQuestion",
+    "ExitPlanMode",
+    "ToolSearch",
+];
+
 /// The arguments that make `claude` a stream session. `-p` with stream-json
 /// both ways keeps it running for as long as stdin is open; `--verbose` is
 /// required for stream-json output; the partial messages are the text as it
@@ -254,12 +275,14 @@ impl Protocol for ClaudeStream {
     }
 
     fn driver(&self, launch: &Launch) -> Box<dyn Driver> {
-        Box::new(Stream::new(
+        let mut stream = Stream::new(
             launch.session.unwrap_or_default(),
             launch.model,
             launch.mode,
             launch.effort,
-        ))
+        );
+        stream.reads_only = launch.reads_only;
+        Box::new(stream)
     }
 
     /// The agent's terminal resumes a conversation in the mode it last
@@ -501,6 +524,8 @@ struct Stream {
     /// agent may not run in where it is not available.
     asked_mode: Option<String>,
     effort: Option<String>,
+    /// Whether the tools that change files are refused.
+    reads_only: bool,
     /// The usage limit the agent said refused the running turn's last
     /// request: the window used up and when it starts over.
     refused: Option<(Option<LimitKind>, Option<u64>)>,
@@ -1009,6 +1034,7 @@ impl Stream {
             mode: mode.map(str::to_string),
             asked_mode: mode.map(str::to_string),
             effort: effort.map(str::to_string),
+            reads_only: false,
             refused: None,
             models: Vec::new(),
             introduced: None,
@@ -2052,13 +2078,51 @@ impl Stream {
         self.closed.retain(|message, _| messages.contains(message));
     }
 
+    /// The answer to the reads-only hook for one tool use. While the
+    /// session reads only, a tool that writes files is refused, one that
+    /// only reads is left to the mode, and any other is put to the user
+    /// whatever the mode or the allow rules say. Off, every tool is left to
+    /// the mode.
+    fn hooked(&self, id: &str, input: &Value) -> Value {
+        let tool = input["tool_name"].as_str().unwrap_or_default();
+        let decided = |decision: &str, reason: &str| {
+            json!({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": decision,
+                    "permissionDecisionReason": reason,
+                },
+            })
+        };
+        let decision = if !self.reads_only
+            || crate::agents::READING_TOOLS.contains(&tool)
+            || LEFT_TO_MODE.contains(&tool)
+        {
+            json!({})
+        } else if crate::agents::CHANGING_TOOLS.contains(&tool) {
+            decided("deny", "This session reads only: it does not change files.")
+        } else {
+            decided("ask", READS_ONLY_ASK)
+        };
+        json!({
+            "type": "control_response",
+            "response": { "subtype": "success", "request_id": id, "response": decision },
+        })
+    }
+
     /// A control request from the agent: a permission or a question to
-    /// ask, or something this side does not do, which is answered as such.
+    /// ask, the reads-only hook, or something this side does not do, which
+    /// is answered as such.
     fn asked(&mut self, line: &Value, out: &mut Reading) {
         let Some(id) = line["request_id"].as_str() else {
             return;
         };
         let request = &line["request"];
+        if request["subtype"] == "hook_callback" && request["callback_id"] == READS_ONLY_HOOK {
+            out.writes
+                .push(self.hooked(id, &request["input"]).to_string());
+            return;
+        }
         if request["subtype"] != "can_use_tool" {
             out.writes.push(
                 json!({
@@ -2117,6 +2181,7 @@ impl Stream {
             description: text(&request["description"])
                 .or_else(|| text(&request["input"]["description"])),
             path: text(&request["blocked_path"]),
+            reads_only: request["decision_reason"] == READS_ONLY_ASK,
             choices: asked.offers(),
         });
         self.asked.insert(id.to_string(), asked);
@@ -2248,8 +2313,21 @@ impl Driver for Stream {
     fn opening(&mut self) -> Vec<String> {
         // Both optional for the agent, and what it answers with is what the
         // window needs before the first turn: what the agent is, and the
-        // model and effort it runs on.
-        let (initialize, _) = self.request(Sent::Initialize, json!({ "subtype": "initialize" }));
+        // model and effort it runs on. The reads-only hook is registered on
+        // every session for every tool, since reading only can be turned on at
+        // any time.
+        let (initialize, _) = self.request(
+            Sent::Initialize,
+            json!({
+                "subtype": "initialize",
+                "hooks": {
+                    "PreToolUse": [{
+                        "matcher": "*",
+                        "hookCallbackIds": [READS_ONLY_HOOK],
+                    }],
+                },
+            }),
+        );
         let (settings, _) = self.request(Sent::Settings, json!({ "subtype": "get_settings" }));
         vec![initialize, settings]
     }
@@ -2519,6 +2597,15 @@ impl Driver for Stream {
                     Sent::Effort(effort.clone()),
                     json!({ "subtype": "apply_flag_settings", "settings": { "effortLevel": effort } }),
                 )
+            }
+            // The hook asks this side before every use of a tool that
+            // changes files, so the change holds from the next use on.
+            Control::SetReadsOnly(on) => {
+                self.reads_only = *on;
+                return Ok(Sending::Local {
+                    reply: json!({ "readsOnly": on }),
+                    events: vec![Event::ReadsOnly { on: *on }],
+                });
             }
             Control::RewindFiles { message, dry_run } => self.request(
                 Sent::RewindFiles { dry_run: *dry_run },
@@ -3832,6 +3919,139 @@ mod tests {
         let answer: Value = serde_json::from_str(&reading.writes[0]).unwrap();
         assert_eq!(answer["response"]["subtype"], "error");
         assert_eq!(answer["response"]["request_id"], "h1");
+    }
+
+    #[test]
+    fn the_opening_registers_the_reads_only_hook_for_every_tool() {
+        let mut stream = stream();
+        let initialize: Value = serde_json::from_str(&stream.opening()[0]).unwrap();
+        let hook = &initialize["request"]["hooks"]["PreToolUse"][0];
+        assert_eq!(hook["matcher"], "*");
+        assert_eq!(hook["hookCallbackIds"], json!([READS_ONLY_HOOK]));
+    }
+
+    /// What the reads-only hook decides for one use of `tool`.
+    fn hook(stream: &mut Stream, tool: &str) -> Value {
+        let reading = stream.read(
+            &json!({
+                "type": "control_request",
+                "request_id": "h1",
+                "request": {
+                    "subtype": "hook_callback",
+                    "callback_id": READS_ONLY_HOOK,
+                    "input": { "hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": {} },
+                    "tool_use_id": "c1",
+                },
+            })
+            .to_string(),
+        );
+        assert!(reading.events.is_empty());
+        let answer: Value = serde_json::from_str(&reading.writes[0]).unwrap();
+        assert_eq!(answer["response"]["subtype"], "success");
+        assert_eq!(answer["response"]["request_id"], "h1");
+        answer["response"]["response"].clone()
+    }
+
+    #[test]
+    fn reading_only_refuses_writes_leaves_reads_and_puts_the_rest_to_the_user() {
+        let mut stream = stream();
+        for tool in ["Edit", "Bash", "mcp__workbench__send"] {
+            assert_eq!(
+                hook(&mut stream, tool),
+                json!({}),
+                "off, the mode decides {tool}"
+            );
+        }
+
+        let Sending::Local { reply, events } =
+            stream.control(&Control::SetReadsOnly(true)).unwrap()
+        else {
+            panic!("reading only is this side's to keep");
+        };
+        assert_eq!(reply, json!({ "readsOnly": true }));
+        assert_eq!(events, vec![Event::ReadsOnly { on: true }]);
+        for tool in ["Edit", "Write", "MultiEdit", "NotebookEdit"] {
+            let decided = hook(&mut stream, tool);
+            assert_eq!(
+                decided["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{tool}"
+            );
+            assert_eq!(decided["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        }
+        for tool in [
+            "Bash",
+            "mcp__workbench__send",
+            "mcp__github__create_issue",
+            "Unheard",
+        ] {
+            let decided = hook(&mut stream, tool);
+            assert_eq!(
+                decided["hookSpecificOutput"]["permissionDecision"], "ask",
+                "{tool}"
+            );
+            assert_eq!(
+                decided["hookSpecificOutput"]["permissionDecisionReason"],
+                READS_ONLY_ASK
+            );
+        }
+        for tool in [
+            "Read",
+            "Grep",
+            "WebFetch",
+            "Agent",
+            "Task",
+            "AskUserQuestion",
+        ] {
+            assert_eq!(
+                hook(&mut stream, tool),
+                json!({}),
+                "{tool} is left to the mode"
+            );
+        }
+
+        stream.control(&Control::SetReadsOnly(false)).unwrap();
+        assert_eq!(hook(&mut stream, "Write"), json!({}));
+        assert_eq!(hook(&mut stream, "Bash"), json!({}));
+    }
+
+    #[test]
+    fn an_ask_the_reads_only_hook_made_says_so() {
+        let mut stream = stream();
+        let ask = |stream: &mut Stream, id: &str, reason: Value| {
+            stream.read(
+                &json!({
+                    "type": "control_request",
+                    "request_id": id,
+                    "request": {
+                        "subtype": "can_use_tool",
+                        "tool_name": "Bash",
+                        "input": { "command": "git commit -am x" },
+                        "tool_use_id": "c1",
+                        "decision_reason": reason,
+                        "decision_reason_type": "hook",
+                    },
+                })
+                .to_string(),
+            )
+        };
+        let reading = ask(&mut stream, "r1", json!(READS_ONLY_ASK));
+        assert!(
+            matches!(&reading.events[..], [Event::PermissionAsked { reads_only: true, tool, .. }] if tool == "Bash"),
+            "{:?}",
+            reading.events
+        );
+        let reading = ask(&mut stream, "r2", Value::Null);
+        assert!(
+            matches!(
+                &reading.events[..],
+                [Event::PermissionAsked {
+                    reads_only: false,
+                    ..
+                }]
+            ),
+            "{:?}",
+            reading.events
+        );
     }
 
     fn interrupt(stream: &mut Stream) -> String {

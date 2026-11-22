@@ -126,6 +126,7 @@
     },
     "parent": null,
     "path": null,
+    "readsOnly": false,
     "request": "7",
     "tool": "commandExecution",
     "truncated": false,

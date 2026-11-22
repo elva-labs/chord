@@ -1,6 +1,6 @@
 # Sessions
 
-A session is one agent process in one project. In a terminal session it runs
+A session is one harness process in one project. In a terminal session it runs
 in a pty of its own with its own terminal and scrollback; an in-Chord
 session has no terminal, and the window draws its conversation instead, as
 [sessions in Chord](#sessions-in-chord) describes. A project holds as
@@ -13,7 +13,7 @@ An in-Chord session's conversation is taken out of layout while it is
 not in front, so a window holding many costs no more to lay out than one
 holding the conversation on screen; it comes back where it was left, and
 at its foot if it was following it. Each
-terminal takes in what its agent draws as it arrives: on the next frame
+terminal takes in what its harness draws as it arrives: on the next frame
 the window paints, or a moment later when the window paints none, as when
 it is minimised or behind other windows. A session that has never been on
 screen still has its screen to read, its title and its bell.
@@ -23,7 +23,7 @@ live sessions if any and past ones to resume. Opening the app brings back
 the sessions that were open when it quit, as described under
 [after a restart](#after-a-restart).
 The past ones of every open project are read again, in one request per
-agent directory and per machine, each time the window comes back into view
+harness directory and per machine, each time the window comes back into view
 and once a minute while it is looked at, so a session run in a terminal
 outside the app is there to resume without a restart. A list that has not
 changed is left as it is, and a machine that does not answer holds up only
@@ -44,7 +44,7 @@ more than one is open. With no project open, the pane lists nothing: the
 agent pane's Open project is the one way in.
 
 Each project starts with a header: its name, the account it runs under as a
-tag when that is not the agents' own, and a button that starts a session in
+tag when that is not the harnesses' own, and a button that starts a session in
 it. Beside that button, while the pointer is on the header, a ⋯ opens the
 project's own menu, New session and, set apart below a separator and in the
 colour of a removal, Close project; a right click on the header opens it
@@ -83,7 +83,7 @@ while a shell that goes with it has something running, naming what runs.
 The kill lives in one place: closing a session stops its pty and clears the
 id, and the terminal's own teardown does not, so a second signal never lands
 on an id that may since have been reused. On shutdown the pty master closes
-with the process and the agent sees SIGHUP. Picking a session that belongs
+with the process and the harness sees SIGHUP. Picking a session that belongs
 to another project brings that project forward. A session that hangs under
 the session that started it, in another project, is drawn there: picking it
 uses the starter's project, and while it is on screen the starter's project
@@ -188,7 +188,7 @@ project in front selects its most recent session.
 The sessions that were open when the app quit come back as rows in their
 projects, in the order they had and under the names they had, with nothing
 running behind them. Their dot is yellow. The session that was on screen
-starts at once, through the agent's resume command, and each of the others
+starts at once, through the harness's resume command, and each of the others
 starts when it is selected. Bringing a project forward selects its most
 recent session, so that one starts too; asking for a new session in it does
 not, as the project's header describes above. A session closed by hand
@@ -209,7 +209,7 @@ had under its name, whether it went unread by itself or was marked by hand;
 a row that was read comes back read, and none of its lines is kept, so
 marking it unread then puts no line back. A mark made by hand comes back
 with its rule. This holds for a terminal and an in-Chord session, whether
-its agent is started again or the row is left as it was, and for a session
+its harness is started again or the row is left as it was, and for a session
 another session started. A row that has not come back within a week, as
 when its project does not open again, is let go, and comes back read if it
 ever does. What waits is kept as it changes, not on the way out, so a crash
@@ -272,7 +272,7 @@ rows' dots and its words where their names start. Opened, the line stays where
 it is with the rows it holds under it, then a row such as `1 more from
 before…` that opens the sessions not listed, and closes them away again. With nothing folded away, the line
 opens the sessions not listed itself. Every row's name starts at the same
-place, past its dot. No row says which agent it runs.
+place, past its dot. No row says which harness it runs.
 
 A row says what its agent is doing. Codex's turn-start, completion and
 interruption events are read from its session log every half second. A new
@@ -349,7 +349,7 @@ in the [settings](settings.md#notifications). A session an orchestrator
 started goes unread only when it needs a permission, which no agent can
 grant for it: its stopping, ending, ringing or leaving a line is the
 orchestrator's to hear, and marks nothing for you. Attention comes through the pty for
-both agents, as the bell or a terminal notification, with nothing installed.
+both harnesses, as the bell or a terminal notification, with nothing installed.
 With hooks on, a row also carries a line under its name from the turn
 that just ended: the first line of what the agent last said, as plain
 words, so the row says how the turn ended for someone who was elsewhere.
@@ -385,7 +385,7 @@ open to wait for the user, and opening it starts it again. A mark comes
 back after a restart, as [after a restart](#after-a-restart) describes.
 
 With the project's hooks on (Live updates, in the settings) the transitions
-are reported by the agent. Both agents' prompt, stop and permission hooks
+are reported by the harness. Both harnesses' prompt, stop and permission hooks
 append to a log the core tails, and from the first line a session's row follows the
 hooks: working from the prompt, needs permission while the agent asks,
 with a hollow ring on the dot, waiting for you from the stop. A stop that
@@ -491,9 +491,9 @@ window does not follow, so a Codex session shows none either.
 
 With accounts named in the [settings](settings.md#accounts), a project
 runs under one of them, and its header carries the account's name as a tag
-when that is not the agents' own. A new session's line in the palette
+when that is not the harnesses' own. A new session's line in the palette
 then names the account it starts under, and Change asks for the account
-first, under `Under which account`, before the agent. A project that
+first, under `Under which account`, before the harness. A project that
 names an account of its own in the settings starts every new session under
 it. A project that names none starts one under the account last picked
 for a new session there, marked `last picked`, and until one is picked,
@@ -558,11 +558,11 @@ of `main-truck` read `work/main-truck` and `spike/main-truck`, the part in
 front of the name dimmed.
 
 A row reads `New session`, in a quieter ink than a name, until something
-names it: the agent's title, a name the user gave it, or the first words of
+names it: the harness's title, a name the user gave it, or the first words of
 the first message the user sent it. Claude Code writes the
 session's name into the terminal title, with a status glyph in front and its
 own name around it; both are stripped, and a title that was only ever the
-agent's name is no title. Codex keeps names in its own index, which is
+harness's name is no title. Codex keeps names in its own index, which is
 polled. A name is kept by session id, so the past-session list shows the
 name you knew a session by, and resuming it starts the row under that name.
 
@@ -580,11 +580,11 @@ session, in a tooltip, a notification, a question before a close or a
 start, a shell's owner, it uses the words the row reads; a question before
 a close adds the project where a row in another project reads the same.
 
-A name the user gives a session through the agent's own rename command is
+A name the user gives a session through the harness's own rename command is
 the row's name at once and from then on. An in-Chord session hears it
-from the agent; for a Claude Code terminal session the transcript records
+from the harness; for a Claude Code terminal session the transcript records
 it, and the end of the transcript is read as the session's working folder
-is, every couple of seconds while it is on screen. A title the agent sets
+is, every couple of seconds while it is on screen. A title the harness sets
 later does not replace it, and a later rename does.
 
 A slash command is never a name. A row named from its first message passes
@@ -606,21 +606,21 @@ worktree.
 
 ## Sessions in Chord
 
-How an agent's sessions run is a setting per agent, a terminal to begin
+How a harness's sessions run is a setting per harness, a terminal to begin
 with; see [settings](settings.md#sessions). Switching it moves the
 sessions already open, as [when the setting is
-switched](#when-the-setting-is-switched) describes. An agent runs
+switched](#when-the-setting-is-switched) describes. A harness runs
 in Chord only where the core says it can drive it in messages, and the
 rest run in a terminal. A session under a
 [workflow](../orchestrator.md#following-a-workflow) runs the way the setting
-of its orchestrator's agent says, as any session does, and is told the
+of its orchestrator's harness says, as any session does, and is told the
 workflow either way; so does a resumed one. A single new
-session can be started the other way from New session's, for the agent the
+session can be started the other way from New session's, for the harness the
 project used last: from the project's ⋯ menu, under its New session; and from
 the palette, beside New session in the project on screen.
-Started the other way, a session is a pick, as an agent picked is, and
+Started the other way, a session is a pick, as a harness picked is, and
 runs alone whatever the project follows. The + and
-New session start the agent's own way, or the project's workflow, so
+New session start the harness's own way, or the project's workflow, so
 nothing is asked of someone who never changes it. An in-Chord session is
 driven through the core in messages, as [sessions in Chord](../integrated.md)
 describes, and is a row like any other: it is listed, stopped with its ×,
@@ -631,7 +631,7 @@ the menu key or Shift+F10 on the row under the pane's cursor. Its arrows
 walk it, Enter picks and Escape puts it away. It holds Mark as unread, or
 Mark as read on a row that is unread, as described under
 [what a row says](#what-a-row-says); Stop, or Close for a
-row with nothing running; and for a session whose agent runs both ways and
+row with nothing running; and for a session whose harness runs both ways and
 whose conversation's id is known, Reopen as a conversation for a terminal
 session and Reopen in a terminal for an in-Chord one. Reopening stops the
 session and, once its process has ended, resumes the same conversation the
@@ -639,12 +639,12 @@ other way in the same row, with its name, its token, its place, its shells
 and the sessions it started, so the tools of the session and those of a
 session that started it go on naming it. The prompt a started session
 began with is not given again. A conversation nothing was said in has
-nothing for its agent to resume, and starts afresh the other way, in the
+nothing for its harness to resume, and starts afresh the other way, in the
 mode kept for it. The row stays live throughout: nothing
 watching it, a wait of the session that started it among them, hears that
 it ended, and such a wait counts it as at work until its next run is up.
 A line another session sends it meanwhile goes to the next run. While a
-terminal session's agent is quit, the pane shows `Reopening as a
+terminal session's harness is quit, the pane shows `Reopening as a
 conversation…` where its terminal was. In the middle of a turn, where
 the run would end a command it left running in the background or what was
 allowed for its session alone, or where a conversation went back to a point
@@ -664,18 +664,18 @@ A terminal Claude Code session is quit as the user would quit it, with
 Ctrl+C a press at a time. Claude Code writes down the mode it resumed a
 conversation in as it starts, and the mode it ran in only as it shuts
 down, on a quit or a hang-up, and a kill on Windows would leave it no time
-to. One the presses do not end is hung up on, and any other agent's
+to. One the presses do not end is hung up on, and any other harness's
 terminal session is hung up on at once. A run that has not ended within
 twenty seconds is left as it was, and the pane says the session was not
 reopened. A mode chosen on the chip while the session is being reopened
 is the one it goes on in.
 
-The session starts in the mode the agent resumes it in that way, as for
+The session starts in the mode the harness resumes it in that way, as for
 any resume, except that a conversation whose last run was in Chord goes
-on in a terminal in the mode it ran in there, which the agent's own record
+on in a terminal in the mode it ran in there, which the harness's own record
 does not hold, so a terminal never starts looser than the mode last chosen
 on the chip. Bypassing permissions, or a mode a session cannot switch to,
-is never passed on; the agent's settings decide then.
+is never passed on; the harness's settings decide then.
 
 The agent pane's header names the session and the model it runs on. The
 status bar names the branch the folder has checked out; what the session is
@@ -693,7 +693,7 @@ started is named by the name its start gave, cut to 60 characters, or by
 the first line of its prompt; a name that reads as You or Workbench, in any
 case or with anything unseen around it, is never taken, since the thread
 says You for the user alone and Workbench for the workbench's own
-messages, and nor is an agent's own name, Claude, Claude Code or Codex,
+messages, and nor is a harness's own name, Claude, Claude Code or Codex,
 whatever marks stand between its words, since the dock names an agent's
 own requests by it, nor a name another live session has, ignoring case,
 spaces, accents, anything unseen and letters of other scripts that look
@@ -724,13 +724,13 @@ another session's by the id it was sent under, never by its words, so the
 user's own message reads as theirs whatever another session sent; the sentence the
 workbench adds to a started session's prompt, asking it to end with a report, is
 never shown as part of it, only behind a fold of its own. The agent's run
-on the left under the model it ran on, or the agent's own name where that is
+on the left under the model it ran on, or the harness's own name where that is
 not known, with the time, down a quiet line at the side. Codex's app-server
 names no model for a turn, so every run of a Codex session, live or read
-back, goes under the agent's name and keeps it over a reload; the model it
+back, goes under the harness's name and keeps it over a reload; the model it
 runs on is on the composer's model chip. What the session
 shows is chosen by the kind of each call and the shape of what it carries,
-the same for every agent. What the agent wrote is drawn as
+the same for every harness. What the agent wrote is drawn as
 Markdown, its code and tables included, and grows in place while it streams,
 with a caret where the next words come. An image the agent names by an
 address is shown as a link to it rather than fetched. The thread stays at
@@ -956,29 +956,29 @@ dropped, pasted or picked with the paper clip goes with the message as a
 picture, and any other file dropped or picked goes as a mention of it (see
 below), shown as a card with its name and size until the message is sent.
 A file from outside the project goes by its full path, and its card says
-which folder it is from; the agent's own rules on reading outside its
+which folder it is from; the harness's own rules on reading outside its
 folder then apply, as Claude Code's do by asking. A session on another
 machine is given pictures only, since the files are on this one, and the
 composer says which were left out until the message is sent. A message sent while an image is still
 being read waits for it. The empty composer names the keys that open its
-menus, `/` for commands where the agent lists them and `@` for files where
+menus, `/` for commands where the harness lists them and `@` for files where
 the project has a git repository. It shows the model the
 session runs on, which a click changes, and a new session the user starts
 shows from its first frame the model, the mode and the effort last chosen
-for its agent, which it starts on, as
-[sessions in Chord](../integrated.md#what-a-new-session-starts-on) describes: the agent's default is named once
-the agent has said which model that is, and a model chosen during a turn is
+for its harness, which it starts on, as
+[sessions in Chord](../integrated.md#what-a-new-session-starts-on) describes: the harness's default is named once
+the harness has said which model that is, and a model chosen during a turn is
 said to be used from the next. A session that follows a workflow shows its
 orchestrator's model and holds it, saying the workflow sets it, and so does
 the status bar. Both name the model the run says it is on, and the
 workflow's own name for it until the run has said. It shows the mode the
-session runs in, as the agent says it does, which a click changes at once
-among the modes the agent offers. A session starts in the mode a terminal
+session runs in, as the harness says it does, which a click changes at once
+among the modes the harness offers. A session starts in the mode a terminal
 session would, as [sessions in Chord](../integrated.md#the-mode-a-session-starts-in)
-describes: for a new session the one last chosen for its agent, else the
-one the user's own agent settings name, and for a session that starts again
+describes: for a new session the one last chosen for its harness, else the
+one the user's own harness settings name, and for a session that starts again
 or is resumed, the one it last ran in. A mode from those
-settings that the agent offers no switch to, such as bypassing permissions,
+settings that the harness offers no switch to, such as bypassing permissions,
 is shown in plain words and comes back only in a new session once another
 is chosen. It shows how much of the context window the conversation takes. While
 the agent works its Send button is a Stop button, and a message sent
@@ -1014,22 +1014,44 @@ by the agent or never sent, can be put back in the composer. What is being
 written stays with its session while another is on screen. The keys are in
 [focus](../focus-model.md#a-session-in-chord).
 
+The plus on the composer offers Agent while the session works as none:
+one of the [agents](settings.md#agents) for it to work as. Once one is
+picked, its chip comes first after Attach and names it. Its menu lists the
+agents by title, with a lock on each that reads only, and typing narrows
+it; a long list shows its first rows and how many more there are. Before
+the first message the list starts with No agent and ends with New agent,
+which opens the settings on a new agent's form. After it, the heading says
+the agent works from the next message, and only the agents are offered,
+since what the conversation was told stays in it. Picking an agent sets
+its model where that is on the session's harness, its effort where it names
+no model or one on that harness, lowered to the nearest the model takes, and
+whether the session reads only. The effort chip's title then says the agent
+set it. Its description goes ahead of the next message once, behind a fold
+that reads As, the agent's title and what it set, and the run that answers
+is headed by the title. While the session reads only, the mode chip says
+Reads only with a lock ahead of the mode, which still decides what reading
+only leaves to it, and picking a mode there ends it. The agent each session
+works as is kept for the 500 sessions last given one; a session past that
+works as none, and reads only no more, once the app starts again. An agent and a workflow are not both
+chosen: either one takes the other off the plus. The chip waits while the
+session is not ready.
+
 A new session, until its first message, also shows the
 [workflow](../orchestrator.md#following-a-workflow) it follows in a chip
 after the mode: the project's workflow to begin with, or none. The chip
 opens a menu of no workflow, the agent working alone on the model the user
 picks, then each workflow with a line saying which model directs, works and
-reviews. A workflow directed by an agent that is not installed, or that
+reviews. A workflow directed by a harness that is not installed, or that
 runs only in a terminal, is listed with why and cannot be picked. Picking a
 workflow makes the session its orchestrator, as starting a session under it
-does: the session starts again on the orchestrator's agent and model, told
-the workflow's instructions and with the agent's own subagent tools taken
+does: the session starts again on the orchestrator's harness and model, told
+the workflow's instructions and with the harness's own subagent tools taken
 away where the workflow says so, and the thread's first line says what it
-follows. A workflow directed by another agent puts the session on that
-agent, still as a conversation, whatever that agent's own setting is.
-Picking none starts it again alone, on the agent it was started on and the
-model last chosen for that agent, else its own default. Either way it keeps its row and its token, the
-words being written, the keyboard, and, while the agent stays the same, the
+follows. A workflow directed by another harness puts the session on that
+harness, still as a conversation, whatever that harness's own setting is.
+Picking none starts it again alone, on the harness it was started on and the
+model last chosen for that harness, else its own default. Either way it keeps its row and its token, the
+words being written, the keyboard, and, while the harness stays the same, the
 user's last choice of mode, one still on its way included. The run it
 leaves is stopped before anything can reach it, and what that run answers
 later is let go. A start already on its way is waited for, and a message
@@ -1042,7 +1064,7 @@ have no chip, and neither does any session while the settings have no
 workflow.
 
 A slash typed as the first thing in the composer opens a menu over the
-thread of the agent's slash commands, then its skills, for an agent that
+thread of the harness's slash commands, then its skills, for a harness that
 lists them, as Claude Code does; Codex lists none, so there a slash is
 text. Each shows its argument hint, what it does, and where it comes from:
 built in, a project, the user, a plugin or an MCP server. Typing narrows
@@ -1050,17 +1072,17 @@ the list to names that begin with what was typed, then names with a later
 word that does, and marks the letters that match; the first is marked.
 Taking one puts it in the composer with a space after it, and its argument
 hint waits in grey after the caret until something is typed; a second
-Enter sends it. Before the agent has listed its commands the menu says so
+Enter sends it. Before the harness has listed its commands the menu says so
 and fills in place once it has, and until then a message that begins with
 a slash is not sent. A word nothing matches is said to go as a message,
-and the menu closes at the first space. Which entries are skills the agent
+and the menu closes at the first space. Which entries are skills the harness
 says when its first turn starts, so until then those that are not its own
 are listed as skills. An MCP server's prompt is offered by the name a
 message gives it, which starts with `mcp__`. The compact command does not
-go as a message: the conversation is compacted through the agent's own
+go as a message: the conversation is compacted through the harness's own
 compaction, with any words after the command for the summary to keep, and
 while a turn runs the composer says it waits for the turn to end. A
-compaction that fails says so in the thread, with the agent's reason, and
+compaction that fails says so in the thread, with the harness's reason, and
 words that could not be sent to compact go back in the composer.
 
 An `@` typed at the start of the composer or after a space opens the
@@ -1108,7 +1130,7 @@ command for the shell, which the empty composer's hint names. The field
 turns to the shell's type with the `!` in the accent, the folder it runs
 in stands where the context share was, files cannot be attached, and Enter
 runs it in that folder, as [sessions in Chord](../integrated.md#commands-the-user-runs)
-describes; before the agent is ready the composer says it runs once it
+describes; before the harness is ready the composer says it runs once it
 is. What it prints goes to the agent as context for the next message,
 with no turn of its own. The thread shows it as the user's, the `!` and the
 line, with what it prints under it as it comes; past twelve lines only the
@@ -1134,14 +1156,14 @@ A session at rest goes back to before one of the user's own messages, as
 [sessions in Chord](../integrated.md#going-back) describes. Esc twice within a
 moment in its empty composer, or Go back to an earlier message in the
 palette, opens a list over the composer of the user's own messages the
-agent keeps, oldest first, with the newest marked; a first Esc says what a
+harness keeps, oldest first, with the newest marked; a first Esc says what a
 second does, and an Esc that stopped a turn or put something away opens
 nothing. Go back to here, shown on each of the user's messages as Copy is,
 opens the same list at the choices for that message. As the mark moves,
 the thread brings the message into view under a line and fades what would
 leave with it, and the list says what leaves, or why the conversation
 cannot go back there. Enter turns the list into the choices for the marked
-message: the conversation alone, and, where the agent puts files back and
+message: the conversation alone, and, where the harness puts files back and
 a dry run named some, the conversation and the files, and only the files,
 naming the files and counting what changes. Past three files a choice
 names two and counts the rest, and names them all once marked by a key or
@@ -1172,7 +1194,7 @@ it comes again. Where going back fails, the composer says why, the thread
 is whole again, the words leave the composer where they stand unchanged,
 and a message sent meanwhile is not sent.
 
-The row's id is the conversation's id as the agent says it once ready, so
+The row's id is the conversation's id as the harness says it once ready, so
 the agent's own tools find the row. Its state, working, asking or idle,
 comes from the session's events, never from the hooks or from output; the
 hooks still fire for it and are left alone. When it stops working or asking
@@ -1184,9 +1206,9 @@ up again after a reload marks when it ends, since what it did before is
 not heard again. A row with no name yet takes the first line of its first
 message that is not a slash command, as [names](#names) describes.
 
-Before a session can run it may need the user. In a folder the agent has
+Before a session can run it may need the user. In a folder the harness has
 not been told to trust, the pane asks whether to trust it, and on a yes the
-trust is recorded where the agent's own question records it and the session
+trust is recorded where the harness's own question records it and the session
 starts. Under an account that is not signed in, the pane says so and gives
 the command to sign in with in a terminal; the workbench never signs in. A
 session that ended or could not start says why, and Resume starts it again
@@ -1202,7 +1224,7 @@ once, with a breathing line above it while the earlier messages are read;
 the session can be written to meanwhile, and what it says goes under the
 line. The earlier messages fill in above it, and a thread with earlier
 messages sits at the foot of the pane while it is shorter than the pane,
-so nothing under them moves. A turn the agent's record gives no end, as
+so nothing under them moves. A turn the harness's record gives no end, as
 when the app quit during it, is over, and its unfinished steps failed.
 A conversation too long to hold whole leaves out its start and says so.
 Earlier messages that cannot be read leave the session able to be written
@@ -1285,7 +1307,7 @@ version before says nothing, and its sessions follow the setting. So is a
 move not yet made when the app quits: the row comes back as it was and
 starts the new way when it is woken, so it never starts one way and moves
 a moment later, even before the window has the setting again. A
-session that has ended stays as it ended, and an agent that runs only in a
+session that has ended stays as it ended, and a harness that runs only in a
 terminal has nothing to move. A session on another machine moves as one
 here does.
 
@@ -1383,7 +1405,7 @@ started. A conversation that goes on by itself once a usage limit resets
 goes on from its notes whatever its size and rest, as
 [sessions in Chord](../integrated.md#going-on-after-a-limit) describes.
 
-Going on, the row starts a fresh conversation of the agent's, with the
+Going on, the row starts a fresh conversation of the harness's, with the
 same row, name and token, so the notes and everything the workbench
 keeps of the session follow it. The core writes a briefing, a few
 thousand tokens whatever the size of what came before: the open items, the
@@ -1409,7 +1431,7 @@ undone; it does not count toward the twelve. The briefing goes ahead of the firs
 conversation is sent, the user's, a line from the session's starter, or
 the workbench's own; a terminal session is given it as its first prompt,
 told to wait for the user when nothing else goes with it. Where the
-agent's command runs through the Windows command interpreter, a first
+harness's command runs through the Windows command interpreter, a first
 prompt too long or with characters it would read as its own goes in a
 file of the session's own, readable by the user alone, and the agent is
 told to read it.
@@ -1453,7 +1475,7 @@ session started, that is when its starter stops it, or when the starter
 is itself gone from its project's history. For a session of the user's
 own, it is when its conversation is gone from the project's history,
 which happens when its transcript is deleted, by the user or by the
-agent's own clean-up. Closing a row, or the workbench putting a finished
+harness's own clean-up. Closing a row, or the workbench putting a finished
 one away, keeps them.
 
 ## Usage log
@@ -1470,7 +1492,7 @@ older file, which it replaces. A file not written for thirty days is
 removed when the next session's log begins.
 
 Each line has its time, the kind of event, the conversation's id, the
-agent, whether the session runs in a terminal or as a conversation, its
+harness, whether the session runs in a terminal or as a conversation, its
 model where known, and the account's five-hour figure as last reported,
 with when it last moved, so the figure before and after any event can be
 read off the lines around it. The events are:
@@ -1490,22 +1512,22 @@ read off the lines around it. The events are:
 
 ## Past sessions
 
-Under the live sessions sit the ones the agent has already had in this
-project, read from the agent's own transcripts or index. Clicking one opens
-it as another live session through the agent's resume command, so a past
+Under the live sessions sit the ones the harness has already had in this
+project, read from the harness's own transcripts or index. Clicking one opens
+it as another live session through the harness's resume command, so a past
 conversation becomes a row like any other and the one you were in keeps
 running.
 
-Ours first, the rest behind a row. The agents' history holds every session
+Ours first, the rest behind a row. The harnesses' history holds every session
 run in the project, including ones started from a plain terminal, and months
 of those would bury the app's own. The sessions this app has run lately are
 remembered by id and listed under the project on screen, one line each
 with its time, among the rows left from the last quit and folded with them
-once there are more than a few. The others, every agent's together, are
+once there are more than a few. The others, every harness's together, are
 counted in the project's [Earlier line](#what-a-row-says), behind a row
 that opens a dialog over them, with a filter that takes every word you type against a
 session's name, its id and the worktree it ran in, and Enter or a click on
-one to resume it. With more than one agent installed, the dialog says
+one to resume it. With more than one harness installed, the dialog says
 whose each one is. Resuming one adopts it.
 How long lately is, is a [setting](settings.md#sessions): forever to begin
 with, or a span after which a session of the app's own that has not changed
@@ -1516,13 +1538,13 @@ storage, which only means everything shows as from outside until it is
 resumed again.
 
 A session run in a directory under the project, a worktree the agent made
-most of all, is filed by the agent under that directory rather than the
+most of all, is filed by the harness under that directory rather than the
 project. Both lists take those in as the project's own, marked with the
-worktree's name, and resuming one starts the agent in that worktree again.
+worktree's name, and resuming one starts the harness in that worktree again.
 
 The lists are built on filenames and stat data, not contents: the filename
 is the session id, mtime is recency, size a rough length. Titles are the
-exception, and every line that parses an agent's own format is quarantined
+exception, and every line that parses a harness's own format is quarantined
 so that a title that cannot be read is a missing title, never an error.
 
 What is read from inside a transcript, the directory it ran in and its
@@ -1547,11 +1569,11 @@ another repository kept in the tree, such as a worktree, which status does
 not look into. A submodule is the exception, since its changes are the
 project's.
 
-**Agent hooks**, opt-in: hooks written into the project's own agent
+**Harness hooks**, opt-in: hooks written into the project's own harness
 configuration, which report each edit the moment a tool finishes and give
 the row its exact state, as above. They are off until asked for, because
 they write into your configuration, and nothing should edit that because you
-opened a folder. They go where the agent keeps local, uncommitted settings,
+opened a folder. They go where the harness keeps local, uncommitted settings,
 so they never turn up in a diff, and turning them off removes only what was
 added. A worktree the workbench makes for a session gets them too, as
 [hooks](../hooks.md) describes.

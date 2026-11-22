@@ -24,6 +24,7 @@ import {
   type PluginPick,
 } from "$lib/conductor.svelte";
 import { say } from "$lib/flash.svelte";
+import { holdsAgentNote } from "$lib/instructions";
 import { wentOnFrom } from "$lib/goingOn.svelte";
 import { handleOf, send as sendIntegrated } from "$lib/integrated.svelte";
 import { choose, modelToStart } from "$lib/lastChosen.svelte";
@@ -75,6 +76,7 @@ export function startRefusal(asked: PluginStartEvent): string | null {
   if (bytes(asked.prompt) > PROMPT_MOST) return "its prompt is too long";
   if (slashLed(line) || slashLed(asked.prompt)) return "its prompt begins with a slash";
   if (runsShell(line) || runsShell(asked.prompt)) return "its prompt begins with !";
+  if (holdsAgentNote(asked.prompt)) return "its prompt holds a line of the workbench's agent note";
   return null;
 }
 
@@ -213,6 +215,7 @@ async function deliver(event: PluginSendEvent): Promise<PluginSentOutcome> {
   const line = oneLine(event.text);
   if (line === "" || bytes(event.text) > TEXT_MOST) return "refused";
   if (commandLed(line) || commandLed(event.text)) return "refused";
+  if (holdsAgentNote(event.text)) return "refused";
   const row = rowFor(event);
   if (row === null) return "gone";
   const from = pluginMark(event.source, event.plugin);

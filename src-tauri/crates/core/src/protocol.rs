@@ -169,6 +169,8 @@ struct IntegratedStartParams {
     afresh: bool,
     #[serde(default)]
     compact_at: Option<u64>,
+    #[serde(default)]
+    reads_only: bool,
     /// The agent session id of the session that started this one.
     #[serde(default)]
     starter: Option<String>,
@@ -350,6 +352,8 @@ struct IntegratedConfigureParams {
     mode: Option<String>,
     #[serde(default)]
     effort: Option<String>,
+    #[serde(default)]
+    reads_only: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -676,6 +680,7 @@ pub fn dispatch(
                 p.start_only,
                 p.afresh,
                 p.compact_at,
+                p.reads_only,
                 p.starter.as_deref(),
                 p.made_worktree,
                 p.plugin_start.as_deref(),
@@ -743,6 +748,7 @@ pub fn dispatch(
                 p.model.as_deref(),
                 p.mode.as_deref(),
                 p.effort.as_deref(),
+                p.reads_only,
             )?)
         }
         "integrated_snapshot" => {

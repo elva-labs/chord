@@ -125,7 +125,9 @@ import { lastRun, nameSessionsBy } from "$lib/thread";
 import { logUsage } from "$lib/usageLog";
 import { defaultModelOf } from "$lib/lastChosen.svelte";
 import { failureOnScreen, type Failure } from "$lib/turnFailure";
-import { atWorkLine, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
+import { agentNote, atWorkLine, holdsAgentNote, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
+import { agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
+import { startAs } from "$lib/sessionAgents.svelte";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
 import { pluginMark, pluginStarted, pluginStartOf } from "$lib/pluginStarts.svelte";
 import { mixesScripts, readsAsWorkbench, readsAsYou, reservedName, shown } from "$lib/unseen";
@@ -1465,6 +1467,7 @@ function callWords(request: Placed): { same: string; what: string } {
       word("step"),
       word("work"),
       agentOf(request, project),
+      word("agent"),
       word("model"),
       login,
       word("name"),
@@ -1705,7 +1708,7 @@ function ownIds(caller: string, withPlaced: boolean): Set<string> {
     run outside the workbench or from a session that left its name out, and
     it cannot be held to the workflow. */
 export const OUTSIDE =
-  "This call names no session. Each session the workbench starts is given a name its tools pass on in every call, so this call comes from an agent run outside the workbench or from a session whose tools left its name out. A session the workbench runs follows a workflow, and a call that names no session cannot be held to it, so starting and sending are refused to such calls until none follows one. An agent run outside the workbench can be started from it instead.";
+  "This call names no session. Each session the workbench starts is given a name its tools pass on in every call, so this call comes from Claude Code or Codex run outside the workbench or from a session whose tools left its name out. A session the workbench runs follows a workflow, and a call that names no session cannot be held to it, so starting and sending are refused to such calls until none follows one. Claude Code or Codex run outside the workbench can be started from it instead.";
 
 /** What a call is told that names a session the workbench is not running:
     one it never had, or one that has stopped and so cannot be calling. */
@@ -2734,6 +2737,7 @@ async function startSession(request: Placed): Promise<Answered> {
   if (project === null) return refused("Starting a session needs a project.");
   if (prompt === null)
     return refused("Starting a session needs a prompt to give it.");
+  if (holdsAgentNote(prompt)) return refused(AGENT_NOTE_HELD);
   // A model's name means something to one harness only, so the harness is
   // named with it rather than taken from the project's last one.
   if (text(request, "model") !== null && harnessText(request) === null)
@@ -2744,6 +2748,10 @@ async function startSession(request: Placed): Promise<Answered> {
     return refused(`No project at ${project} is open in the workbench.`);
   const wanted = wantedAccount(request);
   if ("refusal" in wanted) return refused(wanted.refusal);
+  // An agent the window has read is found at once, so the start goes on
+  // without a pause; only another title waits on the installed ones.
+  const role = roleTitle(request) === null ? null : (roleNamed(request, project) ?? (await roleFor(request, project)));
+  if (role !== null && "refusal" in role) return refused(role.refusal);
   const caller = callerOf(request);
   const room = roomFor(request);
   if (room !== null) return room;
@@ -2761,7 +2769,7 @@ async function startSession(request: Placed): Promise<Answered> {
   if (fit !== null && "refusal" in fit) return refused(fit.refusal);
   let started = false;
   try {
-    const answer = await startFitted(request, project, prompt, name, wanted.named, caller, fit);
+    const answer = await startFitted(request, project, prompt, name, wanted.named, caller, fit, role);
     started = answer.error === null;
     return answer;
   } finally {
@@ -2806,7 +2814,8 @@ function outcomeAsk(agent: HarnessId): string {
 
 /** The rest of a start, once it has been held to the caller's workflow:
     the account it runs under, which turns on the agent the step chose, the
-    question, and the session itself. */
+    question, and the session itself, as the agent `role` where the start
+    names one. */
 async function startFitted(
   request: Placed,
   project: string,
@@ -2815,6 +2824,7 @@ async function startFitted(
   wanted: { account: string | null } | null,
   caller: string,
   fit: Fit | null,
+  role: Agent | null,
 ): Promise<Answered> {
   const wants = flag(request, "worktree");
   const agent = fit?.agent ?? agentOf(request, project);
@@ -2832,6 +2842,10 @@ async function startFitted(
     : null;
   const beyond = fit?.beyond ?? null;
   if (kindFor(agent) === "terminal" && runsShell(oneLine(prompt))) return refused(SHELL_PROMPT);
+  if (role !== null && kindFor(agent) === "terminal")
+    return refused(
+      `${harnessLabel(agent)} runs in a terminal here, which is never told an agent's description: start the agent on a harness that runs as a conversation, or leave the agent out.`,
+    );
   const unasked = !startAsk.every && beyond === null && ownStart(request, project, agent, account);
   if (unasked && mayChangeModel(oneLine(prompt))) return refused(UNASKED_PROMPT);
   const given = givenMode(callingSession(request), agent);
@@ -2871,7 +2885,12 @@ async function startFitted(
   // that started it, and that is where its questions are answered. The row
   // appears folded under its project, and going to it is a click.
   const looking = sessions.active;
-  const chosen = fit === null ? text(request, "model") : fit.model;
+  // The agent's model is the one run where neither the start nor the step
+  // names one, on the agent's harness, and only where no step limits the
+  // models a start may run.
+  const roleModel =
+    role?.model != null && role.model.harness === agent && (fit === null || fit.anyModel) ? role.model.model : null;
+  const chosen = fit === null ? (text(request, "model") ?? roleModel) : (fit.model ?? roleModel);
   const below = chosen === null && fit?.place.kind !== "review" ? modelBelow(callingSession(request), agent, account) : null;
   const model = chosen ?? below;
   const session = create(
@@ -2879,13 +2898,19 @@ async function startFitted(
     null,
     agent,
     startIn,
-    `${oneLine(prompt)} ${outcomeAsk(agent)}`,
+    `${role === null ? "" : `${agentNote(role.title, role.text)}\n\n`}${oneLine(prompt)} ${outcomeAsk(agent)}`,
     model,
     account,
     null,
   );
   session.madeTree = startIn !== null;
   session.profile = profileHandedOn(callingSession(request), agent, account, project);
+  // The agent's effort is its own harness's, so it goes only with its model
+  // or where it names none.
+  if (role !== null)
+    startAs(session.key, role, role.model === null || role.model.harness === agent ? role.effort : null);
+  const works =
+    role === null ? "" : ` It works as the agent ${quoted(role.title)}${role.readsOnly ? ", reading only" : ""}.`;
   // It begins in its starter's mode, the narrower of the one asked about
   // and the one now where the starter's changed meanwhile.
   session.modeGiven = narrowerOf(agent, given, givenMode(callingSession(request), agent));
@@ -2959,14 +2984,14 @@ async function startFitted(
         : ` It runs on ${sessionModelName({ agent, model, account, project })}.`;
   if (fit === null)
     return said(
-      `Started session ${idText(id)} in ${where}${underWords(named)}. It has the prompt.${runsOn}${begins}${notCalled} ${KEEP_WAITING}`,
+      `Started session ${idText(id)} in ${where}${underWords(named)}. It has the prompt.${works}${runsOn}${begins}${notCalled} ${KEEP_WAITING}`,
     );
   // A work session that began a piece is the piece's name from here.
   const at: Place = { ...fit.place, piece: fit.place.piece ?? id };
   conductor.places[session.key] = at;
   place(caller, id, at);
   return said(
-    `Started session ${idText(id)} for ${placeText(at)} in ${where}${underWords(named)}. It has the prompt.${runsOn}${begins}${notCalled} ${KEEP_WAITING}`,
+    `Started session ${idText(id)} for ${placeText(at)} in ${where}${underWords(named)}. It has the prompt.${works}${runsOn}${begins}${notCalled} ${KEEP_WAITING}`,
   );
 }
 
@@ -3150,6 +3175,8 @@ interface Fit {
   place: Place;
   agent: HarnessId | null;
   model: string | null;
+  /** The step allows any model, so an agent's own may run. */
+  anyModel: boolean;
   /** For a round past the review's limit, what the user is asked to allow. */
   beyond: Beyond | null;
   /** The row now holds the place in the step the start took. */
@@ -3347,10 +3374,10 @@ function modelFor(
   agent: string | null,
   model: string | null,
   step: WorkflowStep,
-): { agent: HarnessId | null; model: string | null } | { refusal: string } {
+): { agent: HarnessId | null; model: string | null; anyModel: boolean } | { refusal: string } {
   const named: HarnessId | null =
     agent === "claude-code" || agent === "codex" ? agent : null;
-  if (step.models.length === 0) return { agent: named, model };
+  if (step.models.length === 0) return { agent: named, model, anyModel: true };
   const fits = step.models.filter(
     (allowed) =>
       (agent === null || allowed.agent === agent) &&
@@ -3374,6 +3401,7 @@ function modelFor(
       first.agent === "codex" && first.model === CODEX_DEFAULT
         ? null
         : first.model,
+    anyModel: false,
   };
 }
 
@@ -3453,6 +3481,7 @@ async function resumeSession(
     );
 
   const prompt = text(request, "prompt");
+  if (prompt !== null && holdsAgentNote(prompt)) return refused(AGENT_NOTE_HELD);
   if (prompt !== null && kindFor(agent) === "terminal" && runsShell(oneLine(prompt)))
     return refused(SHELL_PROMPT);
   if (prompt !== null && entry.unasked === true && mayChangeModel(oneLine(prompt)))
@@ -3659,11 +3688,18 @@ export function worktreeName(prompt: string): string {
   return cut.replace(/-+$/, "") || "session";
 }
 
+/** Why words that hold a line of an agent note are not passed on: the note
+    is the workbench's alone, and the session told it would read them as
+    the workbench's. */
+const AGENT_NOTE_HELD =
+  "The workbench writes the note that tells a session which agent it works as, and passes on no words that hold a line of one. Leave that line out; to start a session as an agent, name it with agent.";
+
 async function sendText(request: Placed): Promise<Answered> {
   const id = text(request, "session");
   const line = text(request, "text");
   if (id === null) return refused("Sending needs a session to send to.");
   if (line === null) return refused("Sending needs the text to send.");
+  if (holdsAgentNote(line)) return refused(AGENT_NOTE_HELD);
   // A line that comes while another line brings the session back goes
   // once it is up, as a line to a running session does.
   const coming = comingBack.get(id);
@@ -4566,11 +4602,42 @@ function harnessText(request: ConductRequest): string | null {
 }
 
 /** The harness to run: the one the call named when it is one the workbench
-    drives, else the project's own. */
+    drives, else the one the model of the agent it names is on, else the
+    project's own. */
 function agentOf(request: ConductRequest, project: string): HarnessId {
   const wanted = harnessText(request);
   if (wanted === "claude-code" || wanted === "codex") return wanted;
-  return defaultAgent(project);
+  return roleNamed(request, project)?.model?.harness ?? defaultAgent(project);
+}
+
+/** The title a start names with agent, the agent to work as; null where
+    it names none, or a harness by the argument's earlier use. */
+function roleTitle(request: ConductRequest): string | null {
+  const title = text(request, "agent");
+  return title === null || title === "claude-code" || title === "codex" ? null : title;
+}
+
+/** The agent a start names, among those the window has read. */
+function roleNamed(request: ConductRequest, project: string): Agent | null {
+  const title = roleTitle(request);
+  return title === null ? null : (agentByTitle(title, project) ?? null);
+}
+
+/** The agent a start names to work as, reading the project's installed
+    agents again where none of those the window has is called so; null
+    where it names none. */
+async function roleFor(request: ConductRequest, project: string): Promise<Agent | null | { refusal: string }> {
+  const title = roleTitle(request);
+  if (title === null) return null;
+  let found = agentByTitle(title, project);
+  if (found === undefined) {
+    await loadInstalled(project);
+    found = agentByTitle(title, project);
+  }
+  if (found !== undefined) return found;
+  return {
+    refusal: `There is no agent called ${quoted(title)} for ${project}. The agents are ${either(allAgents(project).map((agent) => quoted(agent.title)), "and")}. Leave the agent out to start the session as none.`,
+  };
 }
 
 /**
@@ -4638,8 +4705,9 @@ function askUser(
   });
 }
 
-/** What a plugin's start runs on: the agent, and its model by name, or
-    `default` for the one the agent picks itself. */
+/** What a plugin's start runs on: the harness, kept as `agent` as a
+    workflow's model keeps it, and its model by name, or `default` for the
+    one the harness picks itself. */
 export interface PluginPick {
   agent: HarnessId;
   model: string;

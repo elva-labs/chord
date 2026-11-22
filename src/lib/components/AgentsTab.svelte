@@ -141,7 +141,8 @@
     void show({ kind: "edit", editing: own.title });
   }
 
-  function create() {
+  /** The form for a new agent, as New agent opens it. */
+  export function create() {
     draft = newAgent();
     void show({ kind: "edit", editing: null });
   }

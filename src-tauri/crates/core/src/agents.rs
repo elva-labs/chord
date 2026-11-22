@@ -87,6 +87,50 @@ const SHAPE: &str = "agents is a list of agents";
 const ONE_SHAPE: &str =
     "an agent is a title, a description, a model or none, an effort or none, and whether it reads only";
 
+/// A character that changes how text is drawn, or is not drawn at all: a
+/// control or format character, such as a bidirectional override or a
+/// zero-width space, a line or paragraph separator, and any other character
+/// Unicode leaves undrawn, such as a Hangul filler. These are Unicode 16's
+/// Cc, Cf, Zl, Zp and Default_Ignorable_Code_Point, as the frontend's
+/// `hidden` pattern has them.
+fn hidden(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c as u32,
+            0x00AD
+                | 0x034F
+                | 0x0600..=0x0605
+                | 0x061C
+                | 0x06DD
+                | 0x070F
+                | 0x0890..=0x0891
+                | 0x08E2
+                | 0x115F..=0x1160
+                | 0x17B4..=0x17B5
+                | 0x180B..=0x180F
+                | 0x200B..=0x200F
+                | 0x2028..=0x202E
+                | 0x2060..=0x206F
+                | 0x3164
+                | 0xFE00..=0xFE0F
+                | 0xFEFF
+                | 0xFFA0
+                | 0xFFF0..=0xFFFB
+                | 0x110BD
+                | 0x110CD
+                | 0x13430..=0x1343F
+                | 0x1BCA0..=0x1BCA3
+                | 0x1D173..=0x1D17A
+                | 0xE0000..=0xE0FFF
+        )
+}
+
+/// Whether a title, trimmed, will do: a few words, with nothing that could
+/// make one agent's read as another's.
+fn fits_title(title: &str) -> bool {
+    !title.is_empty() && title.chars().count() <= LONGEST_TITLE && !title.chars().any(hidden)
+}
+
 /// A model's name or an effort: one word, short, with nothing unprintable.
 fn is_word(text: &str) -> bool {
     !text.is_empty()
@@ -96,10 +140,7 @@ fn is_word(text: &str) -> bool {
 
 fn check(agent: &Agent) -> Result<(), String> {
     let title = agent.title.trim();
-    if title.is_empty()
-        || title.chars().count() > LONGEST_TITLE
-        || title.chars().any(char::is_control)
-    {
+    if !fits_title(title) {
         return Err(format!(
             "an agent's title is a few words, {LONGEST_TITLE} characters at most, not {:?}",
             agent.title
@@ -262,10 +303,14 @@ pub struct InstalledAgent {
 const MOST_INSTALLED: usize = 64;
 const LARGEST_FILE: u64 = 256 * 1024;
 
+/// The tools that write files, which a Claude Code session reading only is
+/// refused.
+pub(crate) const CHANGING_TOOLS: &[&str] = &["Edit", "Write", "MultiEdit", "NotebookEdit"];
+
 /// The tools that only read. A Claude Code agent reads only when it names
 /// its tools and each is one of these; any other tool, Bash and a server's
 /// tools among them, may change files.
-const READING_TOOLS: &[&str] = &[
+pub(crate) const READING_TOOLS: &[&str] = &[
     "Read",
     "Grep",
     "Glob",
@@ -316,7 +361,7 @@ fn lies_within(path: &Path, folder: &Path) -> bool {
 /// frontmatter names it and says what it does, and whose body is what the
 /// session is told. Of files that give the same name, ignoring case, the
 /// first by path is read. A file that links out of `within`, where one is
-/// given, is left out.
+/// given, or whose name is not a title that will do, is left out.
 fn claude_agents(dir: &Path, source: Source, within: Option<&Path>) -> Vec<InstalledAgent> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
@@ -363,7 +408,7 @@ fn claude_agent(path: PathBuf, source: Source) -> Option<InstalledAgent> {
             })
             .filter(|text| !text.is_empty())
     };
-    let name = text_of("name")?;
+    let name = text_of("name").filter(|name| fits_title(name))?;
     let description = text_of("description")?;
     let model = text_of("model").filter(|model| model != "inherit");
     let tools: Option<Vec<String>> =
@@ -570,7 +615,8 @@ fn unquote(text: &str) -> String {
 /// Codex's roles: each an `[agents.<name>]` table in its configuration,
 /// with a description and a file of its own, which holds what the session
 /// is told, its model, its effort and its sandbox. Read only means the
-/// sandbox is read-only.
+/// sandbox is read-only. A role whose name is not a title that will do is
+/// left out.
 fn codex_agents(home: &Path, codex_home: &Path) -> Vec<InstalledAgent> {
     let config = codex_home.join("config.toml");
     let Some(document) = read_small(&config).and_then(|text| text.parse::<DocumentMut>().ok())
@@ -589,7 +635,7 @@ fn codex_agents(home: &Path, codex_home: &Path) -> Vec<InstalledAgent> {
     };
     let mut agents = Vec::new();
     for (name, item) in roles.iter() {
-        let Some(role) = item.as_table_like() else {
+        let Some(role) = item.as_table_like().filter(|_| fits_title(name)) else {
             continue;
         };
         let file = text_in(role, "config_file").map(|file| {
@@ -683,6 +729,17 @@ mod tests {
         assert!(with("title", json!("  ")).contains("title"));
         assert!(with("title", json!("x".repeat(LONGEST_TITLE + 1))).contains("title"));
         assert!(with("title", json!("a\nb")).contains("title"));
+        for lookalike in [
+            "Revie\u{202e}wer",
+            "Revie\u{200b}wer",
+            "Re\u{2028}viewer",
+            "Re\u{3164}viewer",
+        ] {
+            assert!(
+                with("title", json!(lookalike)).contains("title"),
+                "{lookalike:?}"
+            );
+        }
         assert!(with("title", json!("reviewer")).contains("Chord ships"));
         assert!(with("description", json!(" \n ")).contains("description"));
         assert!(
@@ -932,6 +989,39 @@ mod tests {
             format!("agent-{:03}", MOST_INSTALLED - 1)
         );
         assert!(agents.iter().all(|agent| agent.name != "large"));
+    }
+
+    #[test]
+    fn an_installed_agent_whose_name_will_not_do_is_left_out() {
+        let home = crate::scratch::Scratch::new("agents-names-home");
+        let claude = home.join(".claude");
+        let codex = home.join(".codex");
+        let agent = |name: &str| format!("---\nname: {name}\ndescription: Does it.\n---\nBody.\n");
+        write(&claude.join("agents").join("plain.md"), &agent("plain"));
+        write(
+            &claude.join("agents").join("bidi.md"),
+            &agent("Revie\u{202e}wer"),
+        );
+        write(
+            &claude.join("agents").join("zero.md"),
+            &agent("Revie\u{200b}wer"),
+        );
+        write(
+            &claude.join("agents").join("long.md"),
+            &agent(&"x".repeat(LONGEST_TITLE + 1)),
+        );
+        write(
+            &codex.join("config.toml"),
+            &format!(
+                "[agents.explorer]\ndescription = \"Reads.\"\n\n[agents.\"Revie\\u202Ewer\"]\ndescription = \"Reads.\"\n\n[agents.{}]\ndescription = \"Reads.\"\n",
+                "y".repeat(LONGEST_TITLE + 1)
+            ),
+        );
+        let names: Vec<String> = installed(&home, &home.join("project"), &claude, &codex)
+            .into_iter()
+            .map(|agent| agent.name)
+            .collect();
+        assert_eq!(names, ["plain", "explorer"]);
     }
 
     #[cfg(unix)]

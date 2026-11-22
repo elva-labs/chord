@@ -197,6 +197,7 @@ async fn integrated_start(
     start_only: Option<bool>,
     afresh: Option<bool>,
     compact_at: Option<u64>,
+    reads_only: Option<bool>,
     starter: Option<String>,
     made_worktree: Option<bool>,
     plugin_start: Option<String>,
@@ -223,6 +224,7 @@ async fn integrated_start(
             start_only.unwrap_or(false),
             afresh.unwrap_or(false),
             compact_at,
+            reads_only.unwrap_or(false),
             starter.as_deref(),
             made_worktree.unwrap_or(false),
             plugin_start.as_deref(),
@@ -230,7 +232,7 @@ async fn integrated_start(
         Route::Remote { host, rest } => {
             let started = remotes.connection(&host)?.call(
                 "integrated_start",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "readsOnly": reads_only.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start }),
             )?;
             let id = started["id"].as_str().ok_or("no session id")?;
             let id = with_host_id(&host, id);
@@ -458,8 +460,9 @@ async fn integrated_configure(
     model: Option<String>,
     mode: Option<String>,
     effort: Option<String>,
+    reads_only: Option<bool>,
 ) -> Result<Value, String> {
-    let named = json!({ "model": model, "mode": mode, "effort": effort });
+    let named = json!({ "model": model, "mode": mode, "effort": effort, "readsOnly": reads_only });
     routed(
         Arc::clone(&core),
         Arc::clone(&remotes),
@@ -471,7 +474,13 @@ async fn integrated_configure(
             params
         },
         move |core, id| {
-            core.integrated_configure(id, model.as_deref(), mode.as_deref(), effort.as_deref())
+            core.integrated_configure(
+                id,
+                model.as_deref(),
+                mode.as_deref(),
+                effort.as_deref(),
+                reads_only,
+            )
         },
     )
     .await

@@ -65,6 +65,19 @@ describe("a conversation, from the core's events", () => {
     expect(conversation.entries).toEqual([]);
   });
 
+  it("knows whether the session reads only, from its events and from a snapshot", () => {
+    const { fake, conversation, id } = played();
+    expect(conversation.readsOnly).toBe(false);
+    fake.configure(id, { readsOnly: true });
+    expect(conversation.readsOnly).toBe(true);
+    const late = new Conversation(() => 9_000);
+    late.restore({ ...fake.snapshot(id), settings: { model: "sonnet", mode: "default", effort: null, readsOnly: true } });
+    expect(late.readsOnly).toBe(true);
+    expect(late.settings).toEqual({ model: "sonnet", mode: "default", effort: null });
+    fake.configure(id, { readsOnly: false });
+    expect(conversation.readsOnly).toBe(false);
+  });
+
   it("draws a short exchange: the user's words, then the agent's", () => {
     const { fake, conversation, id, send } = played();
     send(M1, "hello");

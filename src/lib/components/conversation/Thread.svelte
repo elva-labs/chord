@@ -101,6 +101,10 @@
         beside it in the agent's reply. Absent where a thread offers no
         mark. */
     onRun?: (command: string) => void;
+    /** What the agent of that title sets the session to, its model, effort
+        and reading only, for the fold a message it went out as shows.
+        Empty where it sets none or is not known. */
+    agentSettings?: (title: string) => string;
   }
 
   let {
@@ -119,6 +123,7 @@
     onUndo,
     commands,
     onRun,
+    agentSettings,
   }: Props = $props();
 
 
@@ -186,6 +191,24 @@
     const last = new Map<number, string>();
     for (const entry of conversation.entries) if (entry.kind === "agent") last.set(entry.turn, entry.key);
     return new Set(last.values());
+  });
+
+  /** The agent each turn worked as, by the turn's id: the one the last
+      message so far to go out as one went out as, the user's or the prompt
+      of a session started as one. */
+  let workedAs = $derived.by(() => {
+    const titles = new Map<number, string>();
+    let title: string | null = null;
+    for (const turn of Object.values(conversation.turns).sort((a, b) => a.id - b.id)) {
+      for (const id of turn.messages) {
+        const said = conversation.messages[id];
+        const from = said === undefined ? null : (sender?.(said) ?? null);
+        if (said === undefined || from?.workbench || from?.plugin) continue;
+        title = spoken(said.text, from === null).agent?.title ?? title;
+      }
+      if (title !== null) titles.set(turn.id, title);
+    }
+    return titles;
   });
 
   /** A cheap reading of what the thread holds, which changes whenever
@@ -1233,9 +1256,12 @@
         {@const turn = conversation.turns[entry.turn]}
         {@const live = entry.key === liveKey}
         {@const doing = live ? nowDoing(conversation, entry.parts) : null}
+        {@const as = workedAs.get(entry.turn)}
         <article class="msg agent" data-testid="agent-run" data-turn={entry.turn} data-copy-host="message">
           <header class="who" title={entry.at === null ? undefined : exactTime(entry.at)}>
-            {#if entry.at !== null}<time class="said-at" datetime={new Date(entry.at).toISOString()}>{exactTime(entry.at)}</time>{/if}<i class="mark"></i><b><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></b>
+            {#if entry.at !== null}<time class="said-at" datetime={new Date(entry.at).toISOString()}>{exactTime(entry.at)}</time>{/if}<i class="mark"></i>{#if as !== undefined}<b data-testid="agent-run-as"><Plain text={as} /></b><span
+                ><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></span
+              >{:else}<b><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></b>{/if}
             {#if entry.parts.some((part) => part.kind === "text" && part.text.trim() !== "")}
               <Copy label="Copy as Markdown" text={() => replyMarkdown(entry.parts)} host="message" place="end" testid="copy-reply" />
             {/if}
@@ -1403,6 +1429,24 @@
                 >{/if}{/if}{/each}</p
         >{/if}
     </div>
+    {#if words.agent !== undefined}
+      {@const shown = `${said.id}:agent`}
+      {@const settings = agentSettings?.(words.agent.title) ?? ""}
+      <button
+        class="link instructions fold"
+        tabindex="-1"
+        data-thread-item
+        onclick={() => (unfolded[shown] = !unfolded[shown])}
+        aria-expanded={unfolded[shown] === true}
+        data-testid="workbench-agent"
+        ><span class="chev" class:open={unfolded[shown]}><Icon name="chev" size={12} /></span>As{" "}<b
+          ><Plain text={words.agent.title} /></b
+        >{#if settings !== ""}<span data-testid="workbench-agent-settings">{" · "}<Plain text={settings} /></span>{/if}</button
+      >
+      {#if unfolded[shown]}<p class="state briefing described" data-testid="workbench-agent-text"
+          ><Plain text={words.agent.text} /></p
+        >{/if}
+    {/if}
     {#if words.filesBack !== null}
       {@const shown = `${said.id}:files`}
       <button
@@ -1836,6 +1880,35 @@
 
   .state.reports {
     white-space: pre-line;
+  }
+
+  /* An agent's fold: a chevron that turns as it opens, the agent's title
+     in the ink, and what it sets the session to. */
+  .link.fold {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .fold .chev {
+    display: inline-flex;
+    color: var(--ink-3);
+  }
+
+  .fold .chev.open {
+    transform: rotate(90deg);
+  }
+
+  .fold b {
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* The agent's description, set in from the thread under its fold. */
+  .state.described {
+    margin-left: 6px;
+    padding-left: 12px;
+    border-left: 2px solid var(--rule);
   }
 
   /* A briefing runs to a few thousand words: read as a block from the

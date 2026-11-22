@@ -167,6 +167,7 @@ fn start_with(name: &str, scenario: &str, adjust: impl FnOnce(&mut Launch)) -> H
         afresh: false,
         compact_at: None,
         resume_at: None,
+        reads_only: false,
         profile: &[],
     };
     adjust(&mut launch);
@@ -1312,17 +1313,26 @@ fn model_and_effort_change_between_turns_and_go_with_the_next() {
     .join("\n");
     let h = start("model", &scenario);
     h.until_type("ready");
-    let settings = configure(&h.sessions, &h.id, Some("gpt-b"), Some("full-access"), None).unwrap();
+    let settings = configure(
+        &h.sessions,
+        &h.id,
+        Some("gpt-b"),
+        Some("full-access"),
+        None,
+        None,
+    )
+    .unwrap();
     assert_eq!(
         settings,
         Settings {
             model: Some("gpt-b".into()),
             mode: Some("full-access".into()),
             effort: Some("high".into()),
+            reads_only: false,
         }
     );
-    assert!(configure(&h.sessions, &h.id, None, None, Some("low")).is_err());
-    assert!(configure(&h.sessions, &h.id, Some("no-such"), None, None).is_err());
+    assert!(configure(&h.sessions, &h.id, None, None, Some("low"), None).is_err());
+    assert!(configure(&h.sessions, &h.id, Some("no-such"), None, None, None).is_err());
     h.send("go");
     h.until_type("turnEnded");
     let turn = &h.sent("turn/start")[0]["params"];
@@ -2029,6 +2039,7 @@ fn real_codex_holds_turns_approvals_an_interrupt_and_a_resume() {
             afresh: false,
             compact_at: None,
             resume_at: None,
+            reads_only: false,
             profile: &[],
         };
         let started = super::start(
@@ -2310,6 +2321,7 @@ fn real_codex_under_a_workflow_reads_its_instructions_and_has_no_subagent_tools(
             afresh: false,
             compact_at: None,
             resume_at: None,
+            reads_only: false,
             profile: &[],
         };
         let started = super::start(
@@ -2741,6 +2753,7 @@ fn real_codex_reads_back_what_a_session_heard_under_the_same_ids() {
         afresh: false,
         compact_at: None,
         resume_at: None,
+        reads_only: false,
         profile: &[],
     };
     let started = super::start(

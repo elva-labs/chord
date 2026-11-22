@@ -214,6 +214,9 @@ export interface IntegratedStartOptions {
   afresh?: boolean;
   /** The context at which the agent compacts on its own, as for `spawn`. */
   compactAt?: number;
+  /** Whether the session starts reading only: the agent's own tools that
+      change files are refused whatever the mode allows. */
+  readsOnly?: boolean;
   /** The session that started this one, as for `spawn`. */
   starter?: string;
   /** Whether `cwd` is a worktree made for this session, as for `spawn`. */
@@ -307,6 +310,12 @@ export interface IntegratedSettings {
   model: string | null;
   mode: string | null;
   effort: string | null;
+}
+
+/** What the session runs on and whether it reads only, as the core keeps
+    them; `readsOnly` is absent from a core that does not say. */
+export interface IntegratedRunsOn extends IntegratedSettings {
+  readsOnly?: boolean;
 }
 
 export interface IntegratedHunk {
@@ -462,6 +471,10 @@ export type IntegratedEventBody =
       effort: string | null;
       efforts: string[];
     }
+  /** Reading only was turned on or off. While on, the agent's own tools
+      that change files are refused. A session started reading only says
+      so right after `ready`. */
+  | { type: "readsOnly"; on: boolean }
   /** Where a sent message stands before the turn that answers it: sent
       to the agent with nothing ahead of it, waiting behind a running turn,
       taken into the running turn, dropped, or withdrawn: taken back by the
@@ -568,6 +581,9 @@ export type IntegratedEventBody =
       truncated: boolean;
       description: string | null;
       path: string | null;
+      /** It asks because the session reads only: allowing it lets the
+          session change files. */
+      readsOnly: boolean;
       choices: PermissionOffer[];
     }
   /** Answered with `integratedReply`. */
@@ -722,7 +738,7 @@ export type IntegratedEvent = IntegratedEventBody & { id: string };
 export interface IntegratedSnapshot {
   state: IntegratedState;
   turn: boolean;
-  settings: IntegratedSettings;
+  settings: IntegratedRunsOn;
   efforts: string[];
   ready: Extract<IntegratedEventBody, { type: "ready" }> | null;
   requests: Extract<IntegratedEventBody, { type: "permissionAsked" | "questionAsked" }>[];
@@ -1756,12 +1772,12 @@ export interface Core {
     request: string,
     answers: string[][] | null,
   ): Promise<void>;
-  /** Switches the model, mode or effort, each that is given. Resolves to
-      what the session now runs on. */
+  /** Switches the model, mode or effort, and turns reading only on or
+      off, each that is given. Resolves to what the session now runs on. */
   integratedConfigure(
     id: string,
-    settings: { model?: string; mode?: string; effort?: string },
-  ): Promise<IntegratedSettings>;
+    settings: { model?: string; mode?: string; effort?: string; readsOnly?: boolean },
+  ): Promise<IntegratedRunsOn>;
   /** What a window that comes to the session late reads to catch up.
       Resolves once every event that went out before it has arrived. */
   integratedSnapshot(id: string): Promise<IntegratedSnapshot>;
@@ -2378,11 +2394,12 @@ const tauriCore: Core = {
   integratedReply: (id, request, answers) =>
     invoke<void>("integrated_reply", { id, request, answers }),
   integratedConfigure: (id, settings) =>
-    invoke<IntegratedSettings>("integrated_configure", {
+    invoke<IntegratedRunsOn>("integrated_configure", {
       id,
       model: settings.model ?? null,
       mode: settings.mode ?? null,
       effort: settings.effort ?? null,
+      readsOnly: settings.readsOnly ?? null,
     }),
   integratedSnapshot: (id) => invoke<IntegratedSnapshot>("integrated_snapshot", { id }),
   integratedHistory: (options) =>

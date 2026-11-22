@@ -133,9 +133,9 @@ it is known or only one is open: the one on screen above the others, then by
 when they were last used. With the project known, one line reads `New
 session` with what it starts on, such as `Claude Code · Work`, and
 <kbd>Enter</kbd> starts it: the project's account and its workflow, else the
-agent last started in it. Under it, where there is anything to choose,
+harness last started in it. Under it, where there is anything to choose,
 Change asks the rest a step at a time. Typing on the line lists everything
-Change would ask, narrowed by what is typed: the workflows and agents, then
+Change would ask, narrowed by what is typed: the workflows and harnesses, then
 the accounts, each under its heading. <kbd>Enter</kbd> on one starts the
 session with that one answer changed, so `cod` and <kbd>Enter</kbd> start
 Codex under the account the line named. With nothing to choose, the line
@@ -144,12 +144,12 @@ different project is on screen, the project on screen is the starter's, as
 [sessions](sessions.md) describes, both here and for the command that starts
 a session in the project on screen. Change asks the account, when accounts are named in the
 [settings](settings.md#accounts), with the project's own under the cursor;
-then how it runs, when there is a workflow or more than one agent to pick
+then how it runs, when there is a workflow or more than one harness to pick
 between: the workflows under one heading, offered once a workflow has been
 turned on for new sessions or for a project, the project's own first and
 marked as the project's workflow or the default, each with the models it
-runs on, and under another the agents to run alone, with no workflow. The cursor starts on the
-project's workflow, else on the agent last started in the project. A step
+runs on, and under another the harnesses to run alone, with no workflow. The cursor starts on the
+project's workflow, else on the harness last started in the project. A step
 with nothing to choose is not asked. Each
 answer stays in the field as a chip, and <kbd>Backspace</kbd> on an empty
 field takes the last one back, one step to a press however long the key is
@@ -367,7 +367,7 @@ reached.
 | <kbd>Esc</kbd> in the choices / in the list | Back to the list / closes it; typing closes it and types |
 | <kbd>↑</kbd> in an empty composer | Goes to the dock, when something waits there: the agent's own requests or those of the sessions it started; <kbd>Esc</kbd> there comes back. With nothing there, takes the newest of the user's own waiting messages back into the composer, the caret at its start |
 | <kbd>↑</kbd> again, the caret at the start | While the composer holds only what <kbd>↑</kbd> took back, unchanged, takes the one before, ahead of it; each comes back in the order sent, and <kbd>Enter</kbd> sends them as one. Once the words or the caret move, <kbd>↑</kbd> moves the caret |
-| <kbd>/</kbd> first in the composer | Opens the agent's commands and skills, for an agent that lists them |
+| <kbd>/</kbd> first in the composer | Opens the harness's commands and skills, for a harness that lists them |
 | <kbd>↑</kbd> <kbd>↓</kbd> in the slash menu | Mark a command or skill |
 | <kbd>Tab</kbd> or <kbd>Enter</kbd> in the slash menu | Puts the marked one in the composer, a space after it |
 | <kbd>Esc</kbd> in the slash menu | Closes the menu, keeping what is written; it stops nothing |

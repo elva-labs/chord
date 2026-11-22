@@ -668,6 +668,7 @@ describe("a permission request, in words", () => {
       truncated: false,
       description: null,
       path,
+      readsOnly: false,
       choices: [],
     }) as Extract<IntegratedEventBody, { type: "permissionAsked" }>;
 
@@ -852,6 +853,7 @@ describe("a permission request that could be read as something else", () => {
       truncated: false,
       description: null,
       path,
+      readsOnly: false,
       choices: [],
     }) as Extract<IntegratedEventBody, { type: "permissionAsked" }>;
 
@@ -928,6 +930,7 @@ describe("a name an MCP server gave", () => {
       truncated: false,
       description: null,
       path: null,
+      readsOnly: false,
       choices: [],
     }) as Extract<IntegratedEventBody, { type: "permissionAsked" }>;
 
@@ -1052,6 +1055,7 @@ describe("the workbench's own tools in a step's title", () => {
           truncated: false,
           description: null,
           path: null,
+          readsOnly: false,
           choices: [],
         }),
       );
@@ -1254,7 +1258,7 @@ describe("what the thread holds, drawn or not", () => {
     // What the user told the agent when refusing a call, without its label.
     c.apply({ type: "toolStarted", call: "c-6", parent: null, name: "Bash", kind: "command" });
     c.apply({ type: "toolInput", call: "c-6", parent: null, delta: null, truncated: false, input: { command: "rm -rf build" } });
-    c.apply({ type: "permissionAsked", request: "r-6", call: "c-6", parent: null, tool: "Bash", input: { command: "rm -rf build" }, truncated: false, description: null, path: null, choices: [] });
+    c.apply({ type: "permissionAsked", request: "r-6", call: "c-6", parent: null, tool: "Bash", input: { command: "rm -rf build" }, truncated: false, description: null, path: null, readsOnly: false, choices: [] });
     c.apply({ type: "answered", request: "r-6", choice: "deny", answers: null, message: "Keep the build folder" });
     c.apply({ type: "toolFinished", call: "c-6", parent: null, output: "denied", error: true, truncated: false, changes: [] });
     expect(shows("c-6:shows").text).toBe("denied\nKeep the build folder");

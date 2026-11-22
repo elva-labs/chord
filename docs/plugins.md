@@ -136,7 +136,7 @@ projects open; a project opened or closed; a session started or ended;
 the tree moved; a shell command a session ran, for a plugin that asked to
 hear it; an action taken, with its row, any input given and the session
 whose section it is on; a tool called, with its arguments and the session that
-called it, by the agent's own id as the session events give it, or none
+called it, by the harness's own id as the session events give it, or none
 where that is not known yet; a message from the plugin's view; what came
 of a line it sent a session; a request to stop.
 
@@ -152,7 +152,7 @@ or an action; a place to open in the viewer, a
 file's diff, files to present, or a line for a session's row, the same
 means the agent has; the view's page and the data the view shows. The app
 never polls a plugin, and a plugin that has nothing to say stays silent.
-A line for a session's row names the session by the agent's own id, as the
+A line for a session's row names the session by the harness's own id, as the
 session events give it, and the app puts it on the row of the running
 session it started with that id. A line naming an id the session events
 have not given, one it is not running, or one two running sessions share,
@@ -278,8 +278,8 @@ greets the app:
 }
 ```
 
-`id` is the agent's own id for the session, the one every other message
-names it by. A session the agent has not yet given an id is told once it
+`id` is the harness's own id for the session, the one every other message
+names it by. A session the harness has not yet given an id is told once it
 has one. `cwd` is the folder it runs in.
 
 `worktree` is true only when `cwd` is a worktree the app made for this very
@@ -330,8 +330,8 @@ plugin is told once the command has finished:
 }
 ```
 
-`session` is the agent's id, as the session events give it. `cwd` is the
-folder the command ran in, the session's own where the agent does not say.
+`session` is the harness's id, as the session events give it. `cwd` is the
+folder the command ran in, the session's own where the harness does not say.
 `ok` is whether the line it ran in succeeded.
 
 `command` is the matched command's own words, as written, from its program
@@ -389,7 +389,7 @@ nothing. The program is known by its name wherever it lives, so
 The app hears a command:
 
 - in a session drawn as a conversation, from the tool call and its result
-  in the agent's stream, Claude Code's and Codex's alike;
+  in the harness's stream, Claude Code's and Codex's alike;
 - in a Claude Code session in a terminal, from the project's hooks; a
   command that fails there is not heard, since Claude Code runs no hook
   after a failed one.
@@ -421,7 +421,7 @@ A command is not heard, and nothing is sent, when:
   its record passes 256 KiB;
 - a Codex session runs in a terminal, which has no hooks;
 - the user types it in a shell of their own;
-- the session was not started by the app, or its agent has not given its
+- the session was not started by the app, or its harness has not given its
   id yet;
 - the plugin is not running when the command finishes;
 - the command runs it out of sight of the words: an alias, a shell
@@ -435,7 +435,7 @@ A command is not heard, and nothing is sent, when:
 ## Sessions' own sections
 
 A section can be for one session instead of the whole project. It names
-the session by the agent's id:
+the session by the harness's id:
 
 ```json
 {
@@ -624,7 +624,7 @@ the plugin, shows the prompt whole, and offers this one session or none,
 never an answer that stands for the next. A plugin has one card up or
 waiting at a time: a start it asks for meanwhile is a no, and its cards
 are taken down as no when it is turned off, removed or fails. The user picks the
-agent and the model it runs on there, the ones last chosen to begin with.
+harness and the model it runs on there, the ones last chosen to begin with.
 On a yes the session starts in the project, in a worktree of its own when
 `worktree` is true, with the prompt as its first message. It appears
 under its project, and the window stays on what the user was looking at.
@@ -635,7 +635,7 @@ starts, and the plugin is told nothing.
 - `prompt` is at most 8 KiB. One that begins with `/`, whatever the
   command, or with `!`, once the characters that draw nothing are passed
   over, is a command, not words, and the app asks nothing for it.
-- `name` is the session's name until its agent gives it one, on one line
+- `name` is the session's name until its harness gives it one, on one line
   and cut to 60 characters. A name another session has, or one that reads
   as the user's, is passed over.
 - `ref` is a string of at most 256 bytes, which the app hands back on the

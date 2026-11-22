@@ -28,6 +28,7 @@ import {
   takeBackCommand,
   trust,
   unspoken,
+  workAs,
 } from "$lib/integrated.svelte";
 import { resetGoingOn, wentOn } from "$lib/goingOn.svelte";
 import { GO_ON, MARGIN, choose as chooseResume, look, resetAutoResume, resumesWords } from "$lib/autoResume.svelte";
@@ -2653,5 +2654,53 @@ describe("what a new session starts on from the user's last choices", () => {
     expect(pty.spawned.at(-1)).toMatchObject({ session: "old-2" });
     expect((pty.spawned.at(-1) as { model?: string }).model).toBeUndefined();
     expect(pty.spawned.at(-1)!.mode).toBeUndefined();
+  });
+});
+
+describe("the agent a session works as", () => {
+  const reviewer = {
+    key: "own:reviewer",
+    kind: "own" as const,
+    title: "Reviewer",
+    firstLine: "Reads the diff",
+    text: "Read the diff.",
+    model: { harness: "claude-code" as const, model: "sonnet" },
+    effort: "high",
+    readsOnly: true,
+  };
+
+  it("runs the session on the agent's model and effort, reading only, and puts its note ahead of the next message once", async () => {
+    const { session } = await started();
+    workAs(session.key, reviewer);
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "configure").at(-1)).toMatchObject({
+      settings: { model: "sonnet", effort: "high", readsOnly: true },
+    });
+    expect(conversationOf(session.key).readsOnly).toBe(true);
+    send(session.key, "Look at the cache change");
+    send(session.key, "And the tests");
+    await settled();
+    const sent = fake.calls.filter((call) => call.method === "send") as { text: string }[];
+    expect(sent[0].text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
+    expect(sent[0].text.endsWith("Look at the cache change")).toBe(true);
+    expect(sent.slice(1).every((call) => !call.text.includes("work as the agent"))).toBe(true);
+  });
+
+  it("lowers the agent's effort to the nearest its model takes", async () => {
+    const { session } = await started();
+    workAs(session.key, { ...reviewer, effort: "max" });
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "configure").at(-1)).toMatchObject({
+      settings: { model: "sonnet", effort: "high", readsOnly: true },
+    });
+  });
+
+  it("leaves the model and effort of another harness's agent alone", async () => {
+    const codex = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    await launch(codex.key);
+    workAs(codex.key, { ...reviewer, readsOnly: false });
+    await settled();
+    const asked = fake.calls.filter((call) => call.method === "configure").at(-1) as { settings: object };
+    expect(asked.settings).toEqual({ readsOnly: false });
   });
 });

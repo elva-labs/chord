@@ -7,7 +7,7 @@ Four tiers, cheapest first. `npm run verify` runs the first three.
 | Unit and component | `npm run test:unit` | The frontend's stores and components, in jsdom |
 | Rust | `npm run test:rust` | The core crate and the app: environment capture, PATH lookup, the agent seam, ptys, git against repositories built on the fly, the wire protocol, the daemon over stdio |
 | Browser | `npm run test:e2e` | The real frontend in a real browser against a fake core: layout, focus, theme, persistence, the dialogs |
-| Real app | `npm run test:driver` | The actual binary, driven over WebDriver, with fake agents on PATH |
+| Real app | `npm run test:driver` | The actual binary, driven over WebDriver, with fake harnesses on PATH |
 
 `npm run test:coverage` reports on the frontend and fails below 80% lines.
 
@@ -113,7 +113,7 @@ transcript readers, and a project on a remote through the daemon. It runs on
 Linux and Windows; there is no WebDriver for macOS WKWebView, so the macOS
 window is checked by hand.
 
-The agent under test is a script called `claude`, and one called `codex`,
+The harness under test is a script called `claude`, and one called `codex`,
 that prints its arguments and echoes what it is told, on a PATH that a fake
 login shell puts first, because the core asks the login shell for its
 environment rather than trusting its own. Each run gets a home of its own.

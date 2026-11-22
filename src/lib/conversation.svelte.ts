@@ -280,6 +280,9 @@ export class Conversation {
       its commands as they now are. */
   ready = $state<Ready | null>(null);
   settings = $state<IntegratedSettings>({ model: null, mode: null, effort: null });
+  /** Whether the session reads only, as the core last said: the agent's
+      own tools that change files are refused. */
+  readsOnly = $state(false);
   /** The efforts the model it runs on takes. */
   efforts = $state<string[]>([]);
   /** The session's state, as its last state event said. */
@@ -765,6 +768,7 @@ export class Conversation {
         this.sessionId = event.sessionId;
         this.ready = event;
         this.settings = { model: event.model, mode: event.mode, effort: event.effort };
+        this.readsOnly = false;
         this.efforts = [...event.efforts];
         break;
       case "commands":
@@ -775,6 +779,9 @@ export class Conversation {
           this.nextModel = { model: event.model, turn: this.current };
         this.settings = { model: event.model, mode: event.mode, effort: event.effort };
         this.efforts = [...event.efforts];
+        break;
+      case "readsOnly":
+        this.readsOnly = event.on;
         break;
       case "message":
         this.#message(event, now);
@@ -1079,7 +1086,9 @@ export class Conversation {
       this.sessionId = snapshot.ready.sessionId;
       this.ready = snapshot.ready;
     }
-    this.settings = { ...snapshot.settings };
+    const { model, mode, effort, readsOnly } = snapshot.settings;
+    this.settings = { model, mode, effort };
+    this.readsOnly = readsOnly ?? false;
     this.efforts = [...snapshot.efforts];
     this.state = snapshot.state;
     if (snapshot.turn && this.current === null) this.#adoptTurn();

@@ -268,6 +268,7 @@ describe("the dock of a session that started others", () => {
       truncated: false,
       description: null,
       path: null,
+      readsOnly: false,
       choices: [{ choice: "allow", remembers: null, message: false }],
     });
     flushSync();
@@ -349,6 +350,7 @@ describe("the dock of a session that started others", () => {
       truncated: false,
       description: null,
       path: null,
+      readsOnly: false,
       choices: [{ choice: "allow", remembers: null, message: false }, { choice: "deny", remembers: null, message: false }],
     });
     flushSync();

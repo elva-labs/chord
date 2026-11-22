@@ -19,7 +19,7 @@ rather than the program it runs in; the
 | Past sessions | Its transcripts under its configuration directory                  | Its SQLite index under its home                          |
 | Earlier messages | Read from the session's transcript                              | Read through its own app-server, from the thread's turns and items |
 | Account       | `CLAUDE_CONFIG_DIR`, its configuration directory                   | `CODEX_HOME`, its home                                   |
-| Session name  | The terminal title, stripped of the glyph and the agent's own name | The thread's name, else its title, else the first prompt |
+| Session name  | The terminal title, stripped of the glyph and its own name        | The thread's name, else its title, else the first prompt |
 | Workflow      | `--append-system-prompt-file`, `--disallowedTools`                 | `-c developer_instructions=…`, `-c features.multi_agent=false`, `-c features.multi_agent_v2.disable_native_tools=true`; in Chord, the same in the thread's start |
 
 ## Accounts

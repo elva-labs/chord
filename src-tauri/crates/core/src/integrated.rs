@@ -188,6 +188,9 @@ pub enum Event {
         effort: Option<String>,
         efforts: Vec<String>,
     },
+    /// Whether the session reads only changed: while `on`, the agent is
+    /// kept from changing files by its own tools.
+    ReadsOnly { on: bool },
     /// The slash commands and skills changed, or the agent said more of
     /// which is which. All of them, as they now are.
     Commands { commands: Vec<CommandInfo> },
@@ -322,6 +325,8 @@ pub enum Event {
     /// made it ask, when there is one; `choices` the answers it takes, each
     /// with what it remembers. `truncated` says a string in `input` was
     /// cut short; the answer carries the whole input back regardless.
+    /// `reads_only` says it asks while the session reads only, so that
+    /// allowing it lets the session change files.
     PermissionAsked {
         request: String,
         call: Option<String>,
@@ -331,6 +336,7 @@ pub enum Event {
         truncated: bool,
         description: Option<String>,
         path: Option<String>,
+        reads_only: bool,
         choices: Vec<Offer>,
     },
     /// The agent asks the user something, answered with `reply`: each
@@ -956,6 +962,9 @@ pub struct Launch<'a> {
     /// For a resumed conversation, the entry of the agent's record it goes
     /// on from, leaving out everything after it; from its newest when None.
     pub resume_at: Option<&'a str>,
+    /// Whether the session starts reading only: the agent's own tools that
+    /// change files are refused.
+    pub reads_only: bool,
     /// The settings of the Codex profile the session runs under, each a
     /// `key=value` for `-c`, as [`crate::codex_profiles::settings`] gives
     /// them. Empty for none.
@@ -1037,6 +1046,9 @@ pub enum Control {
     SetModel(String),
     SetMode(String),
     SetEffort(String),
+    /// Turns reading only on or off: while on, the agent's own tools that
+    /// change files are refused, whatever the mode allows.
+    SetReadsOnly(bool),
     /// Puts the files the agent changed back as they were before a message
     /// of the user's, in the running process, for an agent that keeps them.
     /// With `dry_run` nothing changes, and the reply says what would, as a
@@ -1217,13 +1229,14 @@ pub struct Ran<'a> {
 }
 
 /// The model, mode and effort the session runs on, as its events last
-/// said.
+/// said, and whether it reads only.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub model: Option<String>,
     pub mode: Option<String>,
     pub effort: Option<String>,
+    pub reads_only: bool,
 }
 
 /// What a window that comes to a session late, after a reload or as a
@@ -1634,12 +1647,14 @@ impl Tracker {
                     model: model.clone(),
                     mode: mode.clone(),
                     effort: effort.clone(),
+                    reads_only: self.settings.reads_only,
                 };
                 self.efforts = efforts.clone();
                 if matches!(event, Event::Ready { .. }) {
                     self.ready = Some(event.clone());
                 }
             }
+            Event::ReadsOnly { on } => self.settings.reads_only = *on,
             Event::Commands { commands: now } => {
                 if let Some(Event::Ready { commands, .. }) = &mut self.ready {
                     commands.clone_from(now);
@@ -1761,7 +1776,13 @@ impl Tracker {
             Event::Limits { .. } => self.limits = Some(event.clone()),
             _ => {}
         }
+        // A session started reading only says so right after it is ready,
+        // so every window learns it the same way.
+        let ready = matches!(event, Event::Ready { .. });
         out.push(event);
+        if ready && self.settings.reads_only {
+            out.push(Event::ReadsOnly { on: true });
+        }
         self.push_state(out);
     }
 
@@ -3135,6 +3156,7 @@ pub fn start(
     let opening = driver.opening();
     let mut machine = Machine::new(driver, Some(ready), sessions.deadlines);
     machine.tracker.resumed_at = launch.resume.then(now_millis);
+    machine.tracker.settings.reads_only = launch.reads_only;
     machine.agent = Some(child.id());
     machine.shell = (!machine.driver.runs_commands()).then_some(shell);
     let live = Live::new(id.clone(), machine, Arc::clone(&outbox), lines, kill);
@@ -3989,15 +4011,17 @@ pub fn snapshot(sessions: &Sessions, id: &str) -> Result<Snapshot, String> {
     }
 }
 
-/// Switches what the session runs on: each of the model, the mode and the
-/// effort that is given, in that order, all within [`Deadlines::configure`].
-/// Answers with the settings as the session's events now say them.
+/// Switches what the session runs on: each of the model, the mode, the
+/// effort and reading only that is given, in that order, all within
+/// [`Deadlines::configure`]. Answers with the settings as the session's
+/// events now say them.
 pub fn configure(
     sessions: &Sessions,
     id: &str,
     model: Option<&str>,
     mode: Option<&str>,
     effort: Option<&str>,
+    reads_only: Option<bool>,
 ) -> Result<Settings, String> {
     let by = std::time::Instant::now() + sessions.get(id)?.deadlines.configure;
     if let Some(model) = model {
@@ -4008,6 +4032,9 @@ pub fn configure(
     }
     if let Some(effort) = effort {
         request(sessions, id, &Control::SetEffort(effort.to_string()), by)?;
+    }
+    if let Some(on) = reads_only {
+        request(sessions, id, &Control::SetReadsOnly(on), by)?;
     }
     let live = sessions.get(id)?;
     let machine = live.machine.lock().expect("machine lock");
@@ -4486,6 +4513,7 @@ mod tests {
             truncated: false,
             description: None,
             path: None,
+            reads_only: false,
             choices: vec![],
         }
     }
@@ -4724,9 +4752,36 @@ mod tests {
             Settings {
                 model: Some("sonnet".into()),
                 mode: Some("default".into()),
-                effort: Some("high".into())
+                effort: Some("high".into()),
+                reads_only: false,
             }
         );
+    }
+
+    #[test]
+    fn a_session_started_reading_only_says_so_right_after_ready() {
+        let mut tracker = Tracker::default();
+        tracker.settings.reads_only = true;
+        let mut out = Vec::new();
+        tracker.observe(
+            Event::Ready {
+                session_id: "s".into(),
+                model: None,
+                mode: None,
+                effort: None,
+                version: None,
+                models: vec![],
+                modes: vec![],
+                efforts: vec![],
+                commands: vec![],
+                default_model: None,
+            },
+            &mut out,
+        );
+        assert!(matches!(out[0], Event::Ready { .. }));
+        assert_eq!(out[1], Event::ReadsOnly { on: true });
+        tracker.observe(Event::ReadsOnly { on: false }, &mut out);
+        assert!(!tracker.settings.reads_only);
     }
 
     #[test]
@@ -5126,7 +5181,8 @@ mod tests {
                 | Control::SendNow
                 | Control::Withdraw(_)
                 | Control::RewindFiles { .. }
-                | Control::Revert { .. } => return Err("not here".into()),
+                | Control::Revert { .. }
+                | Control::SetReadsOnly(_) => return Err("not here".into()),
             };
             self.model = model.clone();
             Ok(Sending::Local {
@@ -5601,7 +5657,14 @@ mod tests {
             }
         });
         let started = std::time::Instant::now();
-        let changed = configure(&sessions, "int-bench", None, Some("plan"), Some("high"));
+        let changed = configure(
+            &sessions,
+            "int-bench",
+            None,
+            Some("plan"),
+            Some("high"),
+            None,
+        );
         assert!(changed.is_err(), "{changed:?}");
         let took = started.elapsed();
         assert!(took < Deadlines::default().control / 2, "{took:?}");
@@ -5960,6 +6023,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             resume_at: None,
+            reads_only: false,
             profile: &[],
         };
         let sessions = Arc::new(Sessions::default());

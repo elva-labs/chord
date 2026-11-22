@@ -427,6 +427,7 @@ struct Next {
     model: Option<String>,
     effort: Option<String>,
     mode: Option<String>,
+    reads_only: Option<bool>,
 }
 
 impl Next {
@@ -437,6 +438,7 @@ impl Next {
             model: self.model.or(older.model),
             effort: self.effort.or(older.effort),
             mode: self.mode.or(older.mode),
+            reads_only: self.reads_only.or(older.reads_only),
         }
     }
 }
@@ -778,6 +780,10 @@ struct AppServer {
     instructions: Option<String>,
     /// Whether Codex's own subagent tools are turned off for the thread.
     start_only: bool,
+    /// Whether the session reads only: its turns run in the read-only
+    /// sandbox whatever the mode, and its asks to change files are turned
+    /// down without asking the user.
+    reads_only: bool,
 
     next: i64,
     sent: HashMap<i64, Sent>,
@@ -1422,6 +1428,7 @@ impl AppServer {
             orchestrator: launch.orchestrator,
             instructions: launch.instructions.map(str::to_string),
             start_only: launch.start_only,
+            reads_only: launch.reads_only,
             next: 0,
             sent: HashMap::new(),
             version: None,
@@ -1436,7 +1443,12 @@ impl AppServer {
             mode: None,
             effort: None,
             models: Vec::new(),
-            changes: Next::default(),
+            // The thread starts in its mode's sandbox, and reading only
+            // holds it to reading from the first turn on.
+            changes: Next {
+                reads_only: launch.reads_only.then_some(true),
+                ..Next::default()
+            },
             config_known: false,
             configured_model: None,
             workspace: None,
@@ -1651,6 +1663,16 @@ impl AppServer {
             .find(|(info, _)| info.value == model)
             .and_then(|(_, default)| default.clone())
             .filter(|default| efforts.is_empty() || efforts.contains(default))
+    }
+
+    /// The sandbox the session's mode runs in, as `turn/start` takes it:
+    /// the mode's own, or the one a mode of the user's configuration names.
+    fn mode_sandbox(&self) -> Option<Value> {
+        let name = match self.mode.as_deref().and_then(mode) {
+            Some(mode) => mode.sandbox,
+            None => self.mode.as_deref()?.split_once(", ")?.1,
+        };
+        Some(sandbox_policy(name, self.workspace.as_ref()))
     }
 
     fn configured(&self) -> Event {
@@ -2345,8 +2367,10 @@ impl AppServer {
                     self.workspace = Some(settings["sandboxPolicy"].clone());
                 }
                 let model = text(&settings["model"]).filter(|_| self.changes.model.is_none());
+                // The sandbox reading only holds a turn to is not the mode's.
+                let own_sandbox = !self.reads_only && self.changes.reads_only.is_none();
                 let mode = mode_of(&settings["approvalPolicy"], &settings["sandboxPolicy"])
-                    .filter(|_| self.changes.mode.is_none());
+                    .filter(|_| self.changes.mode.is_none() && own_sandbox);
                 for (now, new) in [(&mut self.model, model), (&mut self.mode, mode)] {
                     if new.is_some() && new != *now {
                         *now = new;
@@ -2503,6 +2527,13 @@ impl AppServer {
                     text(&params["networkApprovalContext"]["host"]),
                 )
             }
+            // Reading only turns down every change of a file, whatever the
+            // mode would ask. Anything else asked while it is on reaches
+            // the user saying that the session reads only.
+            "item/fileChange/requestApproval" if self.reads_only => {
+                out.writes.push(turned_down(id, method));
+                return;
+            }
             "item/fileChange/requestApproval" => {
                 let root = text(&params["grantRoot"]);
                 (
@@ -2622,6 +2653,7 @@ impl AppServer {
                     truncated: false,
                     description: text(&params["message"]),
                     path: None,
+                    reads_only: self.reads_only,
                     choices: asked.offers(),
                 });
                 self.asked.insert(key, asked);
@@ -2663,6 +2695,7 @@ impl AppServer {
             truncated: false,
             description,
             path,
+            reads_only: self.reads_only,
             choices: asked.offers(),
         });
         self.asked.insert(key, asked);
@@ -2814,7 +2847,19 @@ impl Driver for AppServer {
         }
         if let Some(mode) = carried.mode.as_deref().and_then(mode) {
             params["approvalPolicy"] = json!(mode.approval);
-            params["sandboxPolicy"] = sandbox_policy(mode.sandbox, self.workspace.as_ref());
+        }
+        // Codex keeps a turn's sandbox for the turns after it, so it is sent
+        // when the mode or reading only changed: read only while the session
+        // reads only, the mode's own otherwise.
+        if carried.mode.is_some() || carried.reads_only.is_some() {
+            let sandbox = if self.reads_only {
+                Some(json!({ "type": "readOnly" }))
+            } else {
+                self.mode_sandbox()
+            };
+            if let Some(sandbox) = sandbox {
+                params["sandboxPolicy"] = sandbox;
+            }
         }
         let (line, id) = self.request(
             Sent::Turn(message.to_string(), carried),
@@ -2986,6 +3031,14 @@ impl Driver for AppServer {
                 self.mode = Some(found.value.to_string());
                 self.changes.mode = Some(found.value.to_string());
                 local(json!({ "mode": found.value }), vec![self.configured()])
+            }
+            Control::SetReadsOnly(on) => {
+                self.reads_only = *on;
+                self.changes.reads_only = Some(*on);
+                local(
+                    json!({ "readsOnly": on }),
+                    vec![Event::ReadsOnly { on: *on }],
+                )
             }
             // The core holds every message Codex has not been handed, and
             // steers and takes them back itself.
