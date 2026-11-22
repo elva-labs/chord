@@ -1,16 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  PluginNotifyEvent,
   PluginViewDataEvent,
   PluginViewEvent,
   PluginViewMessageRequest,
 } from "$lib/core";
 import { clear, deselect, files, showMedia } from "$lib/files.svelte";
 import { layout } from "$lib/layout.svelte";
+import { clicked, resetNotify } from "$lib/notify.svelte";
 import {
   ACT_SPAN,
   dataArrived,
   leftPage,
   open,
+  pluginNotified,
   pluginViews,
   resetPluginViews,
   send,
@@ -21,6 +24,7 @@ import {
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 
 const sent: PluginViewMessageRequest[] = [];
+const notified: { title: string; body: string; id: string }[] = [];
 let refuse: string | null = null;
 vi.mock("$lib/core", () => ({
   core: () => ({
@@ -28,6 +32,10 @@ vi.mock("$lib/core", () => ({
       sent.push(request);
       if (refuse !== null) throw new Error(refuse);
     },
+    async notify(title: string, body: string, id: string) {
+      notified.push({ title, body, id });
+    },
+    async setWindowTitle() {},
   }),
 }));
 
@@ -55,7 +63,9 @@ beforeEach(() => {
   clear();
   resetWorkspace();
   resetPluginViews();
+  resetNotify();
   sent.length = 0;
+  notified.length = 0;
   refuse = null;
   layout.mode = "working";
   workspace.active = "/one";
@@ -236,5 +246,80 @@ describe("what crosses the bridge", () => {
     viewChanged(event());
     dataArrived(data());
     expect(pluginViews.data).toBeNull();
+  });
+});
+
+describe("a plugin's notification that names no session", () => {
+  const told = (extra: Partial<PluginNotifyEvent> = {}): PluginNotifyEvent => ({
+    source: "src-1",
+    plugin: "github",
+    project: "/two",
+    text: "A review was asked of you",
+    target: "pr/7",
+    ...extra,
+  });
+  const openBoth = () => {
+    workspace.open.push(
+      { path: "/one", name: "one", repository: "/one", isGit: true },
+      { path: "/two", name: "orbit-api", repository: "/two", isGit: true },
+    );
+  };
+
+  it("is told under the project and the plugin's name, with its text as the body", () => {
+    openBoth();
+    pluginNotified(told());
+    expect(notified).toHaveLength(1);
+    expect(notified[0].title).toBe("orbit-api · github");
+    expect(notified[0].body).toBe("A review was asked of you");
+  });
+
+  it("is told for no project that is not open", () => {
+    pluginNotified(told());
+    expect(notified).toHaveLength(0);
+  });
+
+  it("is told by the same name for the same target, so the newer takes the place of the last", () => {
+    openBoth();
+    pluginNotified(told());
+    pluginNotified(told({ text: "Again" }));
+    pluginNotified(told({ target: "pr/8" }));
+    expect(notified[0].id).toBe(notified[1].id);
+    expect(notified[2].id).not.toBe(notified[0].id);
+  });
+
+  it("brings its project forward on a click and opens the page there, handed the target", () => {
+    openBoth();
+    viewChanged(event({ project: "/two" }));
+    pluginNotified(told());
+    clicked(notified[0].id);
+    expect(workspace.active).toBe("/two");
+    expect(files.pluginView?.project).toBe("/two");
+    expect(pluginViews.target).toMatchObject({ key: "src-1/github", project: "/two", target: "pr/7" });
+  });
+
+  it("opens no page on a click for a plugin with none, nor for a project closed since", () => {
+    openBoth();
+    pluginNotified(told());
+    clicked(notified[0].id);
+    expect(workspace.active).toBe("/two");
+    expect(files.pluginView).toBeNull();
+    expect(pluginViews.target).toBeNull();
+
+    viewChanged(event({ project: "/two" }));
+    workspace.active = "/one";
+    pluginNotified(told({ target: "pr/9" }));
+    workspace.open.splice(1, 1);
+    clicked(notified[1].id);
+    expect(workspace.active).toBe("/one");
+    expect(files.pluginView).toBeNull();
+  });
+
+  it("hands the page no target when the plugin gave none", () => {
+    openBoth();
+    viewChanged(event({ project: "/two" }));
+    pluginNotified(told({ target: null }));
+    clicked(notified[0].id);
+    expect(files.pluginView?.project).toBe("/two");
+    expect(pluginViews.target).toBeNull();
   });
 });

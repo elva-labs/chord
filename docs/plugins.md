@@ -532,6 +532,36 @@ the plugin names. A new mark from the same plugin for the same session
 replaces the last one. A mark with no icon
 takes it away, and so does the plugin stopping or the session ending.
 
+## Notifications
+
+A plugin can say one line to the user.
+
+```json
+{
+  "type": "notify",
+  "project": "/srv/orbit-api",
+  "text": "A review was asked of you on #42",
+  "target": "pr/42"
+}
+```
+
+A line that names a session, by the agent's id as `session`, is that
+session's: it shows on the session's row, as a line from the agent's own
+notify tool does, and is dropped when no running session answers to the
+id. A line that names no session is the plugin's own, told as the app's
+other notifications are and only as the settings allow them: titled with
+the project and the plugin's name, "orbit-api · github", with the text as
+its body. The project must be one open in the app. The text is one line of
+120 characters at most, shown as plain text. A plugin gives three such
+lines a minute at most; the rest are dropped. A newer line with the same
+target takes the place of the last where the system allows.
+
+A click on it brings the project forward and opens the plugin's page there,
+and the page is handed the target, a string of 256 bytes at most, so it can
+scroll to the row the line was about. A target over its size is dropped and
+the page opens without one; a plugin with no page for the project opens
+none.
+
 ## Answering the user
 
 What the user does in a plugin goes to it with an id: an action, as its
@@ -703,7 +733,10 @@ but the frame has no origin, no storage and no way at the window or the
 machine. A bridge passes a fixed set of messages between the frame and the
 plugin, through the app: data from the plugin to the page, and from the
 page a request to open a file at lines, to put text in the agent's prompt,
-or a message for the plugin. The page reaches nothing else. The first
+or a message for the plugin. The page reaches nothing else. A page opened
+by a click on one of the plugin's notifications is handed its target, which
+`workbench.onTarget(fn)` receives, even when the handler is set after the
+target arrived. The first
 message the page sends of a click or a key in it reaches the plugin with
 an id, so a button on the page can open an address, start a session or
 send one a line, as an action can.

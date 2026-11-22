@@ -13,11 +13,13 @@
 
 import {
   core,
+  type PluginNotifyEvent,
   type PluginViewDataEvent,
   type PluginViewEvent,
 } from "$lib/core";
 import { closeViewer, files, showPluginView } from "$lib/files.svelte";
-import { workspace } from "$lib/workspace.svelte";
+import { tell } from "$lib/notify.svelte";
+import { activate, projectLabel, workspace } from "$lib/workspace.svelte";
 
 /** A page as one project has it. */
 export interface PluginPage {
@@ -39,6 +41,14 @@ export const pluginViews = $state({
     key: string;
     project: string;
     data: unknown;
+    seq: number;
+  } | null,
+  /** What a click on the plugin's notification hands its page, counted as
+      the data is. */
+  target: null as {
+    key: string;
+    project: string;
+    target: string;
     seq: number;
   } | null,
 });
@@ -118,6 +128,33 @@ export function open(key: string, project: string) {
   showPluginView(page);
 }
 
+/** A plugin's notification that names no session, for a project open
+    here: told as any notification is, as the settings allow, titled with
+    the project and the plugin's name. Its text is the body, which the
+    system shows as text. One again with the same target takes the place
+    of the last. A click brings the project forward and opens the plugin's
+    page there, handed the target; a plugin with no page for the project
+    opens none. */
+export function pluginNotified(event: PluginNotifyEvent) {
+  const { project } = event;
+  if (!workspace.open.some((open) => open.path === project)) return;
+  const key = keyOf(event);
+  const name = JSON.stringify(["plugin", event.source, event.plugin, project, event.target ?? ""]);
+  tell(name, `${projectLabel(project)} · ${event.plugin}`, event.text, () =>
+    openAt(key, project, event.target),
+  );
+}
+
+/** Brings the project forward and opens the plugin's page in it, with the
+    target handed to the page. */
+export function openAt(key: string, project: string, target: string | null) {
+  if (!workspace.open.some((open) => open.path === project)) return;
+  if (workspace.active !== project) activate(project);
+  if (pageAt(key, project) === null) return;
+  open(key, project);
+  pluginViews.target = target === null ? null : { key, project, target, seq: ++seq };
+}
+
 /** Carries a message from a page to its plugin, `acted` when the user's
     click or key in the page sent it. A plugin that is not there for it
     drops it, as an action the plugin refused is dropped. */
@@ -173,6 +210,7 @@ export function leftPage(key: string, project: string) {
 export function resetPluginViews() {
   pluginViews.pages = [];
   pluginViews.data = null;
+  pluginViews.target = null;
   seq = 0;
   actedAt.clear();
 }

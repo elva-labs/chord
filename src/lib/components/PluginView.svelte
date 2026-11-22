@@ -13,7 +13,9 @@
    *
    * The bridge is the whole of what crosses. From the page: a place to open
    * in the viewer, a line for the agent, a message for the plugin. To the
-   * page: the data its plugin sends while the page is open. A message is
+   * page: the data its plugin sends while the page is open, and the target
+   * of the plugin's notification the user clicked to open it, kept for a
+   * handler the page sets later. A message is
    * this frame's only when the window it came from is this frame's.
    *
    * A message for the plugin is the user's doing when the user has just
@@ -33,7 +35,7 @@
   // height: the bottom of its last block, which is what the frame should
   // show without a scrollbar.
   const BRIDGE =
-    '<script>(function(){var handler=null;window.workbench={open:function(path,from,to,note){parent.postMessage({workbench:"open",path:path,from:from,to:to,note:note===undefined?null:note},"*")},agent:function(text){parent.postMessage({workbench:"agent",text:text},"*")},send:function(payload){parent.postMessage({workbench:"send",payload:payload},"*")},onData:function(fn){handler=fn}};addEventListener("message",function(e){var m=e.data;if(m&&m.workbench==="data"&&handler)handler(m.data)});function h(){var c=document.body?document.body.children:[],m=0;for(var i=0;i<c.length;i++){var b=c[i].getBoundingClientRect().bottom;if(b>m)m=b}return m>0?m+16:document.documentElement.scrollHeight}function r(){parent.postMessage({workbenchHeight:h()},"*")}addEventListener("load",r);if(window.ResizeObserver&&document.documentElement)new ResizeObserver(r).observe(document.documentElement);setTimeout(r,0)})()<\/script>';
+    '<script>(function(){var handler=null,target=null,onTarget=null;window.workbench={open:function(path,from,to,note){parent.postMessage({workbench:"open",path:path,from:from,to:to,note:note===undefined?null:note},"*")},agent:function(text){parent.postMessage({workbench:"agent",text:text},"*")},send:function(payload){parent.postMessage({workbench:"send",payload:payload},"*")},onData:function(fn){handler=fn},onTarget:function(fn){onTarget=fn;if(target!==null)fn(target)}};addEventListener("message",function(e){var m=e.data;if(m&&m.workbench==="data"&&handler)handler(m.data);if(m&&m.workbench==="target"){target=m.target;if(onTarget)onTarget(target)}});function h(){var c=document.body?document.body.children:[],m=0;for(var i=0;i<c.length;i++){var b=c[i].getBoundingClientRect().bottom;if(b>m)m=b}return m>0?m+16:document.documentElement.scrollHeight}function r(){parent.postMessage({workbenchHeight:h()},"*")}addEventListener("load",r);if(window.ResizeObserver&&document.documentElement)new ResizeObserver(r).observe(document.documentElement);setTimeout(r,0)})()<\/script>';
 
   let frame: HTMLIFrameElement;
   let height = $state(360);
@@ -41,6 +43,8 @@
   let loaded = $state<string | null>(null);
   /** The last message handed over, so one arrives once. */
   let delivered = 0;
+  /** The last target handed over, so one arrives once. */
+  let targeted = 0;
 
   /** A line number as the page gave it, or the fallback. */
   function lineAt(value: unknown, fallback: number): number {
@@ -118,6 +122,17 @@
       { workbench: "data", data: $state.snapshot(message.data) },
       "*",
     );
+  });
+
+  // The target of the notification that opened the page, handed over once
+  // the page is there to take it.
+  $effect(() => {
+    const given = pluginViews.target;
+    if (given === null || loaded !== page.html) return;
+    if (given.key !== page.key || given.project !== page.project) return;
+    if (given.seq === targeted) return;
+    targeted = given.seq;
+    frame?.contentWindow?.postMessage({ workbench: "target", target: given.target }, "*");
   });
 </script>
 
