@@ -652,7 +652,7 @@ test.describe("what a starter is told", () => {
     await expect(rows(page).first()).toBeVisible();
 
     await push(page, { id: "l-1", tool: "sessions", session: "session-1" });
-    const [away, ...rest] = (await answered(page, "l-1")).content.split("\n");
+    const [away, ...rest] = ((await answered(page, "l-1")).content ?? "").split("\n");
     expect(away).toMatch(/^session-2 .* put away once its work was over$/);
     expect(rest).toEqual([WAY_BACK]);
     await push(page, {
@@ -680,7 +680,7 @@ test.describe("what a starter is told", () => {
     await expect(kid).toHaveCount(0);
 
     await push(page, { id: "l-1", tool: "sessions", session: "session-1" });
-    const [closed, ...rest] = (await answered(page, "l-1")).content.split("\n");
+    const [closed, ...rest] = ((await answered(page, "l-1")).content ?? "").split("\n");
     expect(closed).toMatch(/^session-2 .* closed by the user$/);
     expect(rest).toEqual([WAY_BACK]);
     await push(page, { id: "w-1", tool: "wait", arguments: { session: "session-2" }, session: "session-1" });
