@@ -391,24 +391,24 @@ named under the list with the rule, not used, and kept as written. The
 agents are the user's to change, and an agent's settings tools refuse
 them.
 
-Under them, the agents the user installed for the harnesses in the
-active project are listed under where each was found. From Claude Code
-reads the Markdown files in the `agents` folder of the configuration
-directory of the project's [account](#accounts), and From this project
-those in the project's `.claude/agents`: a file's frontmatter gives the
-name, the description and the model, and its body how it works; one whose
-`tools` name only tools that read, Read, Grep, Glob, LS, NotebookRead,
-WebFetch, WebSearch and TodoWrite, reads only, and any other tool, Bash or
-a server's among them, changes files. Of files that
-give the same name, ignoring case, the first by file name is listed. Each
-place lists 64 agents at most and skips a file over 256 KB, and a file in
-the project that links out of the project is not read. From Codex
-reads the roles in the `[agents.<name>]` tables of the `config.toml` in
-the home of the project's account, each with a file of its own giving its
-model, its reasoning effort and its instructions; one with a read-only
-sandbox reads only. Opening one shows what was read and the file it came
-from. Chord never writes them: they are changed where they are kept, and a
-group with nothing in it is not shown.
+Under them, the agents the user installed for the harnesses in the active
+project are listed under where each was found. From Claude Code reads the
+Markdown files in the `agents` folder of the configuration directory of
+the project's [account](#accounts), and From this project those in the
+project's `.claude/agents`: a file's frontmatter gives the name, the
+description and the model, and its body how it works; one whose `tools`
+name only tools that read, Read, Grep, Glob, LS, NotebookRead, WebFetch,
+WebSearch and TodoWrite, reads only, and any other tool, Bash or a
+server's among them, changes files. Of files that give the same name,
+ignoring case, the first by file name is listed. Each place lists 64
+agents at most and skips a file over 256 KB, and a file in the project
+that links out of the project is not read. From Codex reads the roles in
+the `[agents.<name>]` tables of the `config.toml` in the home of the
+project's account, each with a file of its own giving its model, its
+reasoning effort and its instructions; one with a read-only sandbox reads
+only. Opening one shows its description, how it works, what it runs on and
+the file it came from. Chord never writes them: they are changed where
+they are kept, and a group with nothing in it is not shown.
 
 ## Workflows
 

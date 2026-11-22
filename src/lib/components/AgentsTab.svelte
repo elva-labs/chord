@@ -11,7 +11,8 @@
    * into one line, what it runs on, kept on Save and left as it was on
    * Cancel. A shipped one the user changed is put back as it ships with
    * Reset to shipped, where one of the user's own has Remove. An installed
-   * one opens to read.
+   * one opens to read: its description, how it works, what it runs on and
+   * where it is kept.
    */
   import { tick } from "svelte";
   import type { HarnessId, InstalledAgent, OwnAgent } from "$lib/core";
@@ -213,9 +214,10 @@
     return agent.model === null ? "the session's model" : modelLabel(agent.model.harness, agent.model.model);
   }
 
-  /** An agent's whole description: an installed one keeps its first line apart from its text. */
-  function described(agent: Pick<Agent, "firstLine" | "text">): string {
-    return agent.text.startsWith(agent.firstLine) ? agent.text : `${agent.firstLine}\n\n${agent.text}`;
+  /** How an installed agent works: its text, less the first line where the
+      text starts with it. */
+  function workings(agent: Pick<Agent, "firstLine" | "text">): string {
+    return agent.text.startsWith(agent.firstLine) ? agent.text.slice(agent.firstLine.length).trim() : agent.text;
   }
 </script>
 
@@ -404,8 +406,14 @@
     </div>
     <div class="f">
       <span class="lab">Description</span>
-      <div class="ro" data-testid="agent-text">{described(reading)}</div>
+      <div class="ro" data-testid="agent-lead">{reading.firstLine}</div>
     </div>
+    {#if workings(reading) !== ""}
+      <div class="f">
+        <span class="lab">How it works</span>
+        <div class="ro" data-testid="agent-text">{workings(reading)}</div>
+      </div>
+    {/if}
     <p class="runs" data-testid="agent-facts">{@render facts(reading)}</p>
     <p class="whence note" data-testid="agent-whence">
       Read from <code>{reading.path}</code>; it is changed where it is kept.

@@ -106,9 +106,8 @@ test("changes a shipped agent in place and resets it, and reads an installed one
   const installed = page.locator("[data-testid='agent-installed'][data-source='project']");
   await expect(installed).toContainText("Writes the release notes.");
   await installed.locator("[data-agent='project:release-notes']").click();
-  await expect(page.getByTestId("agent-text")).toHaveText(
-    "Writes the release notes.\n\nYou write release notes from the merged pull requests.",
-  );
+  await expect(page.getByTestId("agent-lead")).toHaveText("Writes the release notes.");
+  await expect(page.getByTestId("agent-text")).toHaveText("You write release notes from the merged pull requests.");
   await expect(page.getByTestId("agent-save")).toHaveCount(0);
   await expect(page.getByTestId("agent-whence")).toContainText(".claude/agents/release-notes.md");
 });
