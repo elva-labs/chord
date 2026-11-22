@@ -527,7 +527,7 @@ export function chipOf(step: Step): string {
 }
 
 export const WORKFLOWS = "Workflows";
-export const ALONE = "One agent, no workflow";
+export const ALONE = "No workflow";
 
 /** The workflows a new session in a project is offered: none unless the
     project follows one, by its own choice or by the default. */
@@ -660,7 +660,7 @@ function readyItems(path: string): PaletteItem[] {
   return steps.length > 1 ? [ready, change] : [ready];
 }
 
-export const AGENTS = "Which agent";
+export const WHICH_HARNESS = "Which harness";
 
 /** Everything Change would ask about a project's new session, narrowed by
     what is typed: how it runs, then the account, each under its heading,
@@ -671,7 +671,7 @@ function readySearch(project: string, query: string): PaletteItem[] {
   const alone = how.length === 1 && how[0].title === ALONE;
   const groups = [
     ...how.map((section) =>
-      section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: AGENTS } : item)),
+      section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: WHICH_HARNESS } : item)),
     ),
     left.includes("account") ? accountChoices(project) : [],
   ];

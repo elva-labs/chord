@@ -2765,7 +2765,7 @@ function wantedAccount(request: Placed): { named: { account: string | null } | n
   if (wanted === null) return { named: null };
   if (namesOwn(wanted)) return { named: { account: null } };
   if (wanted in accounts.list) return { named: { account: wanted } };
-  const own = `${OWN_LABEL} for the agents' own login`;
+  const own = `${OWN_LABEL} for the harnesses' own login`;
   return {
     refusal:
       names().length === 0

@@ -681,7 +681,7 @@ describe("how a new session runs", () => {
     const items = stepItems("");
     expect(items.map((item) => [item.group, item.label])).toEqual([
       ["Workflows", "Build and review"],
-      ["One agent, no workflow", "Claude Code"],
+      ["No workflow", "Claude Code"],
     ]);
     const [flow] = items;
     expect(flow.kind === "choice" && flow.detail).toBe("Fable directs, Sonnet works, Opus reviews");
@@ -932,13 +932,13 @@ describe("a new session", () => {
     expect(palette.ready).toBe(true);
     // Codex begins with it, so it comes before Claude Code and takes the cursor.
     expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
-      ["Codex", "Which agent"],
-      ["Claude Code", "Which agent"],
+      ["Codex", "Which harness"],
+      ["Claude Code", "Which harness"],
     ]);
     setQuery("o");
     expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
-      ["Claude Code", "Which agent"],
-      ["Codex", "Which agent"],
+      ["Claude Code", "Which harness"],
+      ["Codex", "Which harness"],
       ["Work", "Under which account"],
     ]);
     // Enter starts the one found, with the other defaults as they were.

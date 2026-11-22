@@ -451,7 +451,7 @@
           root={sessionRoot(session)}
           dir={session.cwd ?? folder}
           project={projectLabel(session.project)}
-          agentId={session.agent}
+          harness={session.agent}
           alone={harnessProfile(aloneOn(session)).name}
           workflow={session.workflow}
           {choosable}

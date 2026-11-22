@@ -2838,7 +2838,7 @@ test.describe("a new session from the palette", () => {
     await expect(ready(page).getByTestId("palette-detail")).toHaveText("Build and review");
     await askChange(page);
     await expect(field(page)).toHaveAttribute("placeholder", "How should it run");
-    await expect(page.getByTestId("palette-group")).toHaveText(["Workflows", "One agent, no workflow"]);
+    await expect(page.getByTestId("palette-group")).toHaveText(["Workflows", "No workflow"]);
     await expect(entries(page)).toHaveCount(3);
     const flow = entries(page).first();
     await expect(flow).toContainText("Build and review");

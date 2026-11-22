@@ -1144,7 +1144,7 @@ describe("the account a started session runs under", () => {
       expect(conductor.asking).toBeNull();
       expect(last().content).toBeNull();
       expect(last().error).toBe(
-        "There is no account called Play. The accounts are Home, Work, and Default for the agents' own login.",
+        "There is no account called Play. The accounts are Home, Work, and Default for the harnesses' own login.",
       );
       expect(forProject(A)).toHaveLength(1);
     });
@@ -1155,11 +1155,11 @@ describe("the account a started session runs under", () => {
         call("start", { project: A, prompt: "Fix it", account: "Work" }),
       );
       expect(last().error).toBe(
-        "There are no accounts in the workbench's settings, only Default for the agents' own login: leave the account out.",
+        "There are no accounts in the workbench's settings, only Default for the harnesses' own login: leave the account out.",
       );
     });
 
-    it("takes Default, in any case, for the agents' own login, which a start under a named account is asked about", async () => {
+    it("takes Default, in any case, for the harnesses' own login, which a start under a named account is asked about", async () => {
       caller(A, "Work");
       // From a caller under Work, in a project of the agents' own: the
       // other login, asked about, and said.
@@ -1362,7 +1362,7 @@ describe("the account a started session runs under", () => {
 
     it("does not cover an agent the account keeps no directory for", async () => {
       // Work keeps Claude Code only, so Codex under Work runs on the
-      // agents' own login.
+      // harnesses' own login.
       accounts.overrides[B] = "Home";
       caller(A, "Work");
       const claude = handle(
@@ -5254,7 +5254,7 @@ describe("starting in a workflow's shape", () => {
     // One it does not have is refused with the ones there are, and none
     // is chosen for a step that names none.
     expect(await refusedWith({ step: "Work", account: "Home" })).toBe(
-      "There is no account called Home. The accounts are Work, and Default for the agents' own login.",
+      "There is no account called Home. The accounts are Work, and Default for the harnesses' own login.",
     );
     ended({ id: "pty-w1b", code: 0, clean: true });
     flushSync();
@@ -5467,7 +5467,7 @@ describe("starting in a workflow's shape", () => {
 
 describe("sessions told apart by their tokens", () => {
   beforeEach(() => {
-    for (const key of ["chord.mine", "chord.names", "chord.workflows", "chord.agents"])
+    for (const key of ["chord.mine", "chord.names", "chord.workflows", "chord.harnesses"])
       localStorage.removeItem(key);
   });
 
@@ -7074,7 +7074,7 @@ describe("a call that waits on the user", () => {
     // The same start, its login named as the one it resolves to, is the same.
     expect(await refusedAtOnce({})).toBe(true);
     expect(await refusedAtOnce({ account: "Work" })).toBe(true);
-    // The same work on the agents' own login, once Work is at its limit,
+    // The same work on the harnesses' own login, once Work is at its limit,
     // is another start; so is one on another agent or model, or by another
     // name. Each is put to the user in its turn.
     expect(await refusedAtOnce({ account: "Default" })).toBe(false);

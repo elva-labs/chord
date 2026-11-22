@@ -1055,6 +1055,16 @@ describe("an agent that mints its own id", () => {
     expect(defaultAgent(A)).toBe("codex");
   });
 
+  it("moves the harness an earlier version kept for a project to where it is kept now", () => {
+    applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
+    localStorage.removeItem("chord.harnesses");
+    localStorage.setItem("chord.agents", JSON.stringify({ [A]: "codex" }));
+    loadRemembered();
+    expect(defaultAgent(A)).toBe("codex");
+    expect(localStorage.getItem("chord.agents")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("chord.harnesses")!)).toEqual({ [A]: "codex" });
+  });
+
   it("falls back to an installed agent when the preferred one is gone", () => {
     create(A, null, "codex");
     expect(defaultAgent(A)).toBe("claude-code");
@@ -3146,7 +3156,7 @@ describe("following a workflow", () => {
     const session = create(P);
     expect(session.status).toBe("failed");
     expect(statusMessage(session)).toBe(
-      'The workflow "Codex run" runs its orchestrator on Codex, which is not installed here. Pick an agent to start one alone, or choose another workflow for this project in the settings.',
+      'The workflow "Codex run" runs its orchestrator on Codex, which is not installed here. Pick a harness to start one alone, or choose another workflow for this project in the settings.',
     );
     expect(await launch(session.key, 80, 24, () => {})).toBe(false);
     expect(spawned).toHaveLength(0);

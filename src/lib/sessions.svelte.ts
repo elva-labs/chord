@@ -85,7 +85,7 @@ export interface Session {
   token: string;
   /** The project this session belongs to, as an absolute path. */
   project: string;
-  /** Which agent is running in it. */
+  /** Which harness runs it. */
   agent: HarnessId;
   /** How it runs: the agent's own interface in a pty, or integrated, the
       conversation drawn by the window. */
@@ -259,7 +259,9 @@ const MINE_KEY = "chord.mine";
 const NAMES_KEY = "chord.names";
 const OWN_NAMES_KEY = "chord.ownNames";
 const TOKENS_KEY = "chord.tokens";
-const PREFERRED_KEY = "chord.agents";
+const PREFERRED_KEY = "chord.harnesses";
+/** Where an earlier version kept the same, read once and moved. */
+const PREFERRED_KEY_BEFORE = "chord.agents";
 const WORKFLOWS_KEY = "chord.workflows";
 const WAITING_KEY = "chord.waiting";
 /** The record of the rows open at the last quit, whose flag says the
@@ -761,14 +763,19 @@ export function loadRemembered() {
     // No session follows a workflow, then.
   }
   try {
+    const before = localStorage.getItem(PREFERRED_KEY_BEFORE);
+    if (before !== null) {
+      if (localStorage.getItem(PREFERRED_KEY) === null) localStorage.setItem(PREFERRED_KEY, before);
+      localStorage.removeItem(PREFERRED_KEY_BEFORE);
+    }
     const raw = localStorage.getItem(PREFERRED_KEY);
     if (raw !== null) {
       const stored: unknown = JSON.parse(raw);
       if (typeof stored === "object" && stored !== null) {
         const preferred: Record<string, HarnessId> = {};
-        for (const [project, agent] of Object.entries(stored)) {
-          if (agent === "claude-code" || agent === "codex")
-            preferred[project] = agent;
+        for (const [project, harness] of Object.entries(stored)) {
+          if (harness === "claude-code" || harness === "codex")
+            preferred[project] = harness;
         }
         sessions.preferred = preferred;
       }
@@ -1678,7 +1685,7 @@ export function create(
   const resolving = workflow === undefined && resumedFrom !== null;
   const missing =
     following !== null && resumedFrom === null && !installed().includes(runs)
-      ? `The workflow "${following.name}" runs its orchestrator on ${harnessLabel(runs)}, which is not installed here. Pick an agent to start one alone, or choose another workflow for this project in the settings.`
+      ? `The workflow "${following.name}" runs its orchestrator on ${harnessLabel(runs)}, which is not installed here. Pick a harness to start one alone, or choose another workflow for this project in the settings.`
       : null;
   if (missing === null) prefer(project, runs);
   const live = added(

@@ -22,6 +22,7 @@
   import type { HarnessId, Workflow } from "$lib/core";
   import { clock, modelName, tokens } from "$lib/thread";
   import { modelLabel as knownModelLabel } from "$lib/models";
+  import { harnessLabel } from "$lib/harness.svelte";
   import {
     allNamed,
     backCostOf,
@@ -145,8 +146,8 @@
     dir?: string;
     /** The project's name, as the menu says it. */
     project?: string;
-    /** The agent the session runs on. */
-    agentId?: HarnessId;
+    /** The harness the session runs on. */
+    harness?: HarnessId;
     /** The name of the agent it runs on under no workflow. */
     alone?: string;
     /** The workflow the session follows, which holds its model; null for
@@ -185,7 +186,7 @@
     root = null,
     dir = "",
     project = "the project",
-    agentId = "claude-code",
+    harness = "claude-code",
     alone = agent,
     workflow = null,
     choosable = false,
@@ -1035,7 +1036,7 @@
   /** Before the agent has said what it offers, a model is named as the
       workbench knows it. */
   let name = $derived(
-    conversation.ready === null && current !== null ? knownModelLabel(agentId, current) : modelName(conversation, current),
+    conversation.ready === null && current !== null ? knownModelLabel(harness, current) : modelName(conversation, current),
   );
   /** The model as the chip says it: which one a default is, once known. */
   let modelLabel = $derived(name === null ? "Default model" : name);
@@ -1117,7 +1118,7 @@
       changes; a workflow's and going on's are none and off. The agent names
       no default effort, so a model's effort always shows. */
   let away = $derived({
-    mode: mode !== null && !asksFirst(agentId, mode),
+    mode: mode !== null && !asksFirst(harness, mode),
     effort: effort !== null,
     workflow: choosable && workflow !== null,
     resume: resumable && (resumeOn || resumes !== null),
@@ -1225,7 +1226,7 @@
         <span class="back-time num">{row.at === null ? "" : clock(row.at)}<span class="sep">,</span></span>
         <span class="back-line" class:off={!row.conversation}><Plain text={row.line} /></span>
         <span class="back-files" data-testid="back-files"
-          >{#if agentId !== "codex"}{#if preview === "reading"}…{:else if files.length > 0}<span class="sep">,</span>{files.length === 1
+          >{#if harness !== "codex"}{#if preview === "reading"}…{:else if files.length > 0}<span class="sep">,</span>{files.length === 1
                 ? "1 file"
                 : `${files.length} files`}{/if}{/if}</span
         >
@@ -1273,7 +1274,7 @@
       {/snippet}
       {#snippet foot()}
         {#if backCostOf(sessionKey) !== ""}
-          <p class="back-said" class:warn={agentId !== "codex"} data-testid="back-cost"><Plain text={backCostOf(sessionKey)} /></p>
+          <p class="back-said" class:warn={harness !== "codex"} data-testid="back-cost"><Plain text={backCostOf(sessionKey)} /></p>
         {/if}
       {/snippet}
       {#snippet keys()}
@@ -1478,7 +1479,7 @@
   </div>
   {#if pairing}
     <p class="hint" data-testid="composer-esc"><kbd>esc</kbd> again to go back to an earlier message.</p>
-  {:else if link.goingBack !== null && link.goingBack.way !== "files" && agentId === "claude-code"}
+  {:else if link.goingBack !== null && link.goingBack.way !== "files" && harness === "claude-code"}
     <p class="hint" data-testid="composer-going-back">
       Claude Code is starting again from here. What you send waits for it.
     </p>
@@ -1544,13 +1545,14 @@
           disabled={models.length === 0 || !ready}
           aria-haspopup="menu"
           aria-expanded={menu === "model"}
-          title={defaultModel ? "The agent's default model, which the session runs on" : "The model the session runs on"}
+          title={defaultModel ? `${harnessLabel(harness)}'s default model, which the session runs on` : "The model the session runs on"}
           data-testid="model-chip"><Plain text={modelLabel} /><Icon name="down" size={12} /></button
         >
       {/if}
       {#if menu === "model" && workflow === null}
         <ChoiceMenu
           label="Model"
+          heading="Model · {harnessLabel(harness)}"
           choices={modelChoices(conversation)}
           note={conversation.current !== null ? "A model chosen now is used from the next turn." : null}
           onpick={(value) => pick("model", value)}
@@ -1677,7 +1679,7 @@
         {#if menu === "workflow"}
           <ChoiceMenu
             label="Workflow"
-            choices={workflowChoices(agentId, alone, workflow)}
+            choices={workflowChoices(harness, alone, workflow)}
             note="Chosen before the first message, then kept."
             onpick={pickWorkflow}
             onclose={closeMenu}

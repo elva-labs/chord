@@ -149,7 +149,7 @@ export function installed(): HarnessId[] {
 export function unavailableReason(): string | null {
   switch (harnesses.availability) {
     case "unknown":
-      return "Looking for an agent…";
+      return "Looking for Claude Code and Codex…";
     case "detached":
       return "Not connected to the workbench core.";
     case "missing":

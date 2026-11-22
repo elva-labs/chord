@@ -81,13 +81,13 @@ describe("adding and removing", () => {
     expect(addAccount("", suggest(""))).toMatch(/needs a name/);
     expect(addAccount("Work", suggest("Work"))).toBeNull();
     expect(addAccount("work", suggest("work"))).toMatch(/already/);
-    // The agents' own login goes by Default, in any case, which no account
+    // The harnesses' own login goes by Default, in any case, which no account
     // can take.
     for (const own of [OWN_LABEL, OWN_LABEL.toLowerCase(), ` ${OWN_LABEL.toUpperCase()} `])
-      expect(addAccount(own, suggest("x"))).toBe("Default is the agents' own login, so no account can be called that.");
+      expect(addAccount(own, suggest("x"))).toBe("Default is the harnesses' own login, so no account can be called that.");
     expect(addAccount("x".repeat(41), suggest("x"))).toMatch(/at most/);
     expect(addAccount("Blank", { claude: "", codex: null })).toMatch(
-      /at least one agent/,
+      /at least one harness/,
     );
     expect(names()).toEqual(["Work"]);
   });

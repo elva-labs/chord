@@ -211,7 +211,7 @@ export function nameProblem(name: string): string | null {
   if (trimmed === "") return "An account needs a name.";
   if (trimmed.length > LONGEST_NAME)
     return `A name is ${LONGEST_NAME} characters at most.`;
-  if (namesOwn(trimmed)) return `${OWN_LABEL} is the agents' own login, so no account can be called that.`;
+  if (namesOwn(trimmed)) return `${OWN_LABEL} is the harnesses' own login, so no account can be called that.`;
   const taken = Object.keys(accounts.list).some(
     (known) => known.toLowerCase() === trimmed.toLowerCase(),
   );
@@ -228,7 +228,7 @@ export function addAccount(name: string, dirs: AccountDirs): string | null {
   const claude = tidy(dirs.claude);
   const codex = tidy(dirs.codex);
   if (claude === null && codex === null)
-    return "An account needs a directory for at least one agent.";
+    return "An account needs a directory for at least one harness.";
   accounts.list[name.trim()] = { claude, codex };
   save();
   return null;

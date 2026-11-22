@@ -669,7 +669,7 @@ function readModel(value: unknown, what: string): WorkflowModel {
   if (!isObject(value)) throw new Error(`${what} is a model: {"agent": ..., "model": ...}.`);
   only(value, ["agent", "model"], what);
   if (!HARNESS_ORDER.includes(value.agent as HarnessId)) {
-    throw new Error(`${what} names an agent that is one of ${HARNESS_ORDER.join(", ")}.`);
+    throw new Error(`${what} names a harness that is one of ${HARNESS_ORDER.join(", ")}.`);
   }
   if (typeof value.model !== "string") throw new Error(`${what} names its model as text.`);
   return { agent: value.agent as HarnessId, model: value.model.trim() };

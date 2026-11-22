@@ -85,11 +85,11 @@ test.describe("the accounts tab", () => {
   test("refuses a name that will not do, and says why", async ({ page }) => {
     await page.getByTestId("account-add-open").click();
     await expect(page.getByTestId("account-add")).toBeDisabled();
-    // Default, in any case, is the agents' own login's.
+    // Default, in any case, is the harnesses' own login's.
     await page.getByTestId("account-name").fill("default");
     await page.getByTestId("account-add").click();
     await expect(page.getByTestId("account-problem")).toHaveText(
-      "Default is the agents' own login, so no account can be called that.",
+      "Default is the harnesses' own login, so no account can be called that.",
     );
     await expect(page.getByTestId("account-form")).toBeVisible();
     await page.getByTestId("account-cancel").click();
@@ -310,7 +310,7 @@ test.describe("typing on a new session's line with accounts named", () => {
     await page.keyboard.type("cod");
     await expect(page.getByTestId("palette-row").first()).toContainText("Codex");
     await expect(page.getByTestId("palette-row").first()).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId("palette-group").first()).toHaveText("Which agent");
+    await expect(page.getByTestId("palette-group").first()).toHaveText("Which harness");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("palette")).toHaveCount(0);
     await expect.poll(() => spawns(page)).toHaveLength(1);
