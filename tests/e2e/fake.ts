@@ -1085,6 +1085,21 @@ export async function installFakeCore(
             handler;
           return () => {};
         },
+        onPluginStart: async (handler: (event: unknown) => void) => {
+          (window as unknown as Record<string, unknown>).__pluginStart =
+            handler;
+          return () => {};
+        },
+        onPluginSend: async (handler: (event: unknown) => void) => {
+          (window as unknown as Record<string, unknown>).__pluginSend =
+            handler;
+          return () => {};
+        },
+        // Every outcome of a plugin's send, for a test to read back.
+        pluginSent: async (project: string, request: string, outcome: string) => {
+          const w = window as unknown as { __pluginSent?: unknown[] };
+          (w.__pluginSent ??= []).push({ project, request, outcome });
+        },
         onPluginHears: async (handler: (event: unknown) => void) => {
           (window as unknown as Record<string, unknown>).__pluginHears =
             handler;

@@ -15,6 +15,12 @@
    * in the viewer, a line for the agent, a message for the plugin. To the
    * page: the data its plugin sends while the page is open. A message is
    * this frame's only when the window it came from is this frame's.
+   *
+   * A message for the plugin is the user's doing when the user has just
+   * clicked or typed in this frame: the click activates this window too,
+   * and the frame holds the focus. The plugin may then answer it as it
+   * answers an action. A webview that cannot say so sends none as the
+   * user's.
    */
 
   interface Props {
@@ -72,6 +78,15 @@
     typeWhole(session.key, session.ptyId, text).catch(() => {});
   }
 
+  /** Whether the user has just clicked or typed in this frame. */
+  function acted(): boolean {
+    return (
+      navigator.userActivation?.isActive === true &&
+      document.hasFocus() &&
+      document.activeElement === frame
+    );
+  }
+
   $effect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame?.contentWindow) return;
@@ -84,7 +99,7 @@
       }
       if (data.workbench === "open") openPlace(data);
       else if (data.workbench === "agent") toAgent(data);
-      else if (data.workbench === "send") void send(page.key, page.project, data.payload);
+      else if (data.workbench === "send") void send(page.key, page.project, data.payload, acted());
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

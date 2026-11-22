@@ -155,6 +155,10 @@ export interface SpawnOptions {
   /** Whether `cwd` is a worktree the window made for this session, and
       not one it found or another session's. */
   madeWorktree?: boolean;
+  /** The request a plugin made for this session, which the user allowed:
+      the session is that plugin's to send to, this run and every run of it
+      after. */
+  pluginStart?: string;
   cols: number;
   rows: number;
 }
@@ -209,6 +213,9 @@ export interface IntegratedStartOptions {
   starter?: string;
   /** Whether `cwd` is a worktree made for this session, as for `spawn`. */
   madeWorktree?: boolean;
+  /** The plugin's request the user allowed this session for, as for
+      `spawn`. */
+  pluginStart?: string;
 }
 
 /** What starting an integrated session hands back: the id every other
@@ -1108,6 +1115,38 @@ export interface PluginOpenUrlEvent {
   url: string;
 }
 
+/** A plugin asks to start a session, in answer to something the user did
+    in it: the window asks the user before anything starts. `request` is
+    what the start names when the user allows it; `name` is one line of
+    the plugin's text, and `prompt` the plugin's text as it is. */
+export interface PluginStartEvent {
+  source: string;
+  plugin: string;
+  project: string;
+  request: string;
+  prompt: string;
+  name: string | null;
+  worktree: boolean;
+}
+
+/** A plugin sends a line to a session it started, in answer to something
+    the user did in it. `session` is the agent's id it was told, and
+    `started` the request of the plugin's start the session is; what came
+    of it goes back with `pluginSent` under `request`. */
+export interface PluginSendEvent {
+  source: string;
+  plugin: string;
+  project: string;
+  request: string;
+  started: string;
+  session: string;
+  text: string;
+}
+
+/** What came of a plugin's line: the session has it, the session can no
+    longer come back to have it, or the window would not give it. */
+export type PluginSentOutcome = "delivered" | "gone" | "refused";
+
 /** A plugin's own page for a project, as the changes pane's viewer shows
     it. The width says how much room it wants; no html at all means the
     page is gone, and `open` means show it now. */
@@ -1128,12 +1167,15 @@ export interface PluginViewDataEvent {
   data: unknown;
 }
 
-/** A message from a plugin's page for the plugin. */
+/** A message from a plugin's page for the plugin. `acted` says the user
+    clicked or typed in the page to send it, which lets the plugin answer
+    it as it answers an action. */
 export interface PluginViewMessageRequest {
   source: string;
   plugin: string;
   project: string;
   payload: unknown;
+  acted?: boolean;
 }
 
 /** A worktree under a project's own, as the orchestrator's starts leave
@@ -1781,6 +1823,12 @@ export interface Core {
   ): Promise<() => void>;
   /** Carries a message from a plugin's page to the plugin. */
   pluginViewMessage(request: PluginViewMessageRequest): Promise<void>;
+  /** A plugin asks to start a session, for the user to allow or not. */
+  onPluginStart(handler: (event: PluginStartEvent) => void): Promise<() => void>;
+  /** A plugin sends a line to a session it started. */
+  onPluginSend(handler: (event: PluginSendEvent) => void): Promise<() => void>;
+  /** Tells the plugin what came of its line. */
+  pluginSent(project: string, request: string, outcome: PluginSentOutcome): Promise<void>;
   onSessionEnded(handler: (ended: SessionEnded) => void): Promise<() => void>;
   /** An agent that mints its own ids has written one down for a session. */
   onSessionIdentified(
@@ -2339,6 +2387,18 @@ const tauriCore: Core = {
   },
   pluginViewMessage: (request) =>
     invoke<void>("plugin_view_message", { ...request }),
+  async onPluginStart(handler) {
+    return listen<PluginStartEvent>("plugin_start", (event) =>
+      handler(event.payload),
+    );
+  },
+  async onPluginSend(handler) {
+    return listen<PluginSendEvent>("plugin_send", (event) =>
+      handler(event.payload),
+    );
+  },
+  pluginSent: (project, request, outcome) =>
+    invoke<void>("plugin_sent", { project, request, outcome }),
 
   async onSessionEnded(handler) {
     return listen<SessionEnded>("session_ended", (event) =>
@@ -2740,6 +2800,13 @@ const detachedCore: Core = {
   async pluginViewMessage() {
     throw new Error("no core");
   },
+  async onPluginStart() {
+    return () => {};
+  },
+  async onPluginSend() {
+    return () => {};
+  },
+  async pluginSent() {},
   async ptyCwd() {
     return null;
   },

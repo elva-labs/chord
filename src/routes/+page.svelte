@@ -67,6 +67,7 @@
   import { cancelAction, noticed as pluginNoticed, pluginSections, sectionChanged } from "$lib/pluginSections.svelte";
   import { markChanged } from "$lib/pluginMarks.svelte";
   import { dataArrived as pluginViewData, viewChanged as pluginViewChanged } from "$lib/pluginView.svelte";
+  import { pluginSendAsked, pluginStartAsked } from "$lib/pluginSessions.svelte";
   import { loadMedia, presented } from "$lib/media.svelte";
   import {
     activeTab as browserTab,
@@ -286,6 +287,14 @@
     // started on it is under way.
     core()
       .onPluginOpenUrl((event) => void core().openUrl(event.url))
+      .then((unlisten) => offs.push(unlisten));
+    // The core passes a plugin's start or send only in answer to something
+    // the user did in it; a start is still the user's to allow.
+    core()
+      .onPluginStart((event) => void pluginStartAsked(event))
+      .then((unlisten) => offs.push(unlisten));
+    core()
+      .onPluginSend((event) => void pluginSendAsked(event))
       .then((unlisten) => offs.push(unlisten));
     core()
       .onPluginHears(() => void hearsChanged(hookedProjects()))

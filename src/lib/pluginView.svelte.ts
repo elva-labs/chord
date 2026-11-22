@@ -118,9 +118,10 @@ export function open(key: string, project: string) {
   showPluginView(page);
 }
 
-/** Carries a message from a page to its plugin. A plugin that is not there
-    for it drops it, as an action the plugin refused is dropped. */
-export async function send(key: string, project: string, payload: unknown) {
+/** Carries a message from a page to its plugin, `acted` when the user's
+    click or key in the page sent it. A plugin that is not there for it
+    drops it, as an action the plugin refused is dropped. */
+export async function send(key: string, project: string, payload: unknown, acted = false) {
   const page = pageAt(key, project);
   if (page === null) return;
   try {
@@ -129,6 +130,7 @@ export async function send(key: string, project: string, payload: unknown) {
       plugin: page.plugin,
       project,
       payload,
+      acted,
     });
   } catch {
     // The frame has nowhere to show this, and the page is still the truth.

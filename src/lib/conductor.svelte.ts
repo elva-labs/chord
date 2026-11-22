@@ -52,7 +52,7 @@ import {
 } from "$lib/accounts.svelte";
 import { agentLabel } from "$lib/agent.svelte";
 import { untrack } from "svelte";
-import { SvelteSet } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { keepMode } from "$lib/sessionModes";
 
 import { core, type ConductRequest, type ProjectInfo } from "$lib/core";
@@ -126,6 +126,7 @@ import { defaultModelOf } from "$lib/lastChosen.svelte";
 import { failureOnScreen, type Failure } from "$lib/turnFailure";
 import { atWorkLine, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
+import { pluginMark } from "$lib/pluginStarts.svelte";
 import { mixesScripts, readsAsWorkbench, readsAsYou, reservedName, shown } from "$lib/unseen";
 import { within } from "$lib/show.svelte";
 import { handOver, printable } from "$lib/terminals.svelte";
@@ -495,7 +496,8 @@ export interface Ask {
       none, never a standing answer. */
   outside: string | null;
   project: string;
-  /** The prompt's first line. */
+  /** The prompt's first line; a plugin's prompt whole, since nothing else
+      tells the user what the session it asks for would be told. */
   prompt: string;
   worktree: boolean;
   /** For a round of a review past the most the workflow gives a piece: the
@@ -512,6 +514,10 @@ export interface Ask {
   once: boolean;
   /** What the question says of the account, when it names it. */
   named: Named | null;
+  /** The plugin that asks, when one does: the question offers this one
+      session or none, with the agent and model it runs on picked on the
+      card. */
+  plugin?: { source: string; plugin: string };
 }
 
 /** What a started session runs on: the account, by name, null for the
@@ -2779,7 +2785,7 @@ function wantedAccount(request: Placed): { named: { account: string | null } | n
 export const NAME_MOST = 60;
 
 /** A name cut to what a row's name holds, marked where it was cut. */
-function nameCut(name: string): string {
+export function nameCut(name: string): string {
   const chars = Array.from(name);
   return chars.length > NAME_MOST ? `${chars.slice(0, NAME_MOST - 1).join("")}…` : name;
 }
@@ -3598,7 +3604,7 @@ async function bringBack(request: Placed, entry: Gone, line: string): Promise<An
 }
 
 /** Whether a worktree is still one of the project's. */
-async function treeStands(project: string, worktree: string): Promise<boolean> {
+export async function treeStands(project: string, worktree: string): Promise<boolean> {
   try {
     const trees = await core().worktrees(project);
     return trees.some((tree) => tree.path === worktree);
@@ -4592,6 +4598,82 @@ function askUser(
   });
 }
 
+/** What a plugin's start runs on: the agent, and its model by name, or
+    `default` for the one the agent picks itself. */
+export interface PluginPick {
+  agent: AgentId;
+  model: string;
+}
+
+/** The pick on each plugin's question up or waiting, by the question's id. */
+const picks = new SvelteMap<string, PluginPick>();
+
+/** What a plugin's question has picked to run the session on. */
+export function pluginPickOf(ask: Ask): PluginPick | null {
+  return picks.get(ask.request.id) ?? null;
+}
+
+/** Picks what a plugin's question runs the session on, while it is up. */
+export function pickForPlugin(ask: Ask, pick: PluginPick) {
+  if (ask.plugin === undefined || !picks.has(ask.request.id)) return;
+  picks.set(ask.request.id, { agent: pick.agent, model: pick.model });
+}
+
+/** A plugin's start, as it is put to the user. */
+export interface PluginAsk {
+  source: string;
+  plugin: string;
+  project: string;
+  /** The core's id for the start. */
+  request: string;
+  prompt: string;
+  name: string | null;
+  worktree: boolean;
+}
+
+/**
+ * Puts a plugin's start to the user, always: a plugin never has a
+ * standing answer, nor is given one. The question waits behind any other
+ * that is up, and the answer comes with what the user picked to run the
+ * session on, starting from `pick`.
+ */
+export function askForPlugin(asked: PluginAsk, pick: PluginPick): Promise<{ choice: Choice; pick: PluginPick }> {
+  const request: Placed = {
+    id: asked.request,
+    tool: "start",
+    arguments: asked.name === null ? {} : { name: asked.name },
+    cwd: asked.project,
+    session: null,
+    caller: pluginMark(asked.source, asked.plugin),
+  };
+  const ask: Ask = {
+    request,
+    outside: null,
+    caller: `The ${asked.plugin} plugin`,
+    project: asked.project,
+    prompt: asked.prompt,
+    worktree: asked.worktree,
+    round: null,
+    login: null,
+    named: null,
+    once: true,
+    plugin: { source: asked.source, plugin: asked.plugin },
+  };
+  picks.set(request.id, { agent: pick.agent, model: pick.model });
+  return new Promise((settle) => {
+    queue.push({
+      ask,
+      settle: (choice) => {
+        const picked = picks.get(request.id) ?? pick;
+        picks.delete(request.id);
+        // Only this one session is ever allowed.
+        settle({ choice: choice === "no" ? "no" : "once", pick: picked });
+      },
+    });
+    nextAsk();
+  });
+}
+
 /** Takes down the question on screen once the session that asked has
     stopped, and puts up the next: nothing it asked for would be done, and
     an answer would go to no one. */
@@ -4708,7 +4790,7 @@ function allowance(caller: string, project: string, login: Login): string {
 
 /** Null once a row's process is up, else why it is not: the row failed,
     ended, was closed, or never came up in the time a start is given. */
-function cameUp(key: string): Promise<string | null> {
+export function cameUp(key: string): Promise<string | null> {
   return settles<string | null>(
     (settle) => {
       const session = byKey(key);
@@ -4809,6 +4891,7 @@ export function resetConductor() {
   conductor.refusals = {};
   pending = null;
   queue.length = 0;
+  picks.clear();
   allowed.clear();
   seen.clear();
   stops.clear();

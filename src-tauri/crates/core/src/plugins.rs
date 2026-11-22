@@ -404,6 +404,9 @@ pub struct SendAsk {
     pub plugin: String,
     pub project: String,
     pub request: String,
+    /// The request of the plugin's start the session is, which the window
+    /// names on each run of it from then on.
+    pub started: String,
     /// The agent's id of the session, as the plugin names it.
     pub session: String,
     pub text: String,
@@ -3166,13 +3169,13 @@ impl Inner {
             return;
         }
         let key: Key = (source_id.to_string(), name.to_string());
-        let Some(project) = self
+        let Some((started, project)) = self
             .owned
             .lock()
             .expect("plugins lock")
-            .values()
-            .find(|owned| owned.plugin == key && owned.ids.iter().any(|id| id == session))
-            .map(|owned| owned.project.clone())
+            .iter()
+            .find(|(_, owned)| owned.plugin == key && owned.ids.iter().any(|id| id == session))
+            .map(|(started, owned)| (started.clone(), owned.project.clone()))
         else {
             return;
         };
@@ -3196,6 +3199,7 @@ impl Inner {
                 plugin: name.to_string(),
                 project,
                 request,
+                started,
                 session: session.to_string(),
                 text: line.to_string(),
             },
@@ -6144,6 +6148,7 @@ run = ["sh", "main.sh"]
         assert_eq!(sends.len(), 1, "{sends:?}");
         let send = &sends[0];
         assert_eq!(send["session"], "s-own");
+        assert_eq!(send["started"], request.as_str());
         assert_eq!(send["text"], "Address the review");
         assert_eq!(send["project"], here);
         assert_eq!(send["plugin"], "board");

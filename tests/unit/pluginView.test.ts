@@ -148,6 +148,21 @@ describe("what crosses the bridge", () => {
         plugin: "github",
         project: "/one",
         payload: { hello: 1 },
+        acted: false,
+      },
+    ]);
+  });
+
+  it("says a message came of something the user did only when the page says so", async () => {
+    viewChanged(event());
+    await send("src-1/github", "/one", { merge: 12 }, true);
+    expect(sent).toEqual([
+      {
+        source: "src-1",
+        plugin: "github",
+        project: "/one",
+        payload: { merge: 12 },
+        acted: true,
       },
     ]);
   });
