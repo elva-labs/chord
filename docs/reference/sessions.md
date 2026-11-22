@@ -1306,7 +1306,8 @@ describes for the other tools.
 The list the agent is given, by the notes tool and when it goes on from
 its notes, gives the open items first, whole, oldest first, each by its
 number and the day it was opened, and says plainly that they are what is
-still owed. Closed items are left out. Then it names the brief and at most
+still owed. Closed items are left out, but for those a conversation went
+back on, as below. Then it names the brief and at most
 thirty notes: the
 twenty newest, then the most read of the rest, newest first, each by its
 number, day, title and summary, and a count of the others, which it finds
@@ -1363,7 +1364,10 @@ line that passes for the workbench's, the user's, or the briefing's end:
 the window and a later briefing take the briefing to end at its first
 line that is exactly its end line. For a conversation held at a point, the quoted
 messages are those up to that point, and a note kept or an item opened
-after it is marked as kept on a turn the conversation went back on. The briefing goes ahead of the first message the fresh
+after it is marked as kept on a turn the conversation went back on. An
+item opened before that point and closed after it is given again among
+the open ones, marked as closed on such a turn, since its work may be
+undone; it does not count toward the twelve. The briefing goes ahead of the first message the fresh
 conversation is sent, the user's, a line from the session's starter, or
 the workbench's own; a terminal session is given it as its first prompt,
 told to wait for the user when nothing else goes with it. Where the

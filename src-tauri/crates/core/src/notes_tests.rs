@@ -353,12 +353,36 @@ fn the_briefing_gives_the_open_items_first_whole_and_leaves_the_closed_out() {
     let listed = text.find(&format!("> #{note} ")).unwrap();
     assert!(items < brief && brief < listed, "{text}");
     assert!(text.contains(&format!("\n> {}. 1970-01-01 {}\n", ids[0], long.trim())));
-    assert!(!text.contains("Done soon"));
-    assert!(text
-        .lines()
-        .find(|line| line.contains("Went back on"))
+    let line = |text: &str, words: &str| {
+        text.lines()
+            .find(|line| line.contains(words))
+            .unwrap_or_else(|| panic!("{text}"))
+            .to_string()
+    };
+    assert!(line(&text, "Went back on").contains("opened on a turn the conversation went back on"));
+    // Closed on a turn gone back on, it is owed again, among the open ones.
+    let again = line(&text, "Done soon");
+    assert!(again.starts_with(&format!("> {}. ", ids[1])), "{again}");
+    assert!(
+        again.contains("closed on a turn the conversation went back on: its work may be undone")
+    );
+    assert!(text.find("Done soon").unwrap() < brief, "{text}");
+    // Not held, or held after it was closed, it is left out.
+    assert!(!briefing(home.path(), "a").unwrap().contains("Done soon"));
+    assert!(!briefing_since(home.path(), "a", Some(250))
         .unwrap()
-        .contains("opened on a turn the conversation went back on"));
+        .contains("Done soon"));
+    // Nor does it count toward the bound.
+    let more: Vec<String> = (0..ITEMS_MOST - 2).map(|n| format!("Owed {n}")).collect();
+    notes
+        .change_items(
+            "a",
+            &more.iter().map(String::as_str).collect::<Vec<_>>(),
+            &[],
+            300,
+        )
+        .unwrap();
+    assert_eq!(notes.open_items("a").unwrap().len(), ITEMS_MOST);
 }
 
 #[test]

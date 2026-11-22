@@ -413,6 +413,25 @@ impl Notes {
         })
     }
 
+    /// The list for a conversation held at a point it went back to, at
+    /// `since` in seconds: as [`Self::listed`], with the items opened by
+    /// then and closed after it among the open ones, since the turn that
+    /// closed each was gone back on.
+    pub fn listed_since(&self, owner: &str, since: Option<i64>) -> Result<Listed, String> {
+        let mut listed = self.listed(owner)?;
+        if let Some(since) = since {
+            listed.items = self
+                .items(owner)?
+                .into_iter()
+                .filter(|item| {
+                    item.closed
+                        .is_none_or(|closed| item.at <= since && closed > since)
+                })
+                .collect();
+        }
+        Ok(listed)
+    }
+
     /// The owner's notes whose title, summary or body hold every one of
     /// the words, those that hold them in the title or summary first, then
     /// the newest. Standing notes come before replaced ones.
@@ -615,9 +634,12 @@ fn listed_line(note: &Note, since: Option<i64>) -> String {
 
 /// One open item's line in a list: its number, the day it was opened and
 /// its text, and whether it was opened after `since`, on a turn the
-/// conversation went back on.
+/// conversation went back on. An item in the list that is closed was
+/// closed on such a turn.
 fn item_line(item: &Item, since: Option<i64>) -> String {
-    let later = if since.is_some_and(|since| item.at > since) {
+    let later = if item.closed.is_some() {
+        " (closed on a turn the conversation went back on: its work may be undone, so open it again if it is still owed)"
+    } else if since.is_some_and(|since| item.at > since) {
         " (opened on a turn the conversation went back on: it may no longer be owed)"
     } else {
         ""
@@ -685,11 +707,12 @@ pub fn briefing(home: &Path, owner: &str) -> Option<String> {
     briefing_since(home, owner, None)
 }
 
-/// The brief and list for a session held at a point it went back to,
-/// which says of each note kept after `since` that it may no longer stand.
+/// The open items, brief and list for a session held at a point it went
+/// back to, which says of each item or note kept after `since` that it may
+/// no longer stand, and gives again each item closed after it.
 pub fn briefing_since(home: &Path, owner: &str, since: Option<i64>) -> Option<String> {
     let notes = Notes::existing(home).ok()??;
-    briefing_of_since(&notes.listed(owner).ok()?, since)
+    briefing_of_since(&notes.listed_since(owner, since).ok()?, since)
 }
 
 /// One note whole, as the agent reads it: its number, day, title, summary
