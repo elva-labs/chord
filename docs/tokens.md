@@ -36,9 +36,3 @@ Each started session is asked to end with a short report that someone without it
 ## Usage log
 
 The workbench keeps a log of tokens per turn, context sizes and resumes, wakes and starts for each session, in its folder in your home directory. Nothing shows it and nothing is sent from it. It is there to tune the limits above.
-
-## What it does not do
-
-- It does not change how much of a subscription's allowance a turn uses. How the five hour and weekly limits weigh cached and fresh tokens is not published, and the figures above are list prices used as a stand-in.
-- It does not cap your own sessions' context, and it leaves a running terminal row alone.
-- It does not check that work from a fresh conversation is as good as work from the whole one. The measurement is one person's, over two days, and not a controlled comparison.
