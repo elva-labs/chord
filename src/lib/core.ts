@@ -1164,7 +1164,9 @@ export interface PluginOpenUrlEvent {
 /** A plugin asks to start a session, in answer to something the user did
     in it: the window asks the user before anything starts. `request` is
     what the start names when the user allows it; `name` is one line of
-    the plugin's text, and `prompt` the plugin's text as it is. */
+    the plugin's text, and `prompt` the plugin's text as it is. `purpose`
+    is what the session is for, `review` or none; `agent` the title of the
+    agent the plugin suggests it start as, on one line. */
 export interface PluginStartEvent {
   source: string;
   plugin: string;
@@ -1173,6 +1175,8 @@ export interface PluginStartEvent {
   prompt: string;
   name: string | null;
   worktree: boolean;
+  purpose: "review" | null;
+  agent: string | null;
 }
 
 /** A plugin sends a line to a session it started, in answer to something

@@ -9,27 +9,29 @@
 
 import { core, type PluginSendEvent, type PluginSentOutcome, type PluginStartEvent, type PluginStateEvent } from "$lib/core";
 import { accountToStart, dirsOf } from "$lib/accounts.svelte";
+import { agentByKey, agentByTitle, loadInstalled, type Agent } from "$lib/agents.svelte";
 import {
   askForPlugin,
   cameUp,
   idle,
   nameCut,
   oneLine,
+  pickAs,
   runsShell,
   slashLed,
   treeStands,
   typeLine,
   withdrawPlugin,
   worktreeName,
-  type PluginPick,
 } from "$lib/conductor.svelte";
 import { say } from "$lib/flash.svelte";
-import { holdsAgentNote } from "$lib/instructions";
+import { agentNote, holdsAgentNote } from "$lib/instructions";
 import { wentOnFrom } from "$lib/goingOn.svelte";
 import { handleOf, send as sendIntegrated } from "$lib/integrated.svelte";
 import { choose, modelToStart } from "$lib/lastChosen.svelte";
 import { startsIn } from "$lib/orchestratorFolder.svelte";
 import { pluginMark, pluginStarted, rowOfRequest } from "$lib/pluginStarts.svelte";
+import { keepLastAgent, lastPick, startAs } from "$lib/sessionAgents.svelte";
 import { kindFor } from "$lib/sessionKind.svelte";
 import {
   byKey,
@@ -92,9 +94,9 @@ async function settled(asked: PluginStartEvent, started: boolean) {
 
 /**
  * A plugin asks to start a session. The conductor's card asks the user,
- * every time, with the agent and model it runs on, the last chosen to
- * begin with; on yes the session starts the way a session's start does,
- * out of sight, and is the plugin's from then on. Nothing is said back to
+ * every time, with the harness and model it runs on, the last chosen to
+ * begin with, and the agent it works as; on yes the session starts the way
+ * a session's start does, out of sight, and is the plugin's from then on. Nothing is said back to
  * the plugin on no: it hears of a start by the session's own lines.
  */
 export async function pluginStartAsked(asked: PluginStartEvent): Promise<string | null> {
@@ -113,18 +115,37 @@ export function takeDownCardsOf(plugin: PluginStateEvent) {
   if (plugin.state === "off" || plugin.state === "failed") withdrawPlugin(plugin.source, plugin.name);
 }
 
+/** The agent a plugin's card starts on: for a review, the one last picked
+    for reviews, none included, while it is still there; else the one the
+    plugin suggests, by its title, or none for a title no agent has. */
+function roleToStart(asked: PluginStartEvent): Agent | null {
+  if (asked.purpose === "review") {
+    const last = lastPick("review");
+    if (last === null) return null;
+    const kept = agentByKey(last, asked.project);
+    if (kept !== undefined) return kept;
+  }
+  return asked.agent === null ? null : (agentByTitle(asked.agent, asked.project) ?? null);
+}
+
 async function startFor(asked: PluginStartEvent): Promise<string | null> {
   if (startRefusal(asked) !== null) return null;
+  // The card lists the project's installed agents too.
+  await loadInstalled(asked.project);
   const agent = defaultAgent(asked.project);
-  const begins: PluginPick = {
-    agent,
-    model: modelToStart(agent, accountToStart(asked.project)) ?? OWN_DEFAULT,
-  };
+  const begins = pickAs(
+    { agent, model: modelToStart(agent, accountToStart(asked.project)) ?? OWN_DEFAULT },
+    roleToStart(asked),
+  );
   const { choice, pick } = await askForPlugin(asked, begins);
   if (choice === "no") return null;
   // The project may have closed while the card waited.
   if (!startable(asked.project)) return null;
+  if (asked.purpose === "review") keepLastAgent("review", pick.role);
 
+  const terminal = kindFor(pick.agent) === "terminal";
+  // A terminal is never told an agent's description.
+  const role = terminal ? null : (agentByKey(pick.role, asked.project) ?? null);
   let startIn: string | null = null;
   if (asked.worktree) {
     try {
@@ -134,7 +155,6 @@ async function startFor(asked: PluginStartEvent): Promise<string | null> {
       return null;
     }
   }
-  const terminal = kindFor(pick.agent) === "terminal";
   const account = accountToStart(asked.project);
   // The window stays on what the user was looking at: the row appears
   // under its project, and going to it is a click.
@@ -144,12 +164,16 @@ async function startFor(asked: PluginStartEvent): Promise<string | null> {
     null,
     pick.agent,
     startIn,
-    terminal ? oneLine(asked.prompt) : asked.prompt,
+    terminal ? oneLine(asked.prompt) : `${role === null ? "" : `${agentNote(role.title, role.text)}\n\n`}${asked.prompt}`,
     pick.model === OWN_DEFAULT ? null : pick.model,
     account,
     null,
   );
   session.madeTree = startIn !== null;
+  // The agent's effort is its own harness's, so it goes only with its model
+  // or where it names none.
+  if (role !== null)
+    startAs(session.key, role, role.model === null || role.model.harness === pick.agent ? role.effort : null);
   sessions.active = looking;
   pluginStarted(session.key, {
     source: asked.source,
@@ -163,7 +187,9 @@ async function startFor(asked: PluginStartEvent): Promise<string | null> {
   const candidate = asked.name === null ? null : nameCut(oneLine(asked.name));
   if (candidate !== null && candidate !== "" && !readsAsYou(candidate) && !nameTaken(candidate, session.key))
     session.title = candidate;
-  choose(pick.agent, "model", pick.model);
+  // An agent's own model is the agent's, not the user's last chosen.
+  const agentsOwn = role?.model?.harness === pick.agent && role.model.model === pick.model;
+  if (!agentsOwn) choose(pick.agent, "model", pick.model);
   return session.key;
 }
 

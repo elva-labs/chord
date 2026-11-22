@@ -397,6 +397,12 @@ pub struct StartAsk {
     pub name: Option<String>,
     /// Whether it asks for a worktree of the session's own.
     pub worktree: bool,
+    /// What the session is for, where the window keeps a pick of its own:
+    /// `review` is the one purpose known.
+    pub purpose: Option<String>,
+    /// The title of the agent the plugin suggests the session start as, on
+    /// one line. The user picks; the window reads an unknown title as none.
+    pub agent: Option<String>,
 }
 
 /// A line a plugin sends to a session it started, as told to the window,
@@ -531,6 +537,9 @@ const NAME_MOST: usize = 60;
 
 /// The most a plugin's own ref for a session may hold, in bytes.
 const REF_MOST: usize = 256;
+
+/// What a plugin's start may say the session is for.
+const PURPOSES: [&str; 1] = ["review"];
 
 /// The most a plugin's target for its page may hold, in bytes.
 const TARGET_MOST: usize = 256;
@@ -3334,6 +3343,13 @@ impl Inner {
             .map(crate::show::one_line)
             .map(|named| named.chars().take(NAME_MOST).collect::<String>())
             .filter(|named| !named.is_empty());
+        let purpose = text("purpose")
+            .filter(|purpose| PURPOSES.contains(purpose))
+            .map(str::to_string);
+        let agent = text("agent")
+            .filter(|agent| agent.len() <= REF_MOST)
+            .map(crate::show::one_line)
+            .filter(|agent| !agent.is_empty());
         let key: Key = (source_id.to_string(), name.to_string());
         if !self.spend(answers, &key, Reply::Start) {
             return;
@@ -3360,6 +3376,8 @@ impl Inner {
                 prompt: prompt.to_string(),
                 name: named,
                 worktree,
+                purpose,
+                agent,
             },
         );
     }
@@ -6745,6 +6763,65 @@ run = ["sh", "main.sh"]
         assert!(!texts.contains(&serde_json::json!("fourth")));
         assert!(texts.contains(&serde_json::json!("its own")));
         assert_eq!(told().len(), NOTIFY_MOST + 2);
+    }
+
+    #[test]
+    fn a_start_says_a_known_purpose_and_suggests_an_agent_by_a_title_of_its_size() {
+        let home = Scratch::absent("plugins-purpose-home");
+        let recorder = Arc::new(Recorder::default());
+        let plugins = plugins_at(&home, recorder.clone());
+        let project = "/projects/board".to_string();
+        plugins.set_projects(vec![project.clone()]);
+        let board: Key = ("source".into(), "board".into());
+        let ask = |act: &str, extra: serde_json::Value| -> serde_json::Value {
+            plugins
+                .inner
+                .acts
+                .lock()
+                .unwrap()
+                .insert(act.to_string(), Act::new(board.clone()));
+            let mut line =
+                serde_json::json!({"answers": act, "project": project, "prompt": "Review it."});
+            line.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            plugins.inner.start_asked("source", "board", &line);
+            recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .rev()
+                .find(|(name, _)| name == PLUGIN_START)
+                .map(|(_, payload)| payload.clone())
+                .expect("a start was asked")
+        };
+
+        let none = ask("a-1", serde_json::json!({}));
+        assert!(none["purpose"].is_null());
+        assert!(none["agent"].is_null());
+
+        let review = ask(
+            "a-2",
+            serde_json::json!({"purpose": "review", "agent": " Code\n  reviewer "}),
+        );
+        assert_eq!(review["purpose"], "review");
+        assert_eq!(review["agent"], "Code reviewer");
+
+        // A purpose not known, an agent's title over its size or not a
+        // string, still ask: as for no purpose and no agent.
+        let unknown = ask(
+            "a-3",
+            serde_json::json!({"purpose": "deploy", "agent": "x".repeat(REF_MOST + 1)}),
+        );
+        assert!(unknown["purpose"].is_null());
+        assert!(unknown["agent"].is_null());
+        let odd = ask(
+            "a-4",
+            serde_json::json!({"purpose": 1, "agent": {"title": "Reviewer"}}),
+        );
+        assert!(odd["purpose"].is_null());
+        assert!(odd["agent"].is_null());
     }
 
     #[test]

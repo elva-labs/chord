@@ -50,7 +50,8 @@ import {
   namesOwn,
   OWN_LABEL,
 } from "$lib/accounts.svelte";
-import { harnessLabel } from "$lib/harness.svelte";
+import { harnessLabel, installed } from "$lib/harness.svelte";
+import { offeredHarnesses } from "$lib/models";
 import { untrack } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { keepMode } from "$lib/sessionModes";
@@ -126,7 +127,7 @@ import { logUsage } from "$lib/usageLog";
 import { defaultModelOf } from "$lib/lastChosen.svelte";
 import { failureOnScreen, type Failure } from "$lib/turnFailure";
 import { agentNote, atWorkLine, holdsAgentNote, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
-import { agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
+import { agentByKey, agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
 import { startAs } from "$lib/sessionAgents.svelte";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
 import { pluginMark, pluginStarted, pluginStartOf } from "$lib/pluginStarts.svelte";
@@ -4707,10 +4708,12 @@ function askUser(
 
 /** What a plugin's start runs on: the harness, kept as `agent` as a
     workflow's model keeps it, and its model by name, or `default` for the
-    one the harness picks itself. */
+    one the harness picks itself; and the agent it works as, by its key, or
+    null for none. */
 export interface PluginPick {
   agent: HarnessId;
   model: string;
+  role: string | null;
 }
 
 /** The pick on each plugin's question up or waiting, by the question's id. */
@@ -4721,10 +4724,35 @@ export function pluginPickOf(ask: Ask): PluginPick | null {
   return picks.get(ask.request.id) ?? null;
 }
 
-/** Picks what a plugin's question runs the session on, while it is up. */
-export function pickForPlugin(ask: Ask, pick: PluginPick) {
-  if (ask.plugin === undefined || !picks.has(ask.request.id)) return;
-  picks.set(ask.request.id, { agent: pick.agent, model: pick.model });
+/** Picks the harness and model a plugin's question runs the session on,
+    while it is up. The agent picked stays. */
+export function pickForPlugin(ask: Ask, pick: { agent: HarnessId; model: string }) {
+  const now = picks.get(ask.request.id);
+  if (ask.plugin === undefined || now === undefined) return;
+  picks.set(ask.request.id, { ...now, agent: pick.agent, model: pick.model });
+}
+
+/** `pick` working as `role`: on the agent's model too, where it names one
+    on a harness that is here and runs as a conversation, as the composer's
+    chip puts it. A harness that runs in a terminal is never told an
+    agent's description. */
+export function pickAs(pick: Omit<PluginPick, "role">, role: Agent | null): PluginPick {
+  const model = role?.model ?? null;
+  const runs =
+    model !== null &&
+    offeredHarnesses(installed(), [pick.agent]).includes(model.harness) &&
+    kindFor(model.harness) !== "terminal";
+  return runs
+    ? { agent: model.harness, model: model.model, role: role!.key }
+    : { agent: pick.agent, model: pick.model, role: role?.key ?? null };
+}
+
+/** Picks the agent a plugin's question starts the session as, by its key,
+    or none, while it is up: on the agent's model, where it names one. */
+export function roleForPlugin(ask: Ask, key: string | null) {
+  const now = picks.get(ask.request.id);
+  if (ask.plugin === undefined || now === undefined) return;
+  picks.set(ask.request.id, pickAs(now, agentByKey(key, ask.project) ?? null));
 }
 
 /** A plugin's start, as it is put to the user. */
@@ -4776,7 +4804,7 @@ export function askForPlugin(asked: PluginAsk, pick: PluginPick): Promise<{ choi
     once: true,
     plugin: { source: asked.source, plugin: asked.plugin },
   };
-  picks.set(request.id, { agent: pick.agent, model: pick.model });
+  picks.set(request.id, { ...pick });
   return new Promise((settle) => {
     queue.push({
       ask,

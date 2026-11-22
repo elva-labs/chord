@@ -2,7 +2,7 @@
   import { tick, untrack } from "svelte";
   import type { Command, Conversation, Entry, Message } from "$lib/conversation.svelte";
   import { clock, commandEnd, drawnPart, lineCount, notRead, nowDoing, replyMarkdown, speaker, startedIds, timeBreaks, tokens, toHear, exactTime, dayName } from "$lib/thread";
-  import { reportsShown, spoken, wakeShown } from "$lib/instructions";
+  import { agentAt, reportsShown, spoken, wakeShown } from "$lib/instructions";
   import { sentParts, unsent } from "$lib/mention";
   import { mentionsOf } from "$lib/mentioned.svelte";
   import { sessionName, timeOf, type Sender } from "$lib/senders.svelte";
@@ -203,13 +203,28 @@
       for (const id of turn.messages) {
         const said = conversation.messages[id];
         const from = said === undefined ? null : (sender?.(said) ?? null);
-        if (said === undefined || from?.workbench || from?.plugin) continue;
-        title = spoken(said.text, from === null).agent?.title ?? title;
+        if (said === undefined || from?.workbench) continue;
+        const agent = from?.plugin ? agentAt(said.text)?.agent : spoken(said.text, from === null).agent;
+        title = agent?.title ?? title;
       }
       if (title !== null) titles.set(turn.id, title);
     }
     return titles;
   });
+
+  /** A plugin's words as they were sent, after the agent note the
+      workbench put ahead of its start prompt where it has one. */
+  function pluginWords(text: string) {
+    const led = agentAt(text);
+    return {
+      text: led?.rest ?? text,
+      instructions: null,
+      reports: null,
+      filesBack: null,
+      briefing: undefined,
+      agent: led?.agent,
+    };
+  }
 
   /** A cheap reading of what the thread holds, which changes whenever
       something new comes: more entries, a longer last part, a request,
@@ -1367,7 +1382,7 @@
         briefing: spoken(said.text).briefing,
       }
     : from?.plugin
-      ? { text: said.text, instructions: null, reports: null, filesBack: null, briefing: undefined }
+      ? pluginWords(said.text)
       : spoken(said.text, from === null)}
   {@const putBack = from?.workbench ? undefined : onPutBack}
   <article

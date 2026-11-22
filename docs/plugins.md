@@ -614,7 +614,9 @@ for its result.
   "prompt": "Address the review on pull request 42.",
   "name": "Review of #42",
   "ref": "pr-42",
-  "worktree": true
+  "worktree": true,
+  "purpose": "review",
+  "agent": "Reviewer"
 }
 ```
 
@@ -623,10 +625,14 @@ the same card a session's request to start one is put to them: it names
 the plugin, shows the prompt whole, and offers this one session or none,
 never an answer that stands for the next. A plugin has one card up or
 waiting at a time: a start it asks for meanwhile is a no, and its cards
-are taken down as no when it is turned off, removed or fails. The user picks the
-harness and the model it runs on there, the ones last chosen to begin with.
-On a yes the session starts in the project, in a worktree of its own when
-`worktree` is true, with the prompt as its first message. It appears
+are taken down as no when it is turned off, removed or fails. The user picks
+the agent the session works as, or none, and the harness and the model it
+runs on there, the ones last chosen to begin with. An agent's own model and
+effort come with it where it names a model on a harness the session can
+run on in a conversation; a session in a terminal works as no agent. On a
+yes the session starts in the project, in a worktree of its own when
+`worktree` is true, with the prompt as its first message, told first to
+work as the agent picked and reading only where the agent does. It appears
 under its project, and the window stays on what the user was looking at.
 A conversation shows that message as the plugin's. On a no nothing
 starts, and the plugin is told nothing.
@@ -641,6 +647,18 @@ starts, and the plugin is told nothing.
 - `ref` is a string of at most 256 bytes, which the app hands back on the
   session's lines to this plugin alone and shows to no one. A `ref` that is
   not a string, or a `worktree` that is not true or false, asks nothing.
+- `purpose` says what the session is for. The one the app knows is
+  `review`: the card then begins on the agent the user picked for the last
+  review, none included, and keeps the pick on a yes. Any other value is
+  no purpose.
+- `agent` suggests the agent by its title, as listed in Settings, ignoring
+  the case of A to Z: the user's own first, then those Chord ships, then
+  those installed for the project. It is a suggestion the card begins on,
+  never a choice made for the user, and a review's last pick stands over
+  it. A title no agent has, or one past 256 bytes, is no agent.
+- A prompt that holds a line of the note the app tells a session its agent
+  with asks nothing, so only the user's pick makes a session work as an
+  agent.
 
 The plugin learns its session started from the session lines: the one
 that carries its `ref`. The session is the plugin's from then on, under

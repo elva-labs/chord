@@ -1,17 +1,20 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { installed } from "$lib/harness.svelte";
+  import { allAgents } from "$lib/agents.svelte";
   import {
     accountWords,
     answerConduct,
     pickForPlugin,
     pluginPickOf,
+    roleForPlugin,
     roundQuestion,
     type Ask,
     type Choice,
   } from "$lib/conductor.svelte";
   import type { HarnessId } from "$lib/core";
   import { HARNESS_LABELS, modelFromKey, modelKey, offeredHarnesses, offeredModels } from "$lib/models";
+  import { kindFor } from "$lib/sessionKind.svelte";
   import AskCard from "$lib/components/AskCard.svelte";
   import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
   import Plain from "$lib/components/conversation/Plain.svelte";
@@ -21,8 +24,8 @@
    * review run a round past what its workflow gives a piece. The same card
    * in the asking session's dock and over the window. The first answer
    * remembers nothing; one that stands from now on is never first. A
-   * plugin's start offers this one session or none, and picks the harness
-   * and model it runs on.
+   * plugin's start offers this one session or none, and picks the agent it
+   * works as and the harness and model it runs on.
    */
   interface Props {
     ask: Ask;
@@ -107,6 +110,16 @@
     return [...listed, ...held];
   }
 
+  /** The agents a plugin's start may work as, in the order menus list them. */
+  let roles = $derived(pick === null ? [] : allAgents(ask.project));
+  /** A terminal is never told an agent's description. */
+  let roleless = $derived(pick !== null && kindFor(pick.agent) === "terminal");
+
+  function pickedRole(event: Event) {
+    const key = (event.currentTarget as HTMLSelectElement).value;
+    roleForPlugin(ask, key === "" ? null : key);
+  }
+
   function picked(event: Event) {
     const chosen = modelFromKey((event.currentTarget as HTMLSelectElement).value);
     if (chosen !== null) pickForPlugin(ask, chosen);
@@ -149,18 +162,35 @@
     {#if saysWhere || ask.worktree || ask.named !== null}<p class="where">{@render where()}</p>{/if}
   {/if}
   {#if pick !== null}
-    <label class="runs">
-      <span>Runs on</span>
-      <select value={modelKey(pick)} onchange={picked} data-testid="conduct-model">
-        {#each harnesses as harness (harness)}
-          <optgroup label={HARNESS_LABELS[harness]}>
-            {#each modelsFor(harness) as option (option.model)}
-              <option value={modelKey(option)}>{option.label}</option>
-            {/each}
-          </optgroup>
-        {/each}
-      </select>
-    </label>
+    <div class="runs">
+      <label>
+        <span>As</span>
+        <select
+          value={roleless ? "" : (pick.role ?? "")}
+          onchange={pickedRole}
+          disabled={roleless}
+          title={roleless ? "A session in a terminal works as no agent" : undefined}
+          data-testid="conduct-agent"
+        >
+          <option value="">No agent</option>
+          {#each roles as role (role.key)}
+            <option value={role.key}>{role.title}</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        <span>Runs on</span>
+        <select value={modelKey(pick)} onchange={picked} data-testid="conduct-model">
+          {#each harnesses as harness (harness)}
+            <optgroup label={HARNESS_LABELS[harness]}>
+              {#each modelsFor(harness) as option (option.model)}
+                <option value={modelKey(option)}>{option.label}</option>
+              {/each}
+            </optgroup>
+          {/each}
+        </select>
+      </label>
+    </div>
   {/if}
   {#snippet actions()}
     <AskChoices {choices} {armed} bind:pointed describedby="{id}-means" />
@@ -182,9 +212,17 @@
 
   .runs {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin-left: var(--indent);
+  }
+
+  .runs label {
+    display: flex;
     align-items: center;
     gap: 8px;
-    margin-left: var(--indent);
+    min-width: 0;
   }
 
   .runs select {
@@ -197,5 +235,9 @@
     font-family: var(--chrome);
     font-size: var(--field-size);
     color: var(--ink);
+  }
+
+  .runs select:disabled {
+    color: var(--ink-3);
   }
 </style>
