@@ -9,7 +9,7 @@ const TERMINAL = ".xterm";
 /** Every C0 control but tab and newline, DEL, the C1 controls and the
     private-use block the system keys are named in. */
 // eslint-disable-next-line no-control-regex
-const STRAY = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f-]/g;
+const STRAY = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\uf700-\uf8ff]/g;
 
 /** The text without a character no key should type. A carriage return
     that ends a line is a newline; every other control goes. */
