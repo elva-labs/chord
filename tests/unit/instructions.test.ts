@@ -200,10 +200,19 @@ describe("the note an agent picked on the composer goes ahead with", () => {
     });
   });
 
-  it("is left in another session's message, and in one it is not whole in", async () => {
+  it("is taken out of a started session's prompt, ahead of the outcome ask", async () => {
+    const { agentNote, OUTCOME_ASK, spoken } = await import("$lib/instructions");
+    const note = agentNote("Reviewer", "Read the diff.");
+    expect(spoken(`${note}\n\nCheck the cache change ${OUTCOME_ASK}`)).toMatchObject({
+      text: "Check the cache change",
+      instructions: OUTCOME_ASK,
+      agent: { title: "Reviewer", text: "Read the diff." },
+    });
+  });
+
+  it("is left in a message it is not whole in", async () => {
     const { AGENT_END, agentNote, spoken } = await import("$lib/instructions");
     const note = agentNote("Reviewer", "Read the diff.");
-    expect(spoken(`${note}\n\nHi`).agent).toBeUndefined();
     const cut = note.split("\n").filter((line) => line !== AGENT_END).join("\n");
     expect(spoken(cut, true)).toMatchObject({ text: cut });
     expect(spoken(cut, true).agent).toBeUndefined();

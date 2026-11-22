@@ -188,16 +188,18 @@
     return new Set(last.values());
   });
 
-  /** The agent each turn worked as, by the turn's id: the one the user's
-      last message so far was picked to go out as, where any was. */
+  /** The agent each turn worked as, by the turn's id: the one the last
+      message so far to go out as one went out as, the user's or the prompt
+      of a session started as one. */
   let workedAs = $derived.by(() => {
     const titles = new Map<number, string>();
     let title: string | null = null;
     for (const turn of Object.values(conversation.turns).sort((a, b) => a.id - b.id)) {
       for (const id of turn.messages) {
         const said = conversation.messages[id];
-        if (said === undefined || (sender?.(said) ?? null) !== null) continue;
-        title = spoken(said.text, true).agent?.title ?? title;
+        const from = said === undefined ? null : (sender?.(said) ?? null);
+        if (said === undefined || from?.workbench || from?.plugin) continue;
+        title = spoken(said.text, from === null).agent?.title ?? title;
       }
       if (title !== null) titles.set(turn.id, title);
     }

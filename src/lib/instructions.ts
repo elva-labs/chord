@@ -144,9 +144,9 @@ function noteAt(words: string, head: string, shaped: (line: string) => boolean) 
 }
 
 /** A message's own words, the workbench's sentence after them when it has
-    one, and, for a message of the user's own, the workbench's notes ahead
-    of them, without their first lines: the agent picked for it, then on
-    files put back, then on the sessions it started, each where it has one.
+    one, the agent it went out as, and, for a message of the user's own, the
+    workbench's notes ahead of them, without their first lines: on files put
+    back, then on the sessions it started, each where it has one.
     A note is taken out only whole; anything else is the words as they
     are. */
 export function spoken(
@@ -169,12 +169,14 @@ export function spoken(
   if (going !== null) words = going.rest === GOING_ON_WAIT ? "" : going.rest;
   const briefed: { briefing?: string; agent?: { title: string; text: string } } =
     going === null ? {} : { briefing: going.briefing };
+  // The agent it is to work as goes ahead of the user's words, or of the
+  // prompt a session was started with.
+  const agent = agentAt(words);
+  if (agent !== null) {
+    briefed.agent = agent.agent;
+    words = agent.rest;
+  }
   if (user) {
-    const agent = agentAt(words);
-    if (agent !== null) {
-      briefed.agent = agent.agent;
-      words = agent.rest;
-    }
     const files = noteAt(words, FILES_BACK_HEAD, (line) => FILES_BACK_AS.test(line) || ABSOLUTE.test(line));
     if (files !== null) {
       filesBack = files.lines;

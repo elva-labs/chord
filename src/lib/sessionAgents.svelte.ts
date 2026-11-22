@@ -7,7 +7,8 @@
  *
  * The agent's text goes ahead of the next message the user sends, once;
  * the conversation holds it from then on, so a resumed session is not told
- * again.
+ * again. A session another started as an agent has the text in its prompt,
+ * and starts at the agent's effort.
  *
  * Apart from that, the last agent picked is kept for each purpose a pick
  * is made for: the composer's own, and a plugin's ask card for a review,
@@ -34,6 +35,8 @@ export type AgentPurpose = "composer" | "review";
 const byRow = $state<Record<string, SessionAgent | null>>({});
 /** The note that goes ahead of the row's next message of the user's. */
 const ahead = new Map<string, string>();
+/** The effort a started row's first run starts at, its agent's. */
+const startsAt = new Map<string, string>();
 let byId: Map<string, SessionAgent> | null = null;
 
 function isAgent(value: unknown): value is SessionAgent {
@@ -95,6 +98,22 @@ export function pickAgent(
   else ahead.delete(key);
 }
 
+/** The row's session was started as `agent`, which its prompt tells it
+    of: it starts at `effort`, where that is not null, and reading only as
+    the agent does. */
+export function startAs(key: string, agent: { key: string; title: string; readsOnly: boolean }, effort: string | null) {
+  byRow[key] = { key: agent.key, title: agent.title, readsOnly: agent.readsOnly };
+  ahead.delete(key);
+  if (effort !== null) startsAt.set(key, effort);
+  else startsAt.delete(key);
+}
+
+/** The effort the row's agent has its session start at, or null for the
+    session's own. */
+export function agentStartsAt(key: string): string | null {
+  return startsAt.get(key) ?? null;
+}
+
 /** The row's session reads only or no longer does, by the user's choice of
     mode or the agent's: kept with its agent. */
 export function agentReadsOnly(key: string, id: string | null, on: boolean) {
@@ -129,6 +148,7 @@ export function agentAheadBack(key: string, note: string) {
 export function forgetAgentRow(key: string) {
   delete byRow[key];
   ahead.delete(key);
+  startsAt.delete(key);
 }
 
 function readLast(): Partial<Record<AgentPurpose, string>> {

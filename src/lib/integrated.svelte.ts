@@ -8,6 +8,7 @@ import {
   agentIdentified,
   agentOfRow,
   agentReadsOnly,
+  agentStartsAt,
   forgetAgentRow,
   keepLastAgent,
   pickAgent,
@@ -658,7 +659,11 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
   settleAutoResume(key);
   const mode = startMode(starting, link);
   starting.modeNamed = mode ?? null;
-  const carried = carriedFor(starting);
+  // A session started as an agent starts at the agent's effort, which is
+  // lowered as a carried one is where its model does not take it.
+  const startsAt = agentStartsAt(key);
+  const carried =
+    carriedFor(starting) ?? (startsAt === null ? null : { model: null, effort: startsAt, mode: null });
   const effort = startEffort(starting, link, carried);
   starting.carried =
     carried === null
