@@ -61,9 +61,6 @@ stays, the list keeps its order, and the project comes forward with the new
 session once it starts, which is when it counts as used. None of the
 project's other sessions is put on screen on the way, so none of them
 starts. Backing out of the palette leaves everything as it was.
-The `orchestrator` folder an earlier version kept sessions in is listed among
-the projects while it holds past sessions, with no button for a new session
-and Close project alone in its menu; see [orchestrator](../orchestrator.md).
 
 A row's own button takes the place of its time while the pointer is on the
 row, so it never covers a word of the name. On a live row it is ×, which
@@ -200,9 +197,7 @@ starter, starts it in its row. One the workbench had put away before the
 quit stays put away, one whose work was over at the quit is put away by
 the same rest as before it, and one the quit cut off at work stays until
 it is woken, closed or stopped; see
-[orchestrator](../orchestrator.md#when-the-work-is-over). A session left open
-in the `orchestrator` folder of an earlier version comes back too, and
-lists that folder again; see [orchestrator](../orchestrator.md).
+[orchestrator](../orchestrator.md#when-the-work-is-over).
 
 A row that was unread when the app quit comes back unread, with the line it
 had under its name, whether it went unread by itself or was marked by hand;

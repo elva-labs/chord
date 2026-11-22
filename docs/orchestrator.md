@@ -52,23 +52,6 @@ tools, so a Codex session is given them whole as developer instructions
 too, as [the harnesses](adapters.md#naming-the-session-to-its-tools)
 describe.
 
-Earlier versions of the workbench ran such sessions in a project of their
-own, the folder `orchestrator` under the workbench's home. While
-that folder holds past sessions the sessions pane lists it as a project,
-under its name, so they can be read and resumed. A session resumed there is
-a session like any other: it is told nothing of directing, has the tools
-and hooks any project has under the [hooks](hooks.md) setting, where the
-folder has a project override of its own like any project, and keeps
-its token and what it started, as [what is
-remembered](#what-is-remembered) describes. Nothing new starts in the
-folder: it has no new-session button, its menu holds only Close project,
-and neither the agent pane nor the palette offers a new session there.
-Closing it closes its sessions and takes it out of the pane for good; it
-comes back only when a session of it returns from the last quit, or when
-you open the folder again, which lists it in front. It is never one of the
-open projects: `projects` does not list it and `start` refuses it. Nothing
-in the folder is moved or deleted.
-
 ## The tools
 
 The seven tools reach the workbench through the same tool server the app's
