@@ -144,6 +144,8 @@ struct Run {
     starter: Option<String>,
     /// Whether `cwd` is a worktree made for this session.
     made_worktree: bool,
+    /// The request of the plugin's start this session is, if it is one.
+    plugin_start: Option<String>,
     undo: Option<Undo>,
 }
 
@@ -389,9 +391,17 @@ impl Core {
         plugin: &str,
         project: &str,
         payload: &serde_json::Value,
+        acted: bool,
     ) -> Result<(), String> {
         self.plugins()?
-            .view_message(source, plugin, project, payload)
+            .view_message(source, plugin, project, payload, acted)
+    }
+
+    /// What came of a line a plugin sent a session, as the window tells
+    /// it: the plugin hears it.
+    pub fn plugin_sent(&self, request: &str, outcome: &str) -> Result<(), String> {
+        self.plugins()?.sent(request, outcome);
+        Ok(())
     }
 
     pub fn home(&self) -> Option<&Path> {
@@ -548,6 +558,7 @@ impl Core {
         bring_back: bool,
         starter: Option<&str>,
         made_worktree: bool,
+        plugin_start: Option<&str>,
         cols: u16,
         rows: u16,
         output: impl FnOnce(&str) -> Output,
@@ -615,6 +626,7 @@ impl Core {
                     starter: starter.filter(|starter| !starter.trim().is_empty()),
                     worktree: made.is_some(),
                     branch: made.as_deref(),
+                    by: plugin_start,
                 },
             );
         }
@@ -810,6 +822,7 @@ impl Core {
         compact_at: Option<u64>,
         starter: Option<&str>,
         made_worktree: bool,
+        plugin_start: Option<&str>,
     ) -> Result<crate::integrated::Started, String> {
         let run = Run {
             agent: agent.to_string(),
@@ -829,6 +842,7 @@ impl Core {
                 .filter(|starter| !starter.trim().is_empty())
                 .map(str::to_string),
             made_worktree,
+            plugin_start: plugin_start.map(str::to_string),
             undo: None,
         };
         // A conversation held at the point it went back to goes on from
@@ -933,6 +947,7 @@ impl Core {
         };
         let (starting, ending) = (self.plugins.clone(), self.plugins.clone());
         let (folder, starter) = (project.to_string_lossy().to_string(), run.starter.clone());
+        let by = run.plugin_start.clone();
         let made = cwd
             .filter(|_| run.made_worktree)
             .and_then(|cwd| git::made_branch(Path::new(&opened), cwd));
@@ -970,6 +985,7 @@ impl Core {
                             starter: starter.as_deref(),
                             worktree: made.is_some(),
                             branch: made.as_deref(),
+                            by: by.as_deref(),
                         },
                     );
                 }
@@ -2623,6 +2639,7 @@ mod tests {
             false,
             None,
             false,
+            None,
             80,
             24,
             |_| Box::new(|_: &[u8]| true),
@@ -2826,6 +2843,7 @@ mod tests {
             compact_at: None,
             starter: None,
             made_worktree: false,
+            plugin_start: None,
             undo: None,
         };
         let again = |session: Option<&str>, at: Option<&str>| Again {
@@ -2878,6 +2896,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             );
             // Refused before the folder is asked about, since trusting it
             // would not let the session start.

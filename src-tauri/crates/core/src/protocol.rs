@@ -128,6 +128,10 @@ struct SpawnParams {
     /// Whether `cwd` is a worktree the window had made for this session.
     #[serde(default)]
     made_worktree: bool,
+    /// The request of the plugin's start the user allowed, for a session a
+    /// plugin asked for.
+    #[serde(default)]
+    plugin_start: Option<String>,
     cols: u16,
     rows: u16,
 }
@@ -165,6 +169,10 @@ struct IntegratedStartParams {
     /// Whether `cwd` is a worktree the window had made for this session.
     #[serde(default)]
     made_worktree: bool,
+    /// The request of the plugin's start the user allowed, for a session a
+    /// plugin asked for.
+    #[serde(default)]
+    plugin_start: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -472,6 +480,15 @@ struct PluginViewMessageParams {
     project: String,
     #[serde(default)]
     payload: Value,
+    /// The message came of the user's click or key on the page.
+    #[serde(default)]
+    acted: bool,
+}
+
+#[derive(Deserialize)]
+struct PluginSentParams {
+    request: String,
+    outcome: String,
 }
 
 #[derive(Deserialize)]
@@ -606,6 +623,7 @@ pub fn dispatch(
                 p.bring_back,
                 p.starter.as_deref(),
                 p.made_worktree,
+                p.plugin_start.as_deref(),
                 p.cols,
                 p.rows,
                 make_output,
@@ -629,6 +647,7 @@ pub fn dispatch(
                 p.compact_at,
                 p.starter.as_deref(),
                 p.made_worktree,
+                p.plugin_start.as_deref(),
             )?)
         }
         "integrated_trust" => {
@@ -923,7 +942,12 @@ pub fn dispatch(
         }
         "plugin_view_message" => {
             let p: PluginViewMessageParams = parse(params)?;
-            core.plugin_view_message(&p.source, &p.plugin, &p.project, &p.payload)?;
+            core.plugin_view_message(&p.source, &p.plugin, &p.project, &p.payload, p.acted)?;
+            Ok(Value::Null)
+        }
+        "plugin_sent" => {
+            let p: PluginSentParams = parse(params)?;
+            core.plugin_sent(&p.request, &p.outcome)?;
             Ok(Value::Null)
         }
         "list_dirs" => {

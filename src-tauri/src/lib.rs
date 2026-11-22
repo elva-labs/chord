@@ -120,6 +120,7 @@ async fn pty_spawn(
     bring_back: Option<bool>,
     starter: Option<String>,
     made_worktree: Option<bool>,
+    plugin_start: Option<String>,
     cols: u16,
     rows: u16,
     on_output: Channel,
@@ -151,6 +152,7 @@ async fn pty_spawn(
                 bring_back.unwrap_or(false),
                 starter.as_deref(),
                 made_worktree.unwrap_or(false),
+                plugin_start.as_deref(),
                 cols,
                 rows,
                 |_| to_channel(on_output),
@@ -161,7 +163,7 @@ async fn pty_spawn(
             let connection = remotes.connection(&host)?;
             let spawned = connection.call(
                 "pty_spawn",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "prompt": prompt, "model": model, "mode": mode, "configDir": config_dir, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "bringBack": bring_back.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "cols": cols, "rows": rows }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "prompt": prompt, "model": model, "mode": mode, "configDir": config_dir, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "bringBack": bring_back.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start, "cols": cols, "rows": rows }),
             )?;
             let id = spawned["ptyId"].as_str().ok_or("no pty id")?.to_string();
             connection.attach_output(&id, to_channel(on_output));
@@ -194,6 +196,7 @@ async fn integrated_start(
     compact_at: Option<u64>,
     starter: Option<String>,
     made_worktree: Option<bool>,
+    plugin_start: Option<String>,
 ) -> Result<Value, String> {
     let core = Arc::clone(&core);
     let remotes = Arc::clone(&remotes);
@@ -218,11 +221,12 @@ async fn integrated_start(
             compact_at,
             starter.as_deref(),
             made_worktree.unwrap_or(false),
+            plugin_start.as_deref(),
         )?),
         Route::Remote { host, rest } => {
             let started = remotes.connection(&host)?.call(
                 "integrated_start",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "starter": starter, "madeWorktree": made_worktree.unwrap_or(false) }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start }),
             )?;
             let id = started["id"].as_str().ok_or("no session id")?;
             let id = with_host_id(&host, id);
@@ -2172,17 +2176,41 @@ async fn plugin_view_message(
     plugin: String,
     project: String,
     payload: Value,
+    acted: Option<bool>,
 ) -> Result<Value, String> {
     let (s, p, d) = (source.clone(), plugin.clone(), payload.clone());
+    let acted = acted.unwrap_or(false);
     routed(
         Arc::clone(&core),
         Arc::clone(&remotes),
         route(&project),
         "plugin_view_message",
         move |rest| {
-            json!({ "source": source, "plugin": plugin, "project": rest, "payload": payload })
+            json!({ "source": source, "plugin": plugin, "project": rest, "payload": payload, "acted": acted })
         },
-        move |core, project| core.plugin_view_message(&s, &p, project, &d),
+        move |core, project| core.plugin_view_message(&s, &p, project, &d, acted),
+    )
+    .await
+}
+
+/// What came of a line a plugin sent a session, told to the plugin where
+/// the project it asked in is.
+#[tauri::command]
+async fn plugin_sent(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    request: String,
+    outcome: String,
+) -> Result<Value, String> {
+    let (r, o) = (request.clone(), outcome.clone());
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "plugin_sent",
+        move |_| json!({ "request": request, "outcome": outcome }),
+        move |core, _| core.plugin_sent(&r, &o),
     )
     .await
 }
@@ -2463,6 +2491,7 @@ pub fn run() {
             plugin_projects,
             plugin_action,
             plugin_view_message,
+            plugin_sent,
             conduct_answer,
             browser_answer,
             settings_answer,

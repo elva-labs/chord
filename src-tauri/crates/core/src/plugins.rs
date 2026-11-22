@@ -45,6 +45,13 @@ pub const PLUGIN_MARK: &str = "plugin_mark";
 /// The event a web address a plugin opens is told by.
 pub const PLUGIN_OPEN_URL: &str = "plugin_open_url";
 
+/// The event a plugin's ask to start a session is told by. The window puts
+/// it before the user and starts nothing without a yes.
+pub const PLUGIN_START: &str = "plugin_start";
+
+/// The event a line a plugin sends to a session it started is told by.
+pub const PLUGIN_SEND: &str = "plugin_send";
+
 /// The event told when an enabled plugin comes to listen for commands, or
 /// the last one stops, so the hooks are brought up to date at once.
 pub const PLUGIN_HEARS: &str = "plugin_hears";
@@ -373,6 +380,39 @@ pub struct OpenUrl {
     pub url: String,
 }
 
+/// A plugin's ask to start a session, as told to the window. The request
+/// is what the start names it by, so the session is known to be the
+/// plugin's from its first line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StartAsk {
+    pub source: String,
+    pub plugin: String,
+    pub project: String,
+    pub request: String,
+    pub prompt: String,
+    /// The name the plugin asks for, on one line and cut to `NAME_MOST`.
+    pub name: Option<String>,
+    /// Whether it asks for a worktree of the session's own.
+    pub worktree: bool,
+}
+
+/// A line a plugin sends to a session it started, as told to the window,
+/// which says what came of it with [`Plugins::sent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SendAsk {
+    pub source: String,
+    pub plugin: String,
+    pub project: String,
+    pub request: String,
+    /// The agent's id of the session, as the plugin names it.
+    pub session: String,
+    pub text: String,
+}
+
+/// What came of a plugin's line to a session, as the window says and the
+/// plugin hears it.
+pub const SENT: [&str; 3] = ["delivered", "gone", "refused"];
+
 /// What a plugin said went wrong with an action, for the window to show.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Notice {
@@ -458,25 +498,76 @@ static LAUNCHES: AtomicU64 = AtomicU64::new(0);
 
 type Key = (String, String);
 
-/// How long after an action is sent its plugin may open a web address for
-/// it.
+/// How long after the user acts its plugin may answer: open a web address,
+/// ask to start a session, or send a line to one it started.
 const OPEN_WINDOW: Duration = Duration::from_secs(30);
 
-/// An action waiting for an answer: the plugin it went to, when, and
-/// whether that plugin has opened its one web address for it.
-struct Waiting {
-    plugin: Key,
-    sent: Instant,
-    opened: bool,
+/// The most a plugin's prompt for a session may hold, in bytes.
+const PROMPT_MOST: usize = 8 * 1024;
+
+/// The most a plugin's line to a session may hold, in bytes.
+const LINE_MOST: usize = 4 * 1024;
+
+/// The most a plugin's name for a session may hold, in characters.
+const NAME_MOST: usize = 60;
+
+/// The most a plugin's own ref for a session may hold, in bytes.
+const REF_MOST: usize = 256;
+
+/// The ways a plugin may answer something the user did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reply {
+    Open,
+    Start,
+    Send,
 }
 
-impl Waiting {
-    /// Whether `plugin` may open a web address for this action at `now`:
-    /// the action went to it less than `OPEN_WINDOW` ago and it has opened
-    /// none for it yet.
-    fn may_open(&self, plugin: &Key, now: Instant) -> bool {
-        &self.plugin == plugin && !self.opened && now.duration_since(self.sent) < OPEN_WINDOW
+/// Something the user did that went to a plugin: an action, or a message
+/// from its page that came of a click or a key. For `OPEN_WINDOW` after it
+/// was sent its plugin may answer it once in each way: open one web
+/// address, ask to start one session, send one line to a session it
+/// started.
+struct Act {
+    plugin: Key,
+    sent: Instant,
+    spent: Vec<Reply>,
+}
+
+impl Act {
+    fn new(plugin: Key) -> Self {
+        Self {
+            plugin,
+            sent: Instant::now(),
+            spent: Vec::new(),
+        }
     }
+
+    /// Whether `plugin` may answer this act so at `now`: it went to that
+    /// plugin less than `OPEN_WINDOW` ago, and the plugin has not answered
+    /// it so yet.
+    fn may(&self, plugin: &Key, reply: Reply, now: Instant) -> bool {
+        &self.plugin == plugin
+            && now.duration_since(self.sent) < OPEN_WINDOW
+            && !self.spent.contains(&reply)
+    }
+}
+
+/// A session a plugin asked to start: the plugin, the project, the plugin's
+/// own ref for it, and the agent's ids it has run under since the user
+/// allowed it, none before.
+struct Owned {
+    plugin: Key,
+    project: String,
+    reference: Option<String>,
+    ids: Vec<String>,
+}
+
+/// A plugin's line on its way to a session, until the window says what
+/// came of it: the plugin, the act it answered, and the session it named.
+struct Sending {
+    plugin: Key,
+    answers: String,
+    session: String,
 }
 
 /// An agent's pty as the runtime follows it: the session it runs, known at
@@ -493,6 +584,8 @@ struct Pty {
     worktree: bool,
     /// The branch that worktree was made on, when the app knows it.
     branch: Option<String>,
+    /// The start of a plugin's that this session is, by its request.
+    by: Option<String>,
 }
 
 /// A session as it starts, for [`Plugins::session_started`].
@@ -513,6 +606,9 @@ pub struct Started<'a> {
     pub worktree: bool,
     /// The branch that worktree was made on, when the app knows it.
     pub branch: Option<&'a str>,
+    /// The request of the plugin's start the user allowed, for a session a
+    /// plugin asked for, on every run of it.
+    pub by: Option<&'a str>,
 }
 
 /// A shell command a session ran, for [`Plugins::command_ran`].
@@ -563,9 +659,19 @@ struct Inner {
     /// The page each plugin last sent for a project, so what a plugin
     /// leaves in the viewer can be taken out of it when it goes.
     views: Mutex<HashMap<ViewKey, ViewEvent>>,
-    /// The actions waiting for an answer, which tells an action's result
-    /// from a tool call's, until it comes or the plugin goes.
-    pending: Mutex<HashMap<String, Waiting>>,
+    /// The actions waiting for an answer, by the plugin they went to, which
+    /// tells an action's result from a tool call's, until it comes or the
+    /// plugin goes.
+    pending: Mutex<HashMap<String, Key>>,
+    /// What the user did that went to a plugin, by its id, for
+    /// `OPEN_WINDOW` or until the plugin goes.
+    acts: Mutex<HashMap<String, Act>>,
+    /// The sessions plugins asked to start, by request, while the plugin
+    /// is on.
+    owned: Mutex<HashMap<String, Owned>>,
+    /// The lines plugins sent to sessions, by request, until the window
+    /// says what came of each.
+    sending: Mutex<HashMap<String, Sending>>,
     /// The mark each plugin last put on a session's row.
     marks: Mutex<HashMap<MarkKey, MarkEvent>>,
     /// Where the build of a plugin with no process has got to: building,
@@ -950,6 +1056,9 @@ impl Plugins {
                 sections: Mutex::new(HashMap::new()),
                 views: Mutex::new(HashMap::new()),
                 pending: Mutex::new(HashMap::new()),
+                acts: Mutex::new(HashMap::new()),
+                owned: Mutex::new(HashMap::new()),
+                sending: Mutex::new(HashMap::new()),
                 marks: Mutex::new(HashMap::new()),
                 building: Mutex::new(HashMap::new()),
                 starting: Mutex::new(()),
@@ -1086,23 +1195,26 @@ impl Plugins {
     }
 
     /// Hands a plugin's page's message to the plugin and comes back at
-    /// once: whatever the plugin makes of it arrives as its own line.
+    /// once: whatever the plugin makes of it arrives as its own line. A
+    /// message the window says came of the user's click or key carries an
+    /// id, which the plugin answers as it answers an action.
     pub fn view_message(
         &self,
         source_id: &str,
         name: &str,
         project: &str,
         payload: &serde_json::Value,
+        acted: bool,
     ) -> Result<(), String> {
-        self.inner.send(
-            source_id,
-            name,
-            &serde_json::json!({
-                "type": "view_message",
-                "project": project,
-                "payload": payload,
-            }),
-        )
+        self.inner
+            .view_message(source_id, name, project, payload, acted)
+    }
+
+    /// What came of a plugin's line to a session, one of [`SENT`], which
+    /// the plugin hears with the act it answered. A request not on its way,
+    /// or an outcome not one of those, says nothing.
+    pub fn sent(&self, request: &str, outcome: &str) {
+        self.inner.sent(request, outcome);
     }
 }
 
@@ -2479,11 +2591,26 @@ impl Inner {
             out
         };
         // Its actions are answered by no one now, and the next process
-        // under its name opens nothing for them.
+        // under its name answers nothing the user did for this one. A
+        // plugin turned off owns none of the sessions it started.
         self.pending
             .lock()
             .expect("plugins lock")
-            .retain(|_, waiting| waiting.plugin != key);
+            .retain(|_, plugin| plugin != &key);
+        self.acts
+            .lock()
+            .expect("plugins lock")
+            .retain(|_, act| act.plugin != key);
+        self.sending
+            .lock()
+            .expect("plugins lock")
+            .retain(|_, sending| sending.plugin != key);
+        if !still_on {
+            self.owned
+                .lock()
+                .expect("plugins lock")
+                .retain(|_, owned| owned.plugin != key);
+        }
         self.publish();
         self.forget_sections(source_id, name);
         self.forget_views(source_id, name);
@@ -2776,6 +2903,8 @@ impl Inner {
             "open" | "diff" | "present" | "notify" => self.requested(kind, message),
             "mark" => self.marked(source_id, name, message),
             "open_url" => self.open_url(source_id, name, message),
+            "start" => self.start_asked(source_id, name, message),
+            "send" => self.send_asked(source_id, name, message),
             _ => {}
         }
     }
@@ -2868,11 +2997,36 @@ impl Inner {
         }
     }
 
+    /// Answers what the user did that went to `plugin` in this way, if the
+    /// plugin still may: whether it did.
+    fn spend(&self, id: &str, plugin: &Key, reply: Reply) -> bool {
+        let mut acts = self.acts.lock().expect("plugins lock");
+        match acts.get_mut(id) {
+            Some(act) if act.may(plugin, reply, Instant::now()) => {
+                act.spent.push(reply);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Keeps what the user did that went to a plugin, under its id, and
+    /// forgets what is too old to answer.
+    fn acted(&self, id: &str, plugin: Key) {
+        let mut acts = self.acts.lock().expect("plugins lock");
+        let now = Instant::now();
+        acts.retain(|_, act| now.duration_since(act.sent) < OPEN_WINDOW);
+        acts.insert(id.to_string(), Act::new(plugin));
+    }
+
     /// One `open_url` line from a plugin: a web address for the user's
-    /// browser, for the action it names. Only http and https open, one for
-    /// each action, while that action waits for its result and for 30
-    /// seconds at most after it was sent, so the browser opens when the
-    /// user asked something of the plugin and at no other time.
+    /// browser, in answer to something the user did, named by `answers`: an
+    /// action, or a message from the plugin's page that came of a click or
+    /// a key. Only http and https open, one for each, for 30 seconds at
+    /// most after it was sent, so the browser opens when the user asked
+    /// something of the plugin and at no other time. A line that names an
+    /// action by `action` opens only while that action waits for its
+    /// result.
     fn open_url(&self, source_id: &str, name: &str, message: &serde_json::Value) {
         let text = |key: &str| {
             message
@@ -2881,21 +3035,25 @@ impl Inner {
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
         };
-        let (Some(project), Some(url), Some(action)) =
-            (text("project"), text("url"), text("action"))
-        else {
+        let (Some(project), Some(url)) = (text("project"), text("url")) else {
             return;
         };
         if !web_address(url) {
             return;
         }
         let key: Key = (source_id.to_string(), name.to_string());
-        {
-            let mut pending = self.pending.lock().expect("plugins lock");
-            match pending.get_mut(action) {
-                Some(waiting) if waiting.may_open(&key, Instant::now()) => waiting.opened = true,
-                _ => return,
+        let id = match (text("answers"), text("action")) {
+            (Some(answers), _) => answers,
+            (None, Some(action)) => {
+                if self.pending.lock().expect("plugins lock").get(action) != Some(&key) {
+                    return;
+                }
+                action
             }
+            (None, None) => return,
+        };
+        if !self.spend(id, &key, Reply::Open) {
+            return;
         }
         crate::events::emit(
             &self.sink,
@@ -2907,6 +3065,186 @@ impl Inner {
                 url: url.to_string(),
             },
         );
+    }
+
+    /// One `start` line from a plugin: a session it asks to start in an
+    /// open project, in answer to something the user did, once for each
+    /// and for 30 seconds at most. Nothing starts here: the window asks
+    /// the user, and the start it makes on a yes names the request, which
+    /// makes the session the plugin's. A prompt, a name or a ref over its
+    /// size, or a project not open here, asks nothing.
+    fn start_asked(&self, source_id: &str, name: &str, message: &serde_json::Value) {
+        let text = |key: &str| {
+            message
+                .get(key)
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        };
+        let (Some(answers), Some(project), Some(prompt)) =
+            (text("answers"), text("project"), text("prompt"))
+        else {
+            return;
+        };
+        if prompt.len() > PROMPT_MOST {
+            return;
+        }
+        if !self
+            .projects
+            .lock()
+            .expect("plugins lock")
+            .iter()
+            .any(|open| open == project)
+        {
+            return;
+        }
+        let reference = match message.get("ref") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(reference)) if reference.len() <= REF_MOST => {
+                Some(reference.clone())
+            }
+            Some(_) => return,
+        };
+        let worktree = match message.get("worktree") {
+            None | Some(serde_json::Value::Null) => false,
+            Some(serde_json::Value::Bool(worktree)) => *worktree,
+            Some(_) => return,
+        };
+        let named = text("name")
+            .map(crate::show::one_line)
+            .map(|named| named.chars().take(NAME_MOST).collect::<String>())
+            .filter(|named| !named.is_empty());
+        let key: Key = (source_id.to_string(), name.to_string());
+        if !self.spend(answers, &key, Reply::Start) {
+            return;
+        }
+        let request = uuid::Uuid::new_v4().to_string();
+        self.owned.lock().expect("plugins lock").insert(
+            request.clone(),
+            Owned {
+                plugin: key,
+                project: project.to_string(),
+                reference,
+                ids: Vec::new(),
+            },
+        );
+        crate::events::emit(
+            &self.sink,
+            PLUGIN_START,
+            &StartAsk {
+                source: source_id.to_string(),
+                plugin: name.to_string(),
+                project: project.to_string(),
+                request,
+                prompt: prompt.to_string(),
+                name: named,
+                worktree,
+            },
+        );
+    }
+
+    /// One `send` line from a plugin: a line for a session it started, by
+    /// any agent id the session ran under, in answer to something the user
+    /// did, once for each and for 30 seconds at most. A session another
+    /// started, or the user, or one the plugin's start has not started yet,
+    /// is sent nothing, nor is a line over its size. The window delivers
+    /// it, and the plugin hears what came of it as a `sent` line.
+    fn send_asked(&self, source_id: &str, name: &str, message: &serde_json::Value) {
+        let text = |key: &str| {
+            message
+                .get(key)
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        };
+        let (Some(answers), Some(session), Some(line)) =
+            (text("answers"), text("session"), text("text"))
+        else {
+            return;
+        };
+        if line.len() > LINE_MOST {
+            return;
+        }
+        let key: Key = (source_id.to_string(), name.to_string());
+        let Some(project) = self
+            .owned
+            .lock()
+            .expect("plugins lock")
+            .values()
+            .find(|owned| owned.plugin == key && owned.ids.iter().any(|id| id == session))
+            .map(|owned| owned.project.clone())
+        else {
+            return;
+        };
+        if !self.spend(answers, &key, Reply::Send) {
+            return;
+        }
+        let request = uuid::Uuid::new_v4().to_string();
+        self.sending.lock().expect("plugins lock").insert(
+            request.clone(),
+            Sending {
+                plugin: key,
+                answers: answers.to_string(),
+                session: session.to_string(),
+            },
+        );
+        crate::events::emit(
+            &self.sink,
+            PLUGIN_SEND,
+            &SendAsk {
+                source: source_id.to_string(),
+                plugin: name.to_string(),
+                project,
+                request,
+                session: session.to_string(),
+                text: line.to_string(),
+            },
+        );
+    }
+
+    fn sent(&self, request: &str, outcome: &str) {
+        if !SENT.contains(&outcome) {
+            return;
+        }
+        let Some(sending) = self.sending.lock().expect("plugins lock").remove(request) else {
+            return;
+        };
+        let (source_id, name) = &sending.plugin;
+        let _ = self.send(
+            source_id,
+            name,
+            &serde_json::json!({
+                "type": "sent",
+                "answers": sending.answers,
+                "session": sending.session,
+                "outcome": outcome,
+            }),
+        );
+    }
+
+    fn view_message(
+        &self,
+        source_id: &str,
+        name: &str,
+        project: &str,
+        payload: &serde_json::Value,
+        acted: bool,
+    ) -> Result<(), String> {
+        let mut message = serde_json::json!({
+            "type": "view_message",
+            "project": project,
+            "payload": payload,
+        });
+        let id = acted.then(|| uuid::Uuid::new_v4().to_string());
+        if let Some(id) = &id {
+            message["id"] = serde_json::json!(id);
+            self.acted(id, (source_id.to_string(), name.to_string()));
+        }
+        let sent = self.send(source_id, name, &message);
+        if let (Err(_), Some(id)) = (&sent, &id) {
+            self.acts.lock().expect("plugins lock").remove(id);
+        }
+        sent
     }
 
     /// The room a plugin's view asks for and the directory its pages come
@@ -3213,16 +3551,15 @@ impl Inner {
         if let Some(session) = session.and_then(|token| self.session_of(token)) {
             message["session"] = serde_json::Value::String(session);
         }
-        self.pending.lock().expect("plugins lock").insert(
-            id.clone(),
-            Waiting {
-                plugin: (source_id.to_string(), name.to_string()),
-                sent: Instant::now(),
-                opened: false,
-            },
-        );
+        let key: Key = (source_id.to_string(), name.to_string());
+        self.pending
+            .lock()
+            .expect("plugins lock")
+            .insert(id.clone(), key.clone());
+        self.acted(&id, key);
         if let Err(error) = self.send(source_id, name, &message) {
             self.pending.lock().expect("plugins lock").remove(&id);
+            self.acts.lock().expect("plugins lock").remove(&id);
             return Err(error);
         }
         Ok(())
@@ -3309,14 +3646,78 @@ impl Inner {
                 .branch
                 .filter(|branch| started.worktree && !branch.is_empty())
                 .map(str::to_string),
+            by: started
+                .by
+                .filter(|request| self.owns(request, started.project))
+                .map(str::to_string),
         };
         let line = session_line("started", &pty);
+        if let (Some(request), Some(session)) = (&pty.by, &pty.session) {
+            self.own(request, session);
+        }
+        let by = pty.by.clone();
         self.ptys
             .lock()
             .expect("plugins lock")
             .insert(pty_id.to_string(), pty);
         if let Some(line) = line {
-            self.broadcast(&line);
+            self.tell_session(&line, by.as_deref());
+        }
+    }
+
+    /// Whether `request` is a plugin's start the user may have allowed, in
+    /// this project.
+    fn owns(&self, request: &str, project: &str) -> bool {
+        self.owned
+            .lock()
+            .expect("plugins lock")
+            .get(request)
+            .is_some_and(|owned| owned.project == project)
+    }
+
+    /// The session runs under this id for the plugin whose start it is, so
+    /// a line the plugin sends by it reaches it.
+    fn own(&self, request: &str, session: &str) {
+        if session.is_empty() {
+            return;
+        }
+        let mut owned = self.owned.lock().expect("plugins lock");
+        if let Some(owned) = owned.get_mut(request) {
+            if !owned.ids.iter().any(|id| id == session) {
+                owned.ids.push(session.to_string());
+            }
+        }
+    }
+
+    /// Tells every plugin a line about a session. The plugin the session
+    /// is a start of hears it with the ref it gave that start, which no
+    /// other plugin is shown.
+    fn tell_session(&self, line: &serde_json::Value, by: Option<&str>) {
+        let owner = by.and_then(|request| {
+            let owned = self.owned.lock().expect("plugins lock");
+            let owned = owned.get(request)?;
+            let reference = owned.reference.clone()?;
+            Some((owned.plugin.clone(), reference))
+        });
+        let Some((plugin, reference)) = owner else {
+            self.broadcast(line);
+            return;
+        };
+        let stdins: Vec<(bool, Arc<Mutex<ChildStdin>>)> = {
+            let running = self.running.lock().expect("plugins lock");
+            running
+                .iter()
+                .filter(|(_, live)| matches!(live.state, State::Starting | State::Running))
+                .map(|(key, live)| (key == &plugin, Arc::clone(&live.stdin)))
+                .collect()
+        };
+        let mut theirs = line.clone();
+        theirs["ref"] = serde_json::json!(reference);
+        for (own, stdin) in stdins {
+            if let Ok(mut stdin) = stdin.lock() {
+                let _ = writeln!(stdin, "{}", if own { &theirs } else { line });
+                let _ = stdin.flush();
+            }
         }
     }
 
@@ -3330,10 +3731,14 @@ impl Inner {
                 return;
             }
             pty.session = Some(session.to_string());
-            session_line("started", pty)
+            (session_line("started", pty), pty.by.clone())
         };
+        let (line, by) = line;
+        if let Some(request) = &by {
+            self.own(request, session);
+        }
         if let Some(line) = line {
-            self.broadcast(&line);
+            self.tell_session(&line, by.as_deref());
         }
     }
 
@@ -3359,7 +3764,7 @@ impl Inner {
         let Some(line) = session_line("ended", &pty) else {
             return;
         };
-        self.broadcast(&line);
+        self.tell_session(&line, pty.by.as_deref());
         if still {
             return;
         }
@@ -3497,6 +3902,7 @@ mod tests {
             starter: None,
             worktree: false,
             branch: None,
+            by: None,
         }
     }
 
@@ -3623,6 +4029,50 @@ while IFS= read -r line; do
       printf '{"type":"open_url","project":"PROJECT","action":"%s","url":"https://example.com/pull/1"}\n' "$id"
       printf '{"type":"open_url","project":"PROJECT","action":"%s","url":"https://example.com/pull/2"}\n' "$id"
       printf '{"type":"result","id":"%s"}\n' "$id"
+      ;;
+  esac
+done
+"#;
+
+    /// A plugin that asks to start a session and to send lines to one,
+    /// with nothing the user did behind it, for a session not its own, over
+    /// the sizes, twice for one act, and once as it should, and writes down
+    /// every line it hears.
+    #[cfg(unix)]
+    const STARTS: &str = r#"#!/bin/sh
+echo '{"type":"hello","name":"board","version":"1.0.0"}'
+echo '{"type":"start","answers":"made-up","project":"PROJECT","prompt":"Nothing asked for this"}'
+long=$(printf '%9000s' '' | tr ' ' x)
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> received.txt
+  case "$line" in
+    *'"type":"stop"'*) exit 0;;
+    *'"type":"action"'*)
+      id=$(printf '%s' "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+      printf '{"type":"start","answers":"%s","project":"/not-open","prompt":"Elsewhere"}\n' "$id"
+      printf '{"type":"start","answers":"%s","project":"PROJECT","prompt":"   "}\n' "$id"
+      printf '{"type":"start","answers":"%s","project":"PROJECT","prompt":"%s"}\n' "$id" "$long"
+      printf '{"type":"start","answers":"%s","project":"PROJECT","prompt":"Bad ref","ref":{"pr":7}}\n' "$id"
+      printf '{"type":"start","answers":"%s","project":"PROJECT","prompt":"Bad worktree","worktree":"yes"}\n' "$id"
+      printf '{"type":"send","answers":"%s","session":"s-1","text":"not its session"}\n' "$id"
+      printf '{"type":"start","answers":"%s","project":"PROJECT","prompt":"Review pull request 7","name":"Review   pull request 7, a title that goes on and on past what a row fits","ref":"pr-7","worktree":true}\n' "$id"
+      printf '{"type":"start","answers":"%s","project":"PROJECT","prompt":"A second start"}\n' "$id"
+      printf '{"type":"result","id":"%s"}\n' "$id"
+      echo '{"type":"view_data","project":"PROJECT","data":{"done":"action"}}'
+      ;;
+    *'"type":"view_message"'*)
+      case "$line" in
+        *'"id":"'*)
+          id=$(printf '%s' "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+          printf '{"type":"send","answers":"%s","session":"s-1","text":"not its session"}\n' "$id"
+          printf '{"type":"send","answers":"%s","session":"s-own","text":"%s"}\n' "$id" "$long"
+          printf '{"type":"send","answers":"%s","session":"s-own","text":"Address the review"}\n' "$id"
+          printf '{"type":"send","answers":"%s","session":"s-own","text":"A second line"}\n' "$id"
+          printf '{"type":"open_url","project":"PROJECT","answers":"%s","url":"https://example.com/pull/7"}\n' "$id"
+          printf '{"type":"open_url","project":"PROJECT","answers":"%s","url":"https://example.com/pull/8"}\n' "$id"
+          echo '{"type":"view_data","project":"PROJECT","data":{"done":"click"}}'
+          ;;
+      esac
       ;;
   esac
 done
@@ -4476,16 +4926,20 @@ run = ["sh", "main.sh"]
                 "pages",
                 &here,
                 &serde_json::json!({ "want": "rows" }),
+                false,
             )
             .unwrap();
         let answer = wait(PLUGIN_VIEW_DATA, &|payload| {
             payload["data"]["got"] == "pong"
         });
         assert_eq!(answer["plugin"], "pages");
+        // A click for a plugin that is not there leaves nothing it could
+        // answer later.
         let refused = plugins
-            .view_message(&added.id, "missing", &here, &serde_json::json!({}))
+            .view_message(&added.id, "missing", &here, &serde_json::json!({}), true)
             .unwrap_err();
         assert_eq!(refused, "the plugin is not running");
+        assert!(plugins.inner.acts.lock().unwrap().is_empty());
 
         // Off, and the page it left goes with it.
         plugins.enable(&added.id, "pages", false).unwrap();
@@ -5266,6 +5720,7 @@ run = ["sh", "main.sh"]
                 starter: None,
                 worktree: true,
                 branch: Some("fix"),
+                by: None,
             },
         );
         plugins.session_started(
@@ -5278,6 +5733,7 @@ run = ["sh", "main.sh"]
                 starter: Some("s-1"),
                 worktree: false,
                 branch: Some("ignored without a worktree"),
+                by: None,
             },
         );
         let added = plugins.add(&here, None).unwrap();
@@ -5480,21 +5936,271 @@ run = ["sh", "main.sh"]
         assert!(cleared() > before, "the mark stayed");
     }
 
+    #[cfg(unix)]
     #[test]
-    fn an_action_lets_its_own_plugin_open_one_web_address_for_30_seconds() {
+    fn a_plugin_starts_and_sends_only_in_answer_to_the_user_and_only_to_its_own() {
+        let home = Scratch::absent("plugins-starts-home");
+        let dir = source_with(
+            r#"
+[[plugin]]
+name = "board"
+path = "github"
+description = "Starts sessions."
+version = "1.0.0"
+run = ["sh", "main.sh"]
+view = "wide"
+
+[[plugin]]
+name = "ears"
+path = "ears"
+description = "Listens."
+version = "1.0.0"
+run = ["sh", "main.sh"]
+"#,
+            "starts",
+        );
+        let here = dunce::canonicalize(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        std::fs::write(dir.join("github/main.sh"), STARTS.replace("PROJECT", &here)).unwrap();
+        std::fs::create_dir_all(dir.join("ears")).unwrap();
+        std::fs::write(dir.join("ears/main.sh"), RECORDS).unwrap();
+        let recorder = Arc::new(Recorder::default());
+        let plugins = plugins_at(&home, recorder.clone());
+        plugins.set_projects(vec![here.clone()]);
+        plugins.session_started("pty-1", started(Some("s-1"), Some("t-1"), &here));
+        let added = plugins.add(&here, None).unwrap();
+        plugins.enable(&added.id, "board", true).unwrap();
+        plugins.enable(&added.id, "ears", true).unwrap();
+
+        let events = |event: &str| -> Vec<serde_json::Value> {
+            recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(name, _)| name == event)
+                .map(|(_, payload)| payload.clone())
+                .collect()
+        };
+        let lines = |plugin: &str| -> Vec<serde_json::Value> {
+            std::fs::read_to_string(dir.join(plugin).join("received.txt"))
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|line| serde_json::from_str(line).ok())
+                .collect()
+        };
+        let heard = |plugin: &str, ok: &dyn Fn(&serde_json::Value) -> bool| {
+            for _ in 0..50 {
+                if let Some(line) = lines(plugin).into_iter().find(|line| ok(line)) {
+                    return line;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            panic!("{plugin} heard nothing of the kind");
+        };
+        // The plugin says when it has said all it says to one thing, so
+        // what it was refused is known to have been refused.
+        let done = |what: &str| {
+            for _ in 0..50 {
+                if events(PLUGIN_VIEW_DATA)
+                    .iter()
+                    .any(|payload| payload["data"]["done"] == what)
+                {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            panic!("the plugin did not finish with the {what}");
+        };
+        heard("github", &|line| {
+            line["type"] == "session" && line["id"] == "s-1"
+        });
+        heard("ears", &|line| {
+            line["type"] == "session" && line["id"] == "s-1"
+        });
+
+        // An action is something the user did: of all the starts that
+        // answer it, the one in an open project with a prompt, a ref and a
+        // worktree that are what they should be asks the window, once. The
+        // start the plugin sent of its own asks nothing, and the session
+        // the user started is sent nothing.
+        plugins
+            .action(
+                &added.id,
+                "board",
+                "checks",
+                "review",
+                None,
+                &serde_json::json!({}),
+                &here,
+                None,
+            )
+            .unwrap();
+        done("action");
+        let asked = events(PLUGIN_START);
+        assert_eq!(asked.len(), 1, "{asked:?}");
+        let ask = &asked[0];
+        assert_eq!(ask["source"], added.id);
+        assert_eq!(ask["plugin"], "board");
+        assert_eq!(ask["project"], here);
+        assert_eq!(ask["prompt"], "Review pull request 7");
+        assert_eq!(ask["worktree"], true);
+        let name = ask["name"].as_str().unwrap();
+        assert_eq!(name.chars().count(), NAME_MOST);
+        assert!(name.starts_with("Review pull request 7, a title"), "{name}");
+        assert!(ask.get("ref").is_none(), "the window is not shown the ref");
+        let request = ask["request"].as_str().unwrap().to_string();
+        assert!(events(PLUGIN_SEND).is_empty());
+
+        // A session started under a request the plugin was never given, or
+        // under its request in another project, is not its own.
+        plugins.session_started(
+            "pty-forged",
+            Started {
+                by: Some("forged"),
+                ..started(Some("s-forged"), Some("t-forged"), &here)
+            },
+        );
+        plugins.session_started(
+            "pty-elsewhere",
+            Started {
+                by: Some(&request),
+                ..started(Some("s-elsewhere"), Some("t-elsewhere"), "/elsewhere")
+            },
+        );
+        // The user's yes starts it under the request, with its id said
+        // later, and it goes on under a new id: both are the plugin's, and
+        // the plugin alone hears them with its ref.
+        plugins.session_started(
+            "pty-own",
+            Started {
+                by: Some(&request),
+                ..started(None, Some("t-own"), &here)
+            },
+        );
+        plugins.session_identified("pty-own", "s-own");
+        plugins.session_started(
+            "pty-again",
+            Started {
+                by: Some(&request),
+                ..started(Some("s-own-2"), Some("t-own"), &here)
+            },
+        );
+        for id in ["s-own", "s-own-2"] {
+            let theirs = heard("github", &|line| {
+                line["type"] == "session" && line["id"] == id
+            });
+            assert_eq!(theirs["ref"], "pr-7", "{id}");
+            let others = heard("ears", &|line| {
+                line["type"] == "session" && line["id"] == id
+            });
+            assert!(others.get("ref").is_none(), "{id}: {others}");
+        }
+        for id in ["s-forged", "s-elsewhere"] {
+            let line = heard("github", &|line| {
+                line["type"] == "session" && line["id"] == id
+            });
+            assert!(line.get("ref").is_none(), "{id}: {line}");
+        }
+        assert_eq!(
+            plugins.inner.owned.lock().unwrap()[&request].ids,
+            ["s-own", "s-own-2"]
+        );
+
+        // A message from the page that came of no click carries no id, and
+        // so nothing can answer it.
+        plugins
+            .view_message(
+                &added.id,
+                "board",
+                &here,
+                &serde_json::json!({"want": "rows"}),
+                false,
+            )
+            .unwrap();
+        let unasked = heard("github", &|line| line["type"] == "view_message");
+        assert!(unasked.get("id").is_none(), "{unasked}");
+
+        // One that did carries one: the line to the plugin's own session
+        // goes to the window once, and so does one web address. The line
+        // to the user's session, and the one over its size, go nowhere.
+        plugins
+            .view_message(
+                &added.id,
+                "board",
+                &here,
+                &serde_json::json!({"want": "send"}),
+                true,
+            )
+            .unwrap();
+        let clicked = heard("github", &|line| {
+            line["type"] == "view_message" && line["payload"]["want"] == "send"
+        });
+        let act = clicked["id"].as_str().unwrap().to_string();
+        done("click");
+        let sends = events(PLUGIN_SEND);
+        assert_eq!(sends.len(), 1, "{sends:?}");
+        let send = &sends[0];
+        assert_eq!(send["session"], "s-own");
+        assert_eq!(send["text"], "Address the review");
+        assert_eq!(send["project"], here);
+        assert_eq!(send["plugin"], "board");
+        let opened = events(PLUGIN_OPEN_URL);
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0]["url"], "https://example.com/pull/7");
+
+        // What came of the line reaches the plugin once, with the act it
+        // answered; an outcome the window has no word for says nothing.
+        let sending = send["request"].as_str().unwrap();
+        plugins.sent(sending, "lost");
+        plugins.sent(sending, "gone");
+        plugins.sent(sending, "delivered");
+        let told = heard("github", &|line| line["type"] == "sent");
+        assert_eq!(told["answers"], act);
+        assert_eq!(told["session"], "s-own");
+        assert_eq!(told["outcome"], "gone");
+        plugins
+            .view_message(
+                &added.id,
+                "board",
+                &here,
+                &serde_json::json!({"want": "last"}),
+                false,
+            )
+            .unwrap();
+        heard("github", &|line| line["payload"]["want"] == "last");
+        assert_eq!(
+            lines("github")
+                .iter()
+                .filter(|line| line["type"] == "sent")
+                .count(),
+            1
+        );
+
+        // Turned off, the plugin owns none of the sessions it started.
+        plugins.enable(&added.id, "board", false).unwrap();
+        plugins.enable(&added.id, "ears", false).unwrap();
+        assert!(plugins.inner.owned.lock().unwrap().is_empty());
+        assert!(plugins.inner.acts.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn what_the_user_did_lets_its_own_plugin_answer_once_each_way_for_30_seconds() {
         let board: Key = ("source".into(), "board".into());
         let other: Key = ("source".into(), "other".into());
-        let sent = Instant::now();
-        let mut waiting = Waiting {
-            plugin: board.clone(),
-            sent,
-            opened: false,
-        };
-        assert!(waiting.may_open(&board, sent + Duration::from_secs(29)));
-        assert!(!waiting.may_open(&other, sent));
-        assert!(!waiting.may_open(&board, sent + OPEN_WINDOW));
-        waiting.opened = true;
-        assert!(!waiting.may_open(&board, sent));
+        let mut act = Act::new(board.clone());
+        let sent = act.sent;
+        for reply in [Reply::Open, Reply::Start, Reply::Send] {
+            assert!(act.may(&board, reply, sent + Duration::from_secs(29)));
+            assert!(!act.may(&other, reply, sent));
+            assert!(!act.may(&board, reply, sent + OPEN_WINDOW));
+        }
+        act.spent.push(Reply::Start);
+        assert!(!act.may(&board, Reply::Start, sent));
+        assert!(act.may(&board, Reply::Send, sent));
+        assert!(act.may(&board, Reply::Open, sent));
     }
 
     #[test]
@@ -5820,6 +6526,7 @@ run = ["sh", "main.sh"]
                 starter: None,
                 worktree: true,
                 branch: Some("fix"),
+                by: None,
             },
         );
         let added = plugins.add(dir.to_string_lossy().as_ref(), None).unwrap();
