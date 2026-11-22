@@ -1284,12 +1284,11 @@ telling the agent to close or merge items, and none is ever dropped.
 The agent keeps and reads them with the workbench's own tools, as
 [hooks](../hooks.md#the-agents-tools) describes. It is told as it connects to
 keep a note whenever something settles: a decision and why, a finding,
-what the user asked for or prefers, and to open an item for anything
-agreed, asked for, promised or left waiting and not done in the same turn:
-a design agreed but not built, a fix asked for but not started, a question
-put to the user and not answered, work started in another session. It
-closes an item once it is done or dropped, and reads the open items before
-telling the user where things stand. Never a key, token, password or
+what the user asked for or prefers, and to open an item for each thing
+owed and not done in the same turn: a design agreed but not built, a fix
+asked for but not started, a question it put to the user, a session it
+started. It closes an item by its number once it is done or dropped, and
+reads the open items before telling the user where things stand. Never a key, token, password or
 personal data goes in a note or an item. The call goes alongside another one, in a terminal the notify at a turn's end most of all and in a conversation one made while working, never between its thinking and its answer, so it adds
 no step of its own, and the conversation does not draw it. When the user
 refers to something the agent has no context for, it is told to read the

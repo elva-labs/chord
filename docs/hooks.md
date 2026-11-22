@@ -368,7 +368,8 @@ again.
 its open items, and `notes` reads them back: the open items, the brief and
 the list, one note whole, or those found by their words. The agent is told
 to keep a note whenever something settles and an item for whatever is
-owed and not done in the turn, in the same step as another call, to read
+owed and not done in the turn, closed by its number once done or dropped,
+in the same step as another call, to read
 the open items before saying where things stand, and the matching notes
 before asking the user about something it has no context for. [Notes](sessions.md#notes)
 says what they are for and where they are kept.
