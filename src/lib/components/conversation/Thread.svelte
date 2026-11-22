@@ -101,6 +101,10 @@
         beside it in the agent's reply. Absent where a thread offers no
         mark. */
     onRun?: (command: string) => void;
+    /** What the agent of that title sets the session to, its model, effort
+        and reading only, for the fold a message it went out as shows.
+        Empty where it sets none or is not known. */
+    agentSettings?: (title: string) => string;
   }
 
   let {
@@ -119,6 +123,7 @@
     onUndo,
     commands,
     onRun,
+    agentSettings,
   }: Props = $props();
 
 
@@ -1426,15 +1431,19 @@
     </div>
     {#if words.agent !== undefined}
       {@const shown = `${said.id}:agent`}
+      {@const settings = agentSettings?.(words.agent.title) ?? ""}
       <button
-        class="link instructions"
+        class="link instructions fold"
         tabindex="-1"
         data-thread-item
         onclick={() => (unfolded[shown] = !unfolded[shown])}
         aria-expanded={unfolded[shown] === true}
-        data-testid="workbench-agent">As <Plain text={words.agent.title} /></button
+        data-testid="workbench-agent"
+        ><span class="chev" class:open={unfolded[shown]}><Icon name="chev" size={12} /></span>As{" "}<b
+          ><Plain text={words.agent.title} /></b
+        >{#if settings !== ""}<span data-testid="workbench-agent-settings">{" · "}<Plain text={settings} /></span>{/if}</button
       >
-      {#if unfolded[shown]}<p class="state briefing" data-testid="workbench-agent-text"
+      {#if unfolded[shown]}<p class="state briefing described" data-testid="workbench-agent-text"
           ><Plain text={words.agent.text} /></p
         >{/if}
     {/if}
@@ -1871,6 +1880,35 @@
 
   .state.reports {
     white-space: pre-line;
+  }
+
+  /* An agent's fold: a chevron that turns as it opens, the agent's title
+     in the ink, and what it sets the session to. */
+  .link.fold {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .fold .chev {
+    display: inline-flex;
+    color: var(--ink-3);
+  }
+
+  .fold .chev.open {
+    transform: rotate(90deg);
+  }
+
+  .fold b {
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* The agent's description, set in from the thread under its fold. */
+  .state.described {
+    margin-left: 6px;
+    padding-left: 12px;
+    border-left: 2px solid var(--rule);
   }
 
   /* A briefing runs to a few thousand words: read as a block from the

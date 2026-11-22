@@ -78,6 +78,9 @@ test("lists the agents before the first message, narrows them as the user types,
   // The mode chip says the session reads only, with the lock.
   await expect(chip(page, "mode")).toHaveText("Reads only · Default");
   await expect(chip(page, "mode")).toHaveAttribute("data-reads-only", "");
+  // The model chip names the model as the workbench does where the harness
+  // offers none by that name.
+  await expect(chip(page, "model")).toHaveText("Opus");
 
   await page.getByTestId("composer-input").fill("Look at the cache change");
   await page.keyboard.press("Enter");
@@ -87,8 +90,10 @@ test("lists the agents before the first message, narrows them as the user types,
   await agent(page, `f.turn("${H}", "The cache change holds.");`);
   const mine = page.getByTestId("user-message").last();
   await expect(mine.locator(".bubble")).toHaveText("Look at the cache change");
-  await expect(mine.getByTestId("workbench-agent")).toHaveText("As Reviewer");
+  await expect(mine.getByTestId("workbench-agent")).toHaveText("As Reviewer · Runs on Opus · High · Reads only");
+  await expect(mine.getByTestId("workbench-agent")).toHaveAttribute("aria-expanded", "false");
   await mine.getByTestId("workbench-agent").click();
+  await expect(mine.getByTestId("workbench-agent")).toHaveAttribute("aria-expanded", "true");
   await expect(mine.getByTestId("workbench-agent-text")).toBeVisible();
   await expect(page.getByTestId("agent-run-as").last()).toHaveText("Reviewer");
 

@@ -90,7 +90,7 @@
     if (current === null || !integrated) return current === null ? null : sessionModelName(current);
     const conversation = conversationOf(current.key);
     if (current.workflow !== null) return heldModel(conversation, current.workflow);
-    return modelInUse(conversation) ?? sessionModelName(current);
+    return modelInUse(conversation, current.agent) ?? sessionModelName(current);
   });
 
   /** The workflow the session on screen is part of, and its place in it. */

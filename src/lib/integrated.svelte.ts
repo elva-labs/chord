@@ -2182,6 +2182,20 @@ export async function configure(key: string, change: Change, chosen = true) {
   }
 }
 
+/** The effort `agent` sets a session on `harness` to, or null for none:
+    its own where its model is unset or on that harness, lowered to the
+    nearest the model takes. */
+export function agentEffort(conversation: Conversation, agent: Agent, harness: HarnessId): string | null {
+  const own = agent.model !== null && agent.model.harness === harness;
+  if (agent.effort === null || (agent.model !== null && !own)) return null;
+  const efforts = own
+    ? (offeredModel(conversation, agent.model!.model)?.efforts ?? conversation.efforts)
+    : conversation.efforts;
+  return efforts.length === 0 || efforts.includes(agent.effort)
+    ? agent.effort
+    : lowerEffort(agent.effort, efforts, effortScale(conversation.ready?.models ?? []));
+}
+
 /** The row's session works as `agent` from its next message, or as none:
     on the agent's model where that is on the session's harness, at its
     effort where the session offers it, and reading only or not as the
@@ -2194,22 +2208,11 @@ export function workAs(key: string, agent: Agent | null) {
   pickAgent(key, session.id, agent);
   keepLastAgent("composer", agent?.key ?? null);
   const change: Change = { readsOnly: agent?.readsOnly ?? false };
-  // An agent's model and effort are for its own harness: on another, the
-  // session keeps its own. The effort is lowered to the nearest the model
-  // takes.
-  const own = agent?.model != null && agent.model.harness === session.agent;
-  if (own) change.model = agent.model!.model;
-  if (agent?.effort != null && (agent.model == null || own)) {
-    const conversation = link.conversation;
-    const efforts = own
-      ? (offeredModel(conversation, agent.model!.model)?.efforts ?? conversation.efforts)
-      : conversation.efforts;
-    const effort =
-      efforts.length === 0 || efforts.includes(agent.effort)
-        ? agent.effort
-        : lowerEffort(agent.effort, efforts, effortScale(conversation.ready?.models ?? []));
-    if (effort !== null) change.effort = effort;
-  }
+  // An agent's model is for its own harness: on another, the session keeps
+  // its own.
+  if (agent?.model != null && agent.model.harness === session.agent) change.model = agent.model.model;
+  const effort = agent === null ? null : agentEffort(link.conversation, agent, session.agent);
+  if (effort !== null) change.effort = effort;
   void configure(key, change, false);
 }
 

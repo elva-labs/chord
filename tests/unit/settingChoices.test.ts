@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Conversation } from "$lib/conversation.svelte";
-import { effortChoices, effortInUse, heldModel, modeChoices, modeName, workflowChoices } from "$lib/settingChoices";
-import { defaultOffered, effortScale, lowerEffort } from "$lib/integrated.svelte";
+import { agentSettings, effortChoices, effortInUse, heldModel, modeChoices, modeName, workflowChoices } from "$lib/settingChoices";
+import { agentEffort, defaultOffered, effortScale, lowerEffort } from "$lib/integrated.svelte";
+import type { Agent } from "$lib/agents.svelte";
 import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 
@@ -205,5 +206,41 @@ describe("the model a workflow holds its orchestrator to", () => {
     // A run on another model than the workflow's is named by its own.
     expect(heldModel(ready("claude-sonnet-5-5", null, [], FABLE), defaultWorkflow())).toBe("Sonnet");
     expect(heldModel(ready("claude-unlisted-9", null, []), defaultWorkflow())).toBe("claude-unlisted-9");
+  });
+});
+
+describe("what an agent sets a session to", () => {
+  const agent = (model: Agent["model"], effort: string | null, readsOnly = false): Agent => ({
+    key: "k",
+    kind: "own",
+    title: "Checker",
+    firstLine: "",
+    text: "",
+    model,
+    effort,
+    readsOnly,
+  });
+
+  it("is its model by the agent's name for it, its effort lowered to one the model takes, and reading only", () => {
+    const c = ready("claude-sonnet-5-5", "high", ["low", "medium", "high"]);
+    const checker = agent({ harness: "claude-code", model: "sonnet" }, "max", true);
+    expect(agentEffort(c, checker, "claude-code")).toBe("high");
+    expect(agentSettings(c, checker, "claude-code")).toBe("Runs on Sonnet · High · Reads only");
+  });
+
+  it("names a model the agent does not offer as the workbench does", () => {
+    const c = ready("claude-sonnet-5-5", null, ["low", "medium", "high"]);
+    expect(agentSettings(c, agent({ harness: "claude-code", model: "opus" }, null), "claude-code")).toBe("Runs on Opus");
+  });
+
+  it("is neither model nor effort on another harness than the agent's model", () => {
+    const c = ready("gpt-5-codex", "high", ["low", "medium", "high"]);
+    const checker = agent({ harness: "claude-code", model: "opus" }, "high", true);
+    expect(agentEffort(c, checker, "codex")).toBeNull();
+    expect(agentSettings(c, checker, "codex")).toBe("Reads only");
+  });
+
+  it("is the effort alone for an agent that names no model", () => {
+    expect(agentSettings(ready("claude-sonnet-5-5", null, ["low", "medium", "high"]), agent(null, "low"), "claude-code")).toBe("Low");
   });
 });

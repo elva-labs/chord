@@ -4,7 +4,7 @@
   import type { Attached } from "$lib/integrated.svelte";
   import type { Conversation } from "$lib/conversation.svelte";
   import { register, unregister } from "$lib/drops.svelte";
-  import { compact, configure, follow, goOnIfCold, interrupt, linkFor, run, send, workAs } from "$lib/integrated.svelte";
+  import { agentEffort, compact, configure, follow, goOnIfCold, interrupt, linkFor, run, send, workAs } from "$lib/integrated.svelte";
   import { agentByKey, agents, allAgents, loadInstalled } from "$lib/agents.svelte";
   import { agentOfRow } from "$lib/sessionAgents.svelte";
   import { openNewAgent } from "$lib/settings.svelte";
@@ -19,12 +19,12 @@
     modeChoices,
     modeName,
     modelChoices,
+    modelInUse,
     workflowChoices,
   } from "$lib/settingChoices";
   import { asksFirst } from "$lib/lastChosen.svelte";
   import type { HarnessId, Workflow } from "$lib/core";
   import { clock, modelName, tokens } from "$lib/thread";
-  import { modelLabel as knownModelLabel } from "$lib/models";
   import { harnessLabel } from "$lib/harness.svelte";
   import {
     allNamed,
@@ -1049,12 +1049,9 @@
   // ---- the model, the effort and the mode ----
 
   let models = $derived(conversation.ready?.models ?? []);
-  let current = $derived(conversation.settings.model);
-  /** Before the agent has said what it offers, a model is named as the
-      workbench knows it. */
-  let name = $derived(
-    conversation.ready === null && current !== null ? knownModelLabel(harness, current) : modelName(conversation, current),
-  );
+  /** The model as the agent names it, or as the workbench does where the
+      agent offers no model by that name. */
+  let name = $derived(modelInUse(conversation, harness));
   /** The model as the chip says it: which one a default is, once known. */
   let modelLabel = $derived(name === null ? "Default model" : name);
   /** A model chosen during a turn, which the next turn runs on. */
@@ -1137,6 +1134,12 @@
   let working = $derived(row === null ? null : agentOfRow(sessionKey, row.id));
   let projectPath = $derived(row?.project ?? null);
   let workingAgent = $derived(working === null ? undefined : agentByKey(working.key, projectPath));
+  /** The agent whose effort the session runs at, while it still does. */
+  let effortSetBy = $derived(
+    workingAgent !== undefined && effort !== null && agentEffort(conversation, workingAgent, harness) === effort
+      ? workingAgent.title
+      : null,
+  );
   /** New agent's value, which no agent's key is. */
   const NEW_AGENT = "new";
   let agentChoices = $derived.by(() => {
@@ -1670,7 +1673,7 @@
           aria-haspopup="menu"
           aria-expanded={menu === "effort"}
           aria-label="Effort: {effortName(effort)}"
-          title="How hard the model thinks before it answers"
+          title={`${effortSetBy === null ? "" : `Set by ${effortSetBy}. `}How hard the model thinks before it answers`}
           data-testid="effort-chip"
           ><span><Plain text={effortName(effort)} /><span class="word">{" "}effort</span></span><Icon name="down" size={12} /></button
         >

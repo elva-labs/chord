@@ -27,6 +27,8 @@
   import { close, resumeWithout, type Session } from "$lib/sessions.svelte";
   import { senderOf } from "$lib/senders.svelte";
   import { spoken } from "$lib/instructions";
+  import { agentByTitle } from "$lib/agents.svelte";
+  import { agentSettings } from "$lib/settingChoices";
   import { notRead } from "$lib/thread";
   import { projectLabel, sessionRoot } from "$lib/workspace.svelte";
   import { mentionOpener } from "$lib/show.svelte";
@@ -413,6 +415,10 @@
         putBack: (command) => restoreCommand(session.key, command),
       }}
       onRun={(command) => void run(session.key, command)}
+      agentSettings={(title) => {
+        const named = agentByTitle(title, session.project);
+        return named === undefined ? "" : agentSettings(conversation, named, session.agent);
+      }}
     />
     <div class="foot" data-foot style:--conv-width={width > 0 ? `${width}px` : null}>
       {#if over}

@@ -1,6 +1,7 @@
 import type { Conversation } from "$lib/conversation.svelte";
 import type { HarnessId, Workflow } from "$lib/core";
-import { configure, linkOf } from "$lib/integrated.svelte";
+import type { Agent } from "$lib/agents.svelte";
+import { agentEffort, configure, linkOf } from "$lib/integrated.svelte";
 import { choose as keepChoice } from "$lib/lastChosen.svelte";
 import { modelLabel } from "$lib/models";
 import { byKey, cannotDirect } from "$lib/sessions.svelte";
@@ -132,9 +133,30 @@ export function effortInUse(conversation: Conversation): string | null {
 }
 
 /** The model the session runs on as it is named, or null before the agent
-    has said. */
-export function modelInUse(conversation: Conversation): string | null {
-  return modelName(conversation, conversation.settings.model);
+    has said: as the agent names it where it offers it, else by the
+    workbench's own name for it, Opus for `opus`. */
+export function modelInUse(conversation: Conversation, agent: HarnessId): string | null {
+  const model = conversation.settings.model;
+  return model === null ? null : modelShown(conversation, model, agent);
+}
+
+/** A model as the agent names it where it offers it, else by the
+    workbench's own name for it. */
+function modelShown(conversation: Conversation, model: string, agent: HarnessId): string {
+  return (offeredModel(conversation, model) === null ? null : modelName(conversation, model)) ?? modelLabel(agent, model);
+}
+
+/** What `agent` sets a session on `harness` to, as its fold in the thread
+    says it: "Runs on Opus · High · Reads only", each part where it sets
+    one; empty where it sets none. */
+export function agentSettings(conversation: Conversation, agent: Agent, harness: HarnessId): string {
+  const parts: string[] = [];
+  if (agent.model !== null && agent.model.harness === harness)
+    parts.push(`Runs on ${modelShown(conversation, agent.model.model, harness)}`);
+  const effort = agentEffort(conversation, agent, harness);
+  if (effort !== null) parts.push(effortName(effort));
+  if (agent.readsOnly) parts.push("Reads only");
+  return parts.join(" · ");
 }
 
 /** Switches the session to a model, an effort or a mode, unless it is on it
@@ -202,6 +224,5 @@ export function heldModel(conversation: Conversation, workflow: Workflow): strin
   const { agent, model } = workflow.orchestrator;
   const said = conversation.sessionId === null ? null : conversation.settings.model;
   const named = said ?? model;
-  const offered = offeredModel(conversation, named) === null ? null : modelName(conversation, named);
-  return offered ?? modelLabel(agent, named);
+  return modelShown(conversation, named, agent);
 }
