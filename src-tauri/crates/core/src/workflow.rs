@@ -219,7 +219,7 @@ fn check_name(what: &str, name: &str) -> Result<(), String> {
 fn check_model(owner: &str, model: &Model) -> Result<(), String> {
     if !AGENTS.contains(&model.agent.as_str()) {
         return Err(format!(
-            "{owner} names the agent {:?}, which is one of {}",
+            "{owner} names the harness {:?}, which is one of {}",
             model.agent,
             AGENTS.join(", ")
         ));
@@ -360,7 +360,7 @@ fn missing_words(field: &str) -> String {
         }
         "backTo" => "step for one of its reviews to go back to".into(),
         "limit" => "number of rounds for one of its reviews".into(),
-        "agent" => "agent for one of its models".into(),
+        "agent" => "harness for one of its models".into(),
         "model" => "name for one of its models".into(),
         other => format!("field {other}"),
     }

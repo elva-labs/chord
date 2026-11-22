@@ -29,7 +29,7 @@ import {
   type Session,
 } from "$lib/sessions.svelte";
 import { adoptSessionKinds, resetSessionKinds, setKind } from "$lib/sessionKind.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { hook, reset as resetHooks } from "$lib/hook.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { reopen } from "$lib/reopen.svelte";
@@ -93,7 +93,7 @@ beforeEach(async () => {
   resetIntegrated();
   resetConductor();
   resetSessionKinds();
-  resetAgent();
+  resetHarnesses();
   resetHooks();
   resetWorkspace();
   // The window has the workflows, so a resumed row finds out what it
@@ -512,7 +512,7 @@ describe("switching how an agent's sessions run", () => {
     expect(dueTo(byKey(row.key)!)).toBeNull();
     adoptSessionKinds([]);
     expect(dueTo(byKey(row.key)!)).toBe("terminal");
-    resetAgent();
+    resetHarnesses();
     expect(dueTo(byKey(row.key)!)).toBeNull();
     detect("claude-code");
     fake.end(handleOf(row.key)!);
@@ -567,7 +567,7 @@ describe("switching how an agent's sessions run", () => {
     resetSessions();
     resetIntegrated();
     resetSessionKinds();
-    resetAgent();
+    resetHarnesses();
     stopListening();
     fake = fakeIntegrated();
     stopListening = await listenIntegrated();

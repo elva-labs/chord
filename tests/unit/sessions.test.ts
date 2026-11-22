@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpawnOptions, Transcript, Workflow } from "$lib/core";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { stash } from "$lib/exits";
 import { OUTCOME_ASK, OUTCOME_ASK_TERMINAL } from "$lib/instructions";
 import { resetZoom, zoom, zoomed } from "$lib/zoom.svelte";
@@ -206,7 +206,7 @@ beforeEach(() => {
   cwdAnswer = null;
   cwdAsks = 0;
   givenNames = {};
-  resetAgent();
+  resetHarnesses();
   applyDetect(
     {
       id: "claude-code",
@@ -1053,6 +1053,23 @@ describe("an agent that mints its own id", () => {
     expect(defaultAgent(A)).toBe("claude-code");
     loadRemembered();
     expect(defaultAgent(A)).toBe("codex");
+  });
+
+  it("reads the harness an earlier version kept for a project and leaves it for that version", () => {
+    applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
+    localStorage.removeItem("chord.harnesses");
+    localStorage.setItem("chord.agents", JSON.stringify({ [A]: "codex" }));
+    loadRemembered();
+    expect(defaultAgent(A)).toBe("codex");
+    expect(JSON.parse(localStorage.getItem("chord.agents")!)).toEqual({ [A]: "codex" });
+    expect(JSON.parse(localStorage.getItem("chord.harnesses")!)).toEqual({ [A]: "codex" });
+  });
+
+  it("keeps a harness picked now where the earlier version reads it too", () => {
+    applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
+    create(A, null, "codex");
+    expect(JSON.parse(localStorage.getItem("chord.agents")!)).toEqual({ [A]: "codex" });
+    expect(JSON.parse(localStorage.getItem("chord.harnesses")!)).toEqual({ [A]: "codex" });
   });
 
   it("falls back to an installed agent when the preferred one is gone", () => {
@@ -3165,7 +3182,7 @@ describe("following a workflow", () => {
     const session = create(P);
     expect(session.status).toBe("failed");
     expect(statusMessage(session)).toBe(
-      'The workflow "Codex run" runs its orchestrator on Codex, which is not installed here. Pick an agent to start one alone, or choose another workflow for this project in the settings.',
+      'The workflow "Codex run" runs its orchestrator on Codex, which is not installed here. Pick a harness to start one alone, or choose another workflow for this project in the settings.',
     );
     expect(await launch(session.key, 80, 24, () => {})).toBe(false);
     expect(spawned).toHaveLength(0);

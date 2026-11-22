@@ -25,8 +25,8 @@ import {
   lastPicked,
   pickAccount,
 } from "$lib/accounts.svelte";
-import { agentLabel, installed, isReady } from "$lib/agent.svelte";
-import type { AgentId } from "$lib/core";
+import { harnessLabel, installed, isReady } from "$lib/harness.svelte";
+import type { HarnessId } from "$lib/core";
 import {
   overrideOf,
   workflowGist,
@@ -90,7 +90,7 @@ export type CommandId = "new" | "newHere" | "newOther" | "open" | "remote" | "go
 export type Step =
   | { kind: "project"; path: string }
   | { kind: "account"; account: string | null }
-  | { kind: "agent"; agent: AgentId }
+  | { kind: "agent"; agent: HarnessId }
   | { kind: "workflow"; workflow: string };
 
 export type StepKind = Step["kind"];
@@ -520,14 +520,14 @@ export function chipOf(step: Step): string {
     case "account":
       return accountLabel(step.account);
     case "agent":
-      return agentLabel(step.agent);
+      return harnessLabel(step.agent);
     case "workflow":
       return step.workflow;
   }
 }
 
 export const WORKFLOWS = "Workflows";
-export const ALONE = "One agent, no workflow";
+export const ALONE = "No workflow";
 
 /** The workflows a new session in a project is offered: none unless the
     project follows one, by its own choice or by the default. */
@@ -567,7 +567,7 @@ function runSections(
       items: installed().map((agent): PaletteItem => ({
         kind: "choice",
         id: `agent:${agent}`,
-        label: agentLabel(agent),
+        label: harnessLabel(agent),
         group: ALONE,
         step: { kind: "agent", agent },
         detail: "",
@@ -640,7 +640,7 @@ function readyLine(path: string, steps: Step[]): string {
   const how = steps.find((step) => step.kind === "agent" || step.kind === "workflow");
   const account = steps.find((step) => step.kind === "account");
   return [
-    how === undefined ? agentLabel(defaultAgent(path)) : chipOf(how),
+    how === undefined ? harnessLabel(defaultAgent(path)) : chipOf(how),
     ...(account === undefined ? [] : [chipOf(account)]),
   ].join(" · ");
 }
@@ -660,7 +660,7 @@ function readyItems(path: string): PaletteItem[] {
   return steps.length > 1 ? [ready, change] : [ready];
 }
 
-export const AGENTS = "Which agent";
+export const WHICH_HARNESS = "Which harness";
 
 /** Everything Change would ask about a project's new session, narrowed by
     what is typed: how it runs, then the account, each under its heading,
@@ -671,7 +671,7 @@ function readySearch(project: string, query: string): PaletteItem[] {
   const alone = how.length === 1 && how[0].title === ALONE;
   const groups = [
     ...how.map((section) =>
-      section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: AGENTS } : item)),
+      section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: WHICH_HARNESS } : item)),
     ),
     left.includes("account") ? accountChoices(project) : [],
   ];

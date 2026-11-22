@@ -37,8 +37,8 @@
   import WorkflowDiagram, { leastWidth } from "$lib/components/WorkflowDiagram.svelte";
   import StepSettings from "$lib/components/StepSettings.svelte";
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
-  import { installed } from "$lib/agent.svelte";
-  import { offeredAgents } from "$lib/models";
+  import { installed } from "$lib/harness.svelte";
+  import { offeredHarnesses } from "$lib/models";
   import { askCodexCatalog } from "$lib/modelCatalog.svelte";
   import { hostOf } from "$lib/remote.svelte";
 
@@ -67,7 +67,7 @@
       current.orchestrator.agent,
       ...current.steps.flatMap((one) => one.models.map((model) => model.agent)),
     ];
-    if (!offeredAgents(installed(), used).includes("codex")) return;
+    if (!offeredHarnesses(installed(), used).includes("codex")) return;
     for (const project of workspace.open) {
       if (asked.has(project.path)) continue;
       asked.add(project.path);

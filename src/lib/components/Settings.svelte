@@ -1,6 +1,6 @@
 <script module lang="ts">
   /** The columns of settings, one on screen at a time. */
-  type Tab = "appearance" | "sessions" | "workflows" | "accounts" | "plugins" | "keys" | "notifications";
+  type Tab = "appearance" | "sessions" | "agents" | "workflows" | "accounts" | "plugins" | "keys" | "notifications";
 
   /** The tab last chosen. It belongs to the module rather than the dialog, so
       closing the settings and opening them again lands where you were; a new
@@ -46,7 +46,7 @@
     updateSource,
   } from "$lib/plugins.svelte";
   import { lastSegment } from "$lib/paths";
-  import type { AgentId, PluginInfo, PluginSource } from "$lib/core";
+  import type { HarnessId, PluginInfo, PluginSource } from "$lib/core";
   import { hook, overrideOf, reapply, setEverywhere, setOverride } from "$lib/hook.svelte";
   import {
     OWN_LABEL,
@@ -62,7 +62,7 @@
   import { hookedProjects, workspace, projectLabel } from "$lib/workspace.svelte";
   import { PAST_SESSIONS, sessions, setPastSessions } from "$lib/sessions.svelte";
   import { canIntegrate, kindFor, setKind } from "$lib/sessionKind.svelte";
-  import { AGENTS, agentLabel, installed } from "$lib/agent.svelte";
+  import { HARNESSES, harnessLabel, installed } from "$lib/harness.svelte";
   import { INACTIVE_AFTER, projects, setInactiveAfter } from "$lib/projects.svelte";
   import {
     INTERFACE_FONTS,
@@ -92,6 +92,7 @@
   import BackgroundPicker from "$lib/components/BackgroundPicker.svelte";
   import UnreadEntries from "$lib/components/UnreadEntries.svelte";
   import WorkflowsTab from "$lib/components/WorkflowsTab.svelte";
+  import AgentsTab from "$lib/components/AgentsTab.svelte";
 
   /**
    * The settings, over the workbench. Reached from the native menu or its
@@ -110,6 +111,7 @@
   const TABS: { name: Tab; label: string }[] = [
     { name: "appearance", label: "Appearance" },
     { name: "sessions", label: "Sessions" },
+    { name: "agents", label: "Agents" },
     { name: "workflows", label: "Workflows" },
     { name: "accounts", label: "Accounts" },
     { name: "plugins", label: "Plugins" },
@@ -125,7 +127,11 @@
   let tabs: HTMLElement;
   let tab = $state<Tab>(remembered);
 
+  let agentsTab: AgentsTab | undefined = $state();
+
+  /** The tab picked again goes back to its top: the Agents tab to its lists. */
   function show(next: Tab) {
+    if (next === tab && next === "agents") agentsTab?.home();
     tab = next;
     remembered = next;
   }
@@ -306,7 +312,7 @@
   });
 
   /** What new sessions of an agent start on, as its row says it. */
-  function chosenLine(agent: AgentId): string {
+  function chosenLine(agent: HarnessId): string {
     const kept = chosenFor(agent);
     const parts = [
       kept.model === undefined ? null : modelLabel(agent, kept.model),
@@ -600,11 +606,11 @@
           <section data-testid="settings-sessions">
             <h3>Run</h3>
             <div data-testid="session-kinds">
-              {#each installed().length > 0 ? installed() : AGENTS as id (id)}
+              {#each installed().length > 0 ? installed() : HARNESSES as id (id)}
                 <div class="row" data-testid="session-kind" data-agent={id}>
-                  <span class="name">{agentLabel(id)}</span>
+                  <span class="name">{harnessLabel(id)}</span>
                   {#if canIntegrate(id)}
-                    <div class="seg" role="radiogroup" aria-label="Where {agentLabel(id)} sessions run">
+                    <div class="seg" role="radiogroup" aria-label="Where {harnessLabel(id)} sessions run">
                       <button
                         role="radio"
                         aria-checked={kindFor(id) === "integrated"}
@@ -633,8 +639,8 @@
               <UnreadEntries field="hooks" />
               <div class="row" data-testid="hooks-everywhere-row">
                 <span class="name"
-                  ><span id="hooks-label">Let agents talk to Chord</span
-                  ><small id="hooks-hint">Shows when an agent works, waits or asks.</small></span
+                  ><span id="hooks-label">Let sessions talk to Chord</span
+                  ><small id="hooks-hint">Shows when a session works, waits or asks.</small></span
                 >
                 <Switch
                   on={hook.everywhere}
@@ -698,15 +704,15 @@
             <h3>New sessions</h3>
             <UnreadEntries field="lastChosen" />
             <div data-testid="chosen-list">
-              {#each installed().length > 0 ? installed() : AGENTS as id (id)}
+              {#each installed().length > 0 ? installed() : HARNESSES as id (id)}
                 <div class="row" data-testid="chosen" data-agent={id}>
-                  <span class="name">Start {agentLabel(id)} on</span>
+                  <span class="name">Start {harnessLabel(id)} on</span>
                   <span class="value" data-testid="chosen-line">{chosenLine(id)}</span>
                   {#if anyChosen(id)}
                     <button
                       class="tool"
                       onclick={() => forgetChosen(id)}
-                      aria-label="Start new {agentLabel(id)} sessions on its own defaults"
+                      aria-label="Start new {harnessLabel(id)} sessions on its own defaults"
                       data-testid="chosen-forget">Use defaults</button
                     >
                   {/if}
@@ -768,6 +774,8 @@
               </select>
             </div>
           </section>
+        {:else if tab === "agents"}
+          <AgentsTab bind:this={agentsTab} />
         {:else if tab === "workflows"}
           <WorkflowsTab />
         {:else if tab === "accounts"}

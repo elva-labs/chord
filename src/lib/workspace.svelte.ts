@@ -1,6 +1,6 @@
 import type { SessionKind } from "$lib/sessionKind.svelte";
 import { untrack } from "svelte";
-import { core, type AgentId, type ProjectInfo, type Workflow } from "$lib/core";
+import { core, type HarnessId, type ProjectInfo, type Workflow } from "$lib/core";
 import { closeOwner } from "$lib/browser.svelte";
 import { lastSegment } from "$lib/paths";
 import { accountToStart } from "$lib/accounts.svelte";
@@ -251,7 +251,7 @@ export function goTo(key: string): boolean {
     Nothing new starts in the orchestrator folder. */
 export function startSession(
   path: string,
-  agent?: AgentId,
+  agent?: HarnessId,
   account: string | null = accountToStart(path),
   workflow?: Workflow | null,
   kind?: SessionKind,

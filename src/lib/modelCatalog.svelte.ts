@@ -1,5 +1,5 @@
-import { core, type AgentId } from "$lib/core";
-import { agentProfile } from "$lib/agent.svelte";
+import { core, type HarnessId } from "$lib/core";
+import { harnessProfile } from "$lib/harness.svelte";
 import { accountOf, dirFor } from "$lib/accounts.svelte";
 
 /**
@@ -33,31 +33,31 @@ const asking = new Set<string>();
 
 /** A list's key: the agent, the machine (null for this one) and the
     account. */
-function keyOf(agent: AgentId, host: string | null, account: string | null): string {
+function keyOf(agent: HarnessId, host: string | null, account: string | null): string {
   return `${agent}\n${host ?? ""}\n${account ?? ""}`;
 }
 
 /** The agent on the machine `host`, null for this one, listed the models
     it offers the account. */
 export function heardCatalog(
-  agent: AgentId,
+  agent: HarnessId,
   host: string | null,
   account: string | null,
   models: readonly CatalogModel[],
 ) {
-  if (!agentProfile(agent).catalogNames || models.length === 0) return;
+  if (!harnessProfile(agent).catalogNames || models.length === 0) return;
   catalogs.byKey[keyOf(agent, host, account)] = models.map(({ value, name }) => ({ value, name }));
 }
 
 /** The models the agent on the machine last listed for the account, or
     null where none has been heard. */
-export function catalogOf(agent: AgentId, host: string | null, account: string | null): CatalogModel[] | null {
+export function catalogOf(agent: HarnessId, host: string | null, account: string | null): CatalogModel[] | null {
   return catalogs.byKey[keyOf(agent, host, account)] ?? null;
 }
 
 /** Every model the agent listed for any account, each once, in the order
     first heard. */
-export function catalogsOf(agent: AgentId): CatalogModel[] {
+export function catalogsOf(agent: HarnessId): CatalogModel[] {
   const all: CatalogModel[] = [];
   for (const [key, models] of Object.entries(catalogs.byKey)) {
     if (!key.startsWith(`${agent}\n`)) continue;
@@ -73,12 +73,12 @@ export function catalogsOf(agent: AgentId): CatalogModel[] {
     Null for an agent whose models do not, which each place names as it
     always has. */
 export function catalogName(
-  agent: AgentId,
+  agent: HarnessId,
   model: string,
   account: string | null = null,
   host: string | null = null,
 ): string | null {
-  if (!agentProfile(agent).catalogNames) return null;
+  if (!harnessProfile(agent).catalogNames) return null;
   const named = (list: CatalogModel[] | null) => {
     const name = list?.find((known) => known.value === model)?.name ?? null;
     const bare = name?.replace(/\s*\(.*\)\s*$/, "").trim() ?? "";

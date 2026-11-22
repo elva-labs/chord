@@ -12,7 +12,7 @@ The agent does not only answer in text. It opens a file at the lines it means, o
 
 You see each of these as it happens: what it opens comes up in front of you, a browser tab it opened is marked as the agent's, and every session it starts has a row of its own that you can open and take over.
 
-What matters is asked first. A change to the settings, a theme or your stylesheet is shown to you and made only if you allow it, every time. A session it would start in another project, on another agent or under another account is put to you, and a session it starts begins with no more permission than its own. A command it wants run is typed into a terminal for you to run yourself.
+What matters is asked first. A change to the settings, a theme or your stylesheet is shown to you and made only if you allow it, every time. A session it would start in another project, on another harness or under another account is put to you, and a session it starts begins with no more permission than its own. A command it wants run is typed into a terminal for you to run yourself.
 
 ![The agent draws the request flow: a Mermaid diagram and a latency chart open in the viewer, one under the other, with the caption above and the call on the media list under the tree.](docs/tools-present.gif)
 
@@ -43,7 +43,7 @@ brew install --cask chord@beta
 
 Every [release](https://github.com/elva-labs/chord/releases) also carries installers for macOS, Linux and Windows. The macOS builds are signed and notarized.
 
-Chord runs the agents you have installed: `claude` or `codex` on your login shell's PATH. The cask also puts `chord` on the PATH, so `chord .` opens the folder you are in.
+Chord runs Claude Code or Codex, whichever you have installed: `claude` or `codex` on your login shell's PATH. The cask also puts `chord` on the PATH, so `chord .` opens the folder you are in.
 
 Chord was called Agent Workbench before 1.0. Its settings move over on the first start, and [release](docs/release.md#the-casks-and-formulas-under-the-apps-earlier-name) says how the casks under the earlier name move.
 
@@ -62,5 +62,5 @@ Building it:
 
 - [Building](docs/building.md): running it from source and verifying a change.
 - [Architecture](docs/architecture.md): the one rule and the two halves.
-- [Agents](docs/adapters.md) and [sessions in Chord](docs/integrated.md): how each agent is driven.
+- [Harnesses](docs/adapters.md) and [sessions in Chord](docs/integrated.md): how Claude Code and Codex are driven.
 - [Testing](docs/testing.md), [CI and releases](docs/release.md), and the full behaviour of [sessions](docs/reference/sessions.md), [layout](docs/reference/layout.md) and [settings](docs/reference/settings.md).

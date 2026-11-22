@@ -21,7 +21,7 @@ import { playChime } from "$lib/chime";
  */
 
 /** The agents the core knows how to drive. */
-export type AgentId = "claude-code" | "codex";
+export type HarnessId = "claude-code" | "codex";
 
 export interface DetectReport {
   id: string;
@@ -49,7 +49,7 @@ export interface AccountDirs {
 
 /** An agent and the name of one of its models. */
 export interface WorkflowModel {
-  agent: AgentId;
+  agent: HarnessId;
   model: string;
 }
 
@@ -106,7 +106,7 @@ export interface Workflow {
 }
 
 export interface SpawnOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   /** Where to run when that is not the project: a worktree under it. */
   cwd?: string;
@@ -181,7 +181,7 @@ export interface Spawned {
     the events of an id it does not know yet and plays them once it does.
     A message's id is the caller's own, chosen before it sends. */
 export interface IntegratedStartOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   /** Where to run when that is not the project: a worktree under it. */
   cwd?: string;
@@ -789,7 +789,7 @@ export interface IntegratedWentBack {
     id, the project, the folder under it the session ran in, and the
     account's configuration directory. */
 export interface IntegratedHistoryOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   cwd?: string;
   session: string;
@@ -810,7 +810,7 @@ export interface CodexModels {
     is due; without, it answers at once with what it holds. */
 export interface AccountLimitsOptions {
   project: string;
-  agent: AgentId;
+  agent: HarnessId;
   configDir?: string;
   read: boolean;
   /** A session of the account worked since its figures were read, so they
@@ -1446,6 +1446,34 @@ export type PastSessions = "forever" | "month" | "week" | "day";
     Inactive. Never keeps every project in the list. */
 export type InactiveAfter = "day" | "week" | "month" | "never";
 
+/** One of the user's own agents: a title, a description whose first line
+    says what it does, and what it runs on. A model or an effort that is
+    null leaves the session's own. */
+export interface OwnAgent {
+  /** The title a shipped agent the user changed ships under. */
+  shipped?: string;
+  title: string;
+  description: string;
+  model: { harness: HarnessId; model: string } | null;
+  effort: string | null;
+  readsOnly: boolean;
+}
+
+/** An agent the user installed for a harness, read where the harness keeps
+    it and never written: Claude Code's under the account (`claude`) or in
+    the project (`project`), or one of Codex's roles (`codex`). `text` is
+    what a session is told, and `path` the file it came from. */
+export interface InstalledAgent {
+  source: "claude" | "project" | "codex";
+  name: string;
+  description: string;
+  model: string | null;
+  effort: string | null;
+  readsOnly: boolean;
+  text: string;
+  path: string;
+}
+
 /** The user's preferences, one set per machine, kept by the core. */
 export interface Settings {
   appearance: "system" | "light" | "dark";
@@ -1456,10 +1484,10 @@ export interface Settings {
   /** The whole chord table, by action. Empty is the default preset. */
   keys: Record<string, KeyChord>;
   hooks: { everywhere: boolean; overrides: Record<string, boolean> };
-  /** The agents' logins kept apart, by name. The one every project runs
-      under, or null for the agents' own directories, and the projects
-      that say otherwise, each naming an account or null for the agents'
-      own. */
+  /** The harnesses' logins kept apart, by name. The one every project runs
+      under, or null for the harnesses' own directories, and the projects
+      that say otherwise, each naming an account or null for the
+      harnesses' own. */
   accounts: {
     list: Record<string, AccountDirs>;
     everywhere: string | null;
@@ -1475,6 +1503,9 @@ export interface Settings {
     /** The workflows in the file that are not used, carried as written. */
     unread?: UnreadWorkflow[];
   };
+  /** The user's own agents, in the order they are kept. A file from
+      before has none. */
+  agents?: OwnAgent[];
   /** What the file holds and the app does not use, each with the rule it
       breaks: an entry of the keys, the hooks, the accounts or the themes, a
       choice of account that names one, a value of a setting, or a field
@@ -1487,13 +1518,16 @@ export interface Settings {
     reason: string;
     /** The entry as the file holds it. */
     entry?: unknown;
+    /** Where it stands in the field's list, for an entry of a list: one of
+        the user's own agents, named by its title. */
+    at?: number;
   }[];
   /** How long a past session stays listed under its project before it
       goes behind the fold with the rest of the history. */
   pastSessions: PastSessions;
-  /** The agents whose sessions run integrated, drawn by the window; the
+  /** The harnesses whose sessions run integrated, drawn by the window; the
       others run in a terminal. Missing reads as none. */
-  integrated?: AgentId[];
+  integrated?: HarnessId[];
   /** How long a project goes unused before it folds under Inactive. */
   inactiveAfter: InactiveAfter;
   /** The user's own themes, by name. A palette may name one. */
@@ -1538,8 +1572,8 @@ export interface Settings {
       which reads as off. */
   compact?: boolean;
   /** The model, the effort and the permission mode the user last chose
-      for each agent's sessions, by the agent's id, which a new session
-      of that agent starts on. A file from before has none. */
+      for each harness's sessions, by the harness's id, which a new
+      session on that harness starts on. A file from before has none. */
   lastChosen?: Record<string, { model?: string; effort?: string; mode?: string }>;
   /** Whether a new conversation goes on by itself once the usage limit
       that cut it short resets: the user's last choice on a conversation.
@@ -1549,7 +1583,7 @@ export interface Settings {
 
 /** The conversation a session is about to take up again. */
 export interface GoingOnOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   cwd?: string;
   session: string;
@@ -1708,6 +1742,11 @@ export interface Core {
       history the core does not read. Rejects where the agent could not
       read it, as for a thread Codex does not know. */
   integratedHistory(options: IntegratedHistoryOptions): Promise<IntegratedHistory | null>;
+  /** The agents installed for each harness, read on the project's machine:
+      Claude Code's under the account whose directory is `claudeDir`, or
+      its own, then the project's, then Codex's roles under `codexHome`, or
+      its own. */
+  installedAgents(project: string, claudeDir?: string, codexHome?: string): Promise<InstalledAgent[]>;
   /** The models Codex offers the account whose home is `configDir`, read
       by a Codex of the core's own on the project's machine, which takes a
       second or two. Rejects where Codex cannot be started or will not list
@@ -2070,20 +2109,20 @@ export interface Core {
       the agent's own. */
   transcripts(
     project: string,
-    agent: AgentId,
+    agent: HarnessId,
     configDir?: string,
   ): Promise<Transcript[]>;
   /** The same for several projects at once, one list each in the order
       given: the agent's directory is read once for all of them. */
   transcriptsMany(
     projects: string[],
-    agent: AgentId,
+    agent: HarnessId,
     configDir?: string,
   ): Promise<Transcript[][]>;
   /** What the agent calls a session now, for agents that keep that in an
       index of their own rather than in the terminal title. */
   sessionTitle(
-    agent: AgentId,
+    agent: HarnessId,
     id: string,
     configDir?: string,
   ): Promise<string | null>;
@@ -2313,6 +2352,8 @@ const tauriCore: Core = {
   integratedSnapshot: (id) => invoke<IntegratedSnapshot>("integrated_snapshot", { id }),
   integratedHistory: (options) =>
     invoke<IntegratedHistory | null>("integrated_history", { ...options }),
+  installedAgents: (project, claudeDir, codexHome) =>
+    invoke<InstalledAgent[]>("installed_agents", { project, claudeDir, codexHome }),
   codexModels: (project, configDir) => invoke<CodexModels>("codex_models", { project, configDir }),
   accountLimits: (options) =>
     invoke<Extract<IntegratedEventBody, { type: "limits" }> | null>("account_limits", { ...options }),
@@ -2726,6 +2767,9 @@ const detachedCore: Core = {
   },
   async integratedHistory() {
     return null;
+  },
+  async installedAgents() {
+    return [];
   },
   async codexModels() {
     throw new Error("not connected to the workbench core");

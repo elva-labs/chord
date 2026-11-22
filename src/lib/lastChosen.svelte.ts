@@ -18,7 +18,7 @@
  * others for the machine.
  */
 
-import type { AgentId, Settings } from "$lib/core";
+import type { HarnessId, Settings } from "$lib/core";
 import { persist } from "$lib/persist";
 import { carriedOver, noWider } from "$lib/modeFit";
 
@@ -45,7 +45,7 @@ const offers = new Map<string, string[]>();
     sessions were told, by the same key. */
 const defaults = new Map<string, string>();
 
-function offersKey(agent: AgentId, account: string | null): string {
+function offersKey(agent: HarnessId, account: string | null): string {
   return `${agent}\n${account ?? ""}`;
 }
 
@@ -70,7 +70,7 @@ export function adoptLastChosen(value: unknown) {
         const one = (entry as Record<string, unknown>)[setting];
         // A mode a new session is not begun in starts nothing, whoever
         // wrote it to the file.
-        if (readable(one) && (setting !== "mode" || carriedOver(agent as AgentId, one))) kept[setting] = one;
+        if (readable(one) && (setting !== "mode" || carriedOver(agent as HarnessId, one))) kept[setting] = one;
       }
       if (Object.keys(kept).length > 0) byAgent[agent] = kept;
     }
@@ -78,16 +78,16 @@ export function adoptLastChosen(value: unknown) {
 }
 
 /** What is kept for an agent. */
-export function chosenFor(agent: AgentId): Chosen {
+export function chosenFor(agent: HarnessId): Chosen {
   return lastChosen.byAgent[agent] ?? {};
 }
 
 /** Whether anything is kept for an agent. */
-export function anyChosen(agent: AgentId): boolean {
+export function anyChosen(agent: HarnessId): boolean {
   return Object.keys(chosenFor(agent)).length > 0;
 }
 
-function store(agent: AgentId, next: Chosen) {
+function store(agent: HarnessId, next: Chosen) {
   const byAgent = { ...lastChosen.byAgent };
   if (Object.keys(next).length === 0) delete byAgent[agent];
   else byAgent[agent] = next;
@@ -98,7 +98,7 @@ function store(agent: AgentId, next: Chosen) {
 /** The user chose `value` for an agent's sessions. Claude Code's default
     model keeps none, and a mode a new session is not begun in leaves what
     was kept. */
-export function choose(agent: AgentId, setting: Setting, value: string) {
+export function choose(agent: HarnessId, setting: Setting, value: string) {
   if (!readable(value)) return;
   if (setting === "mode" && !carriedOver(agent, value)) return;
   const was = chosenFor(agent);
@@ -111,11 +111,11 @@ export function choose(agent: AgentId, setting: Setting, value: string) {
 
 /** What stands in for no mode kept, when a report is weighed against it:
     the mode that asks before anything changes. */
-const ASKS: Record<AgentId, string> = { "claude-code": "default", codex: "read-only" };
+const ASKS: Record<HarnessId, string> = { "claude-code": "default", codex: "read-only" };
 
 /** Whether `mode` is the one an agent asks before anything changes in, the
     mode a session begins in unless told otherwise. */
-export function asksFirst(agent: AgentId, mode: string): boolean {
+export function asksFirst(agent: HarnessId, mode: string): boolean {
   return ASKS[agent] === mode;
 }
 
@@ -124,33 +124,33 @@ export function asksFirst(agent: AgentId, mode: string): boolean {
     only where it goes no further than what is kept now, Default standing
     in for nothing kept: a report can narrow what new sessions begin in,
     never widen it. A wider mode is kept only from a chip. */
-export function narrowTo(agent: AgentId, mode: string) {
+export function narrowTo(agent: HarnessId, mode: string) {
   const now = chosenFor(agent).mode ?? ASKS[agent];
   if (noWider(agent, mode, now)) choose(agent, "mode", mode);
 }
 
 /** New sessions of the agent start on its own defaults again. */
-export function forget(agent: AgentId) {
+export function forget(agent: HarnessId) {
   if (anyChosen(agent)) store(agent, {});
 }
 
 /** An account's sessions of the agent were told which models it offers,
     and where the agent said, which model its default stands for. */
-export function heardOffers(agent: AgentId, account: string | null, models: string[], fallback: string | null = null) {
+export function heardOffers(agent: HarnessId, account: string | null, models: string[], fallback: string | null = null) {
   if (models.length > 0) offers.set(offersKey(agent, account), [...models]);
   if (fallback !== null) defaults.set(offersKey(agent, account), fallback);
 }
 
 /** The model a session of the agent under the account runs on when none
     is chosen for it, where a session of it has said. Null where none has. */
-export function defaultModelOf(agent: AgentId, account: string | null): string | null {
+export function defaultModelOf(agent: HarnessId, account: string | null): string | null {
   return defaults.get(offersKey(agent, account)) ?? null;
 }
 
 /** The model a new session of the agent under the account starts on: the
     kept one, unless the account was heard not to offer it. Null for the
     agent's own default. */
-export function modelToStart(agent: AgentId, account: string | null): string | null {
+export function modelToStart(agent: HarnessId, account: string | null): string | null {
   const model = chosenFor(agent).model ?? null;
   if (model === null) return null;
   const offered = offers.get(offersKey(agent, account));

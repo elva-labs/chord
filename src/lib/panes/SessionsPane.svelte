@@ -10,7 +10,7 @@
     editor,
     unsavedNames,
   } from "$lib/editor.svelte";
-  import { agentLabel, isReady } from "$lib/agent.svelte";
+  import { harnessLabel, isReady } from "$lib/harness.svelte";
   import { accountLabel, accountOf, accountToStart, hasAccounts } from "$lib/accounts.svelte";
   import type { ProjectInfo } from "$lib/core";
   import { busyGoing, closingAside, closingQuestion, type BusyShell, type Closed } from "$lib/leaving.svelte";
@@ -606,7 +606,7 @@
       detail: [
         ...(midTurn(session)
           ? [
-              `${agentLabel(session.agent)} is in the middle of a turn. Reopening stops it there, and the conversation goes on from where it stopped.`,
+              `${harnessLabel(session.agent)} is in the middle of a turn. Reopening stops it there, and the conversation goes on from where it stopped.`,
             ]
           : []),
         ...(ends.length > 0 ? [`Reopening ends ${listed(ends)}.`] : []),

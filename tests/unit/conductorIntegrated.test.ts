@@ -7,7 +7,7 @@ import { byKey, close, create, ended as endedTerminal, failed, forProject, ident
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
 import { resetSessionKinds, setKind } from "$lib/sessionKind.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { fakeIntegrated, type FakeIntegrated } from "../fakeIntegrated";
 import { outsideCaller, resetSenders, senderOf, sentBy, sessionName } from "$lib/senders.svelte";
@@ -71,7 +71,7 @@ beforeEach(async () => {
   resetConductor();
   resetWorkspace();
   resetSessionKinds();
-  resetAgent();
+  resetHarnesses();
   localStorage.clear();
   resetSenders();
   resetAccounts();

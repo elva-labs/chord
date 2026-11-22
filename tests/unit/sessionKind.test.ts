@@ -30,7 +30,7 @@ import {
 } from "$lib/sessions.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
 import { reopen } from "$lib/reopen.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetConductor } from "$lib/conductor.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
@@ -57,7 +57,7 @@ const PROJECT = "/home/ada/dev/demo";
 
 /** The core says it can drive Claude Code in messages, and not Codex. */
 function detected() {
-  resetAgent();
+  resetHarnesses();
   for (const id of ["claude-code", "codex"])
     applyDetect(
       {
@@ -110,7 +110,7 @@ describe("how an agent's sessions run", () => {
   });
 
   it("can be integrated only for an agent the core says it can drive in messages", () => {
-    resetAgent();
+    resetHarnesses();
     expect(canIntegrate("claude-code")).toBe(false);
     setKind("claude-code", "integrated");
     expect(kindFor("claude-code")).toBe("terminal");

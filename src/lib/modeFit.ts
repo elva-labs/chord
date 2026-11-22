@@ -1,4 +1,4 @@
-import type { AgentId } from "$lib/core";
+import type { HarnessId } from "$lib/core";
 
 /**
  * How far a permission mode lets a session go with no one asked, on one
@@ -11,7 +11,7 @@ import type { AgentId } from "$lib/core";
  * has none. Full access and bypassing permissions ask nothing. A mode not
  * named here stands nowhere.
  */
-const STANDING: Record<AgentId, Record<string, number>> = {
+const STANDING: Record<HarnessId, Record<string, number>> = {
   "claude-code": { plan: 0, dontAsk: 1, default: 1, acceptEdits: 2, auto: 4, bypassPermissions: 5 },
   codex: { "read-only": 1, auto: 3, "full-access": 5 },
 };
@@ -20,13 +20,13 @@ const STANDING: Record<AgentId, Record<string, number>> = {
     first; of two on one step, the one a session of the other agent is
     given comes first. Bypassing permissions is not among them: Claude
     Code takes it only from a flag of its own. */
-const STARTED_IN: Record<AgentId, readonly string[]> = {
+const STARTED_IN: Record<HarnessId, readonly string[]> = {
   "claude-code": ["auto", "acceptEdits", "default", "dontAsk", "plan"],
   codex: ["full-access", "auto", "read-only"],
 };
 
 /** What each mode is called, as the agents' own lists of modes name it. */
-const NAMES: Record<AgentId, Record<string, string>> = {
+const NAMES: Record<HarnessId, Record<string, string>> = {
   "claude-code": {
     plan: "Plan",
     dontAsk: "Don't ask",
@@ -39,11 +39,11 @@ const NAMES: Record<AgentId, Record<string, string>> = {
 };
 
 /** What a mode is called, else the agent's own name for it. */
-export function modeName(agent: AgentId, mode: string): string {
+export function modeName(agent: HarnessId, mode: string): string {
   return Object.hasOwn(NAMES[agent], mode) ? NAMES[agent][mode] : mode;
 }
 
-function standing(agent: AgentId, mode: string): number | null {
+function standing(agent: HarnessId, mode: string): number | null {
   const scale = Object.hasOwn(STANDING, agent) ? STANDING[agent] : null;
   return scale !== null && Object.hasOwn(scale, mode) ? scale[mode] : null;
 }
@@ -56,7 +56,7 @@ function standing(agent: AgentId, mode: string): number | null {
  * from Claude Code's Plan, the narrowest. Null where `mode` is not on the
  * scale.
  */
-export function fitMode(from: AgentId, mode: string, agent: AgentId): string | null {
+export function fitMode(from: HarnessId, mode: string, agent: HarnessId): string | null {
   const most = standing(from, mode);
   if (most === null) return null;
   const modes = STARTED_IN[agent];
@@ -66,7 +66,7 @@ export function fitMode(from: AgentId, mode: string, agent: AgentId): string | n
 
 /** The nearest mode below `mode` that the workbench starts a session of
     the agent in. Null where none is, and for a mode not on the scale. */
-export function nextNarrower(agent: AgentId, mode: string): string | null {
+export function nextNarrower(agent: HarnessId, mode: string): string | null {
   const at = standing(agent, mode);
   if (at === null) return null;
   return STARTED_IN[agent].find((each) => STANDING[agent][each] < at) ?? null;
@@ -76,14 +76,14 @@ export function nextNarrower(agent: AgentId, mode: string): string | null {
     can edit and still asks somewhere. Plan cannot edit, and bypassing
     permissions and Codex's full access ask nothing; a mode not on the
     scale is not known well enough to begin in. */
-export function carriedOver(agent: AgentId, mode: string): boolean {
+export function carriedOver(agent: HarnessId, mode: string): boolean {
   const at = standing(agent, mode);
   return at !== null && at > 0 && at < 5;
 }
 
 /** Whether `mode` lets a session of the agent go no further than `than`
     does. False for a mode off the scale. */
-export function noWider(agent: AgentId, mode: string, than: string): boolean {
+export function noWider(agent: HarnessId, mode: string, than: string): boolean {
   const at = standing(agent, mode);
   const most = standing(agent, than);
   return at !== null && most !== null && at <= most;
@@ -91,7 +91,7 @@ export function noWider(agent: AgentId, mode: string, than: string): boolean {
 
 /** The narrower of two modes of one agent; either where the other is
     null. */
-export function narrowerOf(agent: AgentId, one: string | null, other: string | null): string | null {
+export function narrowerOf(agent: HarnessId, one: string | null, other: string | null): string | null {
   if (one === null) return other;
   if (other === null) return one;
   return (standing(agent, other) ?? Infinity) < (standing(agent, one) ?? Infinity) ? other : one;

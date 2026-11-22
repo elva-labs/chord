@@ -18,7 +18,7 @@ import { pluginMark, pluginStartOf, resetPluginStarts } from "$lib/pluginStarts.
 import { resetGoingOn } from "$lib/goingOn.svelte";
 import { resetSenders, senderOf } from "$lib/senders.svelte";
 import { resetSessionKinds, setKind } from "$lib/sessionKind.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import {
   byKey,
   create,
@@ -109,7 +109,7 @@ beforeEach(async () => {
   resetConductor();
   resetWorkspace();
   resetSessionKinds();
-  resetAgent();
+  resetHarnesses();
   resetLastChosen();
   resetPluginStarts();
   resetGoingOn();

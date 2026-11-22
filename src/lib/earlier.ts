@@ -1,6 +1,6 @@
 import { dirFor } from "$lib/accounts.svelte";
-import { agentLabel } from "$lib/agent.svelte";
-import { core, type AgentId, type IntegratedHistory, type IntegratedSnapshot } from "$lib/core";
+import { harnessLabel } from "$lib/harness.svelte";
+import { core, type HarnessId, type IntegratedHistory, type IntegratedSnapshot } from "$lib/core";
 import type { Conversation, Run } from "$lib/conversation.svelte";
 import type { Session } from "$lib/sessions.svelte";
 import { workflowsKnown } from "$lib/workflows.svelte";
@@ -25,8 +25,8 @@ export const EARLIER_WAIT = 5000;
 
 /** Why the earlier messages of a session that was spoken to are not
     drawn, when its agent's record of it holds none. */
-export function nothingKept(agent: AgentId): string {
-  return `${agentLabel(agent)}'s record of it holds no messages`;
+export function nothingKept(agent: HarnessId): string {
+  return `${harnessLabel(agent)}'s record of it holds no messages`;
 }
 
 /**

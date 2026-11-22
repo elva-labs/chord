@@ -1,4 +1,4 @@
-import type { AgentId } from "$lib/core";
+import type { HarnessId } from "$lib/core";
 import type { SessionKind } from "$lib/sessionKind.svelte";
 import { pendingMove, recordMove } from "$lib/sessionMoves.svelte";
 import { cameBackOver, carryOver, workOver } from "$lib/conductor.svelte";
@@ -48,7 +48,7 @@ const KEY = "chord.open";
 interface Open {
   project: string;
   id: string;
-  agent: AgentId;
+  agent: HarnessId;
   startIn: string | null;
   model: string | null;
   /** The model the agent said it ran on, for naming the row until it runs

@@ -211,6 +211,16 @@ struct CodexModelsParams {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct InstalledAgentsParams {
+    project: PathBuf,
+    #[serde(default)]
+    claude_dir: Option<String>,
+    #[serde(default)]
+    codex_home: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GoingOnParams {
     agent: String,
     project: PathBuf,
@@ -749,6 +759,14 @@ pub fn dispatch(
         "codex_models" => {
             let p: CodexModelsParams = parse(params)?;
             value(core.codex_models(&p.project, p.config_dir.as_deref())?)
+        }
+        "installed_agents" => {
+            let p: InstalledAgentsParams = parse(params)?;
+            value(core.installed_agents(
+                &p.project,
+                p.claude_dir.as_deref(),
+                p.codex_home.as_deref(),
+            ))
         }
         "integrated_rewind_points" => {
             let p: IdParams = parse(params)?;

@@ -8,6 +8,7 @@
 pub mod account;
 pub mod activity;
 pub mod adapter;
+pub mod agents;
 pub mod api;
 pub mod browser;
 pub mod claude_history;

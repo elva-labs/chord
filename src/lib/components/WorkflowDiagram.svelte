@@ -35,15 +35,15 @@
    * put, with the edge that hides more faded.
    */
   import type { ReviewStep, Workflow, WorkflowModel, WorkflowStep } from "$lib/core";
-  import { installed } from "$lib/agent.svelte";
+  import { installed } from "$lib/harness.svelte";
   import { moveProblem } from "$lib/workflows.svelte";
   import {
-    AGENT_LABELS,
+    HARNESS_LABELS,
     modelFromKey,
     modelKey,
     modelLabel,
     offeredModels,
-    offeredAgents,
+    offeredHarnesses,
   } from "$lib/models";
 
   interface Props {
@@ -162,7 +162,7 @@
   }
 
   const agents = $derived(
-    offeredAgents(installed(), [
+    offeredHarnesses(installed(), [
       workflow.orchestrator.agent,
       ...workflow.steps.flatMap((step) => step.models.map((model) => model.agent)),
     ]),
@@ -313,7 +313,7 @@
         <span class="sr">Orchestrator model</span>
         <select value={orchestratorKey} onchange={pick} data-testid="workflow-orchestrator-model">
           {#each agents as agent (agent)}
-            <optgroup label={AGENT_LABELS[agent]}>
+            <optgroup label={HARNESS_LABELS[agent]}>
               {#each offeredModels(agent) as option (option.model)}
                 <option value={modelKey(option)}>{option.label}</option>
               {/each}

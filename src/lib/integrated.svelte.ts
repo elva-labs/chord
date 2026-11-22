@@ -13,7 +13,7 @@ import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
 import { heardOffers } from "$lib/lastChosen.svelte";
 import { limitEnded, runOver, setHands, settle as settleAutoResume, turnMoved } from "$lib/autoResume.svelte";
 import { modelLabel } from "$lib/models";
-import { agentProfile } from "$lib/agent.svelte";
+import { harnessProfile } from "$lib/harness.svelte";
 import { heardCatalog } from "$lib/modelCatalog.svelte";
 import { readsAsCommand } from "$lib/slash";
 import { offeredModel, thoughtAnswers } from "$lib/thread";
@@ -82,7 +82,7 @@ import {
 } from "$lib/sessions.svelte";
 import { orchestratorPrompt, startsOnly } from "$lib/workflowInstructions";
 import { workflowNamed } from "$lib/workflows.svelte";
-import type { AgentId } from "$lib/core";
+import type { HarnessId } from "$lib/core";
 
 /**
  * The integrated sessions behind their rows.
@@ -205,7 +205,7 @@ export class Link {
   ranOn: Run | null = null;
   /** The agent the row was started on, once a workflow picked for it may
       have put it on another: no workflow puts it back. */
-  startedOn = $state<AgentId | null>(null);
+  startedOn = $state<HarnessId | null>(null);
   /** Going back is on its way: the message gone back to, as it stood,
       how it goes back, and the messages the thread let go of for it, until
       the core has answered. */
@@ -427,13 +427,13 @@ function deliver(key: string, link: Link, body: IntegratedEventBody) {
         body.defaultModel ?? body.models.find((model) => model.value === "default")?.resolved ?? null,
       );
       heardCatalog(session.agent, hostOf(session.project), session.account, body.models);
-      if (agentProfile(session.agent).namesRunningModel) session.runsOn = body.model ?? body.defaultModel ?? null;
+      if (harnessProfile(session.agent).namesRunningModel) session.runsOn = body.model ?? body.defaultModel ?? null;
       if (session.modeGiven !== null && session.modeNamed === session.modeGiven && body.mode !== session.modeGiven)
         void fallBack(key, link, session.agent, session.modeGiven, body.mode);
       else if (session.carried !== null) void fallBackCarried(key, link, session, session.carried);
       break;
     case "configured":
-      if (!agentProfile(session.agent).namesRunningModel) session.model = body.model;
+      if (!harnessProfile(session.agent).namesRunningModel) session.model = body.model;
       else {
         // A new model is the one chosen; an effort or a mode changed on
         // the agent's default leaves the session on no model chosen.
@@ -712,7 +712,7 @@ type Change = { model?: string; mode?: string; effort?: string };
     one the row says: the agent, and the workflow's instructions and
     whether they take the agent's own subagents away. */
 interface Run {
-  agent: AgentId;
+  agent: HarnessId;
   told: string | null;
 }
 
@@ -768,7 +768,7 @@ export function follow(key: string, name: string | null) {
 
 /** The agent a new conversation runs on under no workflow: the one it was
     started on. */
-export function aloneOn(session: Session): AgentId {
+export function aloneOn(session: Session): HarnessId {
   return links.get(session.key)?.startedOn ?? session.agent;
 }
 
@@ -981,7 +981,7 @@ export function lowerEffort(effort: string, efforts: string[], scale: string[]):
  * agent offers rather than the one the agent chose for itself, so it holds
  * no more than its starter and no less than it may.
  */
-async function fallBack(key: string, link: Link, agent: AgentId, given: string, took: string | null) {
+async function fallBack(key: string, link: Link, agent: HarnessId, given: string, took: string | null) {
   let mode = nextNarrower(agent, given);
   while (mode !== null && !offers(link, mode)) mode = nextNarrower(agent, mode);
   if (mode === null || mode === took) return;
@@ -1124,7 +1124,7 @@ export function reattach(key: string, handle: string, spoken = true): Promise<Re
       if (snapshot.ready !== null) {
         identify(session, snapshot.ready.sessionId);
         heardCatalog(session.agent, hostOf(session.project), session.account, snapshot.ready.models);
-        if (agentProfile(session.agent).namesRunningModel)
+        if (harnessProfile(session.agent).namesRunningModel)
           session.runsOn = snapshot.settings.model ?? snapshot.ready.defaultModel ?? null;
       }
       settle(session, snapshot.state, before, link);

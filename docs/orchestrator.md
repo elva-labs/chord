@@ -49,7 +49,7 @@ connects stays well inside the length Claude Code keeps of a tool server's
 instructions, 4096 characters, past which it cuts the rest. Codex shows its
 model only their first few lines until the model takes up one of the
 tools, so a Codex session is given them whole as developer instructions
-too, as [the agents](adapters.md#naming-the-session-to-its-tools)
+too, as [the harnesses](adapters.md#naming-the-session-to-its-tools)
 describe.
 
 Earlier versions of the workbench ran such sessions in a project of their
@@ -76,7 +76,7 @@ own tools use. A session that follows a workflow has them whatever the
 projects were told about live updates: it is pointed at the server when it
 starts where its project's configuration does not point at it already. Any
 other session has them where its project's hooks are on. See
-[hooks](hooks.md) and [agents](adapters.md#under-a-workflow).
+[hooks](hooks.md) and [harnesses](adapters.md#under-a-workflow).
 
 `projects` lists the open projects, the caller's own marked, so a session
 names a project the app actually has. `sessions` lists the sessions the
@@ -227,12 +227,15 @@ leaves nothing behind: no row, no worktree or branch, no entry on the
 starter's list and no news to the starter. A worktree that holds changes
 stays, and the starter's list keeps it. A start whose agent gives no
 session id at once, as Codex does, is waited for until the id arrives, and
-is not taken back while it runs. A start can also
-name a model, which goes to the agent on its command line and holds from
+is not taken back while it runs. A start can name
+its harness, Claude Code or Codex, with `harness`; one that names none runs
+on the harness the project last used. `agent` with `claude-code` or `codex`
+names the harness as well, for one more release. A start can also
+name a model, which goes to the harness on its command line and holds from
 the session's first turn, so an orchestrator chooses the model for a piece
 of work when it starts it rather than sending a model command afterwards.
-A model's name belongs to one agent, so a start that names a model names
-the agent too, and one that leaves the agent out is refused rather than
+A model's name belongs to one harness, so a start that names a model names
+the harness too, and one that leaves the harness out is refused rather than
 given the project's last.
 A start that names no model, for a step that names none either, runs one
 model below its starter's when both run Claude Code, the starter is a
@@ -253,7 +256,7 @@ compacts, since every turn reads the whole context. The user's own
 sessions keep the agent's default. There is no setting for either.
 
 A start can name an account, by the name it has in the settings, or
-Default, in any case, for the agents' own login, for work the user asked
+Default, in any case, for the harnesses' own login, for work the user asked
 to have done under a particular login, or for work a session under a
 named account moves to the other login once that account has reached its
 limit. One that names an account there is not is refused with the names
@@ -603,7 +606,7 @@ is held to its workflow the same way in either. It is told the workflow's
 instructions and, unless the workflow says otherwise, has its agent's own
 ways of handing work to agents the user cannot see taken away, so every
 piece it hands out is a session of its own started with `start`.
-[Agents](adapters.md#under-a-workflow) says what each agent loses and what
+[Harnesses](adapters.md#under-a-workflow) says what each harness loses and what
 remains. What a session is held to comes from the workbench's own record of
 it, found by its token. Nothing a call says, such as a step, a workflow or
 a role in its arguments, changes that, and a session another started
@@ -612,10 +615,10 @@ cannot start one of its own however it runs.
 Each start from such a session names the step of the workflow it is for,
 and is held to that step before the user is asked anything. A start that
 names no step, or one the workflow does not have, is refused with the
-steps there are. A start that names an agent or a model the step does not
+steps there are. A start that names a harness or a model the step does not
 allow is refused with the ones it does; one that names neither runs on the
-step's default model, and one that names only the agent on that
-agent's default. A session started for a step stays on the model it was
+step's default model, and one that names only the harness on that
+harness's default. A session started for a step stays on the model it was
 given: `send` gives it no command but `/compact`, since commands such as `/model`
 and `/fast` change the model and either agent completes a command from the
 start of its name, and a start or a resume for a step does not begin with
@@ -891,7 +894,7 @@ A start the user is asked about, a start or a resume for a round of review
 past its limit, and a line `send` would give a review past its limit wait
 on the user's answer, for as long as the user is away. An agent gives up
 on a call of its own accord after a while, Codex after a minute where it
-is not given longer (see [agents](adapters.md#naming-the-session-to-its-tools)),
+is not given longer (see [harnesses](adapters.md#naming-the-session-to-its-tools)),
 and the tool server after ten minutes, and an answer that comes after it
 gave up is never read. So such a call is held no longer than forty
 seconds. Not done by then, it is answered that it waits on the user, that
@@ -918,8 +921,8 @@ at most. The same start, resume or line asked for again by the caller
 while one it was told of waits is refused, saying that one is on its way,
 and nothing is asked twice; calls made together are each their own. The
 same start is the same work in the same project and step, on the same
-agent and model, under the same login and by the same name: the same work
-on the agents' own login once the account it first ran under has reached
+harness and model, under the same login and by the same name: the same work
+on the harnesses' own login once the account it first ran under has reached
 its limit is another start, and is put to the user in its turn. A caller
 that stops has nothing done for it: its question on screen is taken down
 and the next put up, one of its still waiting behind another is never put

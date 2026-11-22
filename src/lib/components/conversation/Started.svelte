@@ -1,6 +1,6 @@
 <script lang="ts">
   import Plain from "./Plain.svelte";
-  import { agentLabel } from "$lib/agent.svelte";
+  import { harnessLabel } from "$lib/harness.svelte";
   import { focusPane } from "$lib/layout.svelte";
   import { modelLabel } from "$lib/models";
   import { hostOf } from "$lib/remote.svelte";
@@ -51,7 +51,7 @@
         <span class="state" class:asking={session.needs === "permission"} data-testid="started-state">
           {at?.round == null ? "" : `${at.round}, `}{session.needs === "permission" ? "asking" : stateWord(session)}
         </span>
-        <span class="model"><Plain text={model !== null ? modelLabel(session.agent, model, session.account, hostOf(session.project)) : agentLabel(session.agent)} /></span>
+        <span class="model"><Plain text={model !== null ? modelLabel(session.agent, model, session.account, hostOf(session.project)) : harnessLabel(session.agent)} /></span>
         <button class="open" tabindex="-1" data-thread-item onclick={() => open(session)} data-testid="open-started">Open</button>
       </div>
     {/each}

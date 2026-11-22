@@ -30,7 +30,7 @@ import { canPreview, effectiveView, files, matches, select as selectFile } from 
 import { browser } from "$lib/browser.svelte";
 import { layout } from "$lib/layout.svelte";
 import { accounts, reset as resetAccounts } from "$lib/accounts.svelte";
-import { agent } from "$lib/agent.svelte";
+import { harnesses } from "$lib/harness.svelte";
 import { create, exact, reset, select, sessions, started } from "$lib/sessions.svelte";
 import { activate, bringForward, onScreen, reset as resetWorkspace, startSession, workspace } from "$lib/workspace.svelte";
 import { projects, resetProjects } from "$lib/projects.svelte";
@@ -73,8 +73,8 @@ beforeEach(() => {
   resetAccounts();
   // No workflows unless a test has some.
   resetWorkflows();
-  agent.availability = "ready";
-  agent.installed = ["claude-code"];
+  harnesses.availability = "ready";
+  harnesses.installed = ["claude-code"];
   attention.focused = true;
   workspace.open.push(repo(A), repo(B), repo(C));
 });
@@ -426,7 +426,7 @@ describe("commands", () => {
   });
 
   it("does not offer a new session while no agent is ready", () => {
-    agent.availability = "missing";
+    harnesses.availability = "missing";
     const item = commandItems("new session")[0];
     expect(pickable(item)).toBe(false);
     expect(pickItem(item)).toEqual({ type: "stay" });
@@ -681,7 +681,7 @@ describe("how a new session runs", () => {
     const items = stepItems("");
     expect(items.map((item) => [item.group, item.label])).toEqual([
       ["Workflows", "Build and review"],
-      ["One agent, no workflow", "Claude Code"],
+      ["No workflow", "Claude Code"],
     ]);
     const [flow] = items;
     expect(flow.kind === "choice" && flow.detail).toBe("Fable directs, Sonnet works, Opus reviews");
@@ -723,7 +723,7 @@ describe("how a new session runs", () => {
   });
 
   it("starts under another workflow picked, and alone on an agent picked", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     adoptWorkflows({ list: [defaultWorkflow(), quick()], default: "Build and review", overrides: {} });
     beginNew(A);
     choose("Change");
@@ -845,7 +845,7 @@ describe("a new session", () => {
 
   it("asks for the agent only where more than one is installed", () => {
     expect(stepsLeft([{ kind: "project", path: A }])).toEqual([]);
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     expect(stepsLeft([{ kind: "project", path: A }])).toEqual(["agent"]);
     expect(stepsLeft([])).toEqual(["project", "agent"]);
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
@@ -853,7 +853,7 @@ describe("a new session", () => {
   });
 
   it("takes each answer as a chip and starts on the last, with the project's agent offered first", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     sessions.preferred[A] = "codex";
     beginNew(A);
@@ -870,7 +870,7 @@ describe("a new session", () => {
   });
 
   it("marks the agent last used on its entry", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     sessions.preferred[A] = "codex";
     beginNew(A);
     choose("Change");
@@ -879,7 +879,7 @@ describe("a new session", () => {
   });
 
   it("clears the field at each step, and narrows only the question asked", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     openCommands();
     choose("New session");
     setQuery("tw");
@@ -924,7 +924,7 @@ describe("a new session", () => {
   });
 
   it("finds every choice the defaults stand for in what is typed on their line", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     accounts.overrides = { [A]: "Work" };
     beginNew(A);
@@ -932,13 +932,13 @@ describe("a new session", () => {
     expect(palette.ready).toBe(true);
     // Codex begins with it, so it comes before Claude Code and takes the cursor.
     expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
-      ["Codex", "Which agent"],
-      ["Claude Code", "Which agent"],
+      ["Codex", "Which harness"],
+      ["Claude Code", "Which harness"],
     ]);
     setQuery("o");
     expect(stepItems(palette.query).map((item) => [item.label, item.group])).toEqual([
-      ["Claude Code", "Which agent"],
-      ["Codex", "Which agent"],
+      ["Claude Code", "Which harness"],
+      ["Codex", "Which harness"],
       ["Work", "Under which account"],
     ]);
     // Enter starts the one found, with the other defaults as they were.
@@ -949,7 +949,7 @@ describe("a new session", () => {
   });
 
   it("starts the default agent under an account found on the defaults' line, and keeps the pick", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     sessions.preferred[A] = "codex";
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     beginNew(A);
@@ -993,7 +993,7 @@ describe("a new session", () => {
   });
 
   it("steps back by one answer, to the defaults, and from the first question to the commands", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     openCommands();
     choose("New session");
@@ -1023,7 +1023,7 @@ describe("a new session", () => {
 
   it("starts with Cmd+Enter from a session or a project in go to", () => {
     const own = create(B);
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     openGoTo();
     const session = paletteItems().find((item) => item.kind === "session")!;
     expect(pickItem(session, true)).toEqual({ type: "stay" });
@@ -1037,7 +1037,7 @@ describe("a new session", () => {
   });
 
   it("steps back out of a new session Cmd+Enter began to go to, with what was typed there", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     openGoTo();
     setQuery("thr");
     const project = paletteItems().find((item) => item.kind === "project" && item.path === C)!;
@@ -1060,7 +1060,7 @@ describe("a new session", () => {
 
   it("does not ask for the project when only one is open", () => {
     workspace.open.splice(0, workspace.open.length, repo(B));
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     openCommands();
     expect(choose("New session")).toEqual({ type: "stay" });
     expect(palette.steps).toEqual([{ kind: "project", path: B }]);
@@ -1079,7 +1079,7 @@ describe("a new session", () => {
   });
 
   it("offers nothing at a later step once the project has closed", () => {
-    agent.installed = ["claude-code", "codex"];
+    harnesses.installed = ["claude-code", "codex"];
     beginNew(A);
     expect(stepItems("")).not.toEqual([]);
     workspace.open.splice(0, workspace.open.length, repo(B), repo(C));

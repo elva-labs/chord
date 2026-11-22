@@ -836,7 +836,7 @@ describe("starting a session", () => {
     expect(plain.model).toBeNull();
   });
 
-  it("refuses a model named without an agent", async () => {
+  it("refuses a model named without a harness", async () => {
     await handle(
       call(
         "start",
@@ -844,7 +844,16 @@ describe("starting a session", () => {
         { session: "caller-1" },
       ),
     );
-    expect(last().error).toContain("names the agent too");
+    expect(last().error).toContain("names the harness too");
+    // agent names the harness only by one of the harnesses' names.
+    await handle(
+      call(
+        "start",
+        { project: A, prompt: "Fix it", model: "sonnet", agent: "Reviewer" },
+        { session: "caller-1" },
+      ),
+    );
+    expect(last().error).toContain("names the harness too");
     expect(conductor.asking).toBeNull();
     expect(forProject(A)).toHaveLength(0);
   });
@@ -1144,7 +1153,7 @@ describe("the account a started session runs under", () => {
       expect(conductor.asking).toBeNull();
       expect(last().content).toBeNull();
       expect(last().error).toBe(
-        "There is no account called Play. The accounts are Home, Work, and Default for the agents' own login.",
+        "There is no account called Play. The accounts are Home, Work, and Default for the harnesses' own login.",
       );
       expect(forProject(A)).toHaveLength(1);
     });
@@ -1155,11 +1164,11 @@ describe("the account a started session runs under", () => {
         call("start", { project: A, prompt: "Fix it", account: "Work" }),
       );
       expect(last().error).toBe(
-        "There are no accounts in the workbench's settings, only Default for the agents' own login: leave the account out.",
+        "There are no accounts in the workbench's settings, only Default for the harnesses' own login: leave the account out.",
       );
     });
 
-    it("takes Default, in any case, for the agents' own login, which a start under a named account is asked about", async () => {
+    it("takes Default, in any case, for the harnesses' own login, which a start under a named account is asked about", async () => {
       caller(A, "Work");
       // From a caller under Work, in a project of the agents' own: the
       // other login, asked about, and said.
@@ -1362,7 +1371,7 @@ describe("the account a started session runs under", () => {
 
     it("does not cover an agent the account keeps no directory for", async () => {
       // Work keeps Claude Code only, so Codex under Work runs on the
-      // agents' own login.
+      // harnesses' own login.
       accounts.overrides[B] = "Home";
       caller(A, "Work");
       const claude = handle(
@@ -1613,7 +1622,7 @@ describe("a start in the caller's own project", () => {
     expect((await begun("sid-4")).model).toBeNull();
     // A model the start names is the one.
     caller.model = "fable";
-    expect((await begun("sid-5", { agent: "claude-code", model: "haiku" })).model).toBe("haiku");
+    expect((await begun("sid-5", { harness: "claude-code", model: "haiku" })).model).toBe("haiku");
     expect(last().content).toContain("It runs on Haiku.");
     // Never above the default the account runs on, where the agent said.
     heardOffers("claude-code", null, ["default", "opus", "sonnet"], "claude-sonnet-5-5");
@@ -4174,12 +4183,12 @@ describe("starting in a workflow's shape", () => {
 
   it("refuses a model the step does not allow, with what it allows", async () => {
     orchestrating();
-    expect(await refusedWith({ step: "Work", agent: "claude-code", model: "opus" })).toBe(
-      'The step "Work" does not allow claude-code with the model opus. It allows claude-code with the model sonnet. Leave the agent and the model out to use the first.',
+    expect(await refusedWith({ step: "Work", harness: "claude-code", model: "opus" })).toBe(
+      'The step "Work" does not allow claude-code with the model opus. It allows claude-code with the model sonnet. Leave the harness and the model out to use the first.',
     );
   });
 
-  it("refuses an agent the step does not allow, with what it allows", async () => {
+  it("refuses a harness the step does not allow, named the old way too", async () => {
     orchestrating();
     expect(await refusedWith({ step: "Work", agent: "codex" })).toContain(
       'The step "Work" does not allow codex. It allows claude-code with the model sonnet.',
@@ -5254,7 +5263,7 @@ describe("starting in a workflow's shape", () => {
     // One it does not have is refused with the ones there are, and none
     // is chosen for a step that names none.
     expect(await refusedWith({ step: "Work", account: "Home" })).toBe(
-      "There is no account called Home. The accounts are Work, and Default for the agents' own login.",
+      "There is no account called Home. The accounts are Work, and Default for the harnesses' own login.",
     );
     ended({ id: "pty-w1b", code: 0, clean: true });
     flushSync();
@@ -5467,7 +5476,7 @@ describe("starting in a workflow's shape", () => {
 
 describe("sessions told apart by their tokens", () => {
   beforeEach(() => {
-    for (const key of ["chord.mine", "chord.names", "chord.workflows", "chord.agents"])
+    for (const key of ["chord.mine", "chord.names", "chord.workflows", "chord.harnesses"])
       localStorage.removeItem(key);
   });
 
@@ -7074,7 +7083,7 @@ describe("a call that waits on the user", () => {
     // The same start, its login named as the one it resolves to, is the same.
     expect(await refusedAtOnce({})).toBe(true);
     expect(await refusedAtOnce({ account: "Work" })).toBe(true);
-    // The same work on the agents' own login, once Work is at its limit,
+    // The same work on the harnesses' own login, once Work is at its limit,
     // is another start; so is one on another agent or model, or by another
     // name. Each is put to the user in its turn.
     expect(await refusedAtOnce({ account: "Default" })).toBe(false);
