@@ -781,8 +781,11 @@ struct AppServer {
     /// Whether Codex's own subagent tools are turned off for the thread.
     start_only: bool,
     /// Whether the session reads only: its turns run in the read-only
-    /// sandbox whatever the mode, and its asks to change files are turned
-    /// down without asking the user.
+    /// sandbox whatever the mode, its asks to change files are turned down
+    /// without asking the user, and an ask to widen the sandbox or to run
+    /// a server's tool other than the workbench's own that change nothing
+    /// says the session reads only. A command is asked about as the mode
+    /// asks.
     reads_only: bool,
 
     next: i64,
@@ -2528,8 +2531,10 @@ impl AppServer {
                 )
             }
             // Reading only turns down every change of a file, whatever the
-            // mode would ask. Anything else asked while it is on reaches
-            // the user saying that the session reads only.
+            // mode would ask. A command the sandbox keeps in is the mode's
+            // to ask about, as it is with reading only off; an ask to widen
+            // the sandbox reaches the user saying that the session reads
+            // only, as that sandbox is what reading only rests on.
             "item/fileChange/requestApproval" if self.reads_only => {
                 out.writes.push(turned_down(id, method));
                 return;
@@ -2653,7 +2658,8 @@ impl AppServer {
                     truncated: false,
                     description: text(&params["message"]),
                     path: None,
-                    reads_only: self.reads_only,
+                    reads_only: self.reads_only
+                        && !(attached && crate::show::READING_TOOLS.contains(&tool.as_str())),
                     choices: asked.offers(),
                 });
                 self.asked.insert(key, asked);
@@ -2695,7 +2701,7 @@ impl AppServer {
             truncated: false,
             description,
             path,
-            reads_only: self.reads_only,
+            reads_only: self.reads_only && matches!(asked.asking, Asking::Permissions { .. }),
             choices: asked.offers(),
         });
         self.asked.insert(key, asked);

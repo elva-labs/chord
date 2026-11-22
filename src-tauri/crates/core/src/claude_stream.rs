@@ -89,9 +89,8 @@ pub(crate) const PLAN_TOOL: &str = "ExitPlanMode";
 /// The tool that keeps the agent's list of steps.
 pub(crate) const TODO_TOOL: &str = "TodoWrite";
 
-/// The id of the hook the stream registers for the tools that change files,
-/// which the agent calls back before each use: refused while the session
-/// reads only, left to the mode otherwise.
+/// The id of the hook the stream registers for every tool, which the agent
+/// calls back before each use: [`Stream::hooked`] answers it.
 const READS_ONLY_HOOK: &str = "chord_reads_only";
 
 /// Why the reads-only hook puts a tool to the user, as the harness hands it
@@ -99,10 +98,12 @@ const READS_ONLY_HOOK: &str = "chord_reads_only";
 const READS_ONLY_ASK: &str = "This session reads only. Allowing this lets it change files.";
 
 /// The tools the reads-only hook leaves to the mode besides those that
-/// only read: a subagent's own tool calls pass the same hook, the
+/// only read: a command is the mode's to allow, as the agent is told to
+/// change nothing, a subagent's own tool calls pass the same hook, the
 /// question and the plan go to the user anyway, and a tool search only
 /// loads tools.
 const LEFT_TO_MODE: &[&str] = &[
+    "Bash",
     "Agent",
     "Task",
     "AskUserQuestion",
@@ -2079,8 +2080,9 @@ impl Stream {
     }
 
     /// The answer to the reads-only hook for one tool use. While the
-    /// session reads only, a tool that writes files is refused, one that
-    /// only reads is left to the mode, and any other is put to the user
+    /// session reads only, a tool that edits files is refused; one that
+    /// only reads, a command, and the workbench's own tools that change
+    /// nothing are left to the mode; and any other is put to the user
     /// whatever the mode or the allow rules say. Off, every tool is left to
     /// the mode.
     fn hooked(&self, id: &str, input: &Value) -> Value {
@@ -2097,6 +2099,7 @@ impl Stream {
         let decision = if !self.reads_only
             || crate::agents::READING_TOOLS.contains(&tool)
             || LEFT_TO_MODE.contains(&tool)
+            || crate::show::reading_tool(tool)
         {
             json!({})
         } else if crate::agents::CHANGING_TOOLS.contains(&tool) {
@@ -3978,12 +3981,7 @@ mod tests {
             );
             assert_eq!(decided["hookSpecificOutput"]["hookEventName"], "PreToolUse");
         }
-        for tool in [
-            "Bash",
-            "mcp__workbench__send",
-            "mcp__github__create_issue",
-            "Unheard",
-        ] {
+        for tool in ["mcp__chord__send", "mcp__github__create_issue", "Unheard"] {
             let decided = hook(&mut stream, tool);
             assert_eq!(
                 decided["hookSpecificOutput"]["permissionDecision"], "ask",
@@ -4015,6 +4013,39 @@ mod tests {
     }
 
     #[test]
+    fn reading_only_leaves_a_command_and_the_workbench_s_reading_tools_to_the_mode() {
+        let mut stream = stream();
+        stream.control(&Control::SetReadsOnly(true)).unwrap();
+        for tool in [
+            "Bash",
+            "mcp__chord__notes",
+            "mcp__chord__sessions",
+            "mcp__chord__wait",
+            "mcp__chord__read",
+            "mcp__chord__selection",
+        ] {
+            assert_eq!(
+                hook(&mut stream, tool),
+                json!({}),
+                "{tool} is left to the mode"
+            );
+        }
+        for tool in [
+            "mcp__chord__start",
+            "mcp__chord__note",
+            "mcp__chord__terminal",
+            "mcp__github__create_issue",
+            "mcp__other__notes",
+        ] {
+            assert_eq!(
+                hook(&mut stream, tool)["hookSpecificOutput"]["permissionDecision"],
+                "ask",
+                "{tool}"
+            );
+        }
+    }
+
+    #[test]
     fn an_ask_the_reads_only_hook_made_says_so() {
         let mut stream = stream();
         let ask = |stream: &mut Stream, id: &str, reason: Value| {
@@ -4024,8 +4055,8 @@ mod tests {
                     "request_id": id,
                     "request": {
                         "subtype": "can_use_tool",
-                        "tool_name": "Bash",
-                        "input": { "command": "git commit -am x" },
+                        "tool_name": "mcp__github__create_issue",
+                        "input": { "title": "x" },
                         "tool_use_id": "c1",
                         "decision_reason": reason,
                         "decision_reason_type": "hook",
@@ -4036,7 +4067,7 @@ mod tests {
         };
         let reading = ask(&mut stream, "r1", json!(READS_ONLY_ASK));
         assert!(
-            matches!(&reading.events[..], [Event::PermissionAsked { reads_only: true, tool, .. }] if tool == "Bash"),
+            matches!(&reading.events[..], [Event::PermissionAsked { reads_only: true, tool, .. }] if tool == "mcp__github__create_issue"),
             "{:?}",
             reading.events
         );
