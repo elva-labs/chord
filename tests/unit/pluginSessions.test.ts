@@ -433,7 +433,7 @@ describe("the agent a plugin's start works as", () => {
     expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "haiku", role: "chord:Developer" });
     once();
     const row = byKey((await starting)!)!;
-    expect(row.prompt.startsWith('From the workbench, not the user: from this message on, work as the agent "Developer"')).toBe(true);
+    expect(row.prompt).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Developer"/);
     expect(row.model).toBe("haiku");
     expect(agentOfRow(row.key, null)).toMatchObject({ key: "chord:Developer", readsOnly: false });
     expect(modelToStart("claude-code", null)).toBe("haiku");
