@@ -505,7 +505,7 @@ and one for a call answered early that is now done, counted from when the
 window saw it done. While others are still at work, it waits
 thirty seconds after the last for more to come along, and never more than
 two minutes after the first. A starter that has rested long enough for its
-prompt cache to lapse, an hour for Claude Code and ten minutes for Codex,
+prompt cache to lapse, an hour for Claude Code and Codex alike,
 would read its conversation again at full price, so its wake waits until
 none of its sessions is at work, or twenty minutes after the first came to
 rest. While a wake is held so, the pointer text on the row's not heard yet
@@ -749,7 +749,8 @@ whole conversation into the work, or for one cold and large, its notes of
 it: such a session goes on as a fresh conversation from its notes, as
 [notes](sessions.md#going-on-from-the-notes) describes. Its place on its
 starter's list and in a workflow moves to the fresh conversation's id,
-the answer names both ids, and the old one still names it in every tool.
+the answer names both ids, or the old one alone where the agent writes the
+fresh one down only later, and the old one still names it in every tool.
 
 The tools act on the sessions the caller started and on no others. A
 session you started yourself is yours, on a subject of your own: another

@@ -138,10 +138,10 @@ const MODE_ENTRY: &[u8] = b"permission-mode";
 /// The most of a transcript's end read for how it stands and what was
 /// last said, and of its start for how it began.
 #[cfg(not(test))]
-const TAIL_KEEP: u64 = 8 * 1024 * 1024;
+pub(crate) const TAIL_KEEP: u64 = 8 * 1024 * 1024;
 #[cfg(test)]
-const TAIL_KEEP: u64 = 64 * 1024;
-const HEAD_KEEP: u64 = 1024 * 1024;
+pub(crate) const TAIL_KEEP: u64 = 64 * 1024;
+pub(crate) const HEAD_KEEP: u64 = 1024 * 1024;
 
 /// How a conversation stood when its last request ended: the tokens of
 /// context that request read, when it ended, and whether its prompt cache
@@ -296,16 +296,26 @@ pub fn last_said(path: &Path, most: usize, line: Option<&HashSet<String>>) -> Ve
         if !on_line(&entry, line) {
             return;
         }
-        if let Some(one) = said_in(&entry) {
-            match said.last_mut() {
-                Some(last) if !last.user && !one.user => {
-                    last.text.push_str("\n\n");
-                    last.text.push_str(&one.text);
-                }
-                _ => said.push(one),
-            }
-        }
+        said.extend(said_in(&entry));
     });
+    last_exchanges(said, most)
+}
+
+/// The last `most` messages of the user's among `said`, each with the
+/// agent's words after it, oldest first. The agent's messages in a row are
+/// one.
+pub(crate) fn last_exchanges(said: impl IntoIterator<Item = Quoted>, most: usize) -> Vec<Quoted> {
+    let mut merged: Vec<Quoted> = Vec::new();
+    for one in said {
+        match merged.last_mut() {
+            Some(last) if !last.user && !one.user => {
+                last.text.push_str("\n\n");
+                last.text.push_str(&one.text);
+            }
+            _ => merged.push(one),
+        }
+    }
+    let mut said = merged;
     let users: Vec<usize> = said
         .iter()
         .enumerate()
@@ -649,9 +659,9 @@ fn survey(path: &Path) -> Found {
 
 /// The bytes of a file that are read: of a very long file, its end.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Span {
-    start: u64,
-    end: u64,
+pub(crate) struct Span {
+    pub(crate) start: u64,
+    pub(crate) end: u64,
 }
 
 /// Hands each whole line of the file to `each`, past a line too long to
@@ -659,7 +669,7 @@ struct Span {
 /// of the end of that. Answers what was read, so a second reading reads the
 /// same lines; none for a file that is not a plain file, which is not
 /// opened, or that could not be read.
-fn lines(path: &Path, span: Option<Span>, mut each: impl FnMut(&[u8])) -> Option<Span> {
+pub(crate) fn lines(path: &Path, span: Option<Span>, mut each: impl FnMut(&[u8])) -> Option<Span> {
     let meta = std::fs::metadata(path).ok()?;
     if !meta.is_file() {
         return None;
@@ -1621,7 +1631,7 @@ fn modified_millis(path: &Path) -> u64 {
 
 /// A time as the transcript writes it, `2026-03-04T05:06:07.890Z` or with
 /// an offset, in milliseconds since the epoch.
-fn millis(text: &str) -> Option<u64> {
+pub(crate) fn millis(text: &str) -> Option<u64> {
     let bytes = text.as_bytes();
     if bytes.len() < 19
         || bytes[4] != b'-'

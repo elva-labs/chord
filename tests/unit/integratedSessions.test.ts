@@ -29,7 +29,7 @@ import {
   trust,
   unspoken,
 } from "$lib/integrated.svelte";
-import { resetGoingOn } from "$lib/goingOn.svelte";
+import { resetGoingOn, wentOn } from "$lib/goingOn.svelte";
 import { GO_ON, MARGIN, choose as chooseResume, look, resetAutoResume, resumesWords } from "$lib/autoResume.svelte";
 import { stateWord } from "$lib/orchestrator.svelte";
 import {
@@ -286,6 +286,23 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(handleOf(key)).not.toBe(handle);
     expect(await goOnIfCold(key, Date.now(), true)).toBe(false);
     expect(asked).toBe(1);
+  });
+
+  it("goes on with a Codex row as with a Claude Code one", async () => {
+    const judged = judging();
+    const row = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    await launch(row.key);
+    const handle = handleOf(row.key)!;
+    const before = byKey(row.key)!.id;
+    fake.emit(handle, { type: "context", used: 400_000, size: 1_000_000 });
+    await settled();
+    const going = goOnIfCold(row.key, Date.now(), true);
+    judged(COLD);
+    expect(await going).toBe(true);
+    expect(handleOf(row.key)).not.toBe(handle);
+    const starts = fake.calls.filter((call) => call.method === "start");
+    expect(starts.at(-1)).toMatchObject({ options: { agent: "codex", session: undefined } });
+    expect(wentOn(row.key)).toMatchObject({ from: before, briefing: "BRIEFING" });
   });
 
   it("keeps the row's name for the conversation that went on, after a restart too", async () => {

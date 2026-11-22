@@ -931,8 +931,7 @@ window has that one, and its chip says so.
 The chip is there only for a Claude Code conversation whose account's
 figures hold a session window. An account metered some other way has no
 such window and is offered nothing. Codex and terminal sessions are not offered it: only a Claude
-Code conversation goes on from its notes, and only an in-Chord session
-says for certain what ended its turn.
+Code conversation in Chord says for certain that the limit ended its turn.
 
 Only the agent's own word is taken that the limit ended a turn. Claude
 Code names a request that the account's usage limit refused with a kind

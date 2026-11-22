@@ -160,10 +160,11 @@ export const GATHER = 30_000;
 export const GATHER_MOST = 120_000;
 /** How long a starter has rested when its prompt cache has lapsed, by
     agent, so a wake reads its whole conversation again at full price: a
-    Claude Code conversation's cache lasts an hour, and Codex's is taken to
-    last ten minutes. A cold starter's wake waits until nothing it started
-    is at work, and at most COLD_MOST after the first came to rest. */
-export const COLD_AFTER: Record<AgentId, number> = { "claude-code": 58 * 60_000, codex: 10 * 60_000 };
+    Claude Code conversation's cache lasts an hour, and Codex's, which it
+    does not record, is taken to last an hour too. A cold starter's wake
+    waits until nothing it started is at work, and at most COLD_MOST after
+    the first came to rest. */
+export const COLD_AFTER: Record<AgentId, number> = { "claude-code": 58 * 60_000, codex: 58 * 60_000 };
 export const COLD_MOST = 20 * 60_000;
 /** How long the user's keys in a starter's terminal have been still
     before the workbench types into it. */
@@ -3546,17 +3547,22 @@ async function resumeSession(
     started = true;
     if (owesRound) owed.add(session.key);
     // A cold and large conversation went on fresh from its notes, under
-    // an id of its own that the old one still names.
+    // an id of its own that the old one still names. An agent that mints
+    // its own ids writes the fresh one down later, and the old one names
+    // the session until then.
     const fresh = wentOn(session.key) !== null;
-    const named = (fresh ? byKey(session.key)?.id : null) ?? id;
+    const own = fresh ? (byKey(session.key)?.id ?? null) : null;
+    const named = own ?? id;
     if (goesOn !== null && goesOn !== at) place(caller, named, goesOn);
     const where = worktree === null ? project : `${project}, in ${worktree}`;
     const round =
       goesOn !== null && goesOn !== at ? ` for ${placeText(goesOn)}` : "";
-    if (fresh)
+    if (fresh) {
+      const ids = own === null || own === id ? " Its old id names it." : ` Its id is ${idText(own)}, and either id names it.`;
       return said(
-        `Session ${id}${round} went on in ${where} as a fresh conversation, ${idText(named)}, from its notes and last exchanges: its own was cold and large, so it was not read again. Either id names it. ${prompt === null ? "It is waiting. Send it a line to go on, then call wait." : `It has the prompt. ${KEEP_WAITING}`}`,
+        `Session ${id}${round} went on in ${where} as a fresh conversation from its notes and last exchanges: its own was cold and large, so it was not read again.${ids} ${prompt === null ? "It is waiting. Send it a line to go on, then call wait." : `It has the prompt. ${KEEP_WAITING}`}`,
       );
+    }
     return said(
       prompt === null
         ? `Resumed session ${id} in ${where}. It has its conversation and is waiting. Send it a line to go on, then call wait.`

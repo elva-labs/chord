@@ -1307,12 +1307,21 @@ A conversation that is needed again after a pause is read again whole by
 its agent, and once its prompt cache has lapsed, that read costs as much
 as writing all of it to the cache afresh: for a conversation of hundreds
 of thousands of tokens, far more than anything said after it. So a Claude
-Code conversation that is cold and large goes on from its notes instead.
-Cold is past the lifetime of its last cache write, an hour or five
+Code or Codex conversation that is cold and large goes on from its notes
+instead. Cold is past the lifetime of its last cache write, an hour or five
 minutes as its transcript records, less two minutes of an hour or thirty
 seconds of five minutes; large is a context of a hundred thousand tokens
 or more, as its last request read it. Warm or small, it is resumed whole,
 as before, and so is one whose last request does not say when it was.
+A Codex conversation is read from the file Codex writes its thread to,
+which stands for its transcript here. Its rest is counted from the end of
+the last request Codex recorded there, or the start or end of its last
+turn where that came later; opening the thread again, in Chord or in
+Codex's own apps, records no request and counts for nothing. Codex does
+not record how long its cache lasts, so the cautious reading is taken: an
+hour, longer than the half hour its provider keeps one at the least. Its
+context is the one Codex last counted; a Codex conversation compacted
+after its last count, or with no count at all, is resumed whole.
 A conversation held at a point it went back to is judged as it stands
 there, not by the turns it went back on. The same rule holds for the
 user's own sessions, the one on screen included, and for sessions another
@@ -1378,7 +1387,7 @@ many tokens it reads where the transcript said, and starts the row again
 on the whole old conversation, at once when the row is on screen. It is
 offered only until anything is said to the fresh run: the old
 conversation would not hold what was said after it, while the row still
-drew it. A Codex conversation is always resumed whole.
+drew it.
 
 The notes go once the session cannot come back. For a session another
 session started, that is when its starter stops it, or when the starter

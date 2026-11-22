@@ -1,9 +1,11 @@
 //! Whether a conversation that is needed again goes on from its notes
 //! rather than being read again whole, and the briefing it goes on with.
 //!
-//! A conversation whose prompt cache has lapsed is read again at the
-//! price of writing it all to the cache, which for a long one is far more
-//! than a fresh conversation costs. So a cold and large one goes on as a
+//! A conversation whose prompt cache has lapsed is read again at full
+//! price, and written to the cache again where that is charged, which for
+//! a long one is far more than a fresh conversation costs. A Claude Code
+//! conversation is judged from its transcript, a Codex one from its
+//! rollout. So a cold and large one goes on as a
 //! fresh conversation, given its brief and the list of its notes, how it
 //! began, its last exchanges word for word, and where its transcript is,
 //! to be searched for a detail and never read whole. A warm or small one
@@ -89,7 +91,9 @@ pub fn without_briefing(text: &str) -> &str {
 
 /// The briefing a fresh conversation goes on with. `notes` is the brief
 /// and list as the notes module gives them, each line of a record already
-/// quoted; the quoted messages are quoted here.
+/// quoted; the quoted messages are quoted here. The transcript is named
+/// without a Windows `\\?\` prefix where it can do without one, as a path
+/// every tool the agent has opens.
 pub fn briefing(
     notes: Option<&str>,
     began: Option<&str>,
@@ -129,7 +133,10 @@ pub fn briefing(
     }
     text.push_str(&format!(
         "\n\nThe whole earlier conversation is at {}. When the user refers to something neither the notes nor the above cover, read the matching notes first, then search that file for the detail with your own tools; never read it whole. Keep notes from here on as before.\n{END}",
-        transcript.display().to_string().replace(LINE_BREAKS, " ")
+        dunce::simplified(transcript)
+            .display()
+            .to_string()
+            .replace(LINE_BREAKS, " ")
     ));
     text
 }
@@ -197,14 +204,62 @@ fn judged(
         None => None,
     };
     let standing = crate::claude_history::standing(transcript, line.as_ref());
+    decided(
+        transcript,
+        standing,
+        notes,
+        now,
+        always,
+        held.is_some(),
+        || {
+            (
+                crate::claude_history::first_said(transcript),
+                crate::claude_history::last_said(transcript, EXCHANGES, line.as_ref()),
+            )
+        },
+    )
+}
+
+/// How a Codex conversation is taken up again, from its rollout: as
+/// [`judge`] takes a Claude Code one up, or with `always` as [`from_notes`]
+/// does, with the readings [`crate::codex_rollout::standing`] takes where
+/// Codex does not say. A rollout that does not say how the conversation
+/// stands is resumed whole. A Codex conversation is never held at a point.
+pub fn judge_rollout(
+    rollout: &Path,
+    notes: impl FnOnce(Option<i64>) -> Option<String>,
+    now: u64,
+    always: bool,
+) -> GoingOn {
+    let standing = crate::codex_rollout::standing(rollout);
+    decided(rollout, standing, notes, now, always, false, || {
+        (
+            crate::codex_rollout::first_said(rollout),
+            crate::codex_rollout::last_said(rollout, EXCHANGES),
+        )
+    })
+}
+
+/// Whether a conversation that stands so goes on from its notes, and its
+/// briefing if so, from `said`, how it began and its last exchanges. Of
+/// one `held` at a point, the briefing says of each note kept after its
+/// last request there that it may no longer stand.
+fn decided(
+    transcript: &Path,
+    standing: Option<Standing>,
+    notes: impl FnOnce(Option<i64>) -> Option<String>,
+    now: u64,
+    always: bool,
+    held: bool,
+    said: impl FnOnce() -> (Option<String>, Vec<Quoted>),
+) -> GoingOn {
     let goes_on = always || standing.is_some_and(|standing| goes_on(&standing, now));
     let briefing = goes_on.then(|| {
         let since = standing
-            .filter(|_| held.is_some())
+            .filter(|_| held)
             .map(|standing| (standing.at / 1000) as i64);
         let notes = notes(since);
-        let began = crate::claude_history::first_said(transcript);
-        let said = crate::claude_history::last_said(transcript, EXCHANGES, line.as_ref());
+        let (began, said) = said();
         briefing(notes.as_deref(), began.as_deref(), &said, transcript)
     });
     GoingOn {

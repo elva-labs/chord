@@ -1422,7 +1422,7 @@ function restingLarge(key: string, now: number): { session: Session; link: Link 
   const session = byKey(key);
   const link = links.get(key);
   if (session === null || link === undefined || session.kind !== "integrated") return null;
-  if (session.agent !== "claude-code" || session.id === null || session.status !== "running") return null;
+  if (session.id === null || session.status !== "running") return null;
   if (link.busy || link.handle === null || session.working || link.sendingNow || link.goingBack !== null) return null;
   // A message on its way, the user's or another session's, goes to the run
   // it was sent to.

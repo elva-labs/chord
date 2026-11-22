@@ -1184,10 +1184,11 @@ impl Core {
     }
 
     /// How a session's conversation is taken up again: whole, or for a
-    /// Claude Code conversation that is cold and large, as a fresh one
-    /// from the briefing this answers with. With `always` it goes on from
-    /// the briefing whatever its size and however long it rested. Whole
-    /// for any other agent, and where no transcript of it is found.
+    /// Claude Code or Codex conversation that is cold and large, as a
+    /// fresh one from the briefing this answers with. With `always` it
+    /// goes on from the briefing whatever its size and however long it
+    /// rested. Whole for any other agent, and where no transcript or
+    /// rollout of it is found.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1208,10 +1209,19 @@ impl Core {
         let Some(home) = self.home.as_ref() else {
             return Ok(whole);
         };
+        let environment = env::environment();
+        let notes = |since| crate::notes::briefing_since(home, token, since);
+        let now = crate::notes::now() as u64 * 1000;
+        if agent == "codex" {
+            let codex_home = account::codex_home(home, config_dir, &environment.vars);
+            let Some(rollout) = crate::codex::rollout_path(&codex_home, session) else {
+                return Ok(whole);
+            };
+            return Ok(crate::going_on::judge_rollout(&rollout, notes, now, always));
+        }
         if agent != "claude-code" {
             return Ok(whole);
         }
-        let environment = env::environment();
         let dir = account::claude_dir(home, config_dir, &environment.vars);
         let Some(path) = crate::claude_history::find(&dir, project, cwd, session) else {
             return Ok(whole);
@@ -1220,8 +1230,6 @@ impl Core {
         // briefed as it stands there.
         let leaf = crate::claude_history::leaf(&path);
         let held = self.held.at(session, leaf.as_deref());
-        let notes = |since| crate::notes::briefing_since(home, token, since);
-        let now = crate::notes::now() as u64 * 1000;
         Ok(if always {
             crate::going_on::from_notes(&path, notes, now, held.as_deref())
         } else {
@@ -2172,6 +2180,13 @@ struct SessionFiles {
 /// The first prompt as it goes on the command line: as given, or, where it
 /// goes through the command interpreter and would not arrive as given, a
 /// line naming the file of the session's own it is written to.
+///
+/// A conversation begun with such a line records the line, not the words,
+/// and the file is gone once the session ends. Should it go on from its
+/// notes later, its briefing quotes the line as how it began. That is
+/// accepted: only a long or unsafe first prompt through a `.cmd` shim on
+/// Windows begins so, and the notes and last exchanges still carry the
+/// work.
 fn first_prompt(
     prompt: Option<&str>,
     through_cmd: bool,
@@ -2415,6 +2430,117 @@ mod tests {
             runs: Arc::default(),
             held: Arc::new(crate::rewind::Held::new(Some(home))),
         }
+    }
+
+    /// A Codex account's folder holding a cold and large conversation's
+    /// rollout, and, made by `index`, its thread index; none where `index`
+    /// is None. `{dir}` in `index` stands for the folder and the separator
+    /// after it, a path written as Codex writes one on each system.
+    fn codex_account(home: &Scratch, index: Option<&str>) -> (PathBuf, PathBuf) {
+        let codex = home.path().join("codex-account");
+        std::fs::create_dir_all(&codex).unwrap();
+        let rollout = codex.join("rollout-thread.jsonl");
+        let lines = [
+            r#"{"timestamp":"2026-01-02T08:00:00.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","content":[{"type":"text","text":"Build the importer."}]}}}"#,
+            r#"{"timestamp":"2026-01-02T08:00:05.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":239600,"output_tokens":400,"total_tokens":240000}}}}"#,
+            r#"{"timestamp":"2026-01-02T08:00:06.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","content":[{"type":"Text","text":"Importer built."}]}}}"#,
+        ];
+        std::fs::write(&rollout, lines.join("\n") + "\n").unwrap();
+        if let Some(index) = index {
+            rusqlite::Connection::open(codex.join("state_5.sqlite"))
+                .unwrap()
+                .execute_batch(&index.replace(
+                    "{dir}",
+                    &format!("{}{}", codex.display(), std::path::MAIN_SEPARATOR),
+                ))
+                .unwrap();
+        }
+        (codex, rollout)
+    }
+
+    const CODEX_INDEX: &str =
+        "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+         INSERT INTO threads VALUES ('thread', '{dir}rollout-thread.jsonl');";
+
+    /// A cold and large Codex conversation is found by its thread in the
+    /// account's index and goes on from its rollout; one the index does not
+    /// hold is resumed whole.
+    #[test]
+    fn a_codex_conversation_is_taken_up_from_its_rollout() {
+        let home = Scratch::new("api-codex-taken-up");
+        let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
+        let core = core_at(&home);
+        let dir = codex.to_str();
+        let judged = core
+            .taken_up("codex", home.path(), None, "thread", dir, "token", false)
+            .unwrap();
+        assert!(judged.goes_on);
+        assert_eq!(judged.context, Some(240_000));
+        let briefing = judged.briefing.unwrap();
+        assert!(briefing.contains("No notes were kept"));
+        assert!(briefing.contains("You:\n> Importer built."));
+        assert!(briefing.contains(&rollout.display().to_string()));
+        let unknown = core
+            .taken_up("codex", home.path(), None, "other", dir, "token", false)
+            .unwrap();
+        assert!(!unknown.goes_on);
+        assert_eq!(unknown.context, None);
+    }
+
+    /// A cold and large Codex conversation whose rollout the account's
+    /// thread index does not lead to is resumed whole.
+    fn resumed_whole_without_its_index(name: &str, index: Option<&str>) {
+        let home = Scratch::new(name);
+        let (codex, _) = codex_account(&home, index);
+        let judged = core_at(&home)
+            .taken_up(
+                "codex",
+                home.path(),
+                None,
+                "thread",
+                codex.to_str(),
+                "token",
+                false,
+            )
+            .unwrap();
+        assert!(!judged.goes_on);
+        assert_eq!(judged.context, None);
+        assert_eq!(judged.briefing, None);
+    }
+
+    #[test]
+    fn a_codex_conversation_without_a_thread_index_is_resumed_whole() {
+        resumed_whole_without_its_index("api-codex-no-index", None);
+    }
+
+    #[test]
+    fn a_codex_conversation_whose_index_has_no_threads_is_resumed_whole() {
+        resumed_whole_without_its_index(
+            "api-codex-no-threads",
+            Some("CREATE TABLE sessions (id TEXT PRIMARY KEY, rollout_path TEXT);"),
+        );
+    }
+
+    #[test]
+    fn a_codex_conversation_whose_index_does_not_say_where_it_is_is_resumed_whole() {
+        resumed_whole_without_its_index(
+            "api-codex-no-rollout-path",
+            Some(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, path TEXT NOT NULL); \
+                 INSERT INTO threads VALUES ('thread', '{dir}rollout-thread.jsonl');",
+            ),
+        );
+    }
+
+    #[test]
+    fn a_codex_conversation_whose_rollout_is_gone_is_resumed_whole() {
+        resumed_whole_without_its_index(
+            "api-codex-rollout-gone",
+            Some(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+                 INSERT INTO threads VALUES ('thread', '{dir}gone.jsonl');",
+            ),
+        );
     }
 
     #[test]

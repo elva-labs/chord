@@ -50,6 +50,7 @@ import {
   spoke,
   superseded as wentOnFromIt,
   takeUp as takeUpAgain,
+  wentOn,
 } from "$lib/goingOn.svelte";
 import { GOING_ON_WAIT, spoken } from "$lib/instructions";
 
@@ -1457,7 +1458,9 @@ export function sessionTitle(raw: string): string | null {
 /**
  * An agent that mints its own ids has written one down. The row is found
  * by its pty, since that is all the two sides share until now. The id makes
- * the session ours, and the name that came with it names the row.
+ * the session ours, and the name that came with it names the row, unless
+ * the run went on from notes: its first message was the briefing, and the
+ * row goes by the name it showed.
  */
 export function identified(
   ptyId: string,
@@ -1470,9 +1473,11 @@ export function identified(
   keepToken(session);
   identifiedZoom(session.key, sessionId);
   adopt(session.project, sessionId);
+  wentOnAs(session.key, sessionId);
   rememberWorkflow(session);
   replayActivity(sessionId);
-  if (title !== null) named(session.key, title);
+  if (wentOn(session.key) !== null) keepName(session);
+  else if (title !== null) named(session.key, title);
 }
 
 /** Keeps the name a session's row goes by under its id, for when the row
