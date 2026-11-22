@@ -1705,7 +1705,7 @@ function ownIds(caller: string, withPlaced: boolean): Set<string> {
     run outside the workbench or from a session that left its name out, and
     it cannot be held to the workflow. */
 export const OUTSIDE =
-  "This call names no session. Each session the workbench starts is given a name its tools pass on in every call, so this call comes from an agent run outside the workbench or from a session whose tools left its name out. A session the workbench runs follows a workflow, and a call that names no session cannot be held to it, so starting and sending are refused to such calls until none follows one. An agent run outside the workbench can be started from it instead.";
+  "This call names no session. Each session the workbench starts is given a name its tools pass on in every call, so this call comes from Claude Code or Codex run outside the workbench or from a session whose tools left its name out. A session the workbench runs follows a workflow, and a call that names no session cannot be held to it, so starting and sending are refused to such calls until none follows one. Claude Code or Codex run outside the workbench can be started from it instead.";
 
 /** What a call is told that names a session the workbench is not running:
     one it never had, or one that has stopped and so cannot be calling. */
@@ -4620,8 +4620,9 @@ function askUser(
   });
 }
 
-/** What a plugin's start runs on: the agent, and its model by name, or
-    `default` for the one the agent picks itself. */
+/** What a plugin's start runs on: the harness, kept as `agent` as a
+    workflow's model keeps it, and its model by name, or `default` for the
+    one the harness picks itself. */
 export interface PluginPick {
   agent: HarnessId;
   model: string;

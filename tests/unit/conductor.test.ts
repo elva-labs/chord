@@ -3277,7 +3277,7 @@ describe("waking an idle starter", () => {
 
   it("wakes no one for an agent the workbench did not start, nor for a rest the window did not see begin", async () => {
     const starter = idleStarter();
-    // A session an agent run outside the workbench started.
+    // A session started by Claude Code or Codex run outside the workbench.
     const outside = atWork("pty-1", "sid-1", outsideCaller(A));
     stops(outside);
     // One that was already asking when the window first saw it, as after a
@@ -6124,7 +6124,7 @@ describe("an agent the workbench did not start", () => {
     expect(ask).toHaveTextContent("An unnamed agent wants to start a session");
     expect(ask).not.toHaveTextContent("did not start");
     expect(card.getByTestId("conduct-outside")).toHaveTextContent(
-      `It runs in ${A} and does not say which session it is: an agent run outside the workbench, or a session that left its name out. Each new session it asks for is put to you.`,
+      `It runs in ${A} and does not say which session it is: Claude Code or Codex run outside the workbench, or a session that left its name out. Each new session it asks for is put to you.`,
     );
     expect(ask).toHaveTextContent(`In ${B}.`);
     expect(ask).toHaveAccessibleName("An unnamed agent wants to start a session");

@@ -21,7 +21,7 @@
    * review run a round past what its workflow gives a piece. The same card
    * in the asking session's dock and over the window. The first answer
    * remembers nothing; one that stands from now on is never first. A
-   * plugin's start offers this one session or none, and picks the agent
+   * plugin's start offers this one session or none, and picks the harness
    * and model it runs on.
    */
   interface Props {
@@ -89,18 +89,20 @@
 
   /** What a plugin's start runs on, as picked on the card. */
   let pick = $derived(ask.plugin === undefined ? null : pluginPickOf(ask));
-  let agents = $derived(pick === null ? [] : offeredHarnesses(installed(), [pick.agent]));
+  let harnesses = $derived(pick === null ? [] : offeredHarnesses(installed(), [pick.agent]));
 
-  /** The models offered for an agent: its own default first, where the
+  /** The models offered for a harness: its own default first, where the
       list does not hold it, then those it offers, then the one picked
       when the list does not hold it either. */
-  function modelsFor(agent: HarnessId) {
-    const offered = offeredModels(agent);
-    const own = offered.some((option) => option.model === "default") ? [] : [{ agent, model: "default", label: "Default" }];
+  function modelsFor(harness: HarnessId) {
+    const offered = offeredModels(harness);
+    const own = offered.some((option) => option.model === "default")
+      ? []
+      : [{ agent: harness, model: "default", label: "Default" }];
     const listed = [...own, ...offered];
     const held =
-      pick !== null && pick.agent === agent && !listed.some((option) => option.model === pick!.model)
-        ? [{ agent, model: pick.model, label: pick.model }]
+      pick !== null && pick.agent === harness && !listed.some((option) => option.model === pick!.model)
+        ? [{ agent: harness, model: pick.model, label: pick.model }]
         : [];
     return [...listed, ...held];
   }
@@ -137,9 +139,9 @@
     {#if ask.round !== null}{#if saysWhere || ask.worktree || ask.named !== null}{@render where()}{" "}{/if}<span
         data-testid="conduct-round"><Plain text={roundQuestion(ask.round)} /></span
       >{:else if ask.outside !== null}<!-- A call that names no session: the
-           workbench cannot tell which agent makes it, so each start it asks
+           workbench cannot tell which session makes it, so each start it asks
            for is asked about. --><span data-testid="conduct-outside"
-        >It runs in <Plain text={ask.outside} /> and does not say which session it is: an agent run outside the
+        >It runs in <Plain text={ask.outside} /> and does not say which session it is: Claude Code or Codex run outside the
         workbench, or a session that left its name out. Each new session it asks for is put to you.</span
       >{:else}{@render where()}{/if}
   {/snippet}
@@ -150,9 +152,9 @@
     <label class="runs">
       <span>Runs on</span>
       <select value={modelKey(pick)} onchange={picked} data-testid="conduct-model">
-        {#each agents as agent (agent)}
-          <optgroup label={HARNESS_LABELS[agent]}>
-            {#each modelsFor(agent) as option (option.model)}
+        {#each harnesses as harness (harness)}
+          <optgroup label={HARNESS_LABELS[harness]}>
+            {#each modelsFor(harness) as option (option.model)}
               <option value={modelKey(option)}>{option.label}</option>
             {/each}
           </optgroup>

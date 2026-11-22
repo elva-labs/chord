@@ -482,7 +482,7 @@ test.describe("a session started by a session under another account", () => {
     const ask = page.getByTestId("conduct-ask");
     await expect(ask).toContainText("An unnamed agent wants to start a session");
     await expect(ask.getByTestId("conduct-outside")).toContainText(
-      "does not say which session it is: an agent run outside the workbench, or a session that left its name out.",
+      "does not say which session it is: Claude Code or Codex run outside the workbench, or a session that left its name out.",
     );
     await expect(ask.getByTestId("conduct-allow")).toHaveCount(0);
     await expect(ask.getByTestId("conduct-account")).toHaveText(
