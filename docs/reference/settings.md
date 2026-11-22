@@ -18,7 +18,7 @@ switch. A row that has been changed from what it started as shows Reset,
 and a row that has not shows nothing. The close button at the top right,
 or <kbd>Esc</kbd>, closes the dialog.
 
-![The settings over the workbench: the four tabs down the left, and the Appearance tab with its appearance, theme, font and colour choices.](../settings.png)
+![The settings over the workbench: the tabs down the left, and the Appearance tab with its appearance, theme, font and colour choices.](../settings.png)
 
 ## Appearance
 
