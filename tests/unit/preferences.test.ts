@@ -35,6 +35,7 @@ const DEFAULTS: Settings = {
   hooks: { everywhere: true, overrides: {} },
   accounts: { list: {}, everywhere: null, overrides: {} },
   workflows: { list: [], default: null, overrides: {} },
+  agents: [],
   pastSessions: "forever",
   integrated: [],
   inactiveAfter: "week",
