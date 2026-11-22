@@ -1561,7 +1561,7 @@ once for all of them.
 The changes pane learns that the tree moved in one of two ways, chosen per
 open project in the settings.
 
-**Watcher only**, the default: a filesystem watcher on the worktree,
+**Watcher only**: a filesystem watcher on the worktree,
 debounced. It costs nothing, needs no permission, and catches every writer:
 the agent, your editor, a script, a rebase. A write the pane would show
 nothing new for does not refresh it: one in an ignored folder, or one inside
@@ -1569,11 +1569,11 @@ another repository kept in the tree, such as a worktree, which status does
 not look into. A submodule is the exception, since its changes are the
 project's.
 
-**Harness hooks**, opt-in: hooks written into the project's own harness
+**Harness hooks**, on for a fresh install: hooks written into the project's own harness
 configuration, which report each edit the moment a tool finishes and give
-the row its exact state, as above. They are off until asked for, because
-they write into your configuration, and nothing should edit that because you
-opened a folder. They go where the harness keeps local, uncommitted settings,
+the row its exact state, as above. A setup from before the choice existed
+has them off until asked for, since they write into your configuration.
+They go where the harness keeps local, uncommitted settings,
 so they never turn up in a diff, and turning them off removes only what was
 added. A worktree the workbench makes for a session gets them too, as
 [hooks](../hooks.md) describes.
