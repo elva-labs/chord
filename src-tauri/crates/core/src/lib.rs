@@ -44,6 +44,7 @@ pub mod project;
 pub mod protocol;
 pub mod pty;
 pub mod rewind;
+pub mod run;
 #[cfg(any(test, feature = "test-support"))]
 pub mod scratch;
 pub mod selection;

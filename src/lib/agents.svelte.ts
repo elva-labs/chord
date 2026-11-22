@@ -58,7 +58,8 @@ const sonnet: AgentModel = { harness: "claude-code", model: "sonnet" };
 const opus: AgentModel = { harness: "claude-code", model: "opus" };
 
 /** The agents Chord ships, as they ship. The core holds their titles too,
-    so no other agent of the user's takes one. */
+    so no other agent of the user's takes one, and which of them only read,
+    for the team's holds. */
 export const SHIPPED: readonly OwnAgent[] = [
   {
     title: "Researcher",
