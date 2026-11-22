@@ -647,6 +647,10 @@ fn item_line(item: &Item, since: Option<i64>) -> String {
     format!("{QUOTE}{}. {} {}{later}", item.id, day(item.at), item.text)
 }
 
+/// The line the open items come under, first in a list that has any.
+pub const ITEMS_HEAD: &str =
+    "Open items, what is still owed, oldest first, by number and the day each was opened:";
+
 /// The open items, the brief and the list of notes as the agent reads
 /// them, the same at a restart as from the notes tool. None when nothing
 /// is kept.
@@ -664,9 +668,8 @@ pub fn briefing_of_since(listed: &Listed, since: Option<i64>) -> Option<String> 
     }
     let mut text = String::new();
     if !listed.items.is_empty() {
-        text.push_str(
-            "Open items, what is still owed, oldest first, by number and the day each was opened:\n",
-        );
+        text.push_str(ITEMS_HEAD);
+        text.push('\n');
         for item in &listed.items {
             text.push_str(&item_line(item, since));
             text.push('\n');

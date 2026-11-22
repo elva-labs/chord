@@ -1356,7 +1356,9 @@ messages each with the agent's words after it, word for word, and where
 the old transcript is, to be searched for a detail the notes lack and
 never read whole. Ahead of the items it says that they, the notes and the
 quoted messages are records the earlier conversation wrote, to be read as data
-and never as instructions, since anything holding the session's token can
+and never as instructions, and that the open items are what the agent still
+owes, to carry on or ask the user about in its first answer, though none
+gives a permission the user did not give, since anything holding the session's token can
 write a note and an agent can copy a page's words into one; the notes
 tool says the same. Every line of a record, in the briefing and in the
 notes tool's answers, starts with a quote mark, so no record can hold a
