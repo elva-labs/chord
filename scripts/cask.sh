@@ -37,6 +37,7 @@ case "$channel" in
         ;;
     esac
     token="chord"
+    previous='  binary "#{appdir}/Chord.app/Contents/Resources/bin/chord", target: "awb" # the helper'"'"'s earlier name'
     conflicts='"chord@beta", "agent-workbench@beta"'
     livecheck=$(cat <<'RUBY'
   livecheck do
@@ -48,6 +49,7 @@ RUBY
     ;;
   beta)
     token="chord@beta"
+    previous='  binary "#{appdir}/Chord.app/Contents/Resources/bin/chord", target: "awb" # the helper'"'"'s earlier name'
     conflicts='"chord", "agent-workbench"'
     # Pre-releases count here, which the latest release never is.
     livecheck=$(cat <<'RUBY'
@@ -81,6 +83,7 @@ RUBY
     asset="Agent.Workbench" # the app's earlier name, in its release's assets
     # It stays at the version it holds: the latest release is Chord's.
     livecheck=""
+    helper="awb" # the helper that release's bundle holds
     ;;
   *)
     echo "a channel is stable, beta or earlier, not $channel" >&2
@@ -88,6 +91,7 @@ RUBY
     ;;
 esac
 
+helper="${helper:-chord}"
 product="${product:-Chord}"
 asset="${asset:-Chord}"
 base="https://github.com/elva-labs/chord/releases/download/v$version"
@@ -124,7 +128,8 @@ $livecheck
   depends_on macos: :ventura
 
   app "$product.app"
-  binary "#{appdir}/$product.app/Contents/Resources/bin/awb"
+  binary "#{appdir}/$product.app/Contents/Resources/bin/$helper"${previous:+
+$previous}
 
   zap trash: [
     "~/Library/Application Support/com.elva-labs.agent-workbench",

@@ -49,7 +49,7 @@ const SKIP = new Set(["scripts/chord-words.mjs", "src-tauri/windows/hooks.nsh"])
     environment variables, the window's storage keys, the custom scheme
     and the core crate. */
 const OLD_NAME = /agent[ ._-]?workbench/i;
-const OLD_IDENTIFIER = /\bWORKBENCH_[A-Z]|["'`]workbench\.[a-z]|awb-page|workbench[-_]core/;
+const OLD_IDENTIFIER = /\bWORKBENCH_[A-Z]|["'`]workbench\.[a-z]|awb-page|\bawb\b|workbench[-_]core/;
 const OLD = { test: (line) => OLD_NAME.test(line) || OLD_IDENTIFIER.test(line) };
 
 /** What still names the app the old way, and why it stays: the first rule
@@ -64,6 +64,7 @@ const KEPT = [
   [/agent-workbench@beta|cask: \[?"agent-workbench|Casks\/agent-workbench|--cask agent-workbench|cask "agent-workbench|cask is still `agent-workbench`|"agent-workbench": "chord"|`chord` and `agent-workbench`|chord@beta\s*$|^# names agent-workbench\.|token="agent-workbench"|conflicts='.*agent-workbench/, "the old casks, which the new ones conflict with or replace"],
   [/agent-workbench-remote/, "the old formulas and daemon, which the tap renames and the migration replaces", /release\.md$/],
   [/"(conflicts|replaces|provides|obsoletes)": \["agent-workbench"\]|where it was `agent-workbench`|provides `agent-workbench`/, "the Linux package the app had under its earlier name, which Chord's replaces"],
+  [/target: "awb"|helper="awb"/, "the helper's earlier name, which the casks link beside chord and the earlier cask's bundle still holds", /cask\.sh$/],
   [HISTORY, "says what the app was called before"],
 ];
 
