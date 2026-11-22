@@ -29,6 +29,8 @@
     sessionModelName,
     sessions,
     resumeWithout,
+    resumeWithoutProfile,
+    profileGone,
     dismissKept,
     statusMessage,
     titled,
@@ -290,6 +292,13 @@
                going on without one is the user's to say. -->
           <button class="without" onclick={() => resumeWithout(current!.key)} data-testid="resume-without-workflow"
             >Resume without a workflow</button
+          >
+        {/if}
+        {#if profileGone(current)}
+          <!-- Its Codex profile is no longer among the account's files:
+               going on without one is the user's to say. -->
+          <button class="without" onclick={() => resumeWithoutProfile(current!.key)} data-testid="resume-without-profile"
+            >Resume without the profile</button
           >
         {/if}
         {#if current.status !== "starting" && startsIn(current.project)}

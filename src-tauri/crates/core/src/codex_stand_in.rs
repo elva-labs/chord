@@ -167,6 +167,7 @@ fn start_with(name: &str, scenario: &str, adjust: impl FnOnce(&mut Launch)) -> H
         afresh: false,
         compact_at: None,
         resume_at: None,
+        profile: &[],
     };
     adjust(&mut launch);
     let started = super::start(
@@ -2028,6 +2029,7 @@ fn real_codex_holds_turns_approvals_an_interrupt_and_a_resume() {
             afresh: false,
             compact_at: None,
             resume_at: None,
+            profile: &[],
         };
         let started = super::start(
             recorder.clone(),
@@ -2308,6 +2310,7 @@ fn real_codex_under_a_workflow_reads_its_instructions_and_has_no_subagent_tools(
             afresh: false,
             compact_at: None,
             resume_at: None,
+            profile: &[],
         };
         let started = super::start(
             recorder.clone(),
@@ -2738,6 +2741,7 @@ fn real_codex_reads_back_what_a_session_heard_under_the_same_ids() {
         afresh: false,
         compact_at: None,
         resume_at: None,
+        profile: &[],
     };
     let started = super::start(
         recorder.clone(),

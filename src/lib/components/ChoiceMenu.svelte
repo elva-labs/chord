@@ -159,6 +159,7 @@
 >
   {#if heading !== null}<p class="heading" data-testid="{testid}-heading">{heading}</p>{/if}
   {#each choices as choice (choice.value)}
+    {#if choice.rule}<div class="rule" role="separator" data-testid="{testid}-rule"></div>{/if}
     <button
       role={actions ? "menuitem" : "menuitemradio"}
       aria-checked={actions ? undefined : (choice.on ?? false)}
@@ -277,6 +278,12 @@
     grid-column: 2;
     grid-row: 1;
     color: var(--accent);
+  }
+
+  .rule {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--divider, var(--rule));
   }
 
   .heading {

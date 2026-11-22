@@ -2885,6 +2885,7 @@ async function startFitted(
     null,
   );
   session.madeTree = startIn !== null;
+  session.profile = profileHandedOn(callingSession(request), agent, account, project);
   // It begins in its starter's mode, the narrower of the one asked about
   // and the one now where the starter's changed meanwhile.
   session.modeGiven = narrowerOf(agent, given, givenMode(callingSession(request), agent));
@@ -3003,6 +3004,21 @@ const TIERS = ["fable", "opus", "sonnet", "haiku"];
 function familyOf(model: string): string | null {
   const family = model.toLowerCase().replace(/^claude-/, "").replace(/\[.*\]$/, "").split("-")[0];
   return TIERS.includes(family) ? family : null;
+}
+
+/** The Codex profile a started session runs under: its starter's, where
+    both run Codex under the same account on the same machine, so the same
+    file is found by the same name. None otherwise; the start tool names
+    no profile. */
+function profileHandedOn(
+  starter: Session | null,
+  agent: HarnessId,
+  account: string | null,
+  project: string,
+): string | null {
+  if (starter === null || starter.profile === null) return null;
+  if (starter.agent !== "codex" || agent !== "codex" || starter.account !== account) return null;
+  return hostOf(starter.project) === hostOf(project) ? starter.profile : null;
 }
 
 /**

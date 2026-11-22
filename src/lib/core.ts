@@ -128,6 +128,9 @@ export interface SpawnOptions {
       runs under an account of the user's own. The agent's own directory
       when left out. */
   configDir?: string;
+  /** The Codex profile a Codex session runs under, by a name
+      `codexProfiles` lists for the account. None when left out. */
+  profile?: string;
   /** A workflow's instructions, for a session that follows one: added to
       what the agent tells itself, and the session has the workbench's
       tools whatever its project was told about live updates. */
@@ -197,6 +200,8 @@ export interface IntegratedStartOptions {
   effort?: string;
   /** The account's configuration directory, as for `spawn`. */
   configDir?: string;
+  /** The Codex profile a Codex session runs under, as for `spawn`. */
+  profile?: string;
   /** A workflow's instructions, for a session that follows one, as for
       `spawn`: it is started where a tool server can reach it or not at
       all. */
@@ -797,6 +802,18 @@ export interface IntegratedHistoryOptions {
   /** It goes on from its notes whatever its size and rest, as one does
       that goes on by itself once a usage limit resets. */
   always?: boolean;
+}
+
+/** A Codex profile of an account: a `<name>.config.toml` in its Codex
+    home, with the model, effort and provider the file sets, where it sets
+    them in a form a session is given. */
+export interface CodexProfile {
+  name: string;
+  model: string | null;
+  effort: string | null;
+  provider: string | null;
+  /** The keys of the file's settings a session is not given. */
+  leftOut: string[];
 }
 
 /** The models Codex offers an account, in the order it lists them. */
@@ -1752,6 +1769,10 @@ export interface Core {
       second or two. Rejects where Codex cannot be started or will not list
       them. */
   codexModels(project: string, configDir?: string): Promise<CodexModels>;
+  /** The Codex profiles in the Codex home of the account whose
+      configuration directory is `configDir`, on the project's machine, by
+      name. */
+  codexProfiles(project: string, configDir?: string): Promise<CodexProfile[]>;
   /** The usage limits of an account, as its machine holds them or has just
       read them; null where there are none. */
   accountLimits(
@@ -2355,6 +2376,8 @@ const tauriCore: Core = {
   installedAgents: (project, claudeDir, codexHome) =>
     invoke<InstalledAgent[]>("installed_agents", { project, claudeDir, codexHome }),
   codexModels: (project, configDir) => invoke<CodexModels>("codex_models", { project, configDir }),
+  codexProfiles: (project, configDir) =>
+    invoke<CodexProfile[]>("codex_profiles", { project, configDir }),
   accountLimits: (options) =>
     invoke<Extract<IntegratedEventBody, { type: "limits" }> | null>("account_limits", { ...options }),
   integratedRewindPoints: (id) => invoke<IntegratedPoints>("integrated_rewind_points", { id }),
@@ -2773,6 +2796,9 @@ const detachedCore: Core = {
   },
   async codexModels() {
     throw new Error("not connected to the workbench core");
+  },
+  async codexProfiles() {
+    return [];
   },
   async accountLimits() {
     return null;

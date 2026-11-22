@@ -136,6 +136,8 @@ struct Run {
     mode: Option<String>,
     effort: Option<String>,
     config_dir: Option<String>,
+    /// The Codex profile the session runs under, by name.
+    profile: Option<String>,
     instructions: Option<String>,
     start_only: bool,
     afresh: bool,
@@ -546,7 +548,9 @@ impl Core {
     /// `mode` is the mode the conversation last ran in where the window
     /// knows it, by the name its integrated sessions offer it under.
     /// `compact_at` is the context, in tokens, at which an agent that takes
-    /// one compacts the conversation on its own.
+    /// one compacts the conversation on its own. `profile` is the Codex
+    /// profile a Codex session runs under, by the name of one found in the
+    /// account's Codex home.
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         &self,
@@ -559,6 +563,7 @@ impl Core {
         model: Option<&str>,
         mode: Option<&str>,
         config_dir: Option<&str>,
+        profile: Option<&str>,
         instructions: Option<&str>,
         start_only: bool,
         afresh: bool,
@@ -585,6 +590,7 @@ impl Core {
             model,
             mode,
             config_dir,
+            profile,
             instructions,
             start_only,
             afresh,
@@ -669,6 +675,7 @@ impl Core {
         model: Option<&str>,
         mode: Option<&str>,
         config_dir: Option<&str>,
+        profile: Option<&str>,
         instructions: Option<&str>,
         start_only: bool,
         afresh: bool,
@@ -704,6 +711,7 @@ impl Core {
             None => None,
         };
         let config_dir = config_dir.filter(|dir| !dir.trim().is_empty());
+        let profile = self.profile_settings(agent, config_dir, profile, vars)?;
         let expanded =
             config_dir.and_then(|dir| self.home.as_deref().map(|home| account::expand(home, dir)));
         // An account's directory exists before the agent is pointed at it:
@@ -781,6 +789,7 @@ impl Core {
             afresh: resumed && afresh,
             compact_at,
             wakes,
+            profile: &profile,
         };
         let surface = match &session_id {
             Some(id) if resumed => adapter.resume(&ctx, id)?,
@@ -811,7 +820,8 @@ impl Core {
     /// [`Core::spawn`]: a session that follows one directs the others, is
     /// not started where no tool server can reach it, and is given the
     /// instructions, and with `start_only` loses its agent's own subagent
-    /// tools, the same way a terminal session is.
+    /// tools, the same way a terminal session is. `profile` is the Codex
+    /// profile, as for [`Core::spawn`].
     #[allow(clippy::too_many_arguments)]
     pub fn integrated_start(
         &self,
@@ -824,6 +834,7 @@ impl Core {
         mode: Option<&str>,
         effort: Option<&str>,
         config_dir: Option<&str>,
+        profile: Option<&str>,
         instructions: Option<&str>,
         start_only: bool,
         afresh: bool,
@@ -842,6 +853,7 @@ impl Core {
             mode: mode.map(str::to_string),
             effort: effort.map(str::to_string),
             config_dir: config_dir.map(str::to_string),
+            profile: profile.map(str::to_string),
             instructions: instructions.map(str::to_string),
             start_only,
             afresh,
@@ -898,6 +910,8 @@ impl Core {
             .clone()
             .or_else(|| adapter.takes_id().then(new_session_id));
         let config_dir = config_dir.filter(|dir| !dir.trim().is_empty());
+        let profile =
+            self.profile_settings(agent, config_dir, run.profile.as_deref(), &environment.vars)?;
         let expanded =
             config_dir.and_then(|dir| self.home.as_deref().map(|home| account::expand(home, dir)));
         let tool_server = self
@@ -952,6 +966,7 @@ impl Core {
             afresh: resume && afresh,
             compact_at: run.compact_at,
             resume_at: at.as_deref().filter(|_| resume),
+            profile: &profile,
         };
         let (starting, ending) = (self.plugins.clone(), self.plugins.clone());
         let (folder, starter) = (project.to_string_lossy().to_string(), run.starter.clone());
@@ -1151,6 +1166,33 @@ impl Core {
             .filter(|dir| !dir.trim().is_empty())
             .map(|dir| account::expand(home, dir));
         crate::codex_models::read(&environment.vars, config_dir.as_deref(), project)
+    }
+
+    /// The Codex profiles of the account whose configuration directory is
+    /// given, or of Codex's own home.
+    pub fn codex_profiles(&self, config_dir: Option<&str>) -> Vec<crate::codex_profiles::Profile> {
+        let Some(home) = self.home.as_deref() else {
+            return vec![];
+        };
+        let vars = &env::environment().vars;
+        crate::codex_profiles::list(&account::codex_home(home, config_dir, vars))
+    }
+
+    /// The settings a session of `agent` is given for the Codex profile
+    /// named, from the account's Codex home: none for no profile, or for
+    /// a harness other than Codex.
+    fn profile_settings(
+        &self,
+        agent: &str,
+        config_dir: Option<&str>,
+        profile: Option<&str>,
+        vars: &HashMap<String, String>,
+    ) -> Result<Vec<String>, String> {
+        let Some(profile) = profile.filter(|name| !name.is_empty() && agent == "codex") else {
+            return Ok(vec![]);
+        };
+        let home = self.home.as_deref().ok_or("there is no home folder")?;
+        crate::codex_profiles::settings(&account::codex_home(home, config_dir, vars), profile)
     }
 
     /// The agents installed for each harness: Claude Code's under the
@@ -2628,6 +2670,7 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
                     instructions,
                     true,
                     false,
@@ -2654,6 +2697,7 @@ mod tests {
         let spawned = core_at(&home).spawn(
             "claude-code",
             &home,
+            None,
             None,
             None,
             None,
@@ -2809,6 +2853,7 @@ mod tests {
                 None,
                 Some(&config),
                 None,
+                None,
                 false,
                 false,
                 None,
@@ -2835,6 +2880,100 @@ mod tests {
         assert_eq!(resume("claude-code", Some(session), true), Ok(()));
         assert!(!held());
         assert_eq!(resume("claude-code", Some(session), false), Ok(()));
+    }
+
+    /// A Codex session is given the settings of the profile it names, only
+    /// a profile found in the account's Codex home.
+    #[test]
+    fn a_codex_session_runs_under_a_profile_of_the_account_s_codex_home() {
+        let home = Scratch::new("api-codex-profile");
+        let folder = home.join("demo");
+        let bin = home.join("bin");
+        let account = home.join(".codex-work");
+        for dir in [&folder, &bin, &account] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        for agent in ["claude", "codex"] {
+            crate::executable::write(bin.join(agent), b"#!/bin/sh\n").unwrap();
+        }
+        std::fs::write(
+            account.join("fast.config.toml"),
+            "model = \"gpt-6.1-terra\"\napproval_policy = \"never\"\n",
+        )
+        .unwrap();
+        let vars = HashMap::from([("PATH".to_string(), bin.to_string_lossy().to_string())]);
+        let config = account.to_string_lossy().to_string();
+        let core = core_at(&home);
+        let args = |agent: &str, profile: Option<&str>| {
+            core.prepare(
+                agent,
+                &folder,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(&config),
+                profile,
+                None,
+                false,
+                false,
+                None,
+                false,
+                &vars,
+            )
+            .map(|prepared| {
+                let argv = prepared.command.get_argv();
+                argv.iter()
+                    .map(|arg| arg.to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+            })
+        };
+        let given = args("codex", Some("fast")).unwrap();
+        assert!(
+            given
+                .windows(2)
+                .any(|pair| pair == ["-c", "model=gpt-6.1-terra"]),
+            "{given:?}"
+        );
+        assert!(!given.iter().any(|arg| arg.contains("approval_policy")));
+        assert!(!args("codex", None).unwrap().concat().contains("terra"));
+        // Another agent has no profiles to name.
+        assert!(args("claude-code", Some("slow")).is_ok());
+        for name in ["slow", "../.codex-work/fast"] {
+            let refused = args("codex", Some(name)).unwrap_err();
+            assert!(
+                refused.starts_with("there is no Codex profile"),
+                "{refused}"
+            );
+            let refused = core
+                .integrated_start(
+                    "codex",
+                    &folder,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(&config),
+                    Some(name),
+                    None,
+                    false,
+                    false,
+                    None,
+                    None,
+                    false,
+                    None,
+                )
+                .unwrap_err();
+            assert!(
+                refused.starts_with("there is no Codex profile"),
+                "{refused}"
+            );
+        }
+        assert_eq!(core.codex_profiles(Some(&config))[0].name, "fast");
     }
 
     /// A conversation started again goes on from the entry asked for, or,
@@ -2866,6 +3005,7 @@ mod tests {
             mode: None,
             effort: None,
             config_dir: Some(claude.to_string_lossy().to_string()),
+            profile: None,
             instructions: None,
             start_only: false,
             afresh: false,
@@ -2912,6 +3052,7 @@ mod tests {
             let started = core_at(&home).integrated_start(
                 agent,
                 &home,
+                None,
                 None,
                 None,
                 None,

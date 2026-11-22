@@ -420,13 +420,17 @@ function deliver(key: string, link: Link, body: IntegratedEventBody) {
       // This run started on the workflow the row follows now.
       rememberWorkflow(session);
       keepRunMode(session, link);
-      heardOffers(
-        session.agent,
-        session.account,
-        body.models.map((model) => model.value),
-        body.defaultModel ?? body.models.find((model) => model.value === "default")?.resolved ?? null,
-      );
-      heardCatalog(session.agent, hostOf(session.project), session.account, body.models);
+      // A session under a Codex profile lists what the profile offers,
+      // which says nothing of what the account does.
+      if (session.profile === null) {
+        heardOffers(
+          session.agent,
+          session.account,
+          body.models.map((model) => model.value),
+          body.defaultModel ?? body.models.find((model) => model.value === "default")?.resolved ?? null,
+        );
+        heardCatalog(session.agent, hostOf(session.project), session.account, body.models);
+      }
       if (harnessProfile(session.agent).namesRunningModel) session.runsOn = body.model ?? body.defaultModel ?? null;
       if (session.modeGiven !== null && session.modeNamed === session.modeGiven && body.mode !== session.modeGiven)
         void fallBack(key, link, session.agent, session.modeGiven, body.mode);
@@ -660,6 +664,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     mode,
     effort,
     configDir: dirFor(starting.account, starting.agent),
+    profile: starting.profile ?? undefined,
     ...told,
     ...originOf(starting),
   });
@@ -1123,7 +1128,8 @@ export function reattach(key: string, handle: string, spoken = true): Promise<Re
       session.resumedFrom = null;
       if (snapshot.ready !== null) {
         identify(session, snapshot.ready.sessionId);
-        heardCatalog(session.agent, hostOf(session.project), session.account, snapshot.ready.models);
+        if (session.profile === null)
+          heardCatalog(session.agent, hostOf(session.project), session.account, snapshot.ready.models);
         if (harnessProfile(session.agent).namesRunningModel)
           session.runsOn = snapshot.settings.model ?? snapshot.ready.defaultModel ?? null;
       }

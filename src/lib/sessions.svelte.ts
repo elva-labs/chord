@@ -11,6 +11,7 @@ import {
 } from "$lib/core";
 import { SvelteSet } from "svelte/reactivity";
 import { accountToStart, dirFor, loadPicked, names } from "$lib/accounts.svelte";
+import { loadPickedProfiles } from "$lib/codexProfiles.svelte";
 import { CODEX_DEFAULT } from "$lib/models";
 import { catalogName } from "$lib/modelCatalog.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
@@ -137,6 +138,10 @@ export interface Session {
       one was chosen for the session, or the session that started it
       handed its own on. Null for the agents' own directories. */
   account: string | null;
+  /** The Codex profile the session runs under, by a name listed for its
+      account, whose settings lie over the account's own. Null for none,
+      and for any other harness. */
+  profile: string | null;
   /** The workflow the session follows, as it was when this run of it
       started: it directs the others by it. Null for none. A change to the
       settings does not reach a session while it runs; a resumed one takes
@@ -240,16 +245,22 @@ export interface Carried {
 /**
  * What a new session the user started takes from the choices kept for its
  * agent: the mode and the effort, and the model where the row was made on
- * the kept one. A resumed session goes on as its conversation did, and a
- * session another started begins as its starter says; neither takes any.
+ * the kept one. One under a Codex profile takes the mode alone, as its
+ * profile's file says the model and the effort. A resumed session goes on
+ * as its conversation did, and a session another started begins as its
+ * starter says; neither takes any.
  */
 export function carriedFor(session: Session): Carried | null {
   if (session.resumedFrom !== null || session.prompt !== null || session.modeGiven !== null) return null;
   if (starterOf(session.key) !== null) return null;
   const kept = chosenFor(session.agent);
+  const own = session.profile === null;
   return {
-    model: session.workflow === null && session.model !== null && session.model === kept.model ? session.model : null,
-    effort: kept.effort ?? null,
+    model:
+      own && session.workflow === null && session.model !== null && session.model === kept.model
+        ? session.model
+        : null,
+    effort: own ? (kept.effort ?? null) : null,
     // Checked again here: a mode a new session is not begun in starts
     // nothing, wherever it came from.
     mode: kept.mode !== undefined && carriedOver(session.agent, kept.mode) ? kept.mode : null,
@@ -675,6 +686,7 @@ export function adopt(project: string, id: string) {
     nothing remembered. */
 export function loadRemembered() {
   loadPicked();
+  loadPickedProfiles();
   try {
     const raw = localStorage.getItem(MINE_KEY);
     if (raw !== null) {
@@ -1219,6 +1231,14 @@ export function sessionModelName(session: {
   const model = session.runsOn ?? session.model;
   if (model === null) return null;
   return catalogName(session.agent, model, session.account, hostOf(session.project)) ?? modelLabel(model);
+}
+
+/** What a session's row says of its model: the model's name, then the
+    Codex profile it runs under where it runs under one. Null where it
+    names neither. */
+export function rowModelLine(session: Session): string | null {
+  const parts = [sessionModelName(session), session.profile].filter((part) => part !== null);
+  return parts.length === 0 ? null : parts.join(" · ");
 }
 
 /** What a model is called on a row. Claude's own names read as they are
@@ -1924,7 +1944,7 @@ export async function rejoined(key: string) {
 export function resumeWithout(key: string): Session | null {
   const session = byKey(key);
   if (session === null || session.workflowLost === null || session.id === null) return null;
-  const { project, id, agent, startIn, model, account, kind } = session;
+  const { project, id, agent, startIn, model, account, kind, profile } = session;
   const before = sessions.workflows[id];
   sessions.workflows[id] = {
     workflow: null,
@@ -1939,6 +1959,36 @@ export function resumeWithout(key: string): Session | null {
   const next = create(project, id, agent, startIn, null, model, account, null, kind);
   next.ownWay = ownWay;
   next.madeTree = session.madeTree;
+  next.profile = profile;
+  handOver(key, { project, session: next.key });
+  return next;
+}
+
+/** The words the core refuses a start with when the Codex profile a session
+    runs under is no longer among its account's files. */
+const PROFILE_GONE = "there is no Codex profile";
+
+/** Whether a row failed to start because the Codex profile it runs under is
+    gone, and its conversation is one it can go on with. */
+export function profileGone(session: Session): boolean {
+  return (
+    session.status === "failed" &&
+    session.profile !== null &&
+    session.id !== null &&
+    (session.error ?? "").includes(PROFILE_GONE)
+  );
+}
+
+/** Resumes a session whose Codex profile is gone, under its account's own
+    configuration, in place of the row that asked. */
+export function resumeWithoutProfile(key: string): Session | null {
+  const session = byKey(key);
+  if (session === null || !profileGone(session) || session.id === null) return null;
+  const { project, id, agent, startIn, model, account, kind, ownWay, madeTree } = session;
+  close(key, true);
+  const next = create(project, id, agent, startIn, null, model, account, null, kind);
+  next.ownWay = ownWay;
+  next.madeTree = madeTree;
   handOver(key, { project, session: next.key });
   return next;
 }
@@ -2035,6 +2085,7 @@ function row(
     model,
     runsOn: null,
     account,
+    profile: null,
     workflow:
       workflow === null ? null : (structuredClone($state.snapshot(workflow)) as Workflow),
     workflowGone: false,
@@ -2264,6 +2315,7 @@ export async function launch(
         model: session.model ?? undefined,
         mode: mode ?? undefined,
         configDir: dirFor(session.account, session.agent),
+        profile: session.profile ?? undefined,
         ...told,
         ...originOf(session),
         cols,

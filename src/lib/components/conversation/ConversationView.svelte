@@ -24,7 +24,7 @@
   import { backOf, canGoBack, closeBack, markedOf, openBack, unrested } from "$lib/rewind.svelte";
   import { actionOf, describe } from "$lib/keys.svelte";
   import { stepsGist, workflows } from "$lib/workflows.svelte";
-  import { close, resumeWithout, type Session } from "$lib/sessions.svelte";
+  import { close, profileGone, resumeWithout, resumeWithoutProfile, type Session } from "$lib/sessions.svelte";
   import { senderOf } from "$lib/senders.svelte";
   import { spoken } from "$lib/instructions";
   import { notRead } from "$lib/thread";
@@ -292,7 +292,7 @@
       : conversation.notLoggedIn
         ? "[data-testid='login-gate'] .card"
         : over
-          ? "[data-testid='resume-session'], [data-testid='resume-without-workflow']"
+          ? "[data-testid='resume-session'], [data-testid='resume-without-workflow'], [data-testid='resume-without-profile']"
           : null;
     if (where === null || !active || layout.focus !== "agent") return;
     untrack(() => {
@@ -423,6 +423,12 @@
                  going on without one is the user's to say. -->
             <button class="primary" tabindex="0" disabled={link.busy} onclick={() => resumeWithout(session.key)} data-testid="resume-without-workflow"
               >Resume without a workflow</button
+            >
+          {:else if profileGone(session)}
+            <!-- Its Codex profile is no longer among the account's files:
+                 going on without one is the user's to say. -->
+            <button class="primary" tabindex="0" disabled={link.busy} onclick={() => resumeWithoutProfile(session.key)} data-testid="resume-without-profile"
+              >Resume without the profile</button
             >
           {:else}
             <button class="primary" tabindex="0" disabled={link.busy} onclick={() => resume(session.key)} data-testid="resume-session"

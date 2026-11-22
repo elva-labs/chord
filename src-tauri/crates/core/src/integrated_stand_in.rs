@@ -191,6 +191,7 @@ fn start_in(
         afresh: false,
         compact_at: None,
         resume_at: None,
+        profile: &[],
     };
     adjust(&mut launch);
     let started = super::start(
@@ -306,6 +307,7 @@ impl Harness {
             afresh: false,
             compact_at: None,
             resume_at: again.at.as_deref(),
+            profile: &[],
         };
         super::start(
             self.recorder.clone(),
@@ -1907,6 +1909,7 @@ fn a_missing_agent_explains_itself() {
         afresh: false,
         compact_at: None,
         resume_at: None,
+        profile: &[],
     };
     let error = super::start(
         Arc::new(Recorder::default()),
@@ -1948,6 +1951,7 @@ fn real_claude_holds_a_short_turn() {
         afresh: false,
         compact_at: None,
         resume_at: None,
+        profile: &[],
     };
     let started = super::start(
         recorder.clone(),

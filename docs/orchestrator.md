@@ -276,6 +276,11 @@ account handed on that keeps no directory for the agent being started runs
 that agent on its own directory, as a blank directory does anywhere. A
 session resumed comes back under the account it ran under.
 
+A start names no [Codex profile](reference/sessions.md#codex-profiles). A
+session started runs under its starter's when both run Codex under the
+same account on the same machine, where the same file is found by the
+same name, and under none otherwise.
+
 ## When the work is over
 
 A session another session started is put away by the workbench once its
