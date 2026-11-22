@@ -302,6 +302,20 @@ export function newAgent(): OwnAgent {
   return { title: "", description: "", model: { ...sonnet }, effort: "high", readsOnly: true };
 }
 
+/** The efforts the settings page offers for an agent on each harness, from
+    the least to the most. An agent on the session's model is offered
+    Claude Code's. */
+const EFFORTS_ON: Record<HarnessId, string[]> = {
+  "claude-code": ["low", "medium", "high", "xhigh", "max"],
+  codex: ["minimal", "low", "medium", "high", "xhigh"],
+};
+
+/** The efforts an agent on a harness can name, the session's harness
+    when it names no model. */
+export function agentEfforts(harness: HarnessId | null): string[] {
+  return EFFORTS_ON[harness ?? "claude-code"];
+}
+
 /** The line under an agent: what it runs on, at what effort, and whether
     it only reads. */
 export function agentFacts(agent: Pick<Agent, "model" | "effort" | "readsOnly">): string[] {

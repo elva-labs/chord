@@ -1921,7 +1921,7 @@ export async function installFakeCore(
                 Object.values(value).some((share) => typeof share !== "number" || share < 0 || share > 0.25)
               )
                 throw new Error("cards is a table of shares by palette or theme, each from 0 to 0.25");
-            } else if (!["keys", "hooks", "accounts", "workflows", "themes"].includes(field)) {
+            } else if (!["keys", "hooks", "accounts", "workflows", "agents", "themes"].includes(field)) {
               throw new Error(`there is no setting called ${field}`);
             }
           }

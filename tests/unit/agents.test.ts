@@ -34,6 +34,7 @@ import {
   adoptAgents,
   agentByKey,
   agentByTitle,
+  agentEfforts,
   agentFacts,
   agentProblem,
   agents,
@@ -232,6 +233,14 @@ describe("an agent by title", () => {
     expect(agentByTitle("migrations", "/p")?.key).toBe("own:Migrations");
     expect(agentByTitle("REVIEWER", "/p")?.key).toBe("chord:Reviewer");
     expect(agentByTitle("Nobody", "/p")).toBeUndefined();
+  });
+});
+
+describe("the efforts an agent names", () => {
+  it("are its harness's, Claude Code's where it runs on the session's model", () => {
+    expect(agentEfforts("codex")).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
+    expect(agentEfforts(null)).toEqual(agentEfforts("claude-code"));
+    expect(agentEfforts("claude-code")).toContain("max");
   });
 });
 

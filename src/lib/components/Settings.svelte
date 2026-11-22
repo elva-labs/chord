@@ -1,6 +1,6 @@
 <script module lang="ts">
   /** The columns of settings, one on screen at a time. */
-  type Tab = "appearance" | "sessions" | "workflows" | "accounts" | "plugins" | "keys" | "notifications";
+  type Tab = "appearance" | "sessions" | "agents" | "workflows" | "accounts" | "plugins" | "keys" | "notifications";
 
   /** The tab last chosen. It belongs to the module rather than the dialog, so
       closing the settings and opening them again lands where you were; a new
@@ -92,6 +92,7 @@
   import BackgroundPicker from "$lib/components/BackgroundPicker.svelte";
   import UnreadEntries from "$lib/components/UnreadEntries.svelte";
   import WorkflowsTab from "$lib/components/WorkflowsTab.svelte";
+  import AgentsTab from "$lib/components/AgentsTab.svelte";
 
   /**
    * The settings, over the workbench. Reached from the native menu or its
@@ -110,6 +111,7 @@
   const TABS: { name: Tab; label: string }[] = [
     { name: "appearance", label: "Appearance" },
     { name: "sessions", label: "Sessions" },
+    { name: "agents", label: "Agents" },
     { name: "workflows", label: "Workflows" },
     { name: "accounts", label: "Accounts" },
     { name: "plugins", label: "Plugins" },
@@ -768,6 +770,8 @@
               </select>
             </div>
           </section>
+        {:else if tab === "agents"}
+          <AgentsTab />
         {:else if tab === "workflows"}
           <WorkflowsTab />
         {:else if tab === "accounts"}
