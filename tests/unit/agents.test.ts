@@ -188,6 +188,9 @@ describe("the user's own agents", () => {
     expect(agentProblem(mine(" "), null)).toMatch(/title is needed/);
     expect(agentProblem(mine("x".repeat(41)), null)).toMatch(/40 characters/);
     expect(agentProblem(mine("a\nb"), null)).toMatch(/one line/);
+    for (const lookalike of ["Revie\u202ewer", "Revie\u200bwer", "Re\u2028viewer", "Re\u3164viewer"]) {
+      expect(agentProblem(mine(lookalike), null)).toMatch(/hidden characters/);
+    }
     expect(agentProblem(mine("reviewer"), null)).toMatch(/Chord ships/);
     expect(agentProblem(mine("MIGRATIONS"), null)).toMatch(/taken/);
     expect(agentProblem(mine("MIGRATIONS"), "Migrations")).toBeNull();

@@ -17,7 +17,7 @@ export function bangLine(draft: string): string | null {
     control or format character other than a tab, such as a bidirectional
     override or a zero-width space, a line or paragraph separator, and any
     other character Unicode leaves undrawn, such as a Hangul filler. */
-const hidden = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u;
+export const hidden = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u;
 
 /** The command in a code span or in a line of a code block the agent
     wrote: one that begins with `!` and a space, then the command. Null for

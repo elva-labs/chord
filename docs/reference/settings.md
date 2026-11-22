@@ -381,7 +381,9 @@ ships as, and stands in that agent's place in every list, under the
 shipped agent's name as well as its own, so whatever names the shipped
 agent finds it changed. Reset to shipped, on one changed, asks once and
 puts it back as Chord ships it, as does saving it as it ships. A title is
-one line of 40 characters at most and no other agent's, ignoring case, a
+one line of 40 characters at most, with no character that is not drawn or
+that changes how text is drawn, such as a zero-width space or a
+right-to-left override, and no other agent's, ignoring case, a
 shipped agent's among them, though a changed shipped agent may keep the
 title it ships under; a description is needed, of 8000 characters at most;
 and the settings hold 32 agents of the user's own at most, the shipped
@@ -400,7 +402,8 @@ description and the model, and its body how it works; one whose `tools`
 name only tools that read, Read, Grep, Glob, LS, NotebookRead, WebFetch,
 WebSearch and TodoWrite, reads only, and any other tool, Bash or a
 server's among them, changes files. Of files that give the same name,
-ignoring case, the first by file name is listed. Each place lists 64
+ignoring case, the first by file name is listed, and a file or role whose
+name breaks the rules for a title is not listed. Each place lists 64
 agents at most and skips a file over 256 KB, and a file in the project
 that links out of the project is not read. From Codex reads the roles in
 the `[agents.<name>]` tables of the `config.toml` in the home of the

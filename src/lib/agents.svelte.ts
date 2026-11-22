@@ -1,6 +1,7 @@
 import type { HarnessId, InstalledAgent, OwnAgent, Settings } from "$lib/core";
 import { core } from "$lib/core";
 import { accountOf, dirFor } from "$lib/accounts.svelte";
+import { hidden } from "$lib/bang";
 import { modelLabel } from "$lib/models";
 import { persist } from "$lib/persist";
 import { effortName } from "$lib/settingChoices";
@@ -272,8 +273,7 @@ export function agentProblem(draft: OwnAgent, editing: string | null): string | 
   const title = draft.title.trim();
   if (title === "") return "A title is needed.";
   if ([...title].length > LONGEST_TITLE) return `A title is ${LONGEST_TITLE} characters at most.`;
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f-\u009f]/u.test(title)) return "A title is one line.";
+  if (hidden.test(title)) return "A title is one line, with no hidden characters.";
   if (SHIPPED.some((shipped) => sameTitle(shipped.title, title) && shipped.title !== draft.shipped)) {
     return `${title} is an agent Chord ships.`;
   }
