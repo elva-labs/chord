@@ -54,6 +54,7 @@ Using it:
 - [Sessions](docs/sessions.md): starting, reading a row, past sessions, in Chord or in a terminal.
 - [Layout](docs/layout.md) and [settings](docs/settings.md): the window, and what each setting changes.
 - [Hooks](docs/hooks.md), [browser](docs/browser.md) and [orchestrator](docs/orchestrator.md): what the agent can do in the app.
+- [Tokens](docs/tokens.md): what Chord does to spare them on long work, and what it does not.
 - [Focus](docs/focus-model.md): the shortcuts and who owns the keyboard.
 - [Editor](docs/editor.md), [remote](docs/remote.md), [plugins](docs/plugins.md) and [platforms](docs/platforms.md).
 
