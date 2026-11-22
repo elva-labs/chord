@@ -15,7 +15,7 @@ import { persist } from "$lib/persist";
 export type SessionKind = "terminal" | "integrated";
 
 export const sessionKinds = $state({
-  /** The agents whose sessions run integrated. */
+  /** The harnesses whose sessions run integrated. */
   integrated: [] as HarnessId[],
   /** The core's word has been taken: until then the setting is not known,
       and every agent reads as a terminal. */

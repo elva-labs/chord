@@ -1422,10 +1422,10 @@ export interface Settings {
   /** The whole chord table, by action. Empty is the default preset. */
   keys: Record<string, KeyChord>;
   hooks: { everywhere: boolean; overrides: Record<string, boolean> };
-  /** The agents' logins kept apart, by name. The one every project runs
-      under, or null for the agents' own directories, and the projects
-      that say otherwise, each naming an account or null for the agents'
-      own. */
+  /** The harnesses' logins kept apart, by name. The one every project runs
+      under, or null for the harnesses' own directories, and the projects
+      that say otherwise, each naming an account or null for the
+      harnesses' own. */
   accounts: {
     list: Record<string, AccountDirs>;
     everywhere: string | null;
@@ -1460,7 +1460,7 @@ export interface Settings {
   /** How long a past session stays listed under its project before it
       goes behind the fold with the rest of the history. */
   pastSessions: PastSessions;
-  /** The agents whose sessions run integrated, drawn by the window; the
+  /** The harnesses whose sessions run integrated, drawn by the window; the
       others run in a terminal. Missing reads as none. */
   integrated?: HarnessId[];
   /** How long a project goes unused before it folds under Inactive. */
@@ -1507,8 +1507,8 @@ export interface Settings {
       which reads as off. */
   compact?: boolean;
   /** The model, the effort and the permission mode the user last chose
-      for each agent's sessions, by the agent's id, which a new session
-      of that agent starts on. A file from before has none. */
+      for each harness's sessions, by the harness's id, which a new
+      session on that harness starts on. A file from before has none. */
   lastChosen?: Record<string, { model?: string; effort?: string; mode?: string }>;
   /** Whether a new conversation goes on by itself once the usage limit
       that cut it short resets: the user's last choice on a conversation.

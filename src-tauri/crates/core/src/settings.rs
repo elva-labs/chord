@@ -202,7 +202,7 @@ pub struct UnreadEntry {
     pub entry: Value,
 }
 
-/// What the user last chose for one agent's sessions, each left out where
+/// What the user last chose for one harness's sessions, each left out where
 /// nothing was chosen.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Chosen {
@@ -231,14 +231,14 @@ fn carried_over(agent: &str, mode: &str) -> bool {
     }
 }
 
-/// The choices a value holds, or why it will not do: a table by agent of
+/// The choices a value holds, or why it will not do: a table by harness of
 /// a model, an effort and a mode, each a short line of text.
 fn last_chosen(value: &Value) -> Result<BTreeMap<String, Chosen>, String> {
     const SHAPE: &str =
-        "lastChosen is a table by agent of the model, the effort and the mode last chosen";
+        "lastChosen is a table by harness of the model, the effort and the mode last chosen";
     let table = value.as_object().ok_or(SHAPE)?;
     if table.len() > MOST_CHOSEN {
-        return Err(format!("lastChosen names {MOST_CHOSEN} agents at most"));
+        return Err(format!("lastChosen names {MOST_CHOSEN} harnesses at most"));
     }
     let line = |text: &Value| -> Result<Option<String>, String> {
         match text {
@@ -293,7 +293,7 @@ pub struct Account {
 }
 
 /// The user's own accounts by name, the one every project uses, and the
-/// projects that say otherwise, by path. No name is the agents' own
+/// projects that say otherwise, by path. No name is the harnesses' own
 /// directories, which every setup has without naming them.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Accounts {
@@ -321,7 +321,7 @@ pub struct Settings {
     /// window fills in whatever an action has no chord for.
     pub keys: BTreeMap<String, Chord>,
     pub hooks: Hooks,
-    /// The agents' logins kept apart, and which project runs under which.
+    /// The harnesses' logins kept apart, and which project runs under which.
     pub accounts: Accounts,
     /// The workflows sessions can follow, the one new sessions start with,
     /// and which project chooses another.
@@ -332,7 +332,7 @@ pub struct Settings {
     pub agents: Vec<crate::agents::Agent>,
     /// How long a past session stays listed under its project.
     pub past_sessions: String,
-    /// The agents whose sessions run integrated, drawn by the window; the
+    /// The harnesses whose sessions run integrated, drawn by the window; the
     /// others run in a terminal.
     pub integrated: Vec<String>,
     /// How long a project goes unused before the sessions pane folds it.
@@ -372,8 +372,8 @@ pub struct Settings {
     #[serde(default)]
     pub auto_resume: bool,
     /// The model, the effort and the permission mode the user last chose
-    /// for each agent's sessions, by the agent's id, which a new session of
-    /// that agent starts on. A file from before has none.
+    /// for each harness's sessions, by the harness's id, which a new session
+    /// on that harness starts on. A file from before has none.
     #[serde(default)]
     pub last_chosen: BTreeMap<String, Chosen>,
     /// What the file holds that is not used. Not a setting: it is read from the file and written back to it.
@@ -651,7 +651,7 @@ fn accounts_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> Accounts {
 pub const OWN_ACCOUNT: &str = "Default";
 
 /// Why an account's name will not do: empty, too long, or the name the
-/// agents' own login goes by.
+/// harnesses' own login goes by.
 fn account_name(name: &str) -> Result<(), String> {
     if name.trim().is_empty() || name.chars().count() > LONGEST_ACCOUNT {
         return Err(format!(
@@ -660,7 +660,7 @@ fn account_name(name: &str) -> Result<(), String> {
     }
     if name.trim().eq_ignore_ascii_case(OWN_ACCOUNT) {
         return Err(format!(
-            "{OWN_ACCOUNT} is the agents' own login, so no account can be called that"
+            "{OWN_ACCOUNT} is the harnesses' own login, so no account can be called that"
         ));
     }
     Ok(())
@@ -1146,13 +1146,13 @@ fn cards_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> BTreeMap<Strin
     kept
 }
 
-/// The agents a value names as running integrated, each once, in the order
-/// the adapters list them, or why it will not do. Which agents can is the
-/// adapters' to say.
+/// The harnesses a value names as running integrated, each once, in the
+/// order the adapters list them, or why it will not do. Which harnesses
+/// can is the adapters' to say.
 fn integrated(value: &Value) -> Result<Vec<String>, String> {
     let named = value
         .as_array()
-        .ok_or("integrated is a list of the agents whose sessions run integrated")?;
+        .ok_or("integrated is a list of the harnesses whose sessions run integrated")?;
     let able = crate::adapter::integrated_agents();
     for agent in named {
         match agent.as_str() {
@@ -2196,7 +2196,7 @@ mod tests {
             )
             .unwrap_err();
             assert!(
-                error.contains("Default is the agents' own login"),
+                error.contains("Default is the harnesses' own login"),
                 "{error}"
             );
         }

@@ -1906,7 +1906,7 @@ export async function installFakeCore(
                     Object.values(entry).some((one) => one !== null && typeof one !== "string"),
                 )
               )
-                throw new Error("lastChosen is a table by agent of the model, the effort and the mode last chosen");
+                throw new Error("lastChosen is a table by harness of the model, the effort and the mode last chosen");
             } else if (field === "cards") {
               if (
                 typeof value !== "object" ||
