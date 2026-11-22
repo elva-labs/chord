@@ -538,7 +538,13 @@ What the user does in a plugin goes to it with an id: an action, as its
 `id`, and a message from the plugin's page that came of a click or a key
 in the page, as its `id` too. Only the first message of a click or a key
 carries one, so however many the page sends, one click is one id. A
-message the page sent on its own carries no id. For 30 seconds after it
+message the page sent on its own carries no id. The app sees no clicks
+inside a page, only that one came shortly before a message, so a message
+within 5 seconds of the last that carried an id carries none, whatever was
+clicked between, until the page sends one on its own or the user leaves
+the page and comes back. A quick second click, on the same button or
+another, then reaches the plugin without an id: the page can ask the user
+to click again in a moment rather than do nothing. For 30 seconds after it
 was sent, the plugin may answer that id once in each of three ways: open
 one web address, ask to start one session, and send one line to a
 session it started. A line that names no such id, one sent to another
@@ -581,7 +587,7 @@ the same card a session's request to start one is put to them: it names
 the plugin, shows the prompt whole, and offers this one session or none,
 never an answer that stands for the next. A plugin has one card up or
 waiting at a time: a start it asks for meanwhile is a no, and its cards
-are taken down as no when it is turned off or removed. The user picks the
+are taken down as no when it is turned off, removed or fails. The user picks the
 agent and the model it runs on there, the ones last chosen to begin with.
 On a yes the session starts in the project, in a worktree of its own when
 `worktree` is true, with the prompt as its first message. It appears
@@ -604,8 +610,9 @@ The plugin learns its session started from the session lines: the one
 that carries its `ref`. The session is the plugin's from then on, under
 every id it runs by: across a quit of the app, the plugin turned off and
 on, and its process started again after it died. It stops being the
-plugin's when the plugin is removed. A plugin holds 300 sessions at most
-this way, and a start past that lets go of the one that ran longest ago.
+plugin's when the plugin is removed or added again. A plugin holds 300
+sessions at most this way, and a start that begins one past that lets go
+of the one that ran longest ago.
 
 ### Sending a line
 
