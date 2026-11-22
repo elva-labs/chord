@@ -555,8 +555,10 @@ id. A line that names no session is the plugin's own, told as the app's
 other notifications are and only as the settings allow them: titled with
 the project and the plugin's name, "orbit-api · github", with the text as
 its body. The project must be one open in the app. The text is one line of
-120 characters at most, shown as plain text. A plugin gives three such
-lines a minute at most; the rest are dropped. A newer line with the same
+120 characters at most, shown as plain text, with every character that
+shows nothing or reorders others taken out; a text with nothing left is
+dropped. A plugin gives three such lines a minute at most; the rest are
+dropped. A newer line with the same
 target takes the place of the last where the system allows.
 
 A click on it brings the project forward and opens the plugin's page there,

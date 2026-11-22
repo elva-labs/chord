@@ -542,6 +542,42 @@ const NOTIFY_MOST: usize = 3;
 /// The span `NOTIFY_MOST` counts over.
 const NOTIFY_SPAN: Duration = Duration::from_secs(60);
 
+/// Whether a character shows nothing of its own or changes how others
+/// show: a control (Cc), a format character (Cf), a line or paragraph
+/// separator (Zl, Zp), or a default-ignorable code point. These are the
+/// characters the window treats as unseen.
+fn unseen(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c as u32,
+            0x00AD
+                | 0x034F
+                | 0x0600..=0x0605
+                | 0x061C
+                | 0x06DD
+                | 0x070F
+                | 0x0890..=0x0891
+                | 0x08E2
+                | 0x115F..=0x1160
+                | 0x17B4..=0x17B5
+                | 0x180B..=0x180F
+                | 0x200B..=0x200F
+                | 0x2028..=0x202E
+                | 0x2060..=0x206F
+                | 0x3164
+                | 0xFE00..=0xFE0F
+                | 0xFEFF
+                | 0xFFA0
+                | 0xFFF0..=0xFFFB
+                | 0x110BD
+                | 0x110CD
+                | 0x13430..=0x1343F
+                | 0x1BCA0..=0x1BCA3
+                | 0x1D173..=0x1D17A
+                | 0xE0000..=0xE0FFF
+        )
+}
+
 /// The most starts a plugin is kept owning: the ones whose sessions last
 /// ran, so the record stays small however many it asks for.
 const OWNED_MOST: usize = 300;
@@ -3629,9 +3665,10 @@ impl Inner {
 
     /// One `notify` line that names no session: the plugin's own
     /// notification, for a project open here. Its text is one line of
-    /// 120 characters at most, with no control characters; a target over
-    /// its size is none. Past `NOTIFY_MOST` in `NOTIFY_SPAN` a plugin's
-    /// line is dropped.
+    /// 120 characters at most, with no character that shows nothing or
+    /// moves others (`unseen`), and a text left empty asks for none; a
+    /// target over its size is none. Past `NOTIFY_MOST` in `NOTIFY_SPAN` a
+    /// plugin's line is dropped.
     fn notify_asked(&self, source_id: &str, name: &str, message: &serde_json::Value) {
         let text = |key: &str| {
             message
@@ -3643,10 +3680,12 @@ impl Inner {
         let (Some(project), Some(said)) = (text("project"), text("text")) else {
             return;
         };
-        let line: String = crate::show::one_line(said)
+        // Whitespace stays for `one_line` to make single spaces of.
+        let seen: String = said
             .chars()
-            .filter(|c| !c.is_control())
+            .filter(|c| c.is_whitespace() || !unseen(*c))
             .collect();
+        let line = crate::show::one_line(&seen);
         if line.is_empty() {
             return;
         }
@@ -6674,6 +6713,19 @@ run = ["sh", "main.sh"]
         assert_eq!(long["text"].as_str().unwrap().chars().count(), 120);
         assert_eq!(long["target"], serde_json::Value::Null);
 
+        // A character that shows nothing or reorders others is dropped, and
+        // a text of only such characters asks for none.
+        say(
+            "bidi",
+            serde_json::json!({"project": "/p", "text": "a\u{202E}b\u{200B}c\u{2028}d"}),
+        );
+        assert_eq!(told().pop().unwrap()["text"], "abc d");
+        say(
+            "bidi",
+            serde_json::json!({"project": "/p", "text": "\u{202E}\u{200B}\u{FEFF}"}),
+        );
+        assert_eq!(told().len(), 3);
+
         // Past its count in the span a plugin's line is dropped; another
         // plugin's still goes.
         say(
@@ -6692,7 +6744,7 @@ run = ["sh", "main.sh"]
         assert!(texts.contains(&serde_json::json!("third")));
         assert!(!texts.contains(&serde_json::json!("fourth")));
         assert!(texts.contains(&serde_json::json!("its own")));
-        assert_eq!(told().len(), NOTIFY_MOST + 1);
+        assert_eq!(told().len(), NOTIFY_MOST + 2);
     }
 
     #[test]
