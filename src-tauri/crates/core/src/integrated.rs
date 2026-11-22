@@ -5220,8 +5220,12 @@ mod tests {
         }
 
         fn events(&self) -> Vec<Value> {
-            // What has been put out reaches the recorder in order; a reply
-            // put out after it means everything before it is there.
+            // A state change puts its events out while it holds the machine,
+            // after the line it writes; taking the machine once means every
+            // change begun so far has put its events out. What has been put
+            // out reaches the recorder in order; a reply put out after it
+            // means everything before it is there.
+            drop(self.live.machine.lock().unwrap());
             let (replied, reply) = mpsc::channel();
             self.live.put(Out::Reply(replied, Ok(Value::Null)));
             reply.recv().unwrap().unwrap();
