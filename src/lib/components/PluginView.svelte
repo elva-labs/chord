@@ -1,9 +1,11 @@
 <script lang="ts">
   import { typeWhole } from "$lib/conductor.svelte";
-  import { leftPage, type PluginPage, pluginViews, send, spendAct } from "$lib/pluginView.svelte";
+  import { contextFor, leftPage, type PluginPage, pluginViews, send, showAsked, spendAct } from "$lib/pluginView.svelte";
   import { activeSession, typed } from "$lib/sessions.svelte";
   import { showPlace } from "$lib/show.svelte";
+  import { tokenReader } from "$lib/terminal";
   import { printable } from "$lib/terminals.svelte";
+  import { theme } from "$lib/theme.svelte";
 
   /**
    * A plugin's page, in a frame of its own: scripts may run, but with no
@@ -12,15 +14,19 @@
    * in front of it.
    *
    * The bridge is the whole of what crosses. From the page: a place to open
-   * in the viewer, a line for the agent, a message for the plugin. To the
-   * page: the data its plugin sends while the page is open. A message is
-   * this frame's only when the window it came from is this frame's.
+   * in the viewer, a line for the agent, a message for the plugin, a session
+   * of the project to bring on screen. To the page: the data its plugin
+   * sends while the page is open; the target of the plugin's notification
+   * the user clicked to open it; and what is around it, the session on
+   * screen and the theme's tokens, told again whenever either changes. The
+   * last two are kept for a handler the page sets later. A message is this
+   * frame's only when the window it came from is this frame's.
    *
    * A message for the plugin is the user's doing when the user has just
    * clicked or typed in this frame: the click activates this window too,
    * and the frame holds the focus. The plugin may then answer it as it
-   * answers an action. A webview that cannot say so sends none as the
-   * user's.
+   * answers an action. A session is brought on screen only on such an act.
+   * A webview that cannot say so sends none as the user's.
    */
 
   interface Props {
@@ -33,7 +39,7 @@
   // height: the bottom of its last block, which is what the frame should
   // show without a scrollbar.
   const BRIDGE =
-    '<script>(function(){var handler=null;window.workbench={open:function(path,from,to,note){parent.postMessage({workbench:"open",path:path,from:from,to:to,note:note===undefined?null:note},"*")},agent:function(text){parent.postMessage({workbench:"agent",text:text},"*")},send:function(payload){parent.postMessage({workbench:"send",payload:payload},"*")},onData:function(fn){handler=fn}};addEventListener("message",function(e){var m=e.data;if(m&&m.workbench==="data"&&handler)handler(m.data)});function h(){var c=document.body?document.body.children:[],m=0;for(var i=0;i<c.length;i++){var b=c[i].getBoundingClientRect().bottom;if(b>m)m=b}return m>0?m+16:document.documentElement.scrollHeight}function r(){parent.postMessage({workbenchHeight:h()},"*")}addEventListener("load",r);if(window.ResizeObserver&&document.documentElement)new ResizeObserver(r).observe(document.documentElement);setTimeout(r,0)})()<\/script>';
+    '<script>(function(){var handler=null,target=null,onTarget=null,onContext=null;window.workbench={context:null,open:function(path,from,to,note){parent.postMessage({workbench:"open",path:path,from:from,to:to,note:note===undefined?null:note},"*")},agent:function(text){parent.postMessage({workbench:"agent",text:text},"*")},send:function(payload){parent.postMessage({workbench:"send",payload:payload},"*")},onData:function(fn){handler=fn},onTarget:function(fn){onTarget=fn;if(target!==null)fn(target)},onContext:function(fn){onContext=fn;if(window.workbench.context!==null)fn(window.workbench.context)},show:function(session){parent.postMessage({workbench:"show",session:session},"*")}};addEventListener("message",function(e){var m=e.data;if(m&&m.workbench==="data"&&handler)handler(m.data);if(m&&m.workbench==="target"){target=m.target;if(onTarget)onTarget(target)}if(m&&m.workbench==="context"){var c=m.context,s=document.documentElement.style;window.workbench.context=c;for(var k in c.tokens)s.setProperty("--workbench-"+k,c.tokens[k]);if(onContext)onContext(c)}});function h(){var c=document.body?document.body.children:[],m=0;for(var i=0;i<c.length;i++){var b=c[i].getBoundingClientRect().bottom;if(b>m)m=b}return m>0?m+16:document.documentElement.scrollHeight}function r(){parent.postMessage({workbenchHeight:h()},"*")}addEventListener("load",r);if(window.ResizeObserver&&document.documentElement)new ResizeObserver(r).observe(document.documentElement);setTimeout(r,0)})()<\/script>';
 
   let frame: HTMLIFrameElement;
   let height = $state(360);
@@ -41,6 +47,13 @@
   let loaded = $state<string | null>(null);
   /** The last message handed over, so one arrives once. */
   let delivered = 0;
+  /** The last target handed over, so one arrives once. */
+  let targeted = 0;
+  /** How many times the frame has loaded, so each document is told what
+      is around it. */
+  let loads = $state(0);
+  /** The context last told, with the load it was told to. */
+  let told = "";
 
   /** A line number as the page gave it, or the fallback. */
   function lineAt(value: unknown, fallback: number): number {
@@ -101,6 +114,7 @@
       if (data.workbench === "open") openPlace(data);
       else if (data.workbench === "agent") toAgent(data);
       else if (data.workbench === "send") void send(page.key, page.project, data.payload, spendAct(page.key, page.project, acted()));
+      else if (data.workbench === "show") showAsked(page.project, data.session, spendAct(page.key, page.project, acted()));
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -119,6 +133,29 @@
       "*",
     );
   });
+
+  // The target of the notification that opened the page, handed over once
+  // the page is there to take it.
+  $effect(() => {
+    const given = pluginViews.target;
+    if (given === null || loaded !== page.html) return;
+    if (given.key !== page.key || given.project !== page.project) return;
+    if (given.seq === targeted) return;
+    targeted = given.seq;
+    frame?.contentWindow?.postMessage({ workbench: "target", target: given.target }, "*");
+  });
+
+  // What is around the page, told once it is there and again when the
+  // session on screen or the theme changes.
+  $effect(() => {
+    if (loaded !== page.html) return;
+    void theme.painted;
+    const context = contextFor(page.project, tokenReader(document.documentElement));
+    const said = `${loads}\n${JSON.stringify(context)}`;
+    if (said === told) return;
+    told = said;
+    frame?.contentWindow?.postMessage({ workbench: "context", context }, "*");
+  });
 </script>
 
 <iframe
@@ -126,7 +163,10 @@
   srcdoc={BRIDGE + page.html}
   sandbox="allow-scripts"
   title={page.plugin}
-  onload={() => (loaded = page.html)}
+  onload={() => {
+    loaded = page.html;
+    loads += 1;
+  }}
   onblur={() => leftPage(page.key, page.project)}
   class:waiting={loaded === null}
   style:height="{height}px"

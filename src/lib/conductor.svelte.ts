@@ -127,7 +127,7 @@ import { defaultModelOf } from "$lib/lastChosen.svelte";
 import { failureOnScreen, type Failure } from "$lib/turnFailure";
 import { atWorkLine, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
-import { pluginMark } from "$lib/pluginStarts.svelte";
+import { pluginMark, pluginStarted, pluginStartOf } from "$lib/pluginStarts.svelte";
 import { mixesScripts, readsAsWorkbench, readsAsYou, reservedName, shown } from "$lib/unseen";
 import { within } from "$lib/show.svelte";
 import { handOver, printable } from "$lib/terminals.svelte";
@@ -3537,9 +3537,10 @@ async function resumeSession(
     // line and model, and is at work again whatever it was at the quit. A
     // row that ended is its transcript again; the resumed session takes
     // its place rather than sitting beside it, with the shells opened
-    // beside it.
+    // beside it and the plugin start it was made by.
     const now = byId(id);
     const left = now !== null && now.status === "dormant" ? now : null;
+    const plugin = now !== null && left === null ? pluginStartOf(now.key) : null;
     if (now !== null && left === null) close(now.key, true);
     const looking = sessions.active;
     const given = prompt === null ? null : `${oneLine(prompt)} ${outcomeAsk(agent)}`;
@@ -3555,6 +3556,7 @@ async function resumeSession(
       session = create(project, id, agent, worktree, given, model, entry.account ?? null, null);
       // A started session runs in a worktree only when one was made for it.
       session.madeTree = worktree !== null;
+      if (plugin !== null) pluginStarted(session.key, plugin);
     }
     conductor.startedBy[session.key] = caller;
     // It has a row again, so why the last one went is past.

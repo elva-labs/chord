@@ -284,6 +284,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
         onPluginState: async () => () => {},
         onPluginSection: async () => () => {},
         onPluginNotice: async () => () => {},
+        onPluginNotify: async () => () => {},
         onPluginMark: async () => () => {},
         onPluginOpenUrl: async () => () => {},
         onPluginStart: async () => () => {},

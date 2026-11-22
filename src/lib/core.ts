@@ -1078,6 +1078,16 @@ export interface PluginSectionEvent {
   order: number;
 }
 
+/** A plugin's notification that names no session: one line of text, for
+    a project open here, and what its page is to be handed on a click. */
+export interface PluginNotifyEvent {
+  source: string;
+  plugin: string;
+  project: string;
+  text: string;
+  target: string | null;
+}
+
 /** What went wrong when an action ran, for the plugin's sections to say. */
 export interface PluginNoticeEvent {
   source: string;
@@ -1865,6 +1875,10 @@ export interface Core {
   onPluginNotice(
     handler: (event: PluginNoticeEvent) => void,
   ): Promise<() => void>;
+  /** A plugin's notification that names no session. */
+  onPluginNotify(
+    handler: (event: PluginNotifyEvent) => void,
+  ): Promise<() => void>;
   /** A plugin's mark on a session's row, new, changed or gone. */
   onPluginMark(handler: (event: PluginMarkEvent) => void): Promise<() => void>;
   /** A plugin asks for a web address to open in the user's browser. */
@@ -2430,6 +2444,11 @@ const tauriCore: Core = {
       handler(event.payload),
     );
   },
+  async onPluginNotify(handler) {
+    return listen<PluginNotifyEvent>("plugin_notify", (event) =>
+      handler(event.payload),
+    );
+  },
   async onPluginMark(handler) {
     return listen<PluginMarkEvent>("plugin_mark", (event) =>
       handler(event.payload),
@@ -2856,6 +2875,9 @@ const detachedCore: Core = {
     return () => {};
   },
   async onPluginNotice() {
+    return () => {};
+  },
+  async onPluginNotify() {
     return () => {};
   },
   async onPluginMark() {

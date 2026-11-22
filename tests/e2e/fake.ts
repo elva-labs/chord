@@ -1132,6 +1132,11 @@ export async function installFakeCore(
             handler;
           return () => {};
         },
+        onPluginNotify: async (handler: (event: unknown) => void) => {
+          (window as unknown as Record<string, unknown>).__pluginNotify =
+            handler;
+          return () => {};
+        },
         onPluginView: async (handler: (event: unknown) => void) => {
           (window as unknown as Record<string, unknown>).__pluginView = handler;
           return () => {};

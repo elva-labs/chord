@@ -1,6 +1,7 @@
 import { isStartedFolded, resetStartedFolds, setStartedFolded } from "$lib/startedFolds.svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
+import { pluginStarted, pluginStartOf, resetPluginStarts } from "$lib/pluginStarts.svelte";
 import type { ConductRequest } from "$lib/core";
 import { byKey as shellByKey, create as createShell, reset as resetShells } from "$lib/terminals.svelte";
 import {
@@ -375,6 +376,7 @@ beforeEach(() => {
   resetSessions();
   resetConductor();
   resetScreens();
+  resetPluginStarts();
   answers.length = 0;
   written.length = 0;
   killed.length = 0;
@@ -1985,6 +1987,18 @@ describe("a session named by the start of its id", () => {
     const row = await resumed(call("start", { session: ONE.slice(0, ID_START) }), "pty-1b");
     expect(row.id).toBe(ONE);
     expect(last().content).toContain(`Resumed session ${ONE} in ${B}.`);
+  });
+
+  it("carries the plugin start of an ended row to the row resumed in its place", async () => {
+    const first = await startAllowed(call("start", { project: B, prompt: "Fix it" }), "pty-1", ONE);
+    const start = { source: "local", plugin: "github", project: B, request: "req-1" };
+    pluginStarted(first.key, start);
+    ended({ id: "pty-1", code: 0, clean: true });
+    flushSync();
+    const row = await resumed(call("start", { session: ONE }), "pty-1b");
+    expect(row.key).not.toBe(first.key);
+    expect(pluginStartOf(row.key)).toEqual(start);
+    expect(pluginStartOf(first.key)).toBeNull();
   });
 
   it("refuses a start that fits more than one, saying which", async () => {

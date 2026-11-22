@@ -37,7 +37,7 @@ import { holdMode, modeOf, terminalEnded } from "$lib/sessionModes";
 import { chosenFor, modelToStart, narrowTo } from "$lib/lastChosen.svelte";
 import { carriedOver } from "$lib/modeFit";
 import { starterOf } from "$lib/senders.svelte";
-import { pluginStartOf } from "$lib/pluginStarts.svelte";
+import { forgetPluginStart, pluginStarted, pluginStartOf } from "$lib/pluginStarts.svelte";
 import { logUsage } from "$lib/usageLog";
 import { bareName, mixesScripts, readsAsWorkbench, reservedName, shown } from "$lib/unseen";
 import { failureOf, interruptedOnScreen, type Failure } from "$lib/turnFailure";
@@ -1955,9 +1955,11 @@ export function resumeWithout(key: string): Session | null {
   // The row resumed in its place runs the way this one did, its own way
   // only where this one ran so, and keeps the shells opened beside it.
   const ownWay = session.ownWay;
+  const plugin = pluginStartOf(key);
   close(key, true);
   const next = create(project, id, agent, startIn, null, model, account, null, kind);
   next.ownWay = ownWay;
+  if (plugin !== null) pluginStarted(next.key, plugin);
   next.madeTree = session.madeTree;
   next.profile = profile;
   handOver(key, { project, session: next.key });
@@ -2771,6 +2773,15 @@ async function quitTerminal(session: Session, pty: string) {
     .catch(() => runEnded(key));
 }
 
+/** Tells the core a plugin's start is the plugin's no longer. */
+async function letGoOf(project: string, request: string) {
+  try {
+    await core().pluginStartSettled(project, request, false);
+  } catch {
+    // A core that cannot be told keeps the start until its plugin goes.
+  }
+}
+
 /** Closes a row. Its shells go with it, unless they are kept for the row
     that takes its place: see `handOver`. */
 export function close(key: string, keepShells = false) {
@@ -2809,6 +2820,11 @@ export function close(key: string, keepShells = false) {
   answered.delete(key);
   worded.delete(key);
   closing(session);
+  // A plugin's start goes with its row. Closed for good, the core lets go
+  // of it as well, so the plugin can send its session nothing more; a row
+  // closed for one that takes its place hands its start on.
+  const plugin = forgetPluginStart(key);
+  if (plugin !== null && !keepShells) void letGoOf(plugin.project, plugin.request);
 
   // The browser tabs opened for the session go with the row.
   void closeOwner({ kind: "session", key });

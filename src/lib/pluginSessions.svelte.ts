@@ -28,7 +28,7 @@ import { wentOnFrom } from "$lib/goingOn.svelte";
 import { handleOf, send as sendIntegrated } from "$lib/integrated.svelte";
 import { choose, modelToStart } from "$lib/lastChosen.svelte";
 import { startsIn } from "$lib/orchestratorFolder.svelte";
-import { pluginMark, pluginStarted, pluginStartOf, rowOfRequest } from "$lib/pluginStarts.svelte";
+import { pluginMark, pluginStarted, rowOfRequest } from "$lib/pluginStarts.svelte";
 import { kindFor } from "$lib/sessionKind.svelte";
 import {
   byKey,
@@ -165,27 +165,24 @@ async function startFor(asked: PluginStartEvent): Promise<string | null> {
   return session.key;
 }
 
-/** Whether a row is another start's than the one a send names: another
-    plugin's, or the same plugin's for another request. */
-function othersRow(row: Session, event: PluginSendEvent): boolean {
-  const start = pluginStartOf(row.key);
-  return (
-    start !== null &&
-    (start.source !== event.source || start.plugin !== event.plugin || start.request !== event.started)
-  );
+/** Whether a row is the session a send names: it runs under that id, or
+    under the id of a conversation that went on from it. */
+function namedBy(row: Session, session: string): boolean {
+  return row.id !== null && (row.id === session || wentOnFrom(session) === row.id);
 }
 
-/** The row of the session a send names: the one the plugin's start made,
-    else the one with its id, or with the id of a conversation that went
-    on from it under a new one, passing over any row another start made. */
+/** The row of the session a send names: only a row this window bound to
+    the send's own start when the user said yes to it, or restored with
+    that binding after a reload, and only while that row runs under the id
+    the send names. The core's record of which ids are a plugin's is not
+    enough on its own: a row with no plugin start of its own, or another
+    start's, is never sent to. Both records are the user's data on disk,
+    which a plugin running as the user could write. */
 function rowFor(event: PluginSendEvent): Session | null {
   const key = rowOfRequest(event.source, event.plugin, event.started);
-  const started = key === null ? null : byKey(key);
-  if (started !== null) return started;
-  const fresh = wentOnFrom(event.session);
-  const withId = (id: string) =>
-    sessions.all.find((row) => row.project === event.project && row.id === id && !othersRow(row, event));
-  return withId(event.session) ?? (fresh === null ? null : withId(fresh)) ?? null;
+  const row = key === null ? null : byKey(key);
+  if (row === null || row.project !== event.project || !namedBy(row, event.session)) return null;
+  return row;
 }
 
 /** A session that will not come back: it ended, failed or crashed. A row
@@ -217,16 +214,7 @@ async function deliver(event: PluginSendEvent): Promise<PluginSentOutcome> {
   if (line === "" || bytes(event.text) > TEXT_MOST) return "refused";
   if (commandLed(line) || commandLed(event.text)) return "refused";
   const row = rowFor(event);
-  if (row === null || row.project !== event.project || othersRow(row, event)) return "gone";
-  // Known again after the window was loaded afresh, by the start the core
-  // tied it to.
-  if (pluginStartOf(row.key) === null)
-    pluginStarted(row.key, {
-      source: event.source,
-      plugin: event.plugin,
-      project: event.project,
-      request: event.started,
-    });
+  if (row === null) return "gone";
   const from = pluginMark(event.source, event.plugin);
   const integrated = row.kind === "integrated";
   const typed = integrated ? event.text : line;
