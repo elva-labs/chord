@@ -30,8 +30,9 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::adapter::{
-    prepare_process, process, CODEX_APPROVE, CODEX_HOME_VAR, CODEX_NO_SUBAGENTS, CODEX_TOOLS,
-    CODEX_TOOL_APPROVAL, CONVERSATION_VIEW, ORCHESTRATOR_ROLE, ROLE_VAR, SESSION_VAR, VIEW_VAR,
+    codex_developer_instructions, prepare_process, process, CODEX_APPROVE, CODEX_HOME_VAR,
+    CODEX_NO_SUBAGENTS, CODEX_TOOLS, CODEX_TOOL_APPROVAL, CONVERSATION_VIEW, ORCHESTRATOR_ROLE,
+    ROLE_VAR, SESSION_VAR, VIEW_VAR,
 };
 use crate::env::find_on_path;
 use crate::hook;
@@ -766,7 +767,7 @@ struct AppServer {
     token: Option<String>,
     orchestrator: bool,
     /// A workflow's instructions, given as developer instructions in the
-    /// thread's start or resume.
+    /// thread's start or resume after what the tool server says.
     instructions: Option<String>,
     /// Whether Codex's own subagent tools are turned off for the thread.
     start_only: bool,
@@ -1542,10 +1543,17 @@ impl AppServer {
             params["approvalPolicy"] = json!(mode.approval);
             params["sandbox"] = json!(mode.sandbox);
         }
-        // A workflow's instructions go in the message that starts or resumes
-        // the thread, never on a command line, so nothing cuts them short.
-        if let Some(instructions) = &self.instructions {
-            params["developerInstructions"] = json!(instructions);
+        // The developer instructions go in the message that starts or
+        // resumes the thread, never on a command line, so nothing cuts them
+        // short. Codex keeps them for the thread's later turns, and puts
+        // what a resume gives in the model's context once it compacts.
+        if self.tool_server.is_some() || self.instructions.is_some() {
+            params["developerInstructions"] = json!(codex_developer_instructions(
+                self.orchestrator,
+                Some(CONVERSATION_VIEW),
+                false,
+                self.instructions.as_deref(),
+            ));
         }
         let mut config = Map::new();
         if let Some(effort) = &self.start_effort {

@@ -68,6 +68,18 @@ names, would stop Codex from starting, so a session without the tool
 server is told nothing of it. On Windows a Codex installed as a script is
 not told the server either; see [under a workflow](#under-a-workflow).
 
+Codex shows its model only the first few lines of what a tool server says
+when it connects, until the model takes up one of the server's tools. So
+wherever a Codex session has the tool server, it is given what the server
+tells it, whole, as developer instructions, with a workflow's instructions
+after them where it follows one: in a terminal on its command line, in
+Chord in the message that starts or resumes its thread. A model that takes
+up the server's tools reads it twice. A thread begun without them reads
+them only once Codex next compacts it, as [under a
+workflow](#under-a-workflow) describes. On Windows a Codex installed as a
+script is given none of it, since the command interpreter would take what
+the server says for commands of its own.
+
 Codex passes a server the variables its entry names from 0.47.0 on. An
 older Codex takes the entry without a word and passes the server none of
 them, so every call its sessions make names no session, and is taken for
@@ -107,9 +119,11 @@ told now.
 
 Codex keeps what a thread began with. Resumed, in a terminal or
 in Chord, it reads the instructions its first turn was given, whatever
-it is told now, and its subagent tools stay as they were then: a thread
-started under a workflow that took them away is without them for good,
-and one resumed under a changed workflow does not read the change.
+it is told now, until it next compacts the thread and puts what it was
+last told in their place, and its subagent tools stay as they were then:
+a thread started under a workflow that took them away is without them for
+good, and one resumed under a changed workflow does not read the change
+before it compacts.
 Resuming it under no workflow, or with its subagent tools asked for, undoes
 neither. A Codex session resumed under other instructions than it began
 with, a changed workflow or none, says so over the session in one line,
@@ -143,19 +157,19 @@ server does not start a session under a workflow, and says why.
 On Windows an agent installed as a script runs through the command
 interpreter, which ends a command at its first line break. Claude Code's
 command line holds only file names there. Codex would lose all but the
-first line of the instructions, so a Codex session under a workflow is
-refused in a terminal on Windows, saying so, and runs in Chord, where
-nothing of the workflow is on its command line. A session with no workflow
-starts as the table above says. The interpreter also takes the first and
-the last quote off a line with more than two, which cuts short a script
-path with a space in it, and the settings that name the tool server to
-Codex hold quotes. So a Codex installed as a script is not told the server
-on Windows: it starts the server from its own configuration, which passes
-the server none of the session's variables, and every call the session
-makes names no session. The workbench takes such a call for one from [an
-agent it did not start](orchestrator.md#who-is-calling). Its tools ask or
-not as the project's entry for the server says, as they do wherever the
-project's configuration names it.
+first line of a workflow's instructions, so a Codex session under a
+workflow is refused in a terminal on Windows, saying so, and runs in Chord,
+where nothing of the workflow is on its command line. A session with no
+workflow starts as the table above says. The interpreter also takes the
+first and the last quote off a line with more than two, which cuts short a
+script path with a space in it, and the settings that name the tool server
+to Codex hold quotes. So a Codex installed as a script is not told the
+server on Windows: it starts the server from its own configuration, which
+passes the server none of the session's variables, and every call the
+session makes names no session. The workbench takes such a call for one
+from [an agent it did not start](orchestrator.md#who-is-calling). Its tools
+ask or not as the project's entry for the server says, as they do wherever
+the project's configuration names it.
 
 ## Detection
 

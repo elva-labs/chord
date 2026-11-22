@@ -324,7 +324,11 @@ describe("coming back", () => {
       expect(forProject(B)).toEqual([over, busy]);
       await vi.advanceTimersByTimeAsync(1000);
       expect(forProject(B)).toEqual([busy]);
-      expect(conductor.started[lead.token].map((entry) => entry.left)).toEqual(["done", undefined]);
+      // Put away, it moves to the end of its starter's list, the latest gone.
+      expect(conductor.started[lead.token].map((entry) => [entry.id, entry.left])).toEqual([
+        ["busy", undefined],
+        ["kid", "done"],
+      ]);
       flushSync();
       expect(record().open.map((kept) => kept.id)).toEqual(["lead", "busy"]);
       expect(spawned.map((options) => options.session)).not.toContain("kid");
@@ -407,7 +411,11 @@ describe("coming back", () => {
       ]);
       await vi.advanceTimersByTimeAsync(PUT_AWAY_AFTER);
       expect(forProject(B)).toEqual([worked, coming]);
-      expect(conductor.started[lead.token].map((entry) => entry.left)).toEqual(["done", undefined, undefined]);
+      expect(conductor.started[lead.token].map((entry) => [entry.id, entry.left])).toEqual([
+        ["worked", undefined],
+        ["coming", undefined],
+        ["looked", "done"],
+      ]);
     } finally {
       unwatch();
       vi.useRealTimers();

@@ -15,31 +15,42 @@ the palette, which a project's new-session button opens as well, as
 [following a workflow](#following-a-workflow) describes. The session that
 follows a workflow is its orchestrator, and is told to direct work rather
 than do it, to start a session per piece in the project it belongs to, on a
-worktree of its own when pieces touch the same files, to wait on them
-rather than ask after them in a loop, to put the user's whole task in the
-prompt it starts a session with and none of its own housekeeping, to start
-a new session for each new task rather than resume or send to one that did
-other work, to read a session's report rather than ask it to say more, and
-to leave a line on its own row when it stops, whether to relay a question
-or to report, as well as the workflow's own steps. A fresh install has a
-workflow for exactly that, Direct: one step of work, on any model, with as
-many sessions at once as a session may run (see
-[settings](settings.md#workflows)). Its steps add what any workflow's do:
-edit no files, hand out work only through `start` and never through its
-own subagents, and name the step in each start. A session
-that follows no workflow is told none of this. Every session, an
+worktree of its own when pieces touch the same files, to name the model a
+piece calls for when it starts it, to start a new session for each new task
+rather than resume or send to one that did other work, and to relay a
+session's question to the user and answer it with `send`, as well as the
+workflow's own steps. A fresh install has a workflow for exactly that,
+Direct: one step of work, on any model, with as many sessions at once as a
+session may run (see [settings](settings.md#workflows)). Its steps add what
+any workflow's do: edit no files, hand out work only through `start` and
+never through its own subagents, and name the step in each start. A session
+that follows no workflow is told none of this.
+
+The rest is said where it is needed, in the descriptions of the tools,
+which a session reads when it takes the tool up: `wait` says to wait on
+sessions rather than ask after them in a loop, `start` to put the user's
+whole task in the prompt and none of the caller's own housekeeping, `send`
+and `read` to read a session's closing report rather than ask it to say
+more, and `stop` and
+`sessions` that the workbench puts away a session once its work is over,
+as [when the work is over](#when-the-work-is-over) describes, so a session
+is stopped only when its work is not wanted. Every session, an
 orchestrator included, is told that once it has started sessions it keeps
 calling `wait` until all of them are done, and does not hand its turn back
 while any is running unless it needs the user or the user wrote to it,
 that it answers a message from the user that comes while they run as the
 final message of its turn and ends the turn there rather than waiting
-after the answer, that a message from the
-workbench, not the user, is what those sessions did while it was idle,
-both only where the workbench can wake it (see [when the user writes to
-it](#when-the-user-writes-to-it)),
-and that the workbench puts away a session it started once that session's
-work is over, as [when the work is over](#when-the-work-is-over) describes,
-so it stops one only when its work is not wanted.
+after the answer, and that a message from the workbench, not the user, is
+what those sessions did while it was idle, both only where the workbench
+can wake it (see [when the user writes to it](#when-the-user-writes-to-it)).
+How a session's row learns why it stopped is told as [the agent's
+tools](hooks.md#the-agents-tools) describe. What a session is told when it
+connects stays well inside the length Claude Code keeps of a tool server's
+instructions, 4096 characters, past which it cuts the rest. Codex shows its
+model only their first few lines until the model takes up one of the
+tools, so a Codex session is given them whole as developer instructions
+too, as [the agents](adapters.md#naming-the-session-to-its-tools)
+describe.
 
 Earlier versions of the workbench ran such sessions in a project of their
 own, the folder `orchestrator` under the workbench's home. While
@@ -74,12 +85,18 @@ worktree, its agent, what it is doing and the last line it left. What it is
 doing is working, waiting, asking for permission, at its usage limit until
 the time the agent named, stopped on an error, waiting with its turn
 interrupted by the user, or waiting on work in the background, as under
-`wait` below. A session that is not running says why: it ended, the user
-closed its row, the workbench put it away once its work was over, or it
-has not run since the workbench was restarted, each with the way back: a
-line sent to it for the last two, a start naming it for the others. A session
-that has stopped, ended or asked for permission without the caller having
-been told says so beside what it is doing, and listing it counts as
+`wait` below. A session with no row that has not run since the workbench
+was restarted is listed in full as well, with the way back: a line sent to
+it. After those come the sessions that are over: closed by the user,
+ended, or put away by the workbench once its work was over. They are
+listed latest gone first, the last ten only, each by its id, its name and
+why. One line ends them with the way back, a start naming any of them,
+listed or not, and for one put away a line sent to it as well, and when
+there are more, how many and that a call with `all: true` lists them. A
+call with `find` and words of a name lists only the sessions whose name
+has them all, over or not, and one with `project` only that project's. A
+session that has stopped, ended or asked for permission without the caller
+having been told says so beside what it is doing, and listing it counts as
 telling. `start` starts a session in a project with a first prompt, on a
 worktree of its own if it asks for one, and answers with the new session's
 id and tells it to keep calling `wait` until every session it started is
@@ -285,7 +302,8 @@ then. Lines that arrive while it comes back wait for it, and then go to it
 as to any running session.
 
 A session put away stays on its starter's list. `sessions` lists it as put
-away by the workbench once its work was over, and a line its starter sends
+away once its work was over, among the last ten that are over until
+others go after it, and a line its starter sends
 it resumes it where it ran, with its conversation and the line as what it
 goes on with. A wait over all of the starter's sessions passes over one
 put away while it waits, and once every session it watched has been put
