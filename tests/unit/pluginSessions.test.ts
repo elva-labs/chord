@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flushSync } from "svelte";
 import { render } from "@testing-library/svelte";
-import type { PluginSendEvent, PluginSentOutcome, PluginStartEvent } from "$lib/core";
+import type { PluginSendEvent, PluginSentOutcome, PluginStartEvent, PluginStateEvent } from "$lib/core";
 import {
   conductor,
   once,
@@ -13,7 +13,7 @@ import {
 } from "$lib/conductor.svelte";
 import { handleOf, launch, listenIntegrated, resetIntegrated } from "$lib/integrated.svelte";
 import { modelToStart, resetLastChosen } from "$lib/lastChosen.svelte";
-import { pluginSendAsked, pluginStartAsked, PROMPT_MOST, startRefusal, TEXT_MOST } from "$lib/pluginSessions.svelte";
+import { pluginSendAsked, pluginStartAsked, PROMPT_MOST, startRefusal, takeDownCardsOf, TEXT_MOST } from "$lib/pluginSessions.svelte";
 import { pluginMark, pluginStartOf, resetPluginStarts } from "$lib/pluginStarts.svelte";
 import { resetGoingOn } from "$lib/goingOn.svelte";
 import { resetSenders, senderOf } from "$lib/senders.svelte";
@@ -271,6 +271,27 @@ describe("a plugin's start", () => {
     expect(await theirs).toBeNull();
     expect(conductor.asking).toBeNull();
     expect(sessions.all).toHaveLength(0);
+  });
+
+  it.each([
+    ["failed", true],
+    ["off", true],
+    ["stopped", false],
+    ["running", false],
+  ] as const)("takes a plugin's card down when it is %s: %s", async (state, down) => {
+    const asking = pluginStartAsked(start());
+    await until(() => conductor.asking !== null);
+    const event: PluginStateEvent = { source: "local", name: "github", state, detail: null, hello: null };
+    takeDownCardsOf(event);
+    takeDownCardsOf({ ...event, name: "jira" });
+    if (down) {
+      expect(await asking).toBeNull();
+      expect(conductor.asking).toBeNull();
+      return;
+    }
+    expect(conductor.asking?.request.id).toBe("req-1");
+    once();
+    expect(await asking).not.toBeNull();
   });
 
   it("tells the core whether a start began a session, on yes, no, a refusal and a failure", async () => {

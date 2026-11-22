@@ -7,7 +7,7 @@
  * could take as a command or as an answer to what it asks.
  */
 
-import { core, type PluginSendEvent, type PluginSentOutcome, type PluginStartEvent } from "$lib/core";
+import { core, type PluginSendEvent, type PluginSentOutcome, type PluginStartEvent, type PluginStateEvent } from "$lib/core";
 import { accountToStart, dirsOf } from "$lib/accounts.svelte";
 import {
   askForPlugin,
@@ -19,6 +19,7 @@ import {
   slashLed,
   treeStands,
   typeLine,
+  withdrawPlugin,
   worktreeName,
   type PluginPick,
 } from "$lib/conductor.svelte";
@@ -102,6 +103,12 @@ export async function pluginStartAsked(asked: PluginStartEvent): Promise<string 
   } finally {
     await settled(asked, key !== null);
   }
+}
+
+/** A plugin turned off, removed or failed has no start of its own left to
+    ask: its cards, shown or waiting, are a no. */
+export function takeDownCardsOf(plugin: PluginStateEvent) {
+  if (plugin.state === "off" || plugin.state === "failed") withdrawPlugin(plugin.source, plugin.name);
 }
 
 async function startFor(asked: PluginStartEvent): Promise<string | null> {

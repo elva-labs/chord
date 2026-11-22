@@ -29,7 +29,6 @@
     cancelled as conductCancelled,
     conductor,
     handle as conductRequested,
-    withdrawPlugin,
   } from "$lib/conductor.svelte";
   import { handle as browserRequested } from "$lib/browserTools.svelte";
   import { handle as settingsRequested, settingsAsk } from "$lib/settingsTools.svelte";
@@ -68,7 +67,7 @@
   import { cancelAction, noticed as pluginNoticed, pluginSections, sectionChanged } from "$lib/pluginSections.svelte";
   import { markChanged } from "$lib/pluginMarks.svelte";
   import { dataArrived as pluginViewData, viewChanged as pluginViewChanged } from "$lib/pluginView.svelte";
-  import { pluginSendAsked, pluginStartAsked } from "$lib/pluginSessions.svelte";
+  import { pluginSendAsked, pluginStartAsked, takeDownCardsOf } from "$lib/pluginSessions.svelte";
   import { loadMedia, presented } from "$lib/media.svelte";
   import {
     activeTab as browserTab,
@@ -275,8 +274,7 @@
     core()
       .onPluginState((event) => {
         pluginStateChanged(event);
-        // A plugin turned off or removed has no start of its own to ask.
-        if (event.state === "off") withdrawPlugin(event.source, event.name);
+        takeDownCardsOf(event);
       })
       .then((unlisten) => offs.push(unlisten));
     core()
