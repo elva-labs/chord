@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// The event a plugin's state change is told by.
 pub const PLUGIN_STATE: &str = "plugin_state";
@@ -517,6 +517,14 @@ const NAME_MOST: usize = 60;
 /// The most a plugin's own ref for a session may hold, in bytes.
 const REF_MOST: usize = 256;
 
+/// The most starts a plugin is kept owning: the ones whose sessions last
+/// ran, so the record stays small however many it asks for.
+const OWNED_MOST: usize = 300;
+
+/// How long a plugin's line waits for the window to say what came of it,
+/// which a window loaded afresh meanwhile never does.
+const SENDING_MOST: Duration = Duration::from_secs(60);
+
 /// The ways a plugin may answer something the user did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Reply {
@@ -556,21 +564,33 @@ impl Act {
 }
 
 /// A session a plugin asked to start: the plugin, the project, the plugin's
-/// own ref for it, and the agent's ids it has run under since the user
-/// allowed it, none before.
+/// own ref for it, the agent's ids it has run under since the user allowed
+/// it, none before, and when it last ran, in milliseconds since the epoch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Owned {
     plugin: Key,
     project: String,
     reference: Option<String>,
     ids: Vec<String>,
+    at: u64,
 }
 
 /// A plugin's line on its way to a session, until the window says what
-/// came of it: the plugin, the act it answered, and the session it named.
+/// came of it or `SENDING_MOST` has gone: the plugin, the act it answered,
+/// the session it named, and when it went.
 struct Sending {
     plugin: Key,
     answers: String,
     session: String,
+    sent: Instant,
+}
+
+/// Now, in milliseconds since the epoch, for [`Owned::at`].
+fn epoch_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|since| u64::try_from(since.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 /// An agent's pty as the runtime follows it: the session it runs, known at
@@ -669,8 +689,10 @@ struct Inner {
     /// What the user did that went to a plugin, by its id, for
     /// `OPEN_WINDOW` or until the plugin goes.
     acts: Mutex<HashMap<String, Act>>,
-    /// The sessions plugins asked to start, by request, while the plugin
-    /// is on.
+    /// The sessions plugins asked to start, by request: on disk once a
+    /// session runs under one, until the plugin's source is removed, the
+    /// window says its start began none, or the plugin has `OWNED_MOST`
+    /// newer.
     owned: Mutex<HashMap<String, Owned>>,
     /// The lines plugins sent to sessions, by request, until the window
     /// says what came of each.
@@ -1032,6 +1054,61 @@ fn write_state(root: &Path, stored: &Stored) -> Result<(), String> {
         .map_err(|e| format!("could not write the plugin state: {e}"))
 }
 
+/// Where the sessions plugins started are kept, beside the sources.
+const OWNED_FILE: &str = "owned.json";
+
+/// Keeps the sessions plugins started, the ones that have run under an id:
+/// a start with none has nothing a send could name after a restart.
+fn write_owned(root: &Path, owned: &HashMap<String, Owned>) {
+    let kept: HashMap<&String, &Owned> = owned
+        .iter()
+        .filter(|(_, owned)| !owned.ids.is_empty())
+        .collect();
+    let Ok(text) = serde_json::to_string(&kept) else {
+        return;
+    };
+    // Non-fatal: the plugins own the sessions until the app quits.
+    if std::fs::create_dir_all(root).is_ok() {
+        let _ = std::fs::write(root.join(OWNED_FILE), text);
+    }
+}
+
+/// Lets a plugin own one more start and no more than `OWNED_MOST`: its
+/// starts that ran longest ago go. Whether any went.
+fn make_room(owned: &mut HashMap<String, Owned>, plugin: &Key) -> bool {
+    let mut its: Vec<(u64, String)> = owned
+        .iter()
+        .filter(|(_, owned)| &owned.plugin == plugin)
+        .map(|(request, owned)| (owned.at, request.clone()))
+        .collect();
+    if its.len() < OWNED_MOST {
+        return false;
+    }
+    its.sort();
+    for (_, old) in its.iter().take(its.len() + 1 - OWNED_MOST) {
+        owned.remove(old);
+    }
+    true
+}
+
+/// The sessions plugins started, as kept, of the sources still installed.
+/// A record that does not read is none.
+fn read_owned(root: &Path, stored: &Stored) -> HashMap<String, Owned> {
+    let read: HashMap<String, Owned> = std::fs::read_to_string(root.join(OWNED_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    read.into_iter()
+        .filter(|(_, owned)| {
+            !owned.ids.is_empty()
+                && stored
+                    .sources
+                    .iter()
+                    .any(|source| source.id == owned.plugin.0)
+        })
+        .collect()
+}
+
 impl Plugins {
     /// The sources' directory is under the app's own in the home.
     pub fn new(home: &Path, sink: Arc<dyn Sink>) -> Self {
@@ -1047,6 +1124,7 @@ impl Plugins {
             .and_then(|text| serde_json::from_str(&text).ok())
             .unwrap_or_default();
         move_to_current_addresses(&root, &mut stored, &known);
+        let owned = read_owned(&root, &stored);
         Self {
             inner: Arc::new(Inner {
                 home: home.to_path_buf(),
@@ -1060,7 +1138,7 @@ impl Plugins {
                 views: Mutex::new(HashMap::new()),
                 pending: Mutex::new(HashMap::new()),
                 acts: Mutex::new(HashMap::new()),
-                owned: Mutex::new(HashMap::new()),
+                owned: Mutex::new(owned),
                 sending: Mutex::new(HashMap::new()),
                 marks: Mutex::new(HashMap::new()),
                 building: Mutex::new(HashMap::new()),
@@ -1218,6 +1296,13 @@ impl Plugins {
     /// or an outcome not one of those, says nothing.
     pub fn sent(&self, request: &str, outcome: &str) {
         self.inner.sent(request, outcome);
+    }
+
+    /// Whether a plugin's start began a session: one that did not, the
+    /// user's no, a start the window refused or one that failed, is the
+    /// plugin's no longer. The plugin hears nothing of it.
+    pub fn start_settled(&self, request: &str, started: bool) {
+        self.inner.start_settled(request, started);
     }
 }
 
@@ -2031,6 +2116,12 @@ impl Inner {
         for name in &source.enabled {
             self.stop(&source.id, name);
         }
+        // Its plugins own nothing once it is gone.
+        {
+            let mut owned = self.owned.lock().expect("plugins lock");
+            owned.retain(|_, owned| owned.plugin.0 != source.id);
+            write_owned(&self.root, &owned);
+        }
         if source.kind == "git" {
             let _ = std::fs::remove_dir_all(self.root.join(&source.id));
         }
@@ -2594,8 +2685,7 @@ impl Inner {
             out
         };
         // Its actions are answered by no one now, and the next process
-        // under its name answers nothing the user did for this one. A
-        // plugin turned off owns none of the sessions it started.
+        // under its name answers nothing the user did for this one.
         self.pending
             .lock()
             .expect("plugins lock")
@@ -2608,12 +2698,6 @@ impl Inner {
             .lock()
             .expect("plugins lock")
             .retain(|_, sending| sending.plugin != key);
-        if !still_on {
-            self.owned
-                .lock()
-                .expect("plugins lock")
-                .retain(|_, owned| owned.plugin != key);
-        }
         self.publish();
         self.forget_sections(source_id, name);
         self.forget_views(source_id, name);
@@ -3122,15 +3206,22 @@ impl Inner {
             return;
         }
         let request = uuid::Uuid::new_v4().to_string();
-        self.owned.lock().expect("plugins lock").insert(
-            request.clone(),
-            Owned {
-                plugin: key,
-                project: project.to_string(),
-                reference,
-                ids: Vec::new(),
-            },
-        );
+        {
+            let mut owned = self.owned.lock().expect("plugins lock");
+            if make_room(&mut owned, &key) {
+                write_owned(&self.root, &owned);
+            }
+            owned.insert(
+                request.clone(),
+                Owned {
+                    plugin: key,
+                    project: project.to_string(),
+                    reference,
+                    ids: Vec::new(),
+                    at: epoch_ms(),
+                },
+            );
+        }
         crate::events::emit(
             &self.sink,
             PLUGIN_START,
@@ -3150,8 +3241,10 @@ impl Inner {
     /// any agent id the session ran under, in answer to something the user
     /// did, once for each and for 30 seconds at most. A session another
     /// started, or the user, or one the plugin's start has not started yet,
-    /// is sent nothing, nor is a line over its size. The window delivers
-    /// it, and the plugin hears what came of it as a `sent` line.
+    /// is sent nothing, and the plugin hears it as `gone`, as it would of a
+    /// session of its own that ended: it learns nothing it did not know. A
+    /// line over its size is sent nothing either. The window delivers the
+    /// rest, and the plugin hears what came of each as a `sent` line.
     fn send_asked(&self, source_id: &str, name: &str, message: &serde_json::Value) {
         let text = |key: &str| {
             message
@@ -3169,28 +3262,44 @@ impl Inner {
             return;
         }
         let key: Key = (source_id.to_string(), name.to_string());
-        let Some((started, project)) = self
+        let found = self
             .owned
             .lock()
             .expect("plugins lock")
             .iter()
             .find(|(_, owned)| owned.plugin == key && owned.ids.iter().any(|id| id == session))
-            .map(|(started, owned)| (started.clone(), owned.project.clone()))
-        else {
-            return;
-        };
+            .map(|(started, owned)| (started.clone(), owned.project.clone()));
         if !self.spend(answers, &key, Reply::Send) {
             return;
         }
+        let Some((started, project)) = found else {
+            let _ = self.send(
+                source_id,
+                name,
+                &serde_json::json!({
+                    "type": "sent",
+                    "answers": answers,
+                    "session": session,
+                    "outcome": "gone",
+                }),
+            );
+            return;
+        };
         let request = uuid::Uuid::new_v4().to_string();
-        self.sending.lock().expect("plugins lock").insert(
-            request.clone(),
-            Sending {
-                plugin: key,
-                answers: answers.to_string(),
-                session: session.to_string(),
-            },
-        );
+        {
+            let mut sending = self.sending.lock().expect("plugins lock");
+            let now = Instant::now();
+            sending.retain(|_, waiting| now.duration_since(waiting.sent) < SENDING_MOST);
+            sending.insert(
+                request.clone(),
+                Sending {
+                    plugin: key,
+                    answers: answers.to_string(),
+                    session: session.to_string(),
+                    sent: now,
+                },
+            );
+        }
         crate::events::emit(
             &self.sink,
             PLUGIN_SEND,
@@ -3224,6 +3333,16 @@ impl Inner {
                 "outcome": outcome,
             }),
         );
+    }
+
+    fn start_settled(&self, request: &str, started: bool) {
+        if started {
+            return;
+        }
+        let mut owned = self.owned.lock().expect("plugins lock");
+        if owned.remove(request).is_some() {
+            write_owned(&self.root, &owned);
+        }
     }
 
     fn view_message(
@@ -3680,17 +3799,20 @@ impl Inner {
     }
 
     /// The session runs under this id for the plugin whose start it is, so
-    /// a line the plugin sends by it reaches it.
+    /// a line the plugin sends by it reaches it, after a restart as well.
     fn own(&self, request: &str, session: &str) {
         if session.is_empty() {
             return;
         }
         let mut owned = self.owned.lock().expect("plugins lock");
-        if let Some(owned) = owned.get_mut(request) {
-            if !owned.ids.iter().any(|id| id == session) {
-                owned.ids.push(session.to_string());
-            }
+        let Some(entry) = owned.get_mut(request) else {
+            return;
+        };
+        if !entry.ids.iter().any(|id| id == session) {
+            entry.ids.push(session.to_string());
         }
+        entry.at = epoch_ms();
+        write_owned(&self.root, &owned);
     }
 
     /// Tells every plugin a line about a session. The plugin the session
@@ -4068,7 +4190,6 @@ while IFS= read -r line; do
       case "$line" in
         *'"id":"'*)
           id=$(printf '%s' "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
-          printf '{"type":"send","answers":"%s","session":"s-1","text":"not its session"}\n' "$id"
           printf '{"type":"send","answers":"%s","session":"s-own","text":"%s"}\n' "$id" "$long"
           printf '{"type":"send","answers":"%s","session":"s-own","text":"Address the review"}\n' "$id"
           printf '{"type":"send","answers":"%s","session":"s-own","text":"A second line"}\n' "$id"
@@ -6057,6 +6178,17 @@ run = ["sh", "main.sh"]
         assert!(ask.get("ref").is_none(), "the window is not shown the ref");
         let request = ask["request"].as_str().unwrap().to_string();
         assert!(events(PLUGIN_SEND).is_empty());
+        // The line to the user's session spent the act's send, and the
+        // plugin hears it as gone, as it would of one of its own that ended.
+        let refused = heard("github", &|line| {
+            line["type"] == "sent" && line["session"] == "s-1"
+        });
+        assert_eq!(refused["outcome"], "gone");
+        let action = lines("github")
+            .into_iter()
+            .find(|line| line["type"] == "action")
+            .unwrap();
+        assert_eq!(refused["answers"], action["id"]);
 
         // A session started under a request the plugin was never given, or
         // under its request in another project, is not its own.
@@ -6129,7 +6261,7 @@ run = ["sh", "main.sh"]
 
         // One that did carries one: the line to the plugin's own session
         // goes to the window once, and so does one web address. The line
-        // to the user's session, and the one over its size, go nowhere.
+        // over its size goes nowhere.
         plugins
             .view_message(
                 &added.id,
@@ -6162,7 +6294,9 @@ run = ["sh", "main.sh"]
         plugins.sent(sending, "lost");
         plugins.sent(sending, "gone");
         plugins.sent(sending, "delivered");
-        let told = heard("github", &|line| line["type"] == "sent");
+        let told = heard("github", &|line| {
+            line["type"] == "sent" && line["session"] == "s-own"
+        });
         assert_eq!(told["answers"], act);
         assert_eq!(told["session"], "s-own");
         assert_eq!(told["outcome"], "gone");
@@ -6179,16 +6313,127 @@ run = ["sh", "main.sh"]
         assert_eq!(
             lines("github")
                 .iter()
-                .filter(|line| line["type"] == "sent")
+                .filter(|line| line["type"] == "sent" && line["session"] == "s-own")
                 .count(),
             1
         );
 
-        // Turned off, the plugin owns none of the sessions it started.
+        // Turned off, it answers nothing the user did, and still owns what
+        // it started.
         plugins.enable(&added.id, "board", false).unwrap();
         plugins.enable(&added.id, "ears", false).unwrap();
-        assert!(plugins.inner.owned.lock().unwrap().is_empty());
         assert!(plugins.inner.acts.lock().unwrap().is_empty());
+        assert!(plugins.inner.owned.lock().unwrap().contains_key(&request));
+
+        // A new core on the same home, as after a restart, still sends the
+        // plugin's line to the session it started.
+        drop(plugins);
+        recorder.events.lock().unwrap().clear();
+        let again = plugins_at(&home, recorder.clone());
+        again.set_projects(vec![here.clone()]);
+        again.enable(&added.id, "board", true).unwrap();
+        heard_again(&again, &added.id, &here, &events, &done);
+        let sends = events(PLUGIN_SEND);
+        assert_eq!(sends.len(), 1, "{sends:?}");
+        assert_eq!(sends[0]["session"], "s-own");
+        assert_eq!(sends[0]["started"], request.as_str());
+
+        // A start the user said no to, or that started nothing, is not
+        // kept; one that started is.
+        again
+            .action(
+                &added.id,
+                "board",
+                "checks",
+                "review",
+                None,
+                &serde_json::json!({}),
+                &here,
+                None,
+            )
+            .unwrap();
+        done("action");
+        let asked = events(PLUGIN_START);
+        assert_eq!(asked.len(), 1, "{asked:?}");
+        let refused_start = asked[0]["request"].as_str().unwrap().to_string();
+        assert!(again
+            .inner
+            .owned
+            .lock()
+            .unwrap()
+            .contains_key(&refused_start));
+        again.start_settled(&refused_start, false);
+        again.start_settled(&request, true);
+        let kept = again
+            .inner
+            .owned
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(kept, std::slice::from_ref(&request));
+
+        // A removed source's plugins own nothing, on disk too.
+        again.remove(&added.id).unwrap();
+        assert!(again.inner.owned.lock().unwrap().is_empty());
+        drop(again);
+        let fresh = plugins_at(&home, recorder.clone());
+        assert!(fresh.inner.owned.lock().unwrap().is_empty());
+    }
+
+    /// Clicks in the plugin's page on a core made afresh, once the plugin
+    /// is up again, and waits for it to answer.
+    #[cfg(unix)]
+    fn heard_again(
+        plugins: &Plugins,
+        source: &str,
+        here: &str,
+        events: &dyn Fn(&str) -> Vec<serde_json::Value>,
+        done: &dyn Fn(&str),
+    ) {
+        for _ in 0..50 {
+            if events(PLUGIN_STATE)
+                .iter()
+                .any(|payload| payload["state"] == "running")
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        plugins
+            .view_message(
+                source,
+                "board",
+                here,
+                &serde_json::json!({"want": "again"}),
+                true,
+            )
+            .unwrap();
+        done("click");
+    }
+
+    #[test]
+    fn a_plugin_owns_its_newest_starts_and_no_more() {
+        let board: Key = ("source".into(), "board".into());
+        let other: Key = ("source".into(), "other".into());
+        let entry = |plugin: &Key, at: u64| Owned {
+            plugin: plugin.clone(),
+            project: "/p".into(),
+            reference: None,
+            ids: vec![format!("s-{at}")],
+            at,
+        };
+        let mut owned: HashMap<String, Owned> = (0..OWNED_MOST as u64)
+            .map(|at| (format!("r-{at}"), entry(&board, at + 10)))
+            .collect();
+        owned.insert("theirs".into(), entry(&other, 0));
+        assert!(make_room(&mut owned, &board));
+        assert_eq!(owned.len(), OWNED_MOST);
+        assert!(!owned.contains_key("r-0"), "the oldest went");
+        assert!(owned.contains_key("r-1"));
+        assert!(owned.contains_key("theirs"), "another plugin's stayed");
+        assert!(!make_room(&mut owned, &other));
     }
 
     #[test]

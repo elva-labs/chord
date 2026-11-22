@@ -2215,6 +2215,27 @@ async fn plugin_sent(
     .await
 }
 
+/// How a plugin's start came out, told where the project it asked in is.
+#[tauri::command]
+async fn plugin_start_settled(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    request: String,
+    started: bool,
+) -> Result<Value, String> {
+    let r = request.clone();
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "plugin_start_settled",
+        move |_| json!({ "request": request, "started": started }),
+        move |core, _| core.plugin_start_settled(&r, started),
+    )
+    .await
+}
+
 /// Opens the connection to a host, or says why it cannot.
 #[tauri::command]
 async fn remote_connect(remotes: State<'_, Arc<Remotes>>, host: String) -> Result<Value, String> {
@@ -2492,6 +2513,7 @@ pub fn run() {
             plugin_action,
             plugin_view_message,
             plugin_sent,
+            plugin_start_settled,
             conduct_answer,
             browser_answer,
             settings_answer,

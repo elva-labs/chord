@@ -492,6 +492,12 @@ struct PluginSentParams {
 }
 
 #[derive(Deserialize)]
+struct PluginStartSettledParams {
+    request: String,
+    started: bool,
+}
+
+#[derive(Deserialize)]
 struct AgentParams {
     id: String,
 }
@@ -948,6 +954,11 @@ pub fn dispatch(
         "plugin_sent" => {
             let p: PluginSentParams = parse(params)?;
             core.plugin_sent(&p.request, &p.outcome)?;
+            Ok(Value::Null)
+        }
+        "plugin_start_settled" => {
+            let p: PluginStartSettledParams = parse(params)?;
+            core.plugin_start_settled(&p.request, p.started)?;
             Ok(Value::Null)
         }
         "list_dirs" => {

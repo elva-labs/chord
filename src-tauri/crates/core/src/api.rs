@@ -404,6 +404,14 @@ impl Core {
         Ok(())
     }
 
+    /// How a plugin's start came out, as the window tells it: the core
+    /// keeps the request only for a session that started. The plugin is
+    /// told nothing.
+    pub fn plugin_start_settled(&self, request: &str, started: bool) -> Result<(), String> {
+        self.plugins()?.start_settled(request, started);
+        Ok(())
+    }
+
     pub fn home(&self) -> Option<&Path> {
         self.home.as_deref()
     }
