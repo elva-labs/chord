@@ -64,7 +64,7 @@ With [accounts](settings.md#accounts) set up, each project runs under one, named
 
 ## Notes
 
-Each session keeps short notes of its conversation through the app: a brief of what is being built, and a note whenever something settles. See [notes](reference/sessions.md#notes).
+Each session keeps short notes of its conversation through the app: a brief of what is being built, a note whenever something settles, and open items, one line each for what is still owed, until each is done or dropped. See [notes](reference/sessions.md#notes).
 
 ### Going on from the notes
 

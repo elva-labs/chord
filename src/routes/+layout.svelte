@@ -40,6 +40,7 @@
   import { listenIntegrated } from "$lib/integrated.svelte";
   import { followOpenRequests, restore, workspace } from "$lib/workspace.svelte";
   import { followTabStops } from "$lib/tabStops";
+  import { followStrayKeys } from "$lib/strayKeys";
 
   let { children } = $props();
 
@@ -63,6 +64,8 @@
     // Tab reaches every control in WebKit as it does elsewhere.
     const stopTabStops = followTabStops();
     const stopStops = watchStops();
+    // No key types its own name into a field.
+    const stopStray = followStrayKeys();
     // The open sessions move when the setting of how their agent's
     // sessions run is switched.
     const stopMoves = followSetting();
@@ -103,6 +106,7 @@
       closed = true;
       stopSettings();
       stopStops();
+      stopStray();
       stopMoves();
       stopOpening();
       stopReopen();

@@ -36,6 +36,7 @@ import { holdMode, modeOf, terminalEnded } from "$lib/sessionModes";
 import { chosenFor, modelToStart, narrowTo } from "$lib/lastChosen.svelte";
 import { carriedOver } from "$lib/modeFit";
 import { starterOf } from "$lib/senders.svelte";
+import { pluginStartOf } from "$lib/pluginStarts.svelte";
 import { logUsage } from "$lib/usageLog";
 import { bareName, mixesScripts, readsAsWorkbench, reservedName, shown } from "$lib/unseen";
 import { failureOf, interruptedOnScreen, type Failure } from "$lib/turnFailure";
@@ -1798,9 +1799,11 @@ export function toldFor(session: Session): Told {
 
 /** What a start tells the core of where a session comes from, which the
     plugins are told in turn: the agent id of the session that started it,
-    and whether it runs in a worktree made for it. */
-export function originOf(session: Session): { starter?: string; madeWorktree?: boolean } {
+    whether it runs in a worktree made for it, and the request of the
+    plugin's start it is, when a plugin started it. */
+export function originOf(session: Session): { starter?: string; madeWorktree?: boolean; pluginStart?: string } {
   const starter = starterOf(session.key);
+  const plugin = pluginStartOf(session.key);
   // A starter is kept by its agent id until its token is known.
   const id =
     starter === null
@@ -1809,6 +1812,7 @@ export function originOf(session: Session): { starter?: string; madeWorktree?: b
   return {
     ...(id === null ? {} : { starter: id }),
     ...(session.madeTree && session.startIn !== null ? { madeWorktree: true } : {}),
+    ...(plugin === null ? {} : { pluginStart: plugin.request }),
   };
 }
 
@@ -3074,6 +3078,13 @@ export function drafting(key: string): boolean {
   return drafts[key] === true;
 }
 
+/** Words the workbench typed into a session's terminal are on its line
+    unsent: a draft, as the user's own words are, until the agent takes a
+    line in or Ctrl+C empties it. */
+export function leftOnLine(key: string) {
+  drafts[key] = true;
+}
+
 /** How long until the user's keys in a session's terminal have been still
     for `quiet` milliseconds: nothing once they have. */
 export function keysStillIn(key: string, quiet: number, now = Date.now()): number {
@@ -3453,6 +3464,8 @@ export interface TurnEnding {
   background?: string[];
   /** The permission mode the hook says the agent runs in. */
   mode?: string | null;
+  /** The model the agent's log says its latest turn runs on. */
+  model?: string | null;
 }
 
 /** How long a transition waits for its row to learn the session's id. */
@@ -3512,6 +3525,10 @@ export function exact(
     if (session.modeSeen !== null && session.modeSeen !== more.mode) narrowTo(session.agent, more.mode);
     session.modeSeen = more.mode;
   }
+  // The model a terminal session's own picker or configuration left it on,
+  // which its row and pane name in place of the one it was started with.
+  if (typeof more.model === "string" && more.model !== "" && harnessProfile(session.agent).namesRunningModel)
+    session.runsOn = more.model;
   answered.delete(session.key);
   // The line a run that a reopen stops leaves on its way out is not left
   // for the user.

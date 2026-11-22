@@ -1561,7 +1561,12 @@ test.describe("the file viewer", () => {
     page,
   }) => {
     await pushSection(page, { rows: CHECKS });
-    await pushView(page, { html: PAGE });
+    await pushView(page, {
+      html:
+        PAGE +
+        "<button id='go'>Go</button><script>document.getElementById('go')" +
+        ".onclick=function(){window.workbench.send({go:1})}</script>",
+    });
     await page.getByTestId("plugin-view-open").click();
 
     await expect(page.getByTestId("viewer")).toHaveAttribute(
@@ -1574,20 +1579,29 @@ test.describe("the file viewer", () => {
     const inner = page.frameLocator("[data-testid='plugin-page']");
     await expect(inner.locator("#branch")).toHaveText("The branch");
 
+    // What the page sends of itself, a moment after a click outside it, is
+    // not the user's doing; what a click in it sends is.
+    const sent = (payload: unknown, acted: boolean) => ({
+      source: "src-1",
+      plugin: "github",
+      project: PROJECT,
+      payload,
+      acted,
+    });
     await expect
       .poll(() => messagesSent(page))
-      .toEqual([
-        {
-          source: "src-1",
-          plugin: "github",
-          project: PROJECT,
-          payload: { hello: 1 },
-        },
-      ]);
+      .toEqual([sent({ hello: 1 }, false)]);
+    await inner.locator("#go").click();
+    await expect
+      .poll(() => messagesSent(page))
+      .toEqual([sent({ hello: 1 }, false), sent({ go: 1 }, true)]);
 
     await pushViewData(page, { checks: 2 });
     await expect(inner.locator("#said")).toHaveText("checks: 2");
 
+    // Keys go to the page while it has them; a click outside it takes them
+    // back.
+    await page.getByTestId("plugin-view-name").click();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "working");
     await expect(page.getByTestId("viewer")).toHaveCount(0);
@@ -2086,6 +2100,8 @@ test.describe("the file viewer", () => {
   }) => {
     await row(page, "mod.rs").click();
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
+    // The tree is measured where the opening viewer leaves it.
+    await columnsAtRest(page);
 
     const tree = await page.locator(TREE).boundingBox();
     if (!tree) throw new Error("no tree");

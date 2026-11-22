@@ -4,6 +4,8 @@
 //! A session has one brief, what is being built, kept current, and notes,
 //! each with a title, a one-line summary, a body and the time it was kept.
 //! A later note can replace an earlier one, which then no longer stands.
+//! Beside them, open items: each a line saying what is still owed, with
+//! the day it was opened, and once done or dropped the day it was closed.
 //! They are kept in a small database in the core's home, under the
 //! session's token, written by the tool server the agent starts and read
 //! by the window. Nothing of them is in the project.
@@ -11,7 +13,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::Serialize;
 
 /// The database's file, in the notes' folder.
@@ -67,6 +69,12 @@ pub const SUMMARY_MOST: usize = 300;
 pub const BODY_MOST: usize = 6000;
 pub const BRIEF_MOST: usize = 4000;
 
+/// The most items open at once, and how long each may be, in characters.
+/// Every open item is read again whole in every briefing, so at the bound
+/// an item is refused, and none is ever dropped to make room.
+pub const ITEMS_MOST: usize = 12;
+pub const ITEM_MOST: usize = 200;
+
 /// How long a write waits for another session's write to finish.
 const BUSY: Duration = Duration::from_secs(5);
 
@@ -91,10 +99,23 @@ pub struct Brief {
     pub at: i64,
 }
 
-/// What the list given at a restart holds: the brief, the notes it names,
-/// newest first, and how many standing notes it leaves out.
+/// One item: what is owed, and to whom or what it waits on, in a line.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Item {
+    pub id: i64,
+    pub text: String,
+    /// When it was opened, in seconds since the epoch.
+    pub at: i64,
+    /// When it was closed, done or dropped; none while it is open.
+    pub closed: Option<i64>,
+}
+
+/// What the list given at a restart holds: the open items, oldest first,
+/// the brief, the notes it names, newest first, and how many standing
+/// notes it leaves out.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Listed {
+    pub items: Vec<Item>,
     pub brief: Option<Brief>,
     pub notes: Vec<Note>,
     pub more: usize,
@@ -208,7 +229,15 @@ impl Notes {
                 replaced_by INTEGER,
                 reads INTEGER NOT NULL DEFAULT 0
             );
-            CREATE INDEX IF NOT EXISTS notes_by_owner ON notes (owner, id);",
+            CREATE INDEX IF NOT EXISTS notes_by_owner ON notes (owner, id);
+            CREATE TABLE IF NOT EXISTS items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner TEXT NOT NULL,
+                text TEXT NOT NULL,
+                at INTEGER NOT NULL,
+                closed INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS items_by_owner ON items (owner, id);",
         )
         .map_err(failed)?;
         Ok(Self { conn })
@@ -377,10 +406,30 @@ impl Notes {
         chosen.sort_by_key(|note| std::cmp::Reverse(note.id));
         let more = standing.len() - chosen.len();
         Ok(Listed {
+            items: self.open_items(owner)?,
             brief: self.brief(owner)?,
             notes: chosen,
             more,
         })
+    }
+
+    /// The list for a conversation held at a point it went back to, at
+    /// `since` in seconds: as [`Self::listed`], with the items opened by
+    /// then and closed after it among the open ones, since the turn that
+    /// closed each was gone back on.
+    pub fn listed_since(&self, owner: &str, since: Option<i64>) -> Result<Listed, String> {
+        let mut listed = self.listed(owner)?;
+        if let Some(since) = since {
+            listed.items = self
+                .items(owner)?
+                .into_iter()
+                .filter(|item| {
+                    item.closed
+                        .is_none_or(|closed| item.at <= since && closed > since)
+                })
+                .collect();
+        }
+        Ok(listed)
     }
 
     /// The owner's notes whose title, summary or body hold every one of
@@ -425,9 +474,134 @@ impl Notes {
             .collect())
     }
 
+    /// Every item of the owner's, oldest first, closed ones included.
+    pub fn items(&self, owner: &str) -> Result<Vec<Item>, String> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT id, text, at, closed FROM items WHERE owner = ?1 ORDER BY id")
+            .map_err(failed)?;
+        let rows = statement
+            .query_map(params![owner], |row| {
+                Ok(Item {
+                    id: row.get(0)?,
+                    text: row.get(1)?,
+                    at: row.get(2)?,
+                    closed: row.get(3)?,
+                })
+            })
+            .map_err(failed)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(failed)
+    }
+
+    /// The owner's open items, oldest first.
+    pub fn open_items(&self, owner: &str) -> Result<Vec<Item>, String> {
+        Ok(self
+            .items(owner)?
+            .into_iter()
+            .filter(|item| item.closed.is_none())
+            .collect())
+    }
+
+    /// A change to the owner's items checked without making it: each item
+    /// to open as its one line, and each number to close one of the
+    /// owner's open items. Refused when it would leave more than
+    /// [`ITEMS_MOST`] open.
+    fn checked_items(
+        &self,
+        owner: &str,
+        open: &[&str],
+        close: &[i64],
+    ) -> Result<Vec<String>, String> {
+        let texts: Vec<String> = open.iter().map(|text| one_line(text)).collect();
+        for text in &texts {
+            if text.is_empty() {
+                return Err("An item to open is empty.".to_string());
+            }
+            too_long("item", text, ITEM_MOST)?;
+        }
+        let items = self.items(owner)?;
+        let mut closing: Vec<i64> = Vec::new();
+        for id in close {
+            match items.iter().find(|item| item.id == *id) {
+                None => return Err(format!("There is no item {id} of this conversation.")),
+                Some(Item {
+                    closed: Some(closed),
+                    ..
+                }) => {
+                    return Err(format!(
+                        "Item {id} was closed already, on {}.",
+                        day(*closed)
+                    ))
+                }
+                Some(_) if !closing.contains(id) => closing.push(*id),
+                Some(_) => {}
+            }
+        }
+        let open_now = items.iter().filter(|item| item.closed.is_none()).count();
+        let after = open_now - closing.len() + texts.len();
+        if !texts.is_empty() && after > ITEMS_MOST {
+            return Err(format!(
+                "That would make {after} open items, and {ITEMS_MOST} is the most kept: close those done or dropped, or merge some by closing them and opening one in their place in the same call."
+            ));
+        }
+        Ok(texts)
+    }
+
+    /// Closes the owner's items named and opens the new ones, together,
+    /// once the change is checked, and answers with the new items' numbers.
+    pub fn change_items(
+        &self,
+        owner: &str,
+        open: &[&str],
+        close: &[i64],
+        at: i64,
+    ) -> Result<Vec<i64>, String> {
+        self.at_once(|notes| {
+            let texts = notes.checked_items(owner, open, close)?;
+            for id in close {
+                notes
+                    .conn
+                    .execute(
+                        "UPDATE items SET closed = ?1 WHERE owner = ?2 AND id = ?3 AND closed IS NULL",
+                        params![at, owner, id],
+                    )
+                    .map_err(failed)?;
+            }
+            let mut opened = Vec::new();
+            for text in &texts {
+                notes
+                    .conn
+                    .execute(
+                        "INSERT INTO items (owner, text, at) VALUES (?1, ?2, ?3)",
+                        params![owner, text, at],
+                    )
+                    .map_err(failed)?;
+                opened.push(notes.conn.last_insert_rowid());
+            }
+            Ok(opened)
+        })
+    }
+
+    /// Makes the writes of `change` in one immediate transaction, so a
+    /// write from another session waits for it, and keeps none of them when
+    /// it fails. Called inside one already, it makes them in that one.
+    pub fn at_once<T>(&self, change: impl FnOnce(&Self) -> Result<T, String>) -> Result<T, String> {
+        if !self.conn.is_autocommit() {
+            return change(self);
+        }
+        let transaction = Transaction::new_unchecked(&self.conn, TransactionBehavior::Immediate)
+            .map_err(failed)?;
+        let made = change(self)?;
+        transaction.commit().map_err(failed)?;
+        Ok(made)
+    }
+
     /// Lets go of everything kept for these owners.
     pub fn forget(&self, owners: &[String]) -> Result<(), String> {
         for owner in owners {
+            self.conn
+                .execute("DELETE FROM items WHERE owner = ?1", params![owner])
+                .map_err(failed)?;
             self.conn
                 .execute("DELETE FROM notes WHERE owner = ?1", params![owner])
                 .map_err(failed)?;
@@ -473,19 +647,50 @@ fn listed_line(note: &Note, since: Option<i64>) -> String {
     )
 }
 
-/// The brief and the list of notes as the agent reads them, the same at a
-/// restart as from the notes tool. None when nothing is kept.
+/// One open item's line in a list: its number, the day it was opened and
+/// its text, and whether it was opened after `since`, on a turn the
+/// conversation went back on. An item in the list that is closed was
+/// closed on such a turn.
+fn item_line(item: &Item, since: Option<i64>) -> String {
+    let later = if item.closed.is_some() {
+        " (closed on a turn the conversation went back on: its work may be undone, so open it again if it is still owed)"
+    } else if since.is_some_and(|since| item.at > since) {
+        " (opened on a turn the conversation went back on: it may no longer be owed)"
+    } else {
+        ""
+    };
+    format!("{QUOTE}{}. {} {}{later}", item.id, day(item.at), item.text)
+}
+
+/// The line the open items come under, first in a list that has any.
+pub const ITEMS_HEAD: &str =
+    "Open items, what is still owed, oldest first, by number and the day each was opened:";
+
+/// The open items, the brief and the list of notes as the agent reads
+/// them, the same at a restart as from the notes tool. None when nothing
+/// is kept.
 pub fn briefing_of(listed: &Listed) -> Option<String> {
     briefing_of_since(listed, None)
 }
 
-/// The brief and the list, each note kept after `since`, in seconds, said
-/// to be kept on a turn the conversation went back on.
+/// The open items, the brief and the list, each item or note kept after
+/// `since`, in seconds, said to be kept on a turn the conversation went
+/// back on. The open items come first, whole, and are left out when there
+/// are none.
 pub fn briefing_of_since(listed: &Listed, since: Option<i64>) -> Option<String> {
-    if listed.brief.is_none() && listed.notes.is_empty() {
+    if listed.items.is_empty() && listed.brief.is_none() && listed.notes.is_empty() {
         return None;
     }
     let mut text = String::new();
+    if !listed.items.is_empty() {
+        text.push_str(ITEMS_HEAD);
+        text.push('\n');
+        for item in &listed.items {
+            text.push_str(&item_line(item, since));
+            text.push('\n');
+        }
+        text.push('\n');
+    }
     match &listed.brief {
         Some(brief) => {
             text.push_str(&format!(
@@ -514,17 +719,18 @@ pub fn briefing_of_since(listed: &Listed, since: Option<i64>) -> Option<String> 
     Some(text.trim_end().to_string())
 }
 
-/// The brief and list for a session, or None when nothing is kept or the
-/// store cannot be read.
+/// The open items, brief and list for a session, or None when nothing is
+/// kept or the store cannot be read.
 pub fn briefing(home: &Path, owner: &str) -> Option<String> {
     briefing_since(home, owner, None)
 }
 
-/// The brief and list for a session held at a point it went back to,
-/// which says of each note kept after `since` that it may no longer stand.
+/// The open items, brief and list for a session held at a point it went
+/// back to, which says of each item or note kept after `since` that it may
+/// no longer stand, and gives again each item closed after it.
 pub fn briefing_since(home: &Path, owner: &str, since: Option<i64>) -> Option<String> {
     let notes = Notes::existing(home).ok()??;
-    briefing_of_since(&notes.listed(owner).ok()?, since)
+    briefing_of_since(&notes.listed_since(owner, since).ok()?, since)
 }
 
 /// One note whole, as the agent reads it: its number, day, title, summary
@@ -550,10 +756,24 @@ pub fn whole(note: &Note) -> String {
     text
 }
 
-/// The notes as the user reads them in the viewer: the brief, then the
-/// standing notes newest first, then those a later one replaced.
-pub fn page_of(brief: Option<&Brief>, notes: &[Note]) -> String {
+/// The notes as the user reads them in the viewer: the open items oldest
+/// first, the brief, the standing notes newest first, those a later one
+/// replaced, then the closed items, the last closed first.
+pub fn page_of(brief: Option<&Brief>, notes: &[Note], items: &[Item]) -> String {
     let mut text = String::from("# Notes\n\nKept by the session as it worked, for going on later without reading the whole conversation again.\n");
+    let (open, mut closed): (Vec<&Item>, Vec<&Item>) =
+        items.iter().partition(|item| item.closed.is_none());
+    if !open.is_empty() {
+        text.push_str("\n## Open items\n\n");
+        for item in open {
+            text.push_str(&format!(
+                "- {} · *opened {} · item {}*\n",
+                item.text,
+                day(item.at),
+                item.id
+            ));
+        }
+    }
     if let Some(brief) = brief {
         text.push_str(&format!(
             "\n## Brief\n\n{}\n\n*{}*\n",
@@ -585,6 +805,19 @@ pub fn page_of(brief: Option<&Brief>, notes: &[Note]) -> String {
             }
         }
     }
+    closed.sort_by_key(|item| std::cmp::Reverse((item.closed, item.id)));
+    if !closed.is_empty() {
+        text.push_str("\n## Closed items\n\n");
+        for item in closed {
+            text.push_str(&format!(
+                "- {} · *opened {} · closed {} · item {}*\n",
+                item.text,
+                day(item.at),
+                day(item.closed.unwrap_or_default()),
+                item.id
+            ));
+        }
+    }
     text
 }
 
@@ -611,12 +844,14 @@ pub fn page_path(home: &Path, owner: &str) -> PathBuf {
     page_folder(home, owner).join(PAGE_NAME)
 }
 
-/// What the window is told of a session's notes: how many stand, and,
-/// when asked for the page, where its readable copy was written.
+/// What the window is told of a session's notes: how many stand, how many
+/// items are open, and, when asked for the page, where its readable copy
+/// was written.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Kept {
     pub standing: usize,
     pub brief: bool,
+    pub open: usize,
     pub page: Option<String>,
 }
 
@@ -627,25 +862,29 @@ pub fn kept(home: &Path, owner: &str, page: bool) -> Result<Kept, String> {
         return Ok(Kept {
             standing: 0,
             brief: false,
+            open: 0,
             page: None,
         });
     };
     let brief = notes.brief(owner)?;
     let all = notes.all(owner)?;
+    let items = notes.items(owner)?;
     let standing = all.iter().filter(|note| note.replaced_by.is_none()).count();
+    let open = items.iter().filter(|item| item.closed.is_none()).count();
     let mut written = None;
-    if page && (brief.is_some() || !all.is_empty()) {
+    if page && (brief.is_some() || !all.is_empty() || !items.is_empty()) {
         let path = page_path(home, owner);
         if let Some(folder) = path.parent() {
             make_folder(folder)?;
         }
-        write_own(&path, &page_of(brief.as_ref(), &all))
+        write_own(&path, &page_of(brief.as_ref(), &all, &items))
             .map_err(|e| format!("the notes could not be written out: {e}"))?;
         written = Some(path.to_string_lossy().to_string());
     }
     Ok(Kept {
         standing,
         brief: brief.is_some(),
+        open,
         page: written,
     })
 }

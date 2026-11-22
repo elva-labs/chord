@@ -33,6 +33,15 @@ test("opens a session's notes in the viewer from its menu, offered only when it 
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
 
+  // Open items alone are enough to offer them.
+  await page.evaluate(() => {
+    (window as unknown as { __notes: unknown }).__notes = { "session-1": { standing: 0, brief: false, open: 1 } };
+  });
+  await row(page, "session 1").click({ button: "right" });
+  await expect(page.getByTestId("session-menu-notes")).toHaveText("Show notes");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
   await page.evaluate(() => {
     const fake = window as unknown as { __notes: unknown; __markdown: string };
     fake.__notes = { "session-1": { standing: 2, brief: true } };

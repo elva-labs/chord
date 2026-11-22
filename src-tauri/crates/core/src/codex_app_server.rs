@@ -321,7 +321,9 @@ pub(crate) fn unrevertable(thread: &Value) -> Option<&'static str> {
 enum Sent {
     Initialize,
     Account,
-    Models,
+    /// A page of the models offered: the cursor it was asked from, none
+    /// for the first, and how many pages came before it.
+    Models(Option<String>, usize),
     /// The user's own configuration, for the sandbox settings a mode keeps.
     Config,
     Thread,
@@ -1755,7 +1757,7 @@ impl AppServer {
                         "account/read",
                         json!({ "refreshToken": false }),
                     );
-                    let (models, _) = self.request(Sent::Models, "model/list", json!({}));
+                    let (models, _) = self.request(Sent::Models(None, 0), "model/list", json!({}));
                     let (config, _) = self.request(
                         Sent::Config,
                         "config/read",
@@ -1779,9 +1781,26 @@ impl AppServer {
                 self.account_known = true;
                 self.introduce(out);
             }
-            Sent::Models => {
+            Sent::Models(asked, before) => {
+                let mut next = None;
                 if let Ok(result) = &reply {
-                    self.models = listed_models(result);
+                    for (info, effort) in listed_models(result) {
+                        if !self.models.iter().any(|(held, _)| held.value == info.value) {
+                            self.models.push((info, effort));
+                        }
+                    }
+                    next = next_models_cursor(result, asked.as_deref())
+                        .filter(|_| before + 1 < MODEL_PAGES);
+                }
+                // A page that fails ends the list with the pages before it.
+                if let Some(cursor) = next {
+                    let (page, _) = self.request(
+                        Sent::Models(Some(cursor.clone()), before + 1),
+                        "model/list",
+                        json!({ "cursor": cursor }),
+                    );
+                    out.writes.push(page);
+                    return;
                 }
                 self.models_known = true;
                 self.introduce(out);
@@ -3046,9 +3065,22 @@ impl Driver for AppServer {
     }
 }
 
-/// The models a `model/list` answer offers, each with the effort it runs
-/// at by default, in the order Codex lists them. A model Codex hides is
-/// left out.
+/// The most pages of models read from Codex's list, far more than it
+/// lists, so a list that never ends still lets a session start.
+pub(crate) const MODEL_PAGES: usize = 20;
+
+/// The cursor of the page of `model/list` after `page`, which was asked
+/// from the cursor `asked`, where Codex says there is one.
+pub(crate) fn next_models_cursor(page: &Value, asked: Option<&str>) -> Option<String> {
+    page["nextCursor"]
+        .as_str()
+        .filter(|next| !next.is_empty() && Some(*next) != asked)
+        .map(str::to_string)
+}
+
+/// The models a page of a `model/list` answer offers, each with the
+/// effort it runs at by default, in the order Codex lists them. A model
+/// Codex hides is left out.
 pub(crate) fn listed_models(result: &Value) -> Vec<(ModelInfo, Option<String>)> {
     result["data"]
         .as_array()
