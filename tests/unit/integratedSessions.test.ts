@@ -2659,10 +2659,19 @@ describe("the agent a session works as", () => {
     expect(sent.slice(1).every((call) => !call.text.includes("work as the agent"))).toBe(true);
   });
 
-  it("leaves the model of another harness's agent alone", async () => {
+  it("lowers the agent's effort to the nearest its model takes", async () => {
+    const { session } = await started();
+    workAs(session.key, { ...reviewer, effort: "max" });
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "configure").at(-1)).toMatchObject({
+      settings: { model: "sonnet", effort: "high", readsOnly: true },
+    });
+  });
+
+  it("leaves the model and effort of another harness's agent alone", async () => {
     const codex = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
     await launch(codex.key);
-    workAs(codex.key, { ...reviewer, effort: null, readsOnly: false });
+    workAs(codex.key, { ...reviewer, readsOnly: false });
     await settled();
     const asked = fake.calls.filter((call) => call.method === "configure").at(-1) as { settings: object };
     expect(asked.settings).toEqual({ readsOnly: false });

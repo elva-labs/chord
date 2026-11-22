@@ -2194,9 +2194,22 @@ export function workAs(key: string, agent: Agent | null) {
   pickAgent(key, session.id, agent);
   keepLastAgent("composer", agent?.key ?? null);
   const change: Change = { readsOnly: agent?.readsOnly ?? false };
-  if (agent?.model != null && agent.model.harness === session.agent) change.model = agent.model.model;
-  const efforts = link.conversation.efforts;
-  if (agent?.effort != null && (efforts.length === 0 || efforts.includes(agent.effort))) change.effort = agent.effort;
+  // An agent's model and effort are for its own harness: on another, the
+  // session keeps its own. The effort is lowered to the nearest the model
+  // takes.
+  const own = agent?.model != null && agent.model.harness === session.agent;
+  if (own) change.model = agent.model!.model;
+  if (agent?.effort != null && (agent.model == null || own)) {
+    const conversation = link.conversation;
+    const efforts = own
+      ? (offeredModel(conversation, agent.model!.model)?.efforts ?? conversation.efforts)
+      : conversation.efforts;
+    const effort =
+      efforts.length === 0 || efforts.includes(agent.effort)
+        ? agent.effort
+        : lowerEffort(agent.effort, efforts, effortScale(conversation.ready?.models ?? []));
+    if (effort !== null) change.effort = effort;
+  }
   void configure(key, change, false);
 }
 
