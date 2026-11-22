@@ -13,6 +13,10 @@ import { PROJECT, NO_WORKFLOW, WITH_WORKFLOW, installFakeCore, startNew, startWi
 const STOP_WHEN_DONE =
   "The workbench puts it away once it has rested at least five minutes with nothing open; a line you send it after that resumes it.";
 
+/** The line a sessions listing ends with when it lists sessions that are over. */
+const WAY_BACK =
+  "Any of them, listed or not, resumes through start with session set to its id, and one put away through send as well.";
+
 const AGENT = "section[data-pane='agent']";
 const MOD = "ControlOrMeta";
 /** A second open project. A session starting one there is asked about; a
@@ -648,9 +652,9 @@ test.describe("what a starter is told", () => {
     await expect(rows(page).first()).toBeVisible();
 
     await push(page, { id: "l-1", tool: "sessions", session: "session-1" });
-    expect((await answered(page, "l-1")).content).toMatch(
-      /^session-2 .* put away by the workbench once its work was over {2}a line you send it resumes it, as start naming session session-2 does$/,
-    );
+    const [away, ...rest] = (await answered(page, "l-1")).content.split("\n");
+    expect(away).toMatch(/^session-2 .* put away once its work was over$/);
+    expect(rest).toEqual([WAY_BACK]);
     await push(page, {
       id: "t-1",
       tool: "send",
@@ -676,9 +680,9 @@ test.describe("what a starter is told", () => {
     await expect(kid).toHaveCount(0);
 
     await push(page, { id: "l-1", tool: "sessions", session: "session-1" });
-    expect((await answered(page, "l-1")).content).toMatch(
-      /^session-2 .* closed by the user {2}resume it with start, naming session session-2$/,
-    );
+    const [closed, ...rest] = (await answered(page, "l-1")).content.split("\n");
+    expect(closed).toMatch(/^session-2 .* closed by the user$/);
+    expect(rest).toEqual([WAY_BACK]);
     await push(page, { id: "w-1", tool: "wait", arguments: { session: "session-2" }, session: "session-1" });
     expect((await answered(page, "w-1")).content).toBe(
       "Session session-2 is not running: the user closed it. Resume it with start, naming session session-2.",
