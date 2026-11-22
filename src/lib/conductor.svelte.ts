@@ -125,7 +125,7 @@ import { lastRun, nameSessionsBy } from "$lib/thread";
 import { logUsage } from "$lib/usageLog";
 import { defaultModelOf } from "$lib/lastChosen.svelte";
 import { failureOnScreen, type Failure } from "$lib/turnFailure";
-import { agentNote, atWorkLine, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
+import { agentNote, atWorkLine, holdsAgentNote, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
 import { agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
 import { startAs } from "$lib/sessionAgents.svelte";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
@@ -2737,6 +2737,7 @@ async function startSession(request: Placed): Promise<Answered> {
   if (project === null) return refused("Starting a session needs a project.");
   if (prompt === null)
     return refused("Starting a session needs a prompt to give it.");
+  if (holdsAgentNote(prompt)) return refused(AGENT_NOTE_HELD);
   // A model's name means something to one harness only, so the harness is
   // named with it rather than taken from the project's last one.
   if (text(request, "model") !== null && harnessText(request) === null)
@@ -2885,8 +2886,10 @@ async function startFitted(
   // appears folded under its project, and going to it is a click.
   const looking = sessions.active;
   // The agent's model is the one run where neither the start nor the step
-  // names one, on the agent's harness.
-  const roleModel = role?.model != null && role.model.harness === agent ? role.model.model : null;
+  // names one, on the agent's harness, and only where no step limits the
+  // models a start may run.
+  const roleModel =
+    role?.model != null && role.model.harness === agent && (fit === null || fit.anyModel) ? role.model.model : null;
   const chosen = fit === null ? (text(request, "model") ?? roleModel) : (fit.model ?? roleModel);
   const below = chosen === null && fit?.place.kind !== "review" ? modelBelow(callingSession(request), agent, account) : null;
   const model = chosen ?? below;
@@ -3156,6 +3159,8 @@ interface Fit {
   place: Place;
   agent: HarnessId | null;
   model: string | null;
+  /** The step allows any model, so an agent's own may run. */
+  anyModel: boolean;
   /** For a round past the review's limit, what the user is asked to allow. */
   beyond: Beyond | null;
   /** The row now holds the place in the step the start took. */
@@ -3353,10 +3358,10 @@ function modelFor(
   agent: string | null,
   model: string | null,
   step: WorkflowStep,
-): { agent: HarnessId | null; model: string | null } | { refusal: string } {
+): { agent: HarnessId | null; model: string | null; anyModel: boolean } | { refusal: string } {
   const named: HarnessId | null =
     agent === "claude-code" || agent === "codex" ? agent : null;
-  if (step.models.length === 0) return { agent: named, model };
+  if (step.models.length === 0) return { agent: named, model, anyModel: true };
   const fits = step.models.filter(
     (allowed) =>
       (agent === null || allowed.agent === agent) &&
@@ -3380,6 +3385,7 @@ function modelFor(
       first.agent === "codex" && first.model === CODEX_DEFAULT
         ? null
         : first.model,
+    anyModel: false,
   };
 }
 
@@ -3459,6 +3465,7 @@ async function resumeSession(
     );
 
   const prompt = text(request, "prompt");
+  if (prompt !== null && holdsAgentNote(prompt)) return refused(AGENT_NOTE_HELD);
   if (prompt !== null && kindFor(agent) === "terminal" && runsShell(oneLine(prompt)))
     return refused(SHELL_PROMPT);
   if (prompt !== null && entry.unasked === true && mayChangeModel(oneLine(prompt)))
@@ -3663,11 +3670,18 @@ export function worktreeName(prompt: string): string {
   return cut.replace(/-+$/, "") || "session";
 }
 
+/** Why words that hold a line of an agent note are not passed on: the note
+    is the workbench's alone, and the session told it would read them as
+    the workbench's. */
+const AGENT_NOTE_HELD =
+  "The workbench writes the note that tells a session which agent it works as, and passes on no words that hold a line of one. Leave that line out; to start a session as an agent, name it with agent.";
+
 async function sendText(request: Placed): Promise<Answered> {
   const id = text(request, "session");
   const line = text(request, "text");
   if (id === null) return refused("Sending needs a session to send to.");
   if (line === null) return refused("Sending needs the text to send.");
+  if (holdsAgentNote(line)) return refused(AGENT_NOTE_HELD);
   // A line that comes while another line brings the session back goes
   // once it is up, as a line to a running session does.
   const coming = comingBack.get(id);

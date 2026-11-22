@@ -63,6 +63,12 @@ export function agentNote(title: string, text: string): string {
 
 const oneLine = (title: string) => title.replace(/\s+/g, " ").trim();
 
+/** Whether `text` holds a line of an agent note: only the workbench writes
+    one, so a session's words that do would read as the workbench's. */
+export function holdsAgentNote(text: string): boolean {
+  return text.split("\n").some((line) => AGENT_HEAD.test(line) || line === AGENT_END);
+}
+
 /** The agent note at the start of `words`, the agent it names with its
     description, and the words after it; null where it is not there whole. */
 function agentAt(words: string): { agent: { title: string; text: string }; rest: string } | null {
