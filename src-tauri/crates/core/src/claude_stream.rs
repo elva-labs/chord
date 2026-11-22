@@ -89,10 +89,17 @@ pub(crate) const PLAN_TOOL: &str = "ExitPlanMode";
 /// The tool that keeps the agent's list of steps.
 pub(crate) const TODO_TOOL: &str = "TodoWrite";
 
-/// The id of the hook the stream registers for the tools that change files,
-/// which the agent calls back before each use: refused while the session
-/// reads only, left to the mode otherwise.
+/// The id of the hook the stream registers for every tool, which the agent
+/// calls back before each use: a tool that changes files is refused while
+/// the session reads only, and a command that hands the work over while a
+/// gate of the session's team run holds it; anything else is left to the
+/// mode.
 const READS_ONLY_HOOK: &str = "chord_reads_only";
+
+/// The id of the hook the stream registers for the end of a turn in a
+/// session that may lead a team's run, which sends a lead whose gates hold
+/// the hand-over back to work once each time it would stop.
+const TEAM_HOLD_HOOK: &str = "chord_team_hold";
 
 /// Why the reads-only hook puts a tool to the user, as the harness hands it
 /// back on the ask.
@@ -282,6 +289,10 @@ impl Protocol for ClaudeStream {
             launch.effort,
         );
         stream.reads_only = launch.reads_only;
+        stream.run = launch
+            .home
+            .zip(launch.token)
+            .map(|(home, token)| (home.to_path_buf(), token.to_string()));
         Box::new(stream)
     }
 
@@ -526,6 +537,9 @@ struct Stream {
     effort: Option<String>,
     /// Whether the tools that change files are refused.
     reads_only: bool,
+    /// The core's home and the session's token, by which the team's run it
+    /// leads or is in is read.
+    run: Option<(PathBuf, String)>,
     /// The usage limit the agent said refused the running turn's last
     /// request: the window used up and when it starts over.
     refused: Option<(Option<LimitKind>, Option<u64>)>,
@@ -1035,6 +1049,7 @@ impl Stream {
             asked_mode: mode.map(str::to_string),
             effort: effort.map(str::to_string),
             reads_only: false,
+            run: None,
             refused: None,
             models: Vec::new(),
             introduced: None,
@@ -2078,13 +2093,19 @@ impl Stream {
         self.closed.retain(|message, _| messages.contains(message));
     }
 
-    /// The answer to the reads-only hook for one tool use. While the
-    /// session reads only, a tool that writes files is refused, one that
-    /// only reads is left to the mode, and any other is put to the user
-    /// whatever the mode or the allow rules say. Off, every tool is left to
-    /// the mode.
+    /// The answer to the reads-only hook for one tool use. A command that
+    /// hands the work over is refused while the session's team run holds
+    /// that. While the session reads only, a tool that writes files is
+    /// refused, one that only reads is left to the mode, and any other is
+    /// put to the user whatever the mode or the allow rules say. Off, every
+    /// tool is left to the mode.
     fn hooked(&self, id: &str, input: &Value) -> Value {
         let tool = input["tool_name"].as_str().unwrap_or_default();
+        let handing_over = (tool == "Bash")
+            .then(|| input["tool_input"]["command"].as_str())
+            .flatten()
+            .zip(self.run.as_ref())
+            .and_then(|(command, (home, token))| crate::run::command_held(home, token, command));
         let decided = |decision: &str, reason: &str| {
             json!({
                 "hookSpecificOutput": {
@@ -2094,7 +2115,9 @@ impl Stream {
                 },
             })
         };
-        let decision = if !self.reads_only
+        let decision = if let Some(held) = handing_over {
+            decided("deny", &held)
+        } else if !self.reads_only
             || crate::agents::READING_TOOLS.contains(&tool)
             || LEFT_TO_MODE.contains(&tool)
         {
@@ -2110,9 +2133,29 @@ impl Stream {
         })
     }
 
+    /// The answer to the team hold for a turn about to end: a lead whose
+    /// run's gates hold the hand-over, where something it does can move
+    /// them on, is sent back to work with why. A turn the hook already sent
+    /// back ends, so a lead that stops twice in a row, to ask the user or
+    /// because it is stuck, is not kept going.
+    fn stopping(&self, id: &str, input: &Value) -> Value {
+        let decision = match &self.run {
+            Some((home, token)) if input["stop_hook_active"] != true => {
+                crate::run::stop_held(home, token)
+                    .map(|held| json!({ "decision": "block", "reason": held }))
+                    .unwrap_or_else(|| json!({}))
+            }
+            _ => json!({}),
+        };
+        json!({
+            "type": "control_response",
+            "response": { "subtype": "success", "request_id": id, "response": decision },
+        })
+    }
+
     /// A control request from the agent: a permission or a question to
-    /// ask, the reads-only hook, or something this side does not do, which
-    /// is answered as such.
+    /// ask, the reads-only hook or the team hold, or something this side
+    /// does not do, which is answered as such.
     fn asked(&mut self, line: &Value, out: &mut Reading) {
         let Some(id) = line["request_id"].as_str() else {
             return;
@@ -2121,6 +2164,11 @@ impl Stream {
         if request["subtype"] == "hook_callback" && request["callback_id"] == READS_ONLY_HOOK {
             out.writes
                 .push(self.hooked(id, &request["input"]).to_string());
+            return;
+        }
+        if request["subtype"] == "hook_callback" && request["callback_id"] == TEAM_HOLD_HOOK {
+            out.writes
+                .push(self.stopping(id, &request["input"]).to_string());
             return;
         }
         if request["subtype"] != "can_use_tool" {
@@ -2315,18 +2363,20 @@ impl Driver for Stream {
         // window needs before the first turn: what the agent is, and the
         // model and effort it runs on. The reads-only hook is registered on
         // every session for every tool, since reading only can be turned on at
-        // any time.
+        // any time. The team hold is registered on a session the workbench
+        // gave a token and a home, since a run it leads is read by them.
+        let mut hooks = json!({
+            "PreToolUse": [{
+                "matcher": "*",
+                "hookCallbackIds": [READS_ONLY_HOOK],
+            }],
+        });
+        if self.run.is_some() {
+            hooks["Stop"] = json!([{ "hookCallbackIds": [TEAM_HOLD_HOOK] }]);
+        }
         let (initialize, _) = self.request(
             Sent::Initialize,
-            json!({
-                "subtype": "initialize",
-                "hooks": {
-                    "PreToolUse": [{
-                        "matcher": "*",
-                        "hookCallbackIds": [READS_ONLY_HOOK],
-                    }],
-                },
-            }),
+            json!({ "subtype": "initialize", "hooks": hooks }),
         );
         let (settings, _) = self.request(Sent::Settings, json!({ "subtype": "get_settings" }));
         vec![initialize, settings]
@@ -3950,6 +4000,104 @@ mod tests {
         assert_eq!(answer["response"]["subtype"], "success");
         assert_eq!(answer["response"]["request_id"], "h1");
         answer["response"]["response"].clone()
+    }
+
+    /// A stream of the session `token` in a run of Quick fix, begun by
+    /// "lead" with "rev" its reviewer, and the home and folder it is in.
+    fn in_a_run(
+        label: &str,
+        token: &str,
+    ) -> (Stream, crate::scratch::Scratch, crate::scratch::Scratch) {
+        let (home, folder) =
+            crate::run::tests::started(label, crate::team::QUICK_FIX, &[("rev", "Reviewer", true)]);
+        let mut stream = stream();
+        stream.run = Some((home.to_path_buf(), token.to_string()));
+        (stream, home, folder)
+    }
+
+    /// What the hooks decide for one call back of `callback` with `input`.
+    fn called_back(stream: &mut Stream, callback: &str, input: Value) -> Value {
+        let reading = stream.read(
+            &json!({
+                "type": "control_request",
+                "request_id": "h1",
+                "request": { "subtype": "hook_callback", "callback_id": callback, "input": input },
+            })
+            .to_string(),
+        );
+        let answer: Value = serde_json::from_str(&reading.writes[0]).unwrap();
+        assert_eq!(answer["response"]["subtype"], "success");
+        answer["response"]["response"].clone()
+    }
+
+    fn bash(command: &str) -> Value {
+        json!({ "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": { "command": command } })
+    }
+
+    #[test]
+    fn a_session_in_a_held_run_is_refused_a_push_or_a_pull_request() {
+        for token in ["lead", "rev"] {
+            let (mut stream, _home, _folder) = in_a_run(&format!("stream-push-{token}"), token);
+            let refused = called_back(&mut stream, READS_ONLY_HOOK, bash("git push origin main"));
+            assert_eq!(refused["hookSpecificOutput"]["permissionDecision"], "deny");
+            let reason = refused["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap();
+            assert!(reason.starts_with("Handing over is held: "), "{reason}");
+            assert_eq!(
+                called_back(&mut stream, READS_ONLY_HOOK, bash("git status")),
+                json!({})
+            );
+        }
+        let (mut stream, home, _folder) = in_a_run("stream-push-waived", "lead");
+        crate::run::waive(&home, "lead", 1, "Checked it myself.").unwrap();
+        assert_eq!(
+            called_back(&mut stream, READS_ONLY_HOOK, bash("gh pr create --fill")),
+            json!({}),
+            "a waived gate holds nothing"
+        );
+        let mut outside = self::stream();
+        assert_eq!(
+            called_back(&mut outside, READS_ONLY_HOOK, bash("git push")),
+            json!({}),
+            "a session in no run pushes"
+        );
+    }
+
+    #[test]
+    fn a_held_lead_is_sent_back_once_each_time_it_would_stop() {
+        let (mut stream, home, _folder) = in_a_run("stream-stop", "lead");
+        let initialize: Value = serde_json::from_str(&stream.opening()[0]).unwrap();
+        assert_eq!(
+            initialize["request"]["hooks"]["Stop"][0]["hookCallbackIds"],
+            json!([TEAM_HOLD_HOOK])
+        );
+        let stop = |active: bool| json!({ "hook_event_name": "Stop", "stop_hook_active": active });
+        let sent_back = called_back(&mut stream, TEAM_HOLD_HOOK, stop(false));
+        assert_eq!(sent_back["decision"], "block");
+        assert!(sent_back["reason"]
+            .as_str()
+            .unwrap()
+            .starts_with("Handing over is held: "));
+        assert_eq!(
+            called_back(&mut stream, TEAM_HOLD_HOOK, stop(true)),
+            json!({}),
+            "a turn already sent back ends"
+        );
+        let (mut member, _home, _folder) = in_a_run("stream-stop-member", "rev");
+        assert_eq!(
+            called_back(&mut member, TEAM_HOLD_HOOK, stop(false)),
+            json!({})
+        );
+        crate::run::waive(&home, "lead", 1, "Checked it myself.").unwrap();
+        assert_eq!(
+            called_back(&mut stream, TEAM_HOLD_HOOK, stop(false)),
+            json!({})
+        );
+
+        let mut outside = self::stream();
+        let initialize: Value = serde_json::from_str(&outside.opening()[0]).unwrap();
+        assert!(initialize["request"]["hooks"].get("Stop").is_none());
     }
 
     #[test]

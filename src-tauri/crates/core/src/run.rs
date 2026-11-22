@@ -1505,4 +1505,4 @@ pub use command::hands_over;
 
 #[cfg(test)]
 #[path = "run_tests.rs"]
-mod tests;
+pub(crate) mod tests;

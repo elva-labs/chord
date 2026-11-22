@@ -30,6 +30,7 @@ fn launch_with<'a>(
         resume_at: None,
         reads_only: false,
         profile: &[],
+        home: None,
     };
     adjust(&mut launch);
     AppServer::new(&launch)
@@ -2146,6 +2147,7 @@ fn the_command_runs_the_app_server_under_the_account_s_home() {
         resume_at: None,
         reads_only: false,
         profile: &profile,
+        home: None,
     };
     let prepared = CODEX_APP_SERVER.command(&launch).unwrap();
     assert!(prepared.files.is_empty());

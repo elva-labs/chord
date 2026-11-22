@@ -969,6 +969,10 @@ pub struct Launch<'a> {
     /// `key=value` for `-c`, as [`crate::codex_profiles::settings`] gives
     /// them. Empty for none.
     pub profile: &'a [String],
+    /// The core's home, where a team's run the session leads or is in is
+    /// kept, so the agent's hooks hold what the run's gates hold. None
+    /// where there is none.
+    pub home: Option<&'a Path>,
 }
 
 /// How one agent is started and spoken to as an integrated session.
@@ -6025,6 +6029,7 @@ mod tests {
             resume_at: None,
             reads_only: false,
             profile: &[],
+            home: None,
         };
         let sessions = Arc::new(Sessions::default());
         for (session, said) in [(None, None), (Some("resumed"), Some("resumed".to_string()))] {

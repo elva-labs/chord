@@ -44,7 +44,11 @@ fn team(name: &str) -> Team {
 
 /// A home, a folder with one commit, and a run of `name` begun in it with
 /// a lead and the members named.
-fn started(label: &str, name: &str, members: &[(&str, &str, bool)]) -> (Scratch, Scratch) {
+pub(crate) fn started(
+    label: &str,
+    name: &str,
+    members: &[(&str, &str, bool)],
+) -> (Scratch, Scratch) {
     let home = Scratch::new(&format!("run-home-{label}"));
     let dir = repo(label);
     write(&dir, "src/main.rs", "fn main() {}\n");
