@@ -6575,6 +6575,35 @@ run = ["sh", "main.sh"]
     }
 
     #[test]
+    #[cfg(unix)]
+    fn a_source_added_again_owns_nothing_started_under_its_id_before() {
+        let home = Scratch::absent("plugins-again-home");
+        let dir = source_with(GOOD, "again");
+        let here = dunce::canonicalize(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        let key: Key = (source_id(&here), "github".into());
+
+        // What a source under the same id started, gone without this core
+        // seeing it go, is not the new source's.
+        let plugins = plugins_at(&home, Arc::new(Recorder::default()));
+        plugins.inner.owned.lock().unwrap().insert(
+            "before".into(),
+            Owned {
+                plugin: key.clone(),
+                project: here.clone(),
+                reference: None,
+                ids: vec!["s-1".into()],
+                at: 1,
+            },
+        );
+        let added = plugins.add(&here, None).unwrap();
+        assert_eq!(added.id, key.0);
+        assert!(plugins.inner.owned.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn a_plugin_owns_after_a_restart_only_what_its_record_may_hold() {
         let home = Scratch::absent("plugins-record-home");
         let dir = source_with(GOOD, "record");
@@ -6591,21 +6620,18 @@ run = ["sh", "main.sh"]
             at,
         };
 
-        // What a source under the same id started, gone without this core
-        // seeing it go, is not the new source's.
-        let plugins = plugins_at(&home, Arc::new(Recorder::default()));
-        plugins
-            .inner
-            .owned
-            .lock()
-            .unwrap()
-            .insert("before".into(), entry(1));
-        let added = plugins.add(&here, None).unwrap();
-        assert_eq!(added.id, key.0);
-        assert!(plugins.inner.owned.lock().unwrap().is_empty());
-        drop(plugins);
-
         let root = crate::home::dir(&home).join("plugins");
+        let installed = Stored {
+            sources: vec![StoredSource {
+                id: key.0.clone(),
+                kind: "dir".into(),
+                location: here.clone(),
+                reference: None,
+                enabled: Vec::new(),
+                built: HashMap::new(),
+            }],
+        };
+        write_state(&root, &installed).unwrap();
         let keep = |owned: &HashMap<String, Owned>, padding: usize| {
             let text = serde_json::to_string(owned).unwrap();
             std::fs::write(
