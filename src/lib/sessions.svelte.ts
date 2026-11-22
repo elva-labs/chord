@@ -3446,6 +3446,8 @@ export interface TurnEnding {
   background?: string[];
   /** The permission mode the hook says the agent runs in. */
   mode?: string | null;
+  /** The model the agent's log says its latest turn runs on. */
+  model?: string | null;
 }
 
 /** How long a transition waits for its row to learn the session's id. */
@@ -3505,6 +3507,10 @@ export function exact(
     if (session.modeSeen !== null && session.modeSeen !== more.mode) narrowTo(session.agent, more.mode);
     session.modeSeen = more.mode;
   }
+  // The model a terminal session's own picker or configuration left it on,
+  // which its row and pane name in place of the one it was started with.
+  if (typeof more.model === "string" && more.model !== "" && agentProfile(session.agent).namesRunningModel)
+    session.runsOn = more.model;
   answered.delete(session.key);
   // The line a run that a reopen stops leaves on its way out is not left
   // for the user.

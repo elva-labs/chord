@@ -63,11 +63,12 @@ import {
   type PresetName,
 } from "$lib/keys.svelte";
 import { runningByToken, toldName } from "$lib/sessions.svelte";
-import { AGENT_ORDER, CODEX_DEFAULT, modelsOf } from "$lib/models";
+import { AGENT_ORDER, CODEX_DEFAULT, modelsOf, offeredModels } from "$lib/models";
 import {
   changed,
   describeWorkflow,
   readWorkflow,
+  LONGEST_NAME,
   MOST_PARALLEL,
   MOST_ROUNDS,
   MOST_STEPS,
@@ -358,8 +359,36 @@ function describeWorkflows(): string[] {
       ? "New sessions start with no workflow."
       : `New sessions start with the workflow ${held.default}.`,
     ...setAside(held.unread ?? []),
-    `Change one with settings_change's workflow argument, a whole workflow that replaces the one of its name or adds one: {"name", "orchestrator": {"agent", "model"}, "steps": [...]}. startOnly, true when left out, takes away the orchestrator's own ways of handing work to agents the user cannot see, so it hands out work only through start; false leaves it its subagents. New sessions follow a workflow only once one is the default or a project's choice, or the user picks one when starting a session. A step is {"kind": "work", "name", "models", "parallel"} or {"kind": "review", "name", "models", "reviewerApproves", "orchestratorAgrees", "backTo", "limit"}. models is a list of {"agent", "model"}, each model one word and listed once, and empty means any model; the first is used unless there is a reason to pick another. parallel is how many sessions run at once, 1 to ${MOST_PARALLEL}. A review passes when the reviewer approves, the orchestrator agrees, or both, so one is true; backTo names an earlier work step and limit, 1 to ${MOST_ROUNDS}, is how many times it goes back before the user is asked. Names are unique, a workflow has 1 to ${MOST_STEPS} steps and the first does work. The agents are ${AGENT_ORDER.join(" and ")}: claude-code takes the models ${modelsOf("claude-code").map((option) => option.model).join(", ")}, and codex takes ${CODEX_DEFAULT}, its own default. deleteWorkflow takes a workflow's name away and defaultWorkflow names the one new sessions start with, or null for none. Which workflow a project follows is the user's to choose.`,
+    `Change one with settings_change's workflow argument, a whole workflow that replaces the one of its name or adds one: {"name", "orchestrator": {"agent", "model"}, "steps": [...]}. startOnly, true when left out, takes away the orchestrator's own ways of handing work to agents the user cannot see, so it hands out work only through start; false leaves it its subagents. New sessions follow a workflow only once one is the default or a project's choice, or the user picks one when starting a session. A step is {"kind": "work", "name", "models", "parallel"} or {"kind": "review", "name", "models", "reviewerApproves", "orchestratorAgrees", "backTo", "limit"}. models is a list of {"agent", "model"}, each model one word and listed once, and empty means any model; the first is used unless there is a reason to pick another. parallel is how many sessions run at once, 1 to ${MOST_PARALLEL}. A review passes when the reviewer approves, the orchestrator agrees, or both, so one is true; backTo names an earlier work step and limit, 1 to ${MOST_ROUNDS}, is how many times it goes back before the user is asked. Names are unique, a workflow has 1 to ${MOST_STEPS} steps and the first does work. The agents are ${AGENT_ORDER.join(" and ")}: claude-code takes the models ${modelsOf("claude-code").map((option) => option.model).join(", ")}, and codex takes ${CODEX_DEFAULT}, its own default${codexListed()}. deleteWorkflow takes a workflow's name away and defaultWorkflow names the one new sessions start with, or null for none. Which workflow a project follows is the user's to choose.`,
   ];
+}
+
+/** The longest name of a model the settings text gives an agent. */
+const LONGEST_MODEL_NAME = 128;
+
+/** Spaces of any kind and characters that are not seen, which a model's
+    name has folded to one space before an agent reads it. */
+const FOLDED = /[\s\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu;
+
+/** The models Codex listed for any account heard, as ids with the names
+    the pickers show, for the text that tells an agent what a step names.
+    Only an id a step can name is said, one word of LONGEST_NAME characters
+    at most, and a name is said on one line and cut to LONGEST_MODEL_NAME
+    characters. Nothing is said where no account's Codex has listed any. */
+function codexListed(): string {
+  const listed = offeredModels("codex").filter(
+    (option) =>
+      option.model !== CODEX_DEFAULT &&
+      [...option.model].length <= LONGEST_NAME &&
+      !/[\s\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(option.model),
+  );
+  if (listed.length === 0) return "";
+  const said = listed.map((option) => {
+    const name = [...option.label.replace(FOLDED, " ").trim()];
+    const cut = name.length > LONGEST_MODEL_NAME ? `${name.slice(0, LONGEST_MODEL_NAME - 1).join("")}…` : name.join("");
+    return cut === "" || cut === option.model ? option.model : `${option.model} (${cut})`;
+  });
+  return `, or the id of a model Codex lists, and it listed these for some account, not always the project's: ${said.join(", ")}`;
 }
 
 /** The workflows the settings file holds but cannot use, each with why and

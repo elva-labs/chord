@@ -231,6 +231,7 @@
           error: event.error ?? null,
           background: Array.isArray(event.background) ? event.background : [],
           mode: typeof event.mode === "string" ? event.mode : null,
+          model: typeof event.model === "string" ? event.model : null,
         }),
       )
       .then((unlisten) => offs.push(unlisten));

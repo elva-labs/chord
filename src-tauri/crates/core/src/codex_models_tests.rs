@@ -69,6 +69,38 @@ fn reads_the_models_codex_lists_with_their_names() {
 }
 
 #[test]
+fn reads_every_page_codex_lists_its_models_on() {
+    let mut first = listed();
+    first["nextCursor"] = json!("3");
+    let second = json!({"data": [
+        {"id": "gpt-5.6-luna", "model": "gpt-5.6-luna", "displayName": "GPT-5.6-Luna",
+         "hidden": false, "supportedReasoningEfforts": []}
+    ], "nextCursor": null});
+    let mut server = Recorded::new([Answer::Result(first), Answer::Result(second)]);
+    let catalog = catalog_of(&mut server).unwrap();
+    let values: Vec<_> = catalog.models.iter().map(|m| m.value.as_str()).collect();
+    assert_eq!(values, ["gpt-6.2-sol", "gpt-6.1-sol", "gpt-5.6-luna"]);
+    assert_eq!(
+        server.asked[1],
+        ("model/list".to_string(), json!({"cursor": "3"}))
+    );
+    // A later page that cannot be read leaves the ones before it, and a
+    // cursor said again ends the list.
+    let mut first = listed();
+    first["nextCursor"] = json!("3");
+    let mut server = Recorded::new([
+        Answer::Result(first),
+        Answer::Refused("invalid cursor".into()),
+    ]);
+    assert_eq!(catalog_of(&mut server).unwrap().models.len(), 2);
+    let mut again = listed();
+    again["nextCursor"] = json!("3");
+    let mut server = Recorded::new([Answer::Result(again.clone()), Answer::Result(again)]);
+    assert_eq!(catalog_of(&mut server).unwrap().models.len(), 2);
+    assert_eq!(server.asked.len(), 2);
+}
+
+#[test]
 fn says_why_where_codex_will_not_list_its_models() {
     let mut server = Recorded::new([Answer::Refused("not signed in".into())]);
     assert_eq!(

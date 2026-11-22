@@ -335,6 +335,77 @@ fn the_handshake_starts_a_thread_with_the_workbench_s_settings() {
     assert!(commands.is_empty());
 }
 
+/// Starts a session whose `model/list` answers its first page with a
+/// cursor to a second, and answers that one as given. The values of the
+/// models the session is ready with, and the page asked for.
+fn paged_start(second: impl FnOnce(Value) -> Value) -> (Option<Vec<String>>, Value) {
+    let mut driver = fresh();
+    let opening = written(&driver.opening());
+    let writes = written(
+        &read(
+            &mut driver,
+            json!({"id": opening[0]["id"], "result": {"userAgent": "chord/0.169.0"}}),
+        )
+        .writes,
+    );
+    let id = |method: &str| {
+        writes
+            .iter()
+            .find(|line| {
+                line["method"]
+                    .as_str()
+                    .is_some_and(|m| m.starts_with(method))
+            })
+            .unwrap()["id"]
+            .clone()
+    };
+    let mut first = models();
+    first["nextCursor"] = json!("2");
+    let mut out = events(
+        &mut driver,
+        &[
+            json!({"id": id("thread/"), "result": thread_started()}),
+            json!({"id": id("account/read"), "result": {"account": null, "requiresOpenaiAuth": false}}),
+            json!({"id": id("config/read"), "result": config()}),
+        ],
+    );
+    let reading = read(
+        &mut driver,
+        json!({"id": id("model/list"), "result": first}),
+    );
+    assert!(reading.events.is_empty(), "not ready before the last page");
+    let asked = written(&reading.writes)[0].clone();
+    out.extend(read(&mut driver, second(asked["id"].clone())).events);
+    let models = out.iter().find_map(|event| match event {
+        Event::Ready { models, .. } => Some(models.iter().map(|m| m.value.clone()).collect()),
+        _ => None,
+    });
+    (models, asked)
+}
+
+#[test]
+fn a_session_reads_every_page_of_the_models_before_it_is_ready() {
+    let (models, asked) = paged_start(|id| {
+        json!({"id": id, "result": {"data": [
+            {"id": "gpt-c", "model": "gpt-c", "displayName": "GPT C", "hidden": false,
+             "supportedReasoningEfforts": []},
+            {"id": "gpt-a", "model": "gpt-a", "displayName": "GPT A", "hidden": false,
+             "supportedReasoningEfforts": []}
+        ], "nextCursor": null}})
+    });
+    assert_eq!(asked["method"], "model/list");
+    assert_eq!(asked["params"], json!({"cursor": "2"}));
+    assert_eq!(models.unwrap(), ["gpt-a", "gpt-b", "gpt-c"], "each once");
+}
+
+#[test]
+fn a_page_of_models_that_fails_leaves_the_pages_before_it() {
+    let (models, _) = paged_start(
+        |id| json!({"id": id, "error": {"code": -32600, "message": "invalid cursor: 2"}}),
+    );
+    assert_eq!(models.unwrap(), ["gpt-a", "gpt-b"]);
+}
+
 #[test]
 fn a_thread_that_names_no_effort_runs_at_its_model_s_default() {
     let ready_effort = |model: &str| {
@@ -2138,6 +2209,8 @@ const USES: &[(&str, &str, &[&str])] = &[
     ("response account/read", "account", &[]),
     ("response account/read", "requiresOpenaiAuth", &[]),
     ("request model/list", "", &[]),
+    ("request model/list", "cursor", &[]),
+    ("response model/list", "nextCursor", &[]),
     ("response model/list", "data.[].id", &[]),
     ("response model/list", "data.[].model", &[]),
     ("response model/list", "data.[].displayName", &[]),
