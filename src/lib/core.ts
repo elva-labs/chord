@@ -805,6 +805,8 @@ export interface CodexProfile {
   model: string | null;
   effort: string | null;
   provider: string | null;
+  /** The keys of the file's settings a session is not given. */
+  leftOut: string[];
 }
 
 /** The models Codex offers an account, in the order it lists them. */

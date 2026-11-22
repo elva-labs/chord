@@ -3,10 +3,13 @@ import { render, screen, waitFor } from "@testing-library/svelte";
 import StatusBar from "$lib/components/StatusBar.svelte";
 import { accounts, reset as resetAccounts } from "$lib/accounts.svelte";
 import { create, reset as resetSessions, select, started } from "$lib/sessions.svelte";
+import { resetProfiles } from "$lib/codexProfiles.svelte";
 
 /** What the core says of each folder asked about, in order. */
 const asked: string[] = [];
 let isRepository = true;
+/** The Codex profiles the core lists, for any account. */
+let listedProfiles: unknown[] = [];
 
 vi.mock("$lib/core", () => ({
   core: () => ({
@@ -15,6 +18,7 @@ vi.mock("$lib/core", () => ({
       if (!isRepository) throw new Error("not a repository");
       return { path, name: "repo", repository: path, isGit: true, branch: "main" };
     },
+    codexProfiles: async () => listedProfiles,
   }),
 }));
 
@@ -23,6 +27,8 @@ beforeEach(() => {
   resetAccounts();
   asked.length = 0;
   isRepository = true;
+  listedProfiles = [];
+  resetProfiles();
 });
 
 function open() {
@@ -54,6 +60,24 @@ describe("the status bar's session words", () => {
     expect(screen.queryByTestId("profile-readout")).toBeNull();
     session.profile = "fast";
     await waitFor(() => expect(screen.getByTestId("profile-readout")).toHaveTextContent("profile: fast"));
+    expect(screen.getByTestId("profile-readout")).toHaveAttribute("title", "Codex profile fast.config.toml");
+  });
+
+  it("names the settings of the profile's file the session is not given", async () => {
+    listedProfiles = [
+      { name: "fast", model: null, effort: null, provider: null, leftOut: ["approval_policy", "mcp_servers"] },
+    ];
+    const session = create("/home/ada/dev/repo", null, "codex", null);
+    session.profile = "fast";
+    started(session.key, "pty-1", "sid-1");
+    select(session.key);
+    render(StatusBar);
+    await waitFor(() =>
+      expect(screen.getByTestId("profile-readout")).toHaveAttribute(
+        "title",
+        "Codex profile fast.config.toml\n2 settings left out: approval_policy, mcp_servers",
+      ),
+    );
   });
 
   it("reads the branch for a folder, and shows none for one that is no repository", async () => {

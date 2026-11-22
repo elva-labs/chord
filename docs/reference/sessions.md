@@ -525,9 +525,10 @@ which, under `With which Codex profile`, after the account and the agent.
 No profile comes first, with the model and the effort the session would
 start on without one, where those are known. Each profile follows by name,
 with its file's name and the model, the effort and the provider the file
-sets. A new session starts under the profile last picked in the project,
-marked `last used here`, while the account still has it, and otherwise
-under none. The pick, no profile included, is kept for the project only,
+sets, and how many of its settings are left out, such as `2 settings left
+out`. A new session, New session in Chord and in a terminal included,
+starts under the profile last picked in the project, marked `last used
+here`, while the account still has it, and otherwise under none. The pick, no profile included, is kept for the project only,
 and between runs. A session that follows a workflow is not asked and runs
 under none.
 
@@ -536,7 +537,8 @@ sets, Codex's own where it sets none, and takes only the permission mode
 from what is kept, as [what a new session starts
 on](../integrated.md#what-a-new-session-starts-on) describes. Its row
 shows the profile's name after the model. The status bar names it after
-the account, as `profile:` and the name. The composer's model menu is
+the account, as `profile:` and the name, and its tooltip names the
+settings left out. The composer's model menu is
 headed with the profile's name and marks the model its file sets; a model
 picked there holds for that session alone. What a profile's file may set,
 and what is left out of it, is in [Codex

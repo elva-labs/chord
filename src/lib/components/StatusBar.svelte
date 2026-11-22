@@ -2,6 +2,7 @@
   import { tick, untrack } from "svelte";
   import { accountLabel, hasAccounts } from "$lib/accounts.svelte";
   import { agentLabel } from "$lib/agent.svelte";
+  import { profileOf, profilesKnown, readProfiles } from "$lib/codexProfiles.svelte";
   import { core } from "$lib/core";
   import { flash } from "$lib/flash.svelte";
   import { fits } from "$lib/giveWay";
@@ -29,7 +30,8 @@
    * then how many sessions wait for you. A word in passing keeps its place
    * between the branch and the allowance. The window's mode is the corner's
    * switch to say, so the bar does not, and the model, the effort and the
-   * mode belong to the composer.
+   * mode belong to the composer. The profile's tooltip names the settings
+   * of its file a session is not given, as its account's list last said.
    *
    * The allowance opens a popover with every window in full. A press opens
    * it, Escape or a press elsewhere puts it away, and the keyboard goes back
@@ -96,6 +98,20 @@
 
   let account = $derived(session !== null && hasAccounts() ? accountLabel(session.account) : null);
   let profile = $derived(session?.profile ?? null);
+  /** The keys of the profile's settings the session is not given. */
+  let leftOut = $derived(
+    session === null || profile === null ? [] : (profileOf(session.project, session.account, profile)?.leftOut ?? []),
+  );
+  let leftOutWords = $derived(
+    leftOut.length === 0
+      ? ""
+      : `${leftOut.length === 1 ? "1 setting" : `${leftOut.length} settings`} left out: ${leftOut.join(", ")}`,
+  );
+  $effect(() => {
+    if (session === null || profile === null) return;
+    const { project, account } = session;
+    if (!profilesKnown(project, account)) void readProfiles(project, account);
+  });
   let report = $derived(session === null ? null : limitsOf(hostOf(session.project), session.agent, session.account));
   let figures = $derived(report === null ? [] : figuresOf(report, now));
   let top = $derived(topFigure(figures));
@@ -113,7 +129,9 @@
         ? `${figure.name} reset`
         : `${figure.name} ${figure.percent}% used${figure.reached ? ", reached" : ""}`,
     );
-    const who = (account === null ? "" : `Account ${account}. `) + (profile === null ? "" : `Profile ${profile}. `);
+    const who =
+      (account === null ? "" : `Account ${account}. `) +
+      (profile === null ? "" : `Profile ${profile}${leftOutWords === "" ? "" : `, ${leftOutWords}`}. `);
     const old = age?.stale ? `. Figures from ${age.long}` : "";
     return `${who}Allowance: ${parts.join(", ")}${old}`;
   });
@@ -296,7 +314,11 @@
         <span class="who" data-testid="account-readout"><span class="pre">{"account: "}</span><span class="name">{account}</span></span>
       {/if}
       {#if profile !== null}
-        <span class="who" data-testid="profile-readout"><span class="pre">{"profile: "}</span><span class="name">{profile}</span></span>
+        <span
+          class="who"
+          title={`Codex profile ${profile}.config.toml${leftOutWords === "" ? "" : `\n${leftOutWords}`}`}
+          data-testid="profile-readout"><span class="pre">{"profile: "}</span><span class="name">{profile}</span></span
+        >
       {/if}
     {/snippet}
     {#if figures.length > 0}

@@ -36,6 +36,7 @@ fn lists_the_profile_files_by_name_with_what_each_sets() {
             model: model.map(str::to_string),
             effort: effort.map(str::to_string),
             provider: provider.map(str::to_string),
+            left_out: vec![],
         };
     assert_eq!(
         list(home.path()),
@@ -163,6 +164,57 @@ network = true
 }
 
 #[test]
+fn lists_the_keys_of_the_settings_a_profile_leaves_out() {
+    let home = Scratch::new("codex-profiles-left-out");
+    write(
+        home.path(),
+        "azure.config.toml",
+        r#"model = "gpt-6.1-terra"
+approval_policy = "never"
+spaced = "two words"
+roots = ["/tmp"]
+"two words" = 1
+"a\u202eb" = 1
+--sandbox = "danger-full-access"
+
+[mcp_servers.chord]
+command = "/tmp/other"
+
+[model_providers.azure]
+base_url = "https://lab.example/openai"
+query_params = { api-version = "2025-04-01-preview" }
+
+[[skills]]
+path = "/tmp/skill"
+"#,
+    );
+
+    let listed = list(home.path());
+    assert_eq!(listed[0].model.as_deref(), Some("gpt-6.1-terra"));
+    assert_eq!(
+        listed[0].left_out,
+        [
+            "approval_policy",
+            "spaced",
+            "roots",
+            "\"two words\"",
+            "\"a?b\"",
+            "--sandbox",
+            "mcp_servers",
+            "model_providers.azure.query_params.api-version",
+            "skills",
+        ]
+    );
+    assert_eq!(
+        settings(home.path(), "azure").unwrap(),
+        [
+            "model=gpt-6.1-terra",
+            "model_providers.azure.base_url=https://lab.example/openai"
+        ]
+    );
+}
+
+#[test]
 fn takes_a_profile_only_by_a_name_found_among_the_files() {
     let home = Scratch::new("codex-profiles-names");
     let codex = home.path().join("codex");
@@ -284,6 +336,19 @@ fn bounds_the_profiles_listed_and_the_settings_given() {
         given.last().unwrap(),
         &format!("key{0:03}={0}", MOST_SETTINGS - 1)
     );
+    assert_eq!(
+        listed[0].left_out,
+        (MOST_SETTINGS..MOST_SETTINGS + 6)
+            .map(|n| format!("key{n:03}"))
+            .collect::<Vec<_>>()
+    );
     assert_eq!(settings(home.path(), "p001").unwrap(), ["shallow=1"]);
+    assert_eq!(
+        listed[1].left_out,
+        [format!(
+            "{}…",
+            &["k"; LONGEST_KEY / 2 + 1].join(".")[..LONGEST_KEY]
+        )]
+    );
     assert!(settings(home.path(), &format!("p{MOST_PROFILES:03}")).is_err());
 }

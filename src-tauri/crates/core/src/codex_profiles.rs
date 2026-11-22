@@ -13,8 +13,8 @@
 //! that same string. No quote, space or other character the Windows
 //! command interpreter reads reaches a command line, on any platform.
 //! Arrays, dates and longer or other strings are left out, as are the
-//! settings in [`KEPT`]. A profile's name is only ever one found among the
-//! files.
+//! settings in [`KEPT`], and the window is told the keys of those left
+//! out. A profile's name is only ever one found among the files.
 
 use std::fs;
 use std::io::Read;
@@ -62,15 +62,27 @@ const KEPT: &[&str] = &[
     "profiles",
 ];
 
-/// A profile as the window lists it: its name, and the model, effort and
+/// A profile as the window lists it: its name, the model, effort and
 /// provider its file sets, where the file sets them in a form that would
-/// be given.
+/// be given, and the keys of the settings it is not given.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Profile {
     pub name: String,
     pub model: Option<String>,
     pub effort: Option<String>,
     pub provider: Option<String>,
+    /// The first [`MOST_SETTINGS`] keys left out, each shown in letters,
+    /// digits and the ASCII marks, and cut at [`LONGEST_KEY`].
+    pub left_out: Vec<String>,
+}
+
+/// A profile file's settings: those given, as `key=value`, and the keys
+/// of those left out.
+#[derive(Default)]
+struct Sorted {
+    given: Vec<String>,
+    left_out: Vec<String>,
 }
 
 /// The profiles in the Codex home `home`, by name. None where it holds
@@ -79,9 +91,9 @@ pub fn list(home: &Path) -> Vec<Profile> {
     names(home)
         .into_iter()
         .map(|name| {
-            let settings = read(home, &name).unwrap_or_default();
+            let Sorted { given, left_out } = read(home, &name).unwrap_or_default();
             let set = |key: &str| {
-                settings.iter().find_map(|setting| {
+                given.iter().find_map(|setting| {
                     let value = setting.strip_prefix(key)?.strip_prefix('=')?;
                     Some(value.to_string())
                 })
@@ -90,6 +102,7 @@ pub fn list(home: &Path) -> Vec<Profile> {
                 model: set("model"),
                 effort: set("model_reasoning_effort"),
                 provider: set("model_provider"),
+                left_out,
                 name,
             }
         })
@@ -104,7 +117,7 @@ pub fn settings(home: &Path, name: &str) -> Result<Vec<String>, String> {
         .into_iter()
         .find(|found| found == name)
         .ok_or_else(|| format!("there is no Codex profile {name:?} in {}", home.display()))?;
-    read(home, &found)
+    read(home, &found).map(|sorted| sorted.given)
 }
 
 /// The names of the profile files in `home`, sorted. A link is followed,
@@ -142,8 +155,8 @@ fn bare(text: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-/// The settings the profile file of `name` gives.
-fn read(home: &Path, name: &str) -> Result<Vec<String>, String> {
+/// The settings the profile file of `name` gives, and those it leaves out.
+fn read(home: &Path, name: &str) -> Result<Sorted, String> {
     let path = home.join(format!("{name}{SUFFIX}"));
     let unread = |e: std::io::Error| format!("could not read {}: {e}", path.display());
     let mut text = String::new();
@@ -168,37 +181,78 @@ fn read(home: &Path, name: &str) -> Result<Vec<String>, String> {
             + 1;
         format!("{} is not TOML Codex reads, at line {line}", path.display())
     })?;
-    let mut settings = Vec::new();
-    flatten(document.as_table(), "", &mut settings);
-    settings.truncate(MOST_SETTINGS);
-    Ok(settings)
+    let mut sorted = Sorted::default();
+    flatten(document.as_table(), "", &mut sorted);
+    let past = sorted
+        .given
+        .split_off(sorted.given.len().min(MOST_SETTINGS));
+    sorted.left_out.extend(
+        past.iter()
+            .filter_map(|setting| setting.split_once('=').map(|(key, _)| key.to_string())),
+    );
+    sorted.left_out.truncate(MOST_SETTINGS);
+    Ok(sorted)
 }
 
-/// Each setting under `table`, whose key is `prefix`, that a profile
-/// gives, as `key=value`.
-fn flatten(table: &dyn TableLike, prefix: &str, settings: &mut Vec<String>) {
+/// Each setting under `table`, whose key is `prefix`, sorted into those a
+/// profile gives, as `key=value`, and the keys of those it leaves out. A
+/// table left out is one key.
+fn flatten(table: &dyn TableLike, prefix: &str, sorted: &mut Sorted) {
+    let join = |key: &str| match prefix {
+        "" => key.to_string(),
+        prefix => format!("{prefix}.{key}"),
+    };
     for (key, item) in table.iter() {
         if !bare(key) {
+            let toml_bare = !key.is_empty()
+                && key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'));
+            let key = if toml_bare {
+                key.to_string()
+            } else {
+                format!("\"{key}\"")
+            };
+            sorted.left_out.push(shown(&join(&key)));
             continue;
         }
-        let path = match prefix {
-            "" => key.to_string(),
-            prefix => format!("{prefix}.{key}"),
-        };
+        let path = join(key);
         if path.len() > LONGEST_KEY || kept(&path) {
+            sorted.left_out.push(shown(&path));
             continue;
         }
         match item {
-            Item::Table(table) => flatten(table, &path, settings),
-            Item::Value(Value::InlineTable(table)) => flatten(table, &path, settings),
-            Item::Value(value) => {
-                if let Some(text) = plain_value(value) {
-                    settings.push(format!("{path}={text}"));
-                }
-            }
-            Item::None | Item::ArrayOfTables(_) => {}
+            Item::Table(table) => flatten(table, &path, sorted),
+            Item::Value(Value::InlineTable(table)) => flatten(table, &path, sorted),
+            Item::Value(value) => match plain_value(value) {
+                Some(text) => sorted.given.push(format!("{path}={text}")),
+                None => sorted.left_out.push(path),
+            },
+            Item::ArrayOfTables(_) => sorted.left_out.push(path),
+            Item::None => {}
         }
     }
+}
+
+/// A key as the window is told it: each character outside the ASCII marks,
+/// letters and digits as `?`, cut at [`LONGEST_KEY`] with a `…`.
+fn shown(key: &str) -> String {
+    let mut shown: String = key
+        .chars()
+        .take(LONGEST_KEY + 1)
+        .map(|c| {
+            if c.is_ascii_graphic() || c == ' ' {
+                c
+            } else {
+                '?'
+            }
+        })
+        .collect();
+    if shown.len() > LONGEST_KEY {
+        shown.truncate(LONGEST_KEY);
+        shown.push('…');
+    }
+    shown
 }
 
 /// Whether the key is one of [`KEPT`] or under one.

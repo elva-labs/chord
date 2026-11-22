@@ -656,11 +656,19 @@ function accountChoices(project: string): PaletteItem[] {
   }));
 }
 
+/** How many of a profile's settings a session is not given, said on its
+    line. Null for none. */
+function leftOutCount(count: number): string | null {
+  if (count === 0) return null;
+  return count === 1 ? "1 setting left out" : `${count} settings left out`;
+}
+
 /** The Codex profiles a new session can run under: no profile first, then
-    the account's, each with the model and effort its file sets and the
-    provider where it names one. No profile says what the session starts
-    on without one, as far as that is known. The one it starts under
-    unless another is picked says so where it was picked before. */
+    the account's, each with the model and effort its file sets, the
+    provider where it names one, and how many of its settings are left out.
+    No profile says what the session starts on without one, as far as that
+    is known. The one it starts under unless another is picked says so
+    where it was picked before. */
 function profileChoices(project: string, account: string | null): PaletteItem[] {
   const host = hostOf(project);
   const named = (model: string | null) =>
@@ -686,7 +694,7 @@ function profileChoices(project: string, account: string | null): PaletteItem[] 
         label: profile.name,
         group: PROFILES,
         step: { kind: "profile", profile: profile.name },
-        detail: `${profile.name}.config.toml`,
+        detail: [`${profile.name}.config.toml`, leftOutCount(profile.leftOut.length)].filter((part) => part !== null).join(" · "),
         end: end([named(profile.model), profile.effort, profile.provider, last(profile.name)]),
       }),
     ),

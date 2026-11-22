@@ -66,8 +66,9 @@ profile, with every key under them: the MCP servers, the approval policy
 and who reviews approvals, the sandbox and permissions, the developer
 instructions, the multi-agent switches, notify, hooks, the profile
 settings themselves, the Windows settings, and whether the Codex home may
-be a link. A setting left out is dropped without a word, and the session
-runs on what the account's configuration says for it.
+be a link. For a setting left out the session runs on what the account's
+configuration says, and the core lists the keys of the first 64 left out
+with the profile, which the palette counts and the status bar names.
 
 ## Naming the session to its tools
 

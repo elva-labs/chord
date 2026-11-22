@@ -31,7 +31,7 @@ vi.mock("$lib/core", () => ({
 const A = "/home/ada/dev/one";
 const LAB = "ssh://ada@lab/srv/one";
 const KEY = "chord.pickedProfiles";
-const fast = { name: "fast", model: "gpt-6.1-terra", effort: "low", provider: null };
+const fast = { name: "fast", model: "gpt-6.1-terra", effort: "low", provider: null, leftOut: [] };
 
 beforeEach(() => {
   resetProfiles();
@@ -56,6 +56,22 @@ describe("the Codex profiles an account has", () => {
     expect(profileOf(A, null, "fast")).toEqual(fast);
     expect(profilesOf(LAB, null)).toEqual([]);
     expect(profilesOf(A, "Work")).toEqual([]);
+  });
+
+  it("say which keys each leaves out, and none where the core does not say", async () => {
+    const many = Array.from({ length: 70 }, (_, at) => `key${at}`);
+    listed.answer = () =>
+      Promise.resolve([
+        { ...fast, leftOut: ["approval_policy", "", 5, null, "x".repeat(131), "mcp_servers"] },
+        { name: "local", model: null, effort: null, provider: null },
+        { name: "wide", model: null, effort: null, provider: null, leftOut: many },
+        { name: "odd", model: null, effort: null, provider: null, leftOut: "skills" },
+      ]);
+    await readProfiles(A, null);
+    expect(profileOf(A, null, "fast")?.leftOut).toEqual(["approval_policy", "mcp_servers"]);
+    expect(profileOf(A, null, "local")?.leftOut).toEqual([]);
+    expect(profileOf(A, null, "wide")?.leftOut).toEqual(many.slice(0, 64));
+    expect(profileOf(A, null, "odd")?.leftOut).toEqual([]);
   });
 
   it("are read once while a read is under way, and known once heard", async () => {

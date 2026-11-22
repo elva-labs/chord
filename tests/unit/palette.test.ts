@@ -1117,7 +1117,13 @@ describe("a new session", () => {
 
 describe("a Codex session's profile", () => {
   const fast = { name: "fast", model: "gpt-6.1-terra", effort: "low", provider: null };
-  const local = { name: "local", model: "gpt-oss-20b", effort: null, provider: "ollama" };
+  const local = {
+    name: "local",
+    model: "gpt-oss-20b",
+    effort: null,
+    provider: "ollama",
+    leftOut: ["approval_policy", "mcp_servers"],
+  };
   const ends = () => stepItems("").map((item) => (item.kind === "choice" ? [item.label, item.detail, item.end] : null));
 
   it("is asked where the account has profiles, and the one picked is started under and offered next", async () => {
@@ -1134,7 +1140,7 @@ describe("a Codex session's profile", () => {
     expect(ends()).toEqual([
       ["No profile", "config.toml", ""],
       ["fast", "fast.config.toml", "gpt-6.1-terra · low"],
-      ["local", "local.config.toml", "gpt-oss-20b · ollama"],
+      ["local", "local.config.toml · 2 settings left out", "gpt-oss-20b · ollama"],
     ]);
     const outcome = choose("fast");
     if (outcome.type === "close") outcome.then();
@@ -1255,6 +1261,15 @@ describe("a Codex session's profile", () => {
     expect(outcome.type).toBe("close");
     if (outcome.type === "close") await outcome.then();
     expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", kind: "integrated", profile: "fast" });
+  });
+
+  it("says one setting left out of a profile in the singular", async () => {
+    agent.installed = ["codex"];
+    listed.profiles = [{ ...fast, leftOut: ["skills"] }];
+    await readProfiles(A, null);
+    beginNew(A);
+    choose("Change");
+    expect(ends()[1]).toEqual(["fast", "fast.config.toml · 1 setting left out", "gpt-6.1-terra · low"]);
   });
 
   it("keeps no profile picked as the project's pick, and takes a name only from the list", async () => {

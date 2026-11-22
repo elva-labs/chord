@@ -59,11 +59,23 @@ export function profileOf(project: string, account: string | null, name: string)
   return profilesOf(project, account).find((profile) => profile.name === name) ?? null;
 }
 
-function readable(profile: unknown): profile is CodexProfile {
-  if (typeof profile !== "object" || profile === null) return false;
-  const { name, model, effort, provider } = profile as Record<string, unknown>;
-  const text = (value: unknown) => value === null || typeof value === "string";
-  return typeof name === "string" && NAME.test(name) && text(model) && text(effort) && text(provider);
+/** The most keys left out that are kept of one profile, and the longest. */
+const MOST_LEFT_OUT = 64;
+const LONGEST_LEFT_OUT = 130;
+
+/** A profile as the core listed it, or null where it does not read as
+    one. The keys left out are none where a core does not say. */
+function readable(profile: unknown): CodexProfile | null {
+  if (typeof profile !== "object" || profile === null) return null;
+  const { name, model, effort, provider, leftOut } = profile as Record<string, unknown>;
+  const text = (value: unknown): value is string | null => value === null || typeof value === "string";
+  if (typeof name !== "string" || !NAME.test(name) || !text(model) || !text(effort) || !text(provider)) return null;
+  const keys = Array.isArray(leftOut)
+    ? leftOut
+        .filter((key): key is string => typeof key === "string" && key !== "" && key.length <= LONGEST_LEFT_OUT)
+        .slice(0, MOST_LEFT_OUT)
+    : [];
+  return { name, model, effort, provider, leftOut: keys };
 }
 
 /** Reads the profiles the account has on the project's machine. A list
@@ -75,7 +87,9 @@ export function readProfiles(project: string, account: string | null): Promise<v
   const read = (async () => {
     try {
       const listed: unknown = await core().codexProfiles(project, dirFor(account, "codex"));
-      profiles.byKey[key] = Array.isArray(listed) ? listed.filter(readable) : [];
+      profiles.byKey[key] = Array.isArray(listed)
+        ? listed.map(readable).filter((profile) => profile !== null)
+        : [];
     } catch {
       // A core from before profiles, or a home it could not read.
       profiles.byKey[key] = [];
