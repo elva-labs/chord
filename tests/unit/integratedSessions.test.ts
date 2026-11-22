@@ -753,6 +753,15 @@ describe("an integrated session behind its row", () => {
     expect(conversationOf(session.key).messages[failed]).toMatchObject({ state: "failed", error: "no such session" });
   });
 
+  it("cuts the four arrow controls from a message and nothing else", async () => {
+    const { session } = await started();
+    send(session.key, "go\u001d on\u001c\n\tnow\f\u0085\u001b[31mok\uf8ff");
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "send").at(-1)).toMatchObject({
+      text: "go on\n\tnow\f\u0085\u001b[31mok\uf8ff",
+    });
+  });
+
   it("sends the first prompt of a session another session started", async () => {
     const { session } = await started({ prompt: "Scan the history" });
     expect(fake.calls.find((call) => call.method === "send")).toMatchObject({ text: "Scan the history" });
@@ -1624,7 +1633,7 @@ describe("the last words of a run", () => {
     ).toBe("Done. The tests pass.");
   });
 
-  it("are its latest turn's only, with the thinking drawn in sight after its words, never one more work followed", () => {
+  it("are its latest turn's only, with the thinking drawn in sight among its words", () => {
     const said = (turn: number, parts: Part[]) => ({ kind: "agent" as const, key: `a-${turn}`, turn, at: 0, parts });
     const words = (text: string) => ({ kind: "text" as const, block: text, text, done: true, gap: false, at: 0, until: 0 });
     const thought = (text: string) => ({ ...words(text), kind: "thinking" as const });
@@ -1634,7 +1643,8 @@ describe("the last words of a run", () => {
     expect(lastWords([said(1, [words("Done.")]), user, said(2, [thought("Shall I fix them?"), notify])])).toBe("Shall I fix them?");
     expect(lastWords([said(2, [thought("Five are wrong."), notify, words("Shall I?")])])).toBe("Shall I?");
     const bash = { kind: "tool", call: "b", name: "Bash", tool: "command", done: true, parts: [] } as unknown as Part;
-    expect(lastWords([said(2, [thought("Shall I fix them?"), notify, bash])])).toBeNull();
+    expect(lastWords([said(2, [thought("Shall I fix them?"), notify, bash])])).toBe("Shall I fix them?");
+    expect(lastWords([said(2, [thought("Shall I fix them?"), bash, notify])])).toBeNull();
     expect(lastWords([said(2, [words("Done.")]), user, said(2, [])])).toBe("Done.");
   });
 });

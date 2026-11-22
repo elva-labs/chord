@@ -1498,6 +1498,25 @@ describe("working, and waiting for you", () => {
     expect(session.turnEnd).toBe("done");
   });
 
+  it("names the model a terminal Codex's latest turn runs on, as its own picker left it", () => {
+    const session = create(A, null, "codex");
+    started(session.key, "codex-pty", "codex-id");
+    exact("codex-id", "prompt");
+    expect(session.runsOn).toBeNull();
+    exact("codex-id", "prompt", null, false, { model: "gpt-6.1-sol" });
+    expect(session.runsOn).toBe("gpt-6.1-sol");
+    exact("codex-id", "stop", null, false, { model: "gpt-6.2-sol" });
+    expect(session.runsOn).toBe("gpt-6.2-sol");
+    // An event that names no model leaves the one heard.
+    exact("codex-id", "prompt", null, false, { model: null });
+    expect(session.runsOn).toBe("gpt-6.2-sol");
+
+    const claude = create(A, null, "claude-code");
+    started(claude.key, "claude-pty", "claude-id");
+    exact("claude-id", "prompt", null, false, { model: "claude-opus" });
+    expect(claude.runsOn).toBeNull();
+  });
+
   it("knows when the user's keys may have left words on a terminal's line, and when they last pressed one", () => {
     vi.useFakeTimers();
     try {

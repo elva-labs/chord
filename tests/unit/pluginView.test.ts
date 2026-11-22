@@ -7,11 +7,14 @@ import type {
 import { clear, deselect, files, showMedia } from "$lib/files.svelte";
 import { layout } from "$lib/layout.svelte";
 import {
+  ACT_SPAN,
   dataArrived,
+  leftPage,
   open,
   pluginViews,
   resetPluginViews,
   send,
+  spendAct,
   viewChanged,
   viewOf,
 } from "$lib/pluginView.svelte";
@@ -148,8 +151,49 @@ describe("what crosses the bridge", () => {
         plugin: "github",
         project: "/one",
         payload: { hello: 1 },
+        acted: false,
       },
     ]);
+  });
+
+  it("says a message came of something the user did only when the page says so", async () => {
+    viewChanged(event());
+    await send("src-1/github", "/one", { merge: 12 }, true);
+    expect(sent).toEqual([
+      {
+        source: "src-1",
+        plugin: "github",
+        project: "/one",
+        payload: { merge: 12 },
+        acted: true,
+      },
+    ]);
+  });
+
+  it("counts one message of a click or key as the user's, and the rest of it as the page's own", () => {
+    expect(spendAct("src-1/github", "/one", true, 1000)).toBe(true);
+    expect(spendAct("src-1/github", "/one", true, 1001)).toBe(false);
+    expect(spendAct("src-1/github", "/one", true, 1000 + ACT_SPAN - 1)).toBe(false);
+    expect(spendAct("src-1/github", "/one", true, 1000 + ACT_SPAN)).toBe(true);
+  });
+
+  it("counts a message as the user's never without a click or key behind it", () => {
+    expect(spendAct("src-1/github", "/one", false, 1000)).toBe(false);
+  });
+
+  it("counts the next click as the user's once one ended, or the user left the page", () => {
+    expect(spendAct("src-1/github", "/one", true, 1000)).toBe(true);
+    expect(spendAct("src-1/github", "/one", false, 1100)).toBe(false);
+    expect(spendAct("src-1/github", "/one", true, 1200)).toBe(true);
+    leftPage("src-1/github", "/one");
+    expect(spendAct("src-1/github", "/one", true, 1300)).toBe(true);
+  });
+
+  it("counts a click for each page alone, by plugin and by project", () => {
+    expect(spendAct("src-1/github", "/one", true, 1000)).toBe(true);
+    expect(spendAct("src-1/jira", "/one", true, 1000)).toBe(true);
+    expect(spendAct("src-1/github", "/two", true, 1000)).toBe(true);
+    expect(spendAct("src-1/github", "/one", true, 1000)).toBe(false);
   });
 
   it("drops a message for a page that is gone", async () => {

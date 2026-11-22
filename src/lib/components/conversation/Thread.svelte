@@ -1340,7 +1340,9 @@
         filesBack: null,
         briefing: spoken(said.text).briefing,
       }
-    : spoken(said.text, from === null)}
+    : from?.plugin
+      ? { text: said.text, instructions: null, reports: null, filesBack: null, briefing: undefined }
+      : spoken(said.text, from === null)}
   {@const putBack = from?.workbench ? undefined : onPutBack}
   <article
     class="msg you"
@@ -1349,7 +1351,7 @@
     class:dropped={said.state === "dropped" || said.state === "failed"}
     data-testid="user-message"
     data-state={said.state}
-    data-from={from?.workbench ? "workbench" : from?.id}
+    data-from={from?.workbench ? "workbench" : from?.plugin ? "plugin" : from?.id}
     data-copy-host="message"
   >
     <header class="who" title={at === null ? undefined : exactTime(at)}>

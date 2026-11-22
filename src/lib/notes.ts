@@ -14,19 +14,20 @@ export interface NotesOwner {
   token: string;
 }
 
-/** Whether the session keeps a brief or notes. False when that cannot be
-    read: the item that opens them is then left off, nothing else. */
+/** Whether the session keeps a brief, notes or open items. False when
+    that cannot be read: the item that opens them is then left off,
+    nothing else. */
 export async function hasNotes(owner: NotesOwner): Promise<boolean> {
   try {
     const kept = await core().notesKept(owner.project, owner.token, false);
-    return kept.brief || kept.standing > 0;
+    return kept.brief || kept.standing > 0 || kept.open > 0;
   } catch {
     return false;
   }
 }
 
-/** Opens the session's brief and notes in the viewer, written out afresh
-    as a document, in place of whatever the viewer shows. */
+/** Opens the session's open items, brief and notes in the viewer, written
+    out afresh as a document, in place of whatever the viewer shows. */
 export async function openNotes(owner: NotesOwner): Promise<boolean> {
   try {
     const kept = await core().notesKept(owner.project, owner.token, true);

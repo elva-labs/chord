@@ -1,4 +1,5 @@
 import { tick } from "svelte";
+import { withoutArrowControls } from "$lib/strayKeys";
 import { dirFor } from "$lib/accounts.svelte";
 import { filesBackNote, spoken } from "$lib/instructions";
 import { unsent, type Sent } from "$lib/mention";
@@ -6,6 +7,7 @@ import { mentionedIn, mentionsOf } from "$lib/mentioned.svelte";
 import { reservedName, shown } from "$lib/unseen";
 import { failureOf } from "$lib/turnFailure";
 import { senderOf, sentAt, sentBy, starterOf, WORKBENCH } from "$lib/senders.svelte";
+import { pluginMarkFor } from "$lib/pluginStarts.svelte";
 import { keepMode, modeOf } from "$lib/sessionModes";
 import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
 import { heardOffers } from "$lib/lastChosen.svelte";
@@ -14,7 +16,7 @@ import { modelLabel } from "$lib/models";
 import { harnessProfile } from "$lib/harness.svelte";
 import { heardCatalog } from "$lib/modelCatalog.svelte";
 import { readsAsCommand } from "$lib/slash";
-import { offeredModel, thoughtAnswer } from "$lib/thread";
+import { offeredModel, thoughtAnswers } from "$lib/thread";
 import { heardLimits } from "$lib/limits.svelte";
 import { hostOf, pathOn } from "$lib/remote.svelte";
 import {
@@ -26,7 +28,7 @@ import {
   type IntegratedState,
   type PermissionChoice,
 } from "$lib/core";
-import { Conversation, type Command, type Message, type Part, type Ready, type TextPart } from "$lib/conversation.svelte";
+import { Conversation, type Command, type Message, type Part, type Ready } from "$lib/conversation.svelte";
 import { earlierAtStart, layEarlier, runFrom } from "$lib/earlier";
 import { logUsage } from "$lib/usageLog";
 import {
@@ -561,11 +563,11 @@ export function lastWords(entries: Conversation["entries"]): string | null {
 }
 
 function lastSaid(parts: Part[]): string | null {
-  const thought = thoughtAnswer(parts);
+  const thoughts = thoughtAnswers(parts);
   for (let at = parts.length - 1; at >= 0; at--) {
     const part = parts[at];
-    if (part.kind !== "text" && part !== thought) continue;
-    const line = (part as TextPart).text
+    if (part.kind !== "text" && !(part.kind === "thinking" && thoughts.has(part))) continue;
+    const line = part.text
       .split("\n")
       .map((candidate) =>
         candidate
@@ -691,7 +693,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
   rememberWorkflow(row);
   if (row.prompt !== null && !link.prompted && link.handle !== null) {
     link.prompted = true;
-    send(key, row.prompt, [], starterOf(key));
+    send(key, row.prompt, [], starterOf(key) ?? pluginMarkFor(key));
   }
 }
 
@@ -1239,6 +1241,7 @@ export function send(
   from: string | null = null,
   mentions: readonly Sent[] = [],
 ): string | null {
+  words = withoutArrowControls(words);
   const link = links.get(key);
   const session = byKey(key);
   if (link === undefined || link.handle === null || session === null) return null;

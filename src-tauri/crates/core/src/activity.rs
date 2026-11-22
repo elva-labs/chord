@@ -67,6 +67,11 @@ pub struct SessionEvent {
     /// agent's own name for it, where its hooks say: Claude Code's do.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    /// The model the agent's latest turn runs on, by the agent's own id
+    /// for it, where its log says: a terminal Codex's rollout does, from
+    /// the context it writes as each turn begins.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// The most background tasks a stop names.
@@ -196,6 +201,7 @@ pub fn classify(line: &str) -> Option<SessionEvent> {
         error,
         background,
         mode,
+        model: None,
     })
 }
 

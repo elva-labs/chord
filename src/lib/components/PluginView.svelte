@@ -1,6 +1,6 @@
 <script lang="ts">
   import { typeWhole } from "$lib/conductor.svelte";
-  import { type PluginPage, pluginViews, send } from "$lib/pluginView.svelte";
+  import { leftPage, type PluginPage, pluginViews, send, spendAct } from "$lib/pluginView.svelte";
   import { activeSession, typed } from "$lib/sessions.svelte";
   import { showPlace } from "$lib/show.svelte";
   import { printable } from "$lib/terminals.svelte";
@@ -15,6 +15,12 @@
    * in the viewer, a line for the agent, a message for the plugin. To the
    * page: the data its plugin sends while the page is open. A message is
    * this frame's only when the window it came from is this frame's.
+   *
+   * A message for the plugin is the user's doing when the user has just
+   * clicked or typed in this frame: the click activates this window too,
+   * and the frame holds the focus. The plugin may then answer it as it
+   * answers an action. A webview that cannot say so sends none as the
+   * user's.
    */
 
   interface Props {
@@ -72,6 +78,16 @@
     typeWhole(session.key, session.ptyId, text).catch(() => {});
   }
 
+  /** Whether the user has just clicked or typed in this frame, which
+      `spendAct` lets count once. */
+  function acted(): boolean {
+    return (
+      navigator.userActivation?.isActive === true &&
+      document.hasFocus() &&
+      document.activeElement === frame
+    );
+  }
+
   $effect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame?.contentWindow) return;
@@ -84,7 +100,7 @@
       }
       if (data.workbench === "open") openPlace(data);
       else if (data.workbench === "agent") toAgent(data);
-      else if (data.workbench === "send") void send(page.key, page.project, data.payload);
+      else if (data.workbench === "send") void send(page.key, page.project, data.payload, spendAct(page.key, page.project, acted()));
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -111,6 +127,7 @@
   sandbox="allow-scripts"
   title={page.plugin}
   onload={() => (loaded = page.html)}
+  onblur={() => leftPage(page.key, page.project)}
   class:waiting={loaded === null}
   style:height="{height}px"
   data-testid="plugin-page"
