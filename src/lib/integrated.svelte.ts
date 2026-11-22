@@ -14,7 +14,7 @@ import { modelLabel } from "$lib/models";
 import { agentProfile } from "$lib/agent.svelte";
 import { heardCatalog } from "$lib/modelCatalog.svelte";
 import { readsAsCommand } from "$lib/slash";
-import { offeredModel, thoughtAnswer } from "$lib/thread";
+import { offeredModel, thoughtAnswers } from "$lib/thread";
 import { heardLimits } from "$lib/limits.svelte";
 import { hostOf, pathOn } from "$lib/remote.svelte";
 import {
@@ -26,7 +26,7 @@ import {
   type IntegratedState,
   type PermissionChoice,
 } from "$lib/core";
-import { Conversation, type Command, type Message, type Part, type Ready, type TextPart } from "$lib/conversation.svelte";
+import { Conversation, type Command, type Message, type Part, type Ready } from "$lib/conversation.svelte";
 import { earlierAtStart, layEarlier, runFrom } from "$lib/earlier";
 import { logUsage } from "$lib/usageLog";
 import {
@@ -560,11 +560,11 @@ export function lastWords(entries: Conversation["entries"]): string | null {
 }
 
 function lastSaid(parts: Part[]): string | null {
-  const thought = thoughtAnswer(parts);
+  const thoughts = thoughtAnswers(parts);
   for (let at = parts.length - 1; at >= 0; at--) {
     const part = parts[at];
-    if (part.kind !== "text" && part !== thought) continue;
-    const line = (part as TextPart).text
+    if (part.kind !== "text" && !(part.kind === "thinking" && thoughts.has(part))) continue;
+    const line = part.text
       .split("\n")
       .map((candidate) =>
         candidate
