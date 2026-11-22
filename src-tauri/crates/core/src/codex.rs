@@ -152,6 +152,9 @@ pub struct Activity {
     id: Option<String>,
     path: Option<PathBuf>,
     offset: u64,
+    /// The model the latest turn read runs on, as the user's `/model`
+    /// or the configuration left it. None until a turn has begun.
+    model: Option<String>,
 }
 
 impl Activity {
@@ -162,7 +165,12 @@ impl Activity {
             .and_then(|path| path.metadata().ok())
             .map(|meta| meta.len())
             .unwrap_or(0);
-        Self { id, path, offset }
+        Self {
+            id,
+            path,
+            offset,
+            model: None,
+        }
     }
 
     fn poll(&mut self, home: &Path) -> Option<&'static str> {
@@ -171,8 +179,25 @@ impl Activity {
         }
         let (lines, offset) = crate::activity::read_new(self.path.as_ref()?, self.offset);
         self.offset = offset;
+        if let Some(model) = lines.iter().rev().find_map(|line| turn_model(line)) {
+            self.model = Some(model);
+        }
         lines.iter().rev().find_map(|line| turn_event(line))
     }
+}
+
+/// The model a turn runs on, from the context Codex writes as the turn
+/// begins, just after the turn's start.
+fn turn_model(line: &str) -> Option<String> {
+    if !line.contains("\"turn_context\"") {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(line).ok()?;
+    if value.get("type")?.as_str()? != "turn_context" {
+        return None;
+    }
+    let model = value.get("payload")?.get("model")?.as_str()?.trim();
+    (!model.is_empty()).then(|| model.to_string())
 }
 
 fn turn_event(line: &str) -> Option<&'static str> {
@@ -234,6 +259,7 @@ pub fn observe(
                     error: None,
                     background: Vec::new(),
                     mode: None,
+                    model: activity.model.clone(),
                 },
             );
         }
@@ -257,6 +283,7 @@ mod tests {
             id: Some("id".into()),
             path: Some(path.clone()),
             offset: 0,
+            model: None,
         };
         assert_eq!(activity.poll(&home), Some("prompt"));
         assert_eq!(activity.poll(&home), None);
@@ -290,6 +317,59 @@ mod tests {
             None
         );
         assert_eq!(turn_event("invalid"), None);
+    }
+
+    #[test]
+    fn activity_keeps_the_model_the_latest_turn_runs_on() {
+        use std::io::Write;
+        let home = codex_home("activity-model");
+        let path = home.join("rollout.jsonl");
+        let start = r#"{"type":"event_msg","payload":{"type":"task_started"}}"#;
+        let context = |model: &str| {
+            format!(
+                r#"{{"type":"turn_context","payload":{{"turn_id":"t","model":"{model}","effort":"high"}}}}"#
+            )
+        };
+        std::fs::write(&path, format!("{start}\n")).unwrap();
+        let mut activity = Activity {
+            id: Some("id".into()),
+            path: Some(path.clone()),
+            offset: 0,
+            model: None,
+        };
+        assert_eq!(activity.poll(&home), Some("prompt"));
+        assert_eq!(activity.model, None, "no turn has said its model yet");
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        // The configured model, where the session was started with none.
+        writeln!(file, "{}", context("gpt-6.1-sol")).unwrap();
+        assert_eq!(activity.poll(&home), None);
+        assert_eq!(activity.model.as_deref(), Some("gpt-6.1-sol"));
+        // The user's /model, which the next turn runs on.
+        writeln!(file, "{start}\n{}", context("gpt-6.2-sol")).unwrap();
+        assert_eq!(activity.poll(&home), Some("prompt"));
+        assert_eq!(activity.model.as_deref(), Some("gpt-6.2-sol"));
+        writeln!(
+            file,
+            r#"{{"type":"event_msg","payload":{{"type":"task_complete"}}}}"#
+        )
+        .unwrap();
+        assert_eq!(activity.poll(&home), Some("stop"));
+        assert_eq!(
+            activity.model.as_deref(),
+            Some("gpt-6.2-sol"),
+            "kept between turns"
+        );
+        assert_eq!(
+            turn_model(r#"{"type":"response_item","payload":{"model":"x","t":"turn_context"}}"#),
+            None
+        );
+        assert_eq!(
+            turn_model(r#"{"type":"turn_context","payload":{"model":""}}"#),
+            None
+        );
     }
 
     #[test]

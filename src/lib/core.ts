@@ -835,6 +835,9 @@ export interface SessionEvent {
   /** The permission mode the agent runs in as the event fires, where its
       hooks say. */
   mode?: string;
+  /** The model the agent's latest turn runs on, by its own id, where its
+      log says: a terminal Codex's does. */
+  model?: string;
 }
 
 /** A place in a file the agent asked to show, through the daemon's MCP
