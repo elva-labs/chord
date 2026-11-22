@@ -15,7 +15,7 @@
  * which starts on its own last pick and leaves the composer's as it was.
  */
 
-import { agentNote } from "$lib/instructions";
+import { agentNote, agentNoteReadsOnly } from "$lib/instructions";
 
 /** What a session is kept working as: the agent's key and title, and
     whether it still reads only, which picking another mode ends. */
@@ -94,7 +94,7 @@ export function pickAgent(
   const picked = agent === null ? null : { key: agent.key, title: agent.title, readsOnly: agent.readsOnly };
   byRow[key] = picked;
   if (id !== null) keepById(id, picked);
-  if (agent !== null) ahead.set(key, agentNote(agent.title, agent.text));
+  if (agent !== null) ahead.set(key, agentNote(agent.title, agent.text, agent.readsOnly));
   else ahead.delete(key);
 }
 
@@ -115,13 +115,16 @@ export function agentStartsAt(key: string): string | null {
 }
 
 /** The row's session reads only or no longer does, by the user's choice of
-    mode or the agent's: kept with its agent. */
+    mode or the agent's: kept with its agent, and said in its note where
+    that is still to be sent. */
 export function agentReadsOnly(key: string, id: string | null, on: boolean) {
   const agent = agentOfRow(key, id);
   if (agent === null || agent.readsOnly === on) return;
   const changed = { ...agent, readsOnly: on };
   byRow[key] = changed;
   if (id !== null) keepById(id, changed);
+  const note = ahead.get(key);
+  if (note !== undefined) ahead.set(key, agentNoteReadsOnly(note, on));
 }
 
 /** The row's conversation is now known by `id`: the agent picked before is

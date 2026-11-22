@@ -228,6 +228,28 @@ describe("the note an agent picked on the composer goes ahead with", () => {
     });
   });
 
+  it("tells an agent that reads only to change no files, a line the fold leaves out", async () => {
+    const { AGENT_END, AGENT_READS_ONLY, agentNote, spoken } = await import("$lib/instructions");
+    const note = agentNote("Reviewer", `Read the diff.\n${AGENT_READS_ONLY}`, true);
+    expect(note.split("\n").slice(-2)).toEqual([AGENT_READS_ONLY, AGENT_END]);
+    expect(note.split("\n").filter((line) => line === AGENT_READS_ONLY)).toHaveLength(1);
+    expect(AGENT_READS_ONLY).toMatch(/change no files.*command/);
+    expect(spoken(`${note}\n\nGo`, true)).toMatchObject({
+      text: "Go",
+      agent: { title: "Reviewer", text: "Read the diff." },
+    });
+    expect(agentNote("Builder", "Build it.")).not.toContain(AGENT_READS_ONLY);
+  });
+
+  it("says the agent reads only, or stops saying so, as that changes", async () => {
+    const { agentNote, agentNoteReadsOnly } = await import("$lib/instructions");
+    const off = agentNote("Reviewer", "Read the diff.");
+    const on = agentNote("Reviewer", "Read the diff.", true);
+    expect(agentNoteReadsOnly(off, true)).toBe(on);
+    expect(agentNoteReadsOnly(on, true)).toBe(on);
+    expect(agentNoteReadsOnly(on, false)).toBe(off);
+  });
+
   it("comes after the briefing and before the note on files put back", async () => {
     const { agentNote, GOING_ON_HEAD, GOING_ON_END, spoken } = await import("$lib/instructions");
     const briefing = `${GOING_ON_HEAD}\n\nNo notes.\n${GOING_ON_END}`;
