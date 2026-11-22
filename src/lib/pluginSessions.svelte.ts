@@ -16,7 +16,6 @@ import {
   idle,
   nameCut,
   oneLine,
-  pickAs,
   runsShell,
   slashLed,
   suggestForPlugin,
@@ -133,16 +132,13 @@ function roleToStart(asked: PluginStartEvent): Agent | null {
 async function startFor(asked: PluginStartEvent): Promise<string | null> {
   if (startRefusal(asked) !== null) return null;
   const agent = defaultAgent(asked.project);
-  const begins = pickAs(
-    { agent, model: modelToStart(agent, accountToStart(asked.project)) ?? OWN_DEFAULT },
-    roleToStart(asked),
-  );
+  const began = { agent, model: modelToStart(agent, accountToStart(asked.project)) ?? OWN_DEFAULT };
   // The card goes up at once, so a plugin turned off meanwhile takes it
   // down; the project's installed agents join its list once read, and the
   // agent it begins on is told again from them.
-  const answer = askForPlugin(asked, begins);
+  const answer = askForPlugin(asked, began, roleToStart(asked));
   void loadInstalled(asked.project).then(() => suggestForPlugin(asked.request, roleToStart(asked)));
-  const { choice, pick } = await answer;
+  const { choice, pick, chose } = await answer;
   if (choice === "no") return null;
   // The project may have closed while the card waited.
   if (!startable(asked.project)) return null;
@@ -192,9 +188,8 @@ async function startFor(asked: PluginStartEvent): Promise<string | null> {
   const candidate = asked.name === null ? null : nameCut(oneLine(asked.name));
   if (candidate !== null && candidate !== "" && !readsAsYou(candidate) && !nameTaken(candidate, session.key))
     session.title = candidate;
-  // An agent's own model is the agent's, not the user's last chosen.
-  const agentsOwn = role?.model?.harness === pick.agent && role.model.model === pick.model;
-  if (!agentsOwn) choose(pick.agent, "model", pick.model);
+  // Only a model the user picked on the card is their last chosen.
+  if (chose) choose(pick.agent, "model", pick.model);
   return session.key;
 }
 

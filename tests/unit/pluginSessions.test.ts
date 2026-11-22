@@ -452,6 +452,32 @@ describe("the agent a plugin's start works as", () => {
     expect(agentOfRow(bare.key, null)).toBeNull();
   });
 
+  it("puts the model back when the agent changes, and keeps as the last chosen only a model the user picked", async () => {
+    const { starting, ask } = await asked(start({ agent: "Reviewer" }));
+    expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "opus", role: "chord:Reviewer" });
+    roleForPlugin(ask, null);
+    expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "default", role: null });
+    roleForPlugin(ask, "chord:Developer");
+    expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "sonnet", role: "chord:Developer" });
+    roleForPlugin(ask, null);
+    once();
+    const row = byKey((await starting)!)!;
+    expect(row.model).toBeNull();
+    expect(modelToStart("claude-code", null)).toBeNull();
+  });
+
+  it("keeps the model the user picked when the agent changes after it", async () => {
+    const { starting, ask } = await asked(start({ agent: "Reviewer" }));
+    pickForPlugin(ask, { agent: "claude-code", model: "haiku" });
+    roleForPlugin(ask, "chord:Developer");
+    expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "haiku", role: "chord:Developer" });
+    roleForPlugin(ask, null);
+    expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "haiku", role: null });
+    once();
+    expect(byKey((await starting)!)!.model).toBe("haiku");
+    expect(modelToStart("claude-code", null)).toBe("haiku");
+  });
+
   it("for a review, begins as the one last picked for reviews, none included, and keeps the pick on yes", async () => {
     // Nothing picked for reviews yet: the plugin's suggestion.
     let { starting, ask } = await asked(start({ purpose: "review", agent: "Reviewer" }));
