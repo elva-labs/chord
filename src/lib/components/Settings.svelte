@@ -639,8 +639,8 @@
               <UnreadEntries field="hooks" />
               <div class="row" data-testid="hooks-everywhere-row">
                 <span class="name"
-                  ><span id="hooks-label">Let agents talk to Chord</span
-                  ><small id="hooks-hint">Shows when an agent works, waits or asks.</small></span
+                  ><span id="hooks-label">Let sessions talk to Chord</span
+                  ><small id="hooks-hint">Shows when a session works, waits or asks.</small></span
                 >
                 <Switch
                   on={hook.everywhere}

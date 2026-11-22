@@ -34,7 +34,7 @@ A stylesheet of your own, `user.css` beside the settings file, laid over the app
 
 ## Live updates
 
-Let agents talk to Chord, in the Sessions tab. Off, the app learns what an agent is doing by watching its files. On, it does through agent [hooks](hooks.md), which keep the session's row more exact and give the agent the app's tools. A fresh install has it on. A project can go the other way from the rest, under By project. See [live updates](reference/settings.md#live-updates).
+Let sessions talk to Chord, in the Sessions tab. Off, the app learns what a session is doing by watching its files. On, it does through the harness's [hooks](hooks.md), which keep the session's row more exact and give the session the app's tools. A fresh install has it on. A project can go the other way from the rest, under By project. See [live updates](reference/settings.md#live-updates).
 
 ## Sessions
 

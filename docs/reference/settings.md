@@ -285,9 +285,9 @@ among them. Class names are the app's own and change without notice.
 
 ## Live updates
 
-Shown in the Sessions tab as Let agents talk to Chord, with the line
-Shows when an agent works, waits or asks. Off is the watcher only, on is
-agent hooks, chosen once for every project; each project you open follows
+Shown in the Sessions tab as Let sessions talk to Chord, with the line
+Shows when a session works, waits or asks. Off is the watcher only, on is
+the harness's hooks, chosen once for every project; each project you open follows
 it, and a project that should go the other way can say so under By project. The `orchestrator` folder is among those projects while the
 sessions pane lists it (see [orchestrator](../orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
 choice existed starts with them off, and is told once, in a word over the
