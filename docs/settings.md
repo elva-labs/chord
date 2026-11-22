@@ -38,13 +38,17 @@ Let agents talk to Chord, in the Sessions tab. Off, the app learns what an agent
 
 ## Sessions
 
-- **Run**, for each agent: In Chord, a conversation the window draws, or In a terminal, the agent's own interface. In a terminal to begin with. [Sessions](sessions.md#sessions-in-chord) says what the difference is.
-- **Start on**, for each agent: the model, effort and mode you last chose for it. Use defaults puts back the agent's own.
+- **Run**, for each harness, Claude Code or Codex: In Chord, a conversation the window draws, or In a terminal, the harness's own interface. In a terminal to begin with. [Sessions](sessions.md#sessions-in-chord) says what the difference is.
+- **Start on**, for each harness: the model, effort and mode you last chose for it. Use defaults puts back the harness's own.
 - **Ask before a session starts another**: Outside its project to begin with, so a session may start one in its own project without asking. Every time puts every start to you.
 - **Keep listed**: how long past sessions stay listed, forever, 30 days, 7 days or 1 day. Older ones are still there to resume behind the project's Earlier line.
 - **Fold inactive projects after**: 1 day, 7 days, 30 days or never, 7 days to begin with.
 
 See [sessions](reference/settings.md#sessions).
+
+## Agents
+
+An agent is a role: a title, a description whose first line is what lists show, and the model, effort and whether it reads only. The Agents tab lists the agents Chord ships, which cannot be changed, then your own, which you make, change and remove there, and under them the agents you installed for Claude Code or Codex, read from where those keep them and never written. See [agents](reference/settings.md#agents).
 
 ## Workflows
 
@@ -52,7 +56,7 @@ A workflow names the model a session starts on, and the models it may hand work 
 
 ## Accounts
 
-An account is a separate login: a Claude Code configuration directory and a Codex home, such as `~/.claude-work` and `~/.codex-work`. Naming an account logs nothing in. Run the agent once in a terminal with `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set to the directory, and it asks for a login and keeps it there. Each project then runs under the account chosen for it. See [accounts](reference/settings.md#accounts).
+An account is a separate login: a Claude Code configuration directory and a Codex home, such as `~/.claude-work` and `~/.codex-work`. Naming an account logs nothing in. Run the harness once in a terminal with `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set to the directory, and it asks for a login and keeps it there. Each project then runs under the account chosen for it. See [accounts](reference/settings.md#accounts).
 
 ## Plugins
 

@@ -47,18 +47,19 @@ hands to the window as an event, and the one call that runs the other way,
 what the user is looking at, reads a record the window keeps beside the
 log. [Hooks](hooks.md) has the tools.
 
-## Agents
+## Harnesses
 
-An agent is a binary on the login shell's PATH, started in a pty with the
-environment that shell would give it. The differences between agents, how
-each is started and resumed, where its past sessions are, what it calls a
-session, sit behind one seam. [Agents](adapters.md) lists them. An agent
-with a structured protocol can instead run as a process the core speaks to
-in messages; see [sessions in Chord](integrated.md).
+A harness, Claude Code or Codex, is a binary on the login shell's PATH,
+started in a pty with the environment that shell would give it. The
+differences between harnesses, how each is started and resumed, where its
+past sessions are, what it calls a session, sit behind one seam.
+[Harnesses](adapters.md) lists them. A harness with a structured protocol
+can instead run as a process the core speaks to in messages; see
+[sessions in Chord](integrated.md).
 
 ## What is persisted
 
-The core keeps nothing across restarts but what the agents themselves write,
+The core keeps nothing across restarts but what the harnesses themselves write,
 what the tools need, what plugins are for and the user's settings: the
 request log, the record of what is on screen, the plugin sources with their
 clones and which of their plugins are on, and one settings file for the
@@ -69,5 +70,5 @@ knew sessions by, what each session presented, and which words to the user
 were taken, all in the webview's local storage, keyed by the real project path, and a copy
 of the settings to paint its first frame with.
 [Settings](settings.md) says how the file and that copy relate.
-Hooks the user turns on are written into the project's own agent
+Hooks the user turns on are written into the project's own harness
 configuration, and only there.

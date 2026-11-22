@@ -4,9 +4,9 @@ Settings open from the native menu, or with <kbd>Cmd</kbd><kbd>,</kbd>
 (<kbd>Ctrl</kbd> on Windows and Linux), over the workbench. A choice applies
 at once.
 
-The settings are in seven tabs down the left. Appearance carries the
+The settings are in eight tabs down the left. Appearance carries the
 appearance, theme, compact mode, font, colour, background and custom styles sections; sessions,
-workflows, accounts, plugins, keys and notifications each carry
+agents, workflows, accounts, plugins, keys and notifications each carry
 the section of that name, and sessions carries live updates too. Opening the settings again lands on the tab last used, for as long as
 the window is open. The dialog follows the look the panes are drawn in. It
 has one size for every tab, so nothing moves when the tab changes, and the
@@ -299,27 +299,27 @@ tools they bring the agent, is in [hooks](../hooks.md).
 
 ## Sessions
 
-How each agent's sessions run: in a terminal, the agent's own interface,
-or in Chord, the conversation drawn by the window, a terminal to begin
-with. An agent the core says it can drive in messages offers the choice,
-and the tab says an agent that runs only in a terminal does. A session
-that follows a workflow runs the way its orchestrator's agent is set, as
-any other does. A change moves the sessions already open as well, each
+How each harness's sessions run: in a terminal, the harness's own
+interface, or in Chord, the conversation drawn by the window, a terminal to
+begin with. A harness the core says it can drive in messages offers the
+choice, and the tab says a harness that runs only in a terminal does. A
+session that follows a workflow runs the way its orchestrator's harness is
+set, as any other does. A change moves the sessions already open as well, each
 once it is at rest and opened, as [sessions](sessions.md#when-the-setting-is-switched)
 describes, and the tab says so under the choice. A single new session can be
 started the other way from a project's ⋯ menu or the palette. What an
 in-Chord session is like is in
 [sessions](sessions.md#sessions-in-chord), and the mode it starts in,
-which is the one the agent's own settings name as for a terminal session,
+which is the one the harness's own settings name as for a terminal session,
 in [sessions in Chord](../integrated.md#the-mode-a-session-starts-in). It is the
 user's to change, and an agent's settings tools refuse it.
 
-What a new session starts on, for each agent: the model, the effort and
+What a new session starts on, for each harness: the model, the effort and
 the mode the user last chose for it, as
 [sessions in Chord](../integrated.md#what-a-new-session-starts-on) describes, or the
-agent's own defaults where nothing is kept. Each agent's line says what
+harness's own defaults where nothing is kept. Each harness's line says what
 it keeps, and Use defaults beside it lets go of all three. Choosing the
-agent's own default model on a chip lets go of the model alone. The
+harness's own default model on a chip lets go of the model alone. The
 choices are kept by the window as the user makes them, and an agent's
 settings tools refuse them. Whether a Claude Code conversation goes on by
 itself once a usage limit resets is kept the same way, from the chip on a
@@ -328,7 +328,7 @@ conversation's composer, as
 before has none, which reads as off.
 
 Whether you are asked before every session another session starts. Off to
-begin with: a session that starts one in its own project, on its own agent
+begin with: a session that starts one in its own project, on its own harness
 and account, goes ahead without a question, and the session begins in no
 more than the starting session's own mode. A start from a Claude Code
 session in a terminal whose hooks have not said its mode, as with hooks
@@ -345,7 +345,7 @@ describes. Left unchanged for longer than the span chosen, it goes behind
 the project's Earlier line with the rest of its history instead, where it is still
 there to resume and to search; a row left from the last quit, with nothing
 running behind it, goes the same way. Resuming one brings it back to the
-list. Nothing is deleted: the transcripts are the agent's own and stay where
+list. Nothing is deleted: the transcripts are the harness's own and stay where
 they are.
 
 How long a project stays in the sessions pane's list unused: 1 day, 7 days,
@@ -355,6 +355,48 @@ at the foot of the pane until it is used again, as
 session running or waiting for you stays whatever the span. Never keeps
 every project in the list.
 
+## Agents
+
+An agent is a role: a title, and a description whose first line says in a
+few words what it does, which is what a list shows, and whose rest says how
+it works. One line under the description says what it runs on: a model on
+one harness or the session's own, an effort or the session's own, and
+whether it reads only or changes files.
+
+The tab lists the agents Chord ships first, Researcher, Developer,
+Debugger, Tester, Reviewer, Security reviewer, Cloud architect and Docs
+writer, then the user's own in the order they were made, and New agent at
+the foot. A lock marks an agent that reads only. Opening a shipped agent
+shows its description and what it runs on, and says Chord ships it and it
+cannot be changed there.
+
+New agent opens a form: the title, the description, and the line of what
+it runs on, which opens to choose the model, the effort, and Reads only or
+Changes files. A new agent starts on Sonnet on Claude Code, at high effort,
+reading only. The models are those the [workflows](#workflows) offer, by
+harness. Save keeps the agent, Cancel goes back without it, and Remove, on
+an agent already kept, asks once and takes it away. Opening one of the
+user's own opens the same form with what it holds. A title is one line of
+40 characters at most, no other agent's, ignoring case, and none of the
+shipped agents'; a description is needed, of 8000 characters at most; and
+the settings hold 32 agents of the user's own at most. A save that breaks
+a rule says which under the form and keeps nothing. The agents are the
+user's to change, and an agent's settings tools refuse them.
+
+Under them, the agents the user installed for the harnesses in the
+active project are listed under where each was found. From Claude Code
+reads the Markdown files in the `agents` folder of the configuration
+directory of the project's [account](#accounts), and From this project
+those in the project's `.claude/agents`: a file's frontmatter gives the
+name, the description and the model, and its body how it works; one whose
+`tools` leave out every tool that changes files reads only. From Codex
+reads the roles in the `[agents.<name>]` tables of the `config.toml` in
+the home of the project's account, each with a file of its own giving its
+model, its reasoning effort and its instructions; one with a read-only
+sandbox reads only. Opening one shows what was read and the file it came
+from. Chord never writes them: they are changed where they are kept, and a
+group with nothing in it is not shown.
+
 ## Workflows
 
 A workflow says which model a session starts on and which models it may hand
@@ -362,8 +404,8 @@ work and review to. It holds a name, the orchestrator's model, and steps in
 order. The roles are fixed: the orchestrator is the session the user talks
 to, a worker does a piece of work, and a reviewer checks it.
 
-A model is an agent and a model name, since a model's name belongs to one
-agent. Claude Code offers the aliases its command line takes, fable, opus,
+A model is a harness and a model name, since a model's name belongs to one
+harness. Claude Code offers the aliases its command line takes, fable, opus,
 sonnet and haiku. Codex offers Codex first, which means whatever Codex runs
 by default, then the models Codex lists, by the names its list gives them.
 The list is the one a Codex session gave when it was ready, else one read
@@ -372,11 +414,11 @@ Chord's own is started on the project's machine under the account's home
 and asked for its models, once for each account on each machine while the
 window is open, and again when the tab is next opened where it could not
 say or listed none. A model a workflow names that no list offers is shown
-by its id. Only the agents found on the machine are offered, with any a
+by its id. Only the harnesses found on the machine are offered, with any a
 workflow already names so that its choice can still be shown.
 
 A step has a name, a kind and the models it may use. The models are any, or
-a chosen set across the agents, and the first one chosen is the default, the one
+a chosen set across the harnesses, and the first one chosen is the default, the one
 used unless the orchestrator has a reason to pick another. A step that does
 work says how many sessions may run at once, from one to eight. A step that
 reviews says when the work passes: the reviewer approves, the orchestrator
@@ -425,8 +467,8 @@ and a project that chose it follows the default again.
 
 A workflow also says whether its orchestrator hands out work only as
 sessions the user can see, which it does unless the workflow says
-otherwise. Its agent's own ways of handing work to agents the user cannot
-see are then taken away, as [agents](../adapters.md#under-a-workflow) lists,
+otherwise. Its harness's own ways of handing work to agents the user cannot
+see are then taken away, as [harnesses](../adapters.md#under-a-workflow) lists,
 so every piece it hands out is a session of its own on the sessions pane,
 started with the `start` tool; with the setting off it keeps its own
 subagents, and their work does not show as sessions. The settings file
@@ -436,17 +478,17 @@ A project's workflow is its own choice, else the one for new sessions, else
 none. A plain new session, where there is nothing to pick, follows it. In a
 project that follows a workflow, by its own choice or by the default, the
 palette's new session offers every workflow, the project's first, marked as
-the project's workflow or as the default, beside the agents to run alone.
+the project's workflow or as the default, beside the harnesses to run alone.
 Its line of defaults starts the project's workflow, and Change picks
 another. In a project that follows none the palette offers no workflows,
-whatever other projects chose, and with one agent installed and no
-account to pick its line has nothing to change. An agent picked anywhere
+whatever other projects chose, and with one harness installed and no
+account to pick its line has nothing to change. A harness picked anywhere
 starts alone. A
-session under a workflow starts on the workflow's orchestrator, its agent
+session under a workflow starts on the workflow's orchestrator, its harness
 and its model, told the workflow's instructions, and keeps the workflow as
 it was for as long as it runs, whatever changes in the settings. Resumed,
 it takes the workflow of the same name as the settings have it then; an
-in-Chord one the window takes up again after a reload, its agent still
+in-Chord one the window takes up again after a reload, its harness still
 running, goes on with the copy its run was started on. Where
 that workflow was deleted it follows the copy it kept, which its header
 says; where that copy no longer reads either, the session does not start,
@@ -514,7 +556,7 @@ workflow comes to: a short numbered list. The first tells the orchestrator
 to direct the work rather than do it, and to delegate by starting sessions
 with the workbench's `start` tool, not with its own subagents, or, where it
 keeps them, to use them for help and not for a piece of the work; to name
-the step each start is for, give the agent and the model each step names
+the step each start is for, give the harness and the model each step names
 and no model for Codex's own default, and name, for a review, the session
 whose work it checks. Then each step has a sentence naming the step, what a
 piece has come out of or passed before it, the models it may use with the
@@ -545,30 +587,30 @@ An account is a login kept apart from the others. Claude Code keeps its
 login, its settings and its past sessions in a configuration directory,
 `~/.claude` unless `CLAUDE_CONFIG_DIR` names another; Codex keeps its own
 in a home, `~/.codex` unless `CODEX_HOME` names another, as an absolute
-path in the environment the agent is started with. An account names a
+path in the environment the harness is started with. An account names a
 directory of each, so a work login and a personal one can both be on the
-machine and a session run under either. The agents' own directories are
+machine and a session run under either. The harnesses' own directories are
 the account every setup has, called Default where a name is shown, and a
 setup with no other account named is what it always was. Default is
 theirs alone: no account can be called that, in any case, whether in the
 tab or written into the settings file, so a session that starts another
-can name the agents' own login by it (see
+can name the harnesses' own login by it (see
 [orchestrator](../orchestrator.md#the-tools)).
 
 The tab lists the accounts, Default first, each with where it keeps each
-agent. Add an account… opens a form: a name, and under it the two
+harness. Add an account… opens a form: a name, and under it the two
 directories the name suggests, `~/.claude-work` and `~/.codex-work` for an
 account called Work, shown as they will be. A pencil beside either opens
 it for editing, and a directory opened that way keeps what is typed into
 it while the other goes on following the name. A directory left blank
-means the agent's own, so an account can be for one agent alone. Nothing
+means the harness's own, so an account can be for one harness alone. Nothing
 exists until Add. Remove takes an account away; the projects that named
 it follow the rest again.
 
 Naming an account does not log anything in. The directory is empty until
-the agent has been run with it once: in a terminal, with
-`CLAUDE_CONFIG_DIR` or `CODEX_HOME` set to the directory, the agent asks
-for a login the first time and keeps it there. Whatever of the agent's
+the harness has been run with it once: in a terminal, with
+`CLAUDE_CONFIG_DIR` or `CODEX_HOME` set to the directory, the harness asks
+for a login the first time and keeps it there. Whatever of the harness's
 global configuration the account should share, Claude Code's `CLAUDE.md`
 and skills most of all, is copied or linked in by hand.
 
@@ -578,10 +620,10 @@ can name an account of its own, or Default, whatever the rest. A new
 session runs under its project's account, unless another is picked for it;
 in a project that names none, the account last picked there is the one a
 new session starts under, as [sessions](sessions.md#accounts) describes. Under an
-account it starts with the agent's directory set to the account's, its
+account it starts with the harness's directory set to the account's, its
 past sessions are read from there, and the tools the hooks bring are
 registered there too, as [hooks](../hooks.md) describes; an account with no
-directory for the agent runs it on the agent's own. What a project's row
+directory for the harness runs it on the harness's own. What a project's row
 shows, and how one session can go another way, is in
 [sessions](sessions.md#accounts).
 
@@ -704,7 +746,7 @@ on, whichever machine the agent runs on.
 ## Where they are kept
 
 The appearance, the look, compact mode, the palette, the fonts, the shortcuts, the answer
-on hooks, the accounts, the workflows and the projects' choices among them,
+on hooks, the accounts, your own agents, the workflows and the projects' choices among them,
 how long past sessions stay listed, how long a project stays active, what
 new sessions start on, the notifications, your own themes, the backgrounds and the cards' shares are kept for the machine, in `settings.json` under `~/.chord`, and every
 window on the machine follows the same file.
@@ -733,6 +775,9 @@ background. A value that is not used is named in
 the section of its setting. Workflows say so in their own tab, as
 [workflows](#workflows) describes. A setting that is not the shape it should
 be at all is kept whole in the same way.
+Your own agents are read as one list: where one of them breaks a rule,
+none is used, and the file keeps the list as written until a change sets
+the agents again.
 
 A read finds the file in one of three states: there is none, it is whole, or
 it is there and cannot be read, because it is empty, cut short or not

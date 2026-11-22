@@ -44,7 +44,7 @@ through `cmd /c`; a project path is handed to it in the plain form, since
 `cmd` refuses the verbatim `\\?\` form and would start the agent in the
 Windows directory. `cmd` ends a command at its first line break, so a
 workflow's instructions reach Claude Code by file, and a Codex session under
-a workflow is refused there; see [agents](adapters.md#under-a-workflow). The
+a workflow is refused there; see [harnesses](adapters.md#under-a-workflow). The
 hooks run under Git Bash, which Claude Code needs there anyway. Following a session into a worktree is not implemented, so
 the changes pane stays on the project. The driver tier attaches to a running
 app rather than launching one; [testing](testing.md) says why. A browser
