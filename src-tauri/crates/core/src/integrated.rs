@@ -956,6 +956,10 @@ pub struct Launch<'a> {
     /// For a resumed conversation, the entry of the agent's record it goes
     /// on from, leaving out everything after it; from its newest when None.
     pub resume_at: Option<&'a str>,
+    /// The settings of the Codex profile the session runs under, each a
+    /// `key=value` for `-c`, as [`crate::codex_profiles::settings`] gives
+    /// them. Empty for none.
+    pub profile: &'a [String],
 }
 
 /// How one agent is started and spoken to as an integrated session.
@@ -5956,6 +5960,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             resume_at: None,
+            profile: &[],
         };
         let sessions = Arc::new(Sessions::default());
         for (session, said) in [(None, None), (Some("resumed"), Some("resumed".to_string()))] {

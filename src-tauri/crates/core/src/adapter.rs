@@ -106,6 +106,10 @@ pub struct LaunchCtx<'a> {
     /// agent's environment as [`WAKE_VAR`], which decides what the tool
     /// server tells it to do when the user writes while it waits.
     pub wakes: bool,
+    /// The settings of the Codex profile the session runs under, each a
+    /// `key=value` for `-c`, as [`crate::codex_profiles::settings`] gives
+    /// them. Empty for none.
+    pub profile: &'a [String],
 }
 
 /// The tools Claude Code hands work to agents the user cannot see with: its
@@ -495,7 +499,9 @@ fn codex_workflow(ctx: &LaunchCtx, windows: bool, script: bool) -> Result<Vec<St
     let text = |value: &str| serde_json::Value::from(value).to_string();
     let configured = ctx.configured.filter(|_| !(windows && script));
     let named = ctx.server.or(configured);
-    let mut settings = Vec::new();
+    // The profile's settings come first, so the workbench's own, given
+    // after them, win where both name one.
+    let mut settings = ctx.profile.to_vec();
     if let Some(server) = named {
         settings.push(format!(
             "mcp_servers.{CODEX_SERVER_KEY}.command={}",
@@ -885,6 +891,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let Surface::Pty(resumed) = Codex.resume(&ctx, "abc").unwrap();
         let argv: Vec<String> = resumed
@@ -932,6 +939,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let argv = |surface: Surface| {
             let Surface::Pty(command) = surface;
@@ -986,6 +994,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let Surface::Pty(claude) = ClaudeCode.launch(&ctx, "abc").unwrap();
         assert_eq!(claude.get_env(CLAUDE_CONFIG_VAR), Some(own.as_os_str()));
@@ -1030,6 +1039,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let argv = |surface: Surface| {
             let Surface::Pty(command) = surface;
@@ -1105,6 +1115,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let argv = |surface: Surface| {
             let Surface::Pty(command) = surface;
@@ -1182,6 +1193,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let argv = |surface: Surface| {
             let Surface::Pty(command) = surface;
@@ -1422,6 +1434,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: true,
+            profile: &[],
         };
         let settings = codex_workflow(&ctx, false, false).unwrap();
         let setting = settings
@@ -1593,6 +1606,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let named_settings = codex_workflow(&named, false, false).unwrap();
         let said = starts(&named_settings);
@@ -1680,6 +1694,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let Surface::Pty(command) = ClaudeCode.launch(&ctx, "abc-123").unwrap();
         assert_eq!(
@@ -1720,9 +1735,54 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let Surface::Pty(command) = ClaudeCode.launch(&unnamed, "abc-123").unwrap();
         assert!(command.get_env(SESSION_VAR).is_none());
+    }
+
+    #[test]
+    fn codex_is_given_its_profile_s_settings_before_the_workbench_s_own() {
+        let vars = HashMap::new();
+        let daemon = Path::new("/tmp/chord-remote");
+        let profile = [
+            "model=gpt-6.1-terra".to_string(),
+            "model_provider=ollama".to_string(),
+        ];
+        let ctx = LaunchCtx {
+            project: Path::new("/tmp"),
+            env: &vars,
+            config_dir: None,
+            session: None,
+            token: Some("token-1"),
+            prompt: None,
+            model: None,
+            mode: None,
+            orchestrator: false,
+            instructions: None,
+            instructions_file: None,
+            start_only: false,
+            server: None,
+            server_file: None,
+            configured: Some(daemon),
+            afresh: false,
+            compact_at: None,
+            wakes: false,
+            profile: &profile,
+        };
+        let given = ["-c", "model=gpt-6.1-terra", "-c", "model_provider=ollama"];
+        let settings = codex_workflow(&ctx, false, false).unwrap();
+        assert_eq!(settings[..4], given);
+        let after = &settings[4..];
+        assert!(after
+            .iter()
+            .any(|s| s.starts_with("mcp_servers.chord.command=")));
+        assert!(after
+            .iter()
+            .any(|s| s.starts_with("developer_instructions=")));
+        // A script on Windows is told no server, and still runs under it.
+        let script = codex_workflow(&ctx, true, true).unwrap();
+        assert_eq!(script, given);
     }
 
     #[test]
@@ -1748,6 +1808,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         // No server anywhere: nothing is said of one, since an entry Codex
         // cannot start would stop the session from starting.
@@ -1794,6 +1855,7 @@ mod tests {
         // instructions after them.
         let woken = LaunchCtx {
             wakes: true,
+            profile: &[],
             ..configured
         };
         assert_eq!(
@@ -1923,6 +1985,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let says = |text: &str| {
             crate::executable::write(&bin, format!("#!/bin/sh\necho '{text}'\n")).unwrap();
@@ -1984,6 +2047,7 @@ mod tests {
                 afresh: false,
                 compact_at: None,
                 wakes: false,
+                profile: &[],
             };
             let Surface::Pty(command) = adapter.launch(&ctx, "abc").unwrap();
             command
@@ -2029,6 +2093,7 @@ mod tests {
                 afresh: false,
                 compact_at: None,
                 wakes,
+                profile: &[],
             };
             let Surface::Pty(command) = adapter.launch(&ctx, "abc").unwrap();
             command
@@ -2068,6 +2133,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
         let error = ClaudeCode.launch(&ctx, "id").unwrap_err();
         assert!(error.contains("claude"), "names the binary: {error}");
@@ -2097,6 +2163,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
 
         let Surface::Pty(command) = ClaudeCode.launch(&ctx, "fresh-id").unwrap();
@@ -2132,6 +2199,7 @@ mod tests {
             afresh: false,
             compact_at,
             wakes: false,
+            profile: &[],
         };
         let argv = |surface: Surface| {
             let Surface::Pty(command) = surface;
@@ -2183,6 +2251,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
 
         let Surface::Pty(command) = ClaudeCode.resume(&ctx, "abc-123").unwrap();
@@ -2224,6 +2293,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
 
         let Surface::Pty(command) = ClaudeCode.launch(&ctx, "id").unwrap();
@@ -2262,6 +2332,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
 
         let Surface::Pty(command) = ClaudeCode.launch(&ctx, "id").unwrap();
@@ -2295,6 +2366,7 @@ mod tests {
             afresh: false,
             compact_at: None,
             wakes: false,
+            profile: &[],
         };
 
         let Surface::Pty(command) = ClaudeCode.launch(&ctx, "id").unwrap();

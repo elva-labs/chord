@@ -113,6 +113,7 @@ async fn pty_spawn(
     model: Option<String>,
     mode: Option<String>,
     config_dir: Option<String>,
+    profile: Option<String>,
     instructions: Option<String>,
     start_only: Option<bool>,
     afresh: Option<bool>,
@@ -144,6 +145,7 @@ async fn pty_spawn(
                 model.as_deref(),
                 mode.as_deref(),
                 config_dir.as_deref(),
+                profile.as_deref(),
                 instructions.as_deref(),
                 start_only.unwrap_or(false),
                 afresh.unwrap_or(false),
@@ -161,7 +163,7 @@ async fn pty_spawn(
             let connection = remotes.connection(&host)?;
             let spawned = connection.call(
                 "pty_spawn",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "prompt": prompt, "model": model, "mode": mode, "configDir": config_dir, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "bringBack": bring_back.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "cols": cols, "rows": rows }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "prompt": prompt, "model": model, "mode": mode, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "bringBack": bring_back.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "cols": cols, "rows": rows }),
             )?;
             let id = spawned["ptyId"].as_str().ok_or("no pty id")?.to_string();
             connection.attach_output(&id, to_channel(on_output));
@@ -188,6 +190,7 @@ async fn integrated_start(
     mode: Option<String>,
     effort: Option<String>,
     config_dir: Option<String>,
+    profile: Option<String>,
     instructions: Option<String>,
     start_only: Option<bool>,
     afresh: Option<bool>,
@@ -212,6 +215,7 @@ async fn integrated_start(
             mode.as_deref(),
             effort.as_deref(),
             config_dir.as_deref(),
+            profile.as_deref(),
             instructions.as_deref(),
             start_only.unwrap_or(false),
             afresh.unwrap_or(false),
@@ -222,7 +226,7 @@ async fn integrated_start(
         Route::Remote { host, rest } => {
             let started = remotes.connection(&host)?.call(
                 "integrated_start",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "starter": starter, "madeWorktree": made_worktree.unwrap_or(false) }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "starter": starter, "madeWorktree": made_worktree.unwrap_or(false) }),
             )?;
             let id = started["id"].as_str().ok_or("no session id")?;
             let id = with_host_id(&host, id);
@@ -547,6 +551,26 @@ async fn codex_models(
             "codex_models",
             json!({ "project": rest, "configDir": config_dir }),
         ),
+    })
+    .await
+}
+
+/// The Codex profiles of the account whose configuration directory is
+/// given, read on the machine the project is on.
+#[tauri::command]
+async fn codex_profiles(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    config_dir: Option<String>,
+) -> Result<Value, String> {
+    let core = Arc::clone(&core);
+    let remotes = Arc::clone(&remotes);
+    blocking(move || match route(&project) {
+        Route::Local(_) => value(core.codex_profiles(config_dir.as_deref())),
+        Route::Remote { host, .. } => remotes
+            .connection(&host)?
+            .call("codex_profiles", json!({ "configDir": config_dir })),
     })
     .await
 }
@@ -2441,6 +2465,7 @@ pub fn run() {
             integrated_snapshot,
             integrated_history,
             codex_models,
+            codex_profiles,
             account_limits,
             integrated_rewind_points,
             integrated_rewind_preview,

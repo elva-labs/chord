@@ -110,6 +110,9 @@ struct SpawnParams {
     mode: Option<String>,
     #[serde(default)]
     config_dir: Option<String>,
+    /// The Codex profile a Codex session runs under, by name.
+    #[serde(default)]
+    profile: Option<String>,
     #[serde(default)]
     instructions: Option<String>,
     #[serde(default)]
@@ -151,6 +154,9 @@ struct IntegratedStartParams {
     effort: Option<String>,
     #[serde(default)]
     config_dir: Option<String>,
+    /// The Codex profile a Codex session runs under, by name.
+    #[serde(default)]
+    profile: Option<String>,
     #[serde(default)]
     instructions: Option<String>,
     #[serde(default)]
@@ -197,6 +203,13 @@ struct IntegratedHistoryParams {
 #[serde(rename_all = "camelCase")]
 struct CodexModelsParams {
     project: PathBuf,
+    #[serde(default)]
+    config_dir: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexProfilesParams {
     #[serde(default)]
     config_dir: Option<String>,
 }
@@ -599,6 +612,7 @@ pub fn dispatch(
                 p.model.as_deref(),
                 p.mode.as_deref(),
                 p.config_dir.as_deref(),
+                p.profile.as_deref(),
                 p.instructions.as_deref(),
                 p.start_only,
                 p.afresh,
@@ -623,6 +637,7 @@ pub fn dispatch(
                 p.mode.as_deref(),
                 p.effort.as_deref(),
                 p.config_dir.as_deref(),
+                p.profile.as_deref(),
                 p.instructions.as_deref(),
                 p.start_only,
                 p.afresh,
@@ -724,6 +739,10 @@ pub fn dispatch(
         "codex_models" => {
             let p: CodexModelsParams = parse(params)?;
             value(core.codex_models(&p.project, p.config_dir.as_deref())?)
+        }
+        "codex_profiles" => {
+            let p: CodexProfilesParams = parse(params)?;
+            value(core.codex_profiles(p.config_dir.as_deref()))
         }
         "integrated_rewind_points" => {
             let p: IdParams = parse(params)?;
