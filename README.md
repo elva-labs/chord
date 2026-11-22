@@ -43,7 +43,7 @@ brew install --cask chord@beta
 
 Every [release](https://github.com/elva-labs/chord/releases) also carries installers for macOS, Linux and Windows. The macOS builds are signed and notarized.
 
-Chord runs the agents you have installed: `claude` or `codex` on your login shell's PATH. The cask also puts `awb` on the PATH, so `awb .` opens the folder you are in.
+Chord runs the agents you have installed: `claude` or `codex` on your login shell's PATH. The cask also puts `chord` on the PATH, so `chord .` opens the folder you are in.
 
 Chord was called Agent Workbench before 1.0. Its settings move over on the first start, and [release](docs/release.md#the-casks-and-formulas-under-the-apps-earlier-name) says how the casks under the earlier name move.
 

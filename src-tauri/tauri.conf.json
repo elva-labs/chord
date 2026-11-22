@@ -30,7 +30,7 @@
     "targets": "all",
     "resources": ["resources/remote/*/*"],
     "macOS": {
-      "files": { "Resources/bin/awb": "macos/awb" }
+      "files": { "Resources/bin/chord": "macos/chord" }
     },
     "windows": {
       "wix": { "upgradeCode": "60ccaa4a-c22c-520c-888a-92859857c412" },
