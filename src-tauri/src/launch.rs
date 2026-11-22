@@ -2,7 +2,7 @@
 //!
 //! They come three ways: named on the command line the app starts with;
 //! handed over on Linux and Windows by a second launch, which then exits;
-//! and on macOS sent by the system, which is what `open -a` and the `awb`
+//! and on macOS sent by the system, which is what `open -a` and the `chord`
 //! command do, to a running app and a starting one alike. Each lands on one
 //! list and the window is told. The window takes the list when told, and
 //! once when it has loaded, since the first ones arrive before it has.

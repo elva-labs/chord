@@ -3,9 +3,9 @@
 # Opens folders in Chord as projects, the current one when none is
 # named. The app's Homebrew cask links it onto the PATH.
 #
-#   awb [folder ...]
-#   awb help | -h | --help
-#   awb -v | --version
+#   chord [folder ...]
+#   chord help | -h | --help
+#   chord -v | --version
 #
 # The folders go through `open` to the app bundle this sits in, which starts
 # the app when it is not running and hands them to it when it is.
@@ -22,7 +22,7 @@ esac
 
 case "${1:-}" in
   help | -h | --help)
-    echo "usage: awb [folder ...]"
+    echo "usage: chord [folder ...]"
     echo "Opens each folder in Chord, the current one when none is named."
     echo
     echo "  help, -h, --help  show this help"
@@ -31,10 +31,10 @@ case "${1:-}" in
     ;;
   -v | --version)
     if [ ! -f "$app/Contents/Info.plist" ]; then
-      echo "awb: not inside the Chord app bundle" >&2
+      echo "chord: not inside the Chord app bundle" >&2
       exit 1
     fi
-    echo "awb $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+    echo "chord $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
     exit 0
     ;;
 esac
@@ -42,7 +42,7 @@ esac
 [ $# -gt 0 ] || set -- .
 for folder; do
   if [ ! -d "$folder" ]; then
-    echo "awb: not a folder: $folder" >&2
+    echo "chord: not a folder: $folder" >&2
     exit 1
   fi
   set -- "$@" "$(CDPATH='' cd -- "$folder" && pwd)"
