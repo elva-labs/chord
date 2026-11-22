@@ -1401,6 +1401,17 @@ export type PastSessions = "forever" | "month" | "week" | "day";
     Inactive. Never keeps every project in the list. */
 export type InactiveAfter = "day" | "week" | "month" | "never";
 
+/** One of the user's own agents: a title, a description whose first line
+    says what it does, and what it runs on. A model or an effort that is
+    null leaves the session's own. */
+export interface OwnAgent {
+  title: string;
+  description: string;
+  model: { harness: HarnessId; model: string } | null;
+  effort: string | null;
+  readsOnly: boolean;
+}
+
 /** The user's preferences, one set per machine, kept by the core. */
 export interface Settings {
   appearance: "system" | "light" | "dark";
@@ -1430,6 +1441,9 @@ export interface Settings {
     /** The workflows in the file that are not used, carried as written. */
     unread?: UnreadWorkflow[];
   };
+  /** The user's own agents, in the order they are kept. A file from
+      before has none. */
+  agents?: OwnAgent[];
   /** What the file holds and the app does not use, each with the rule it
       breaks: an entry of the keys, the hooks, the accounts or the themes, a
       choice of account that names one, a value of a setting, or a field

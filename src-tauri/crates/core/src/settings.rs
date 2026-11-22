@@ -1,8 +1,8 @@
 //! The user's preferences for the workbench, kept in one file per machine.
 //!
 //! The appearance, the look, the palette, the two fonts, the chords the app
-//! claims, the answer on agent hooks, the workflows and the user's own
-//! themes are the user's, not a window's, so
+//! claims, the answer on agent hooks, the workflows, the user's own agents
+//! and the user's own themes are the user's, not a window's, so
 //! they live here under the app's home and every window on the machine
 //! reads the same ones. A change is written whole and moved into place, and
 //! announced as an event carrying the settings as they now are. The file is
@@ -326,6 +326,10 @@ pub struct Settings {
     /// The workflows sessions can follow, the one new sessions start with,
     /// and which project chooses another.
     pub workflows: Workflows,
+    /// The user's own agents, in the order the user keeps them. A file
+    /// from before has none.
+    #[serde(default)]
+    pub agents: Vec<crate::agents::Agent>,
     /// How long a past session stays listed under its project.
     pub past_sessions: String,
     /// The agents whose sessions run integrated, drawn by the window; the
@@ -392,6 +396,7 @@ impl Default for Settings {
             },
             accounts: Accounts::default(),
             workflows: Workflows::default(),
+            agents: Vec::new(),
             past_sessions: "forever".into(),
             integrated: Vec::new(),
             inactive_after: "week".into(),
@@ -1242,6 +1247,7 @@ fn set_field(settings: &mut Settings, field: &str, value: &Value) -> Result<(), 
             settings.workflows = workflow::read(value)?;
             mend(&before, settings, "workflows");
         }
+        "agents" => settings.agents = crate::agents::read(value)?,
         "pastSessions" => settings.past_sessions = one_of(field, value, PAST_SESSIONS)?,
         "integrated" => settings.integrated = integrated(value)?,
         "inactiveAfter" => settings.inactive_after = one_of(field, value, INACTIVE_AFTER)?,
@@ -3174,6 +3180,42 @@ mod tests {
         assert_eq!(unread.unread_entries[0].field, "lastChosen");
         let written: Value = serde_json::from_str(&render(&unread)).unwrap();
         assert_eq!(written["lastChosen"], "opus");
+    }
+
+    #[test]
+    fn the_users_own_agents_are_kept_whole_and_one_that_does_not_read_is_kept_as_written() {
+        assert!(Settings::default().agents.is_empty());
+        let agent = json!({
+            "title": "Migrations",
+            "description": "Checks migrations for locks.\n\nYou read them.",
+            "model": { "harness": "claude-code", "model": "opus" },
+            "effort": "high",
+            "readsOnly": true,
+        });
+        let next = apply(&Settings::default(), &json!({ "agents": [agent.clone()] })).unwrap();
+        assert_eq!(next.agents.len(), 1);
+        assert_eq!(next.agents[0].title, "Migrations");
+        let written: Value = serde_json::from_str(&render(&next)).unwrap();
+        assert_eq!(written["agents"], json!([agent]));
+        assert_eq!(parse(&render(&next)).unwrap(), next);
+        // A change that will not do is refused whole.
+        assert!(apply(
+            &next,
+            &json!({ "agents": [{ "title": "Developer", "description": "x" }] })
+        )
+        .is_err());
+        assert!(apply(&next, &json!({ "agents": {} })).is_err());
+        // A file from before has none, and a list that does not read is kept
+        // as written until a change sets the agents again.
+        assert!(parse(r#"{ "chime": true }"#).unwrap().agents.is_empty());
+        let unread =
+            parse(r#"{ "agents": [{ "title": "Tester", "description": "Mine." }] }"#).unwrap();
+        assert!(unread.agents.is_empty());
+        assert_eq!(unread.unread_entries[0].field, "agents");
+        let written: Value = serde_json::from_str(&render(&unread)).unwrap();
+        assert_eq!(written["agents"][0]["title"], "Tester");
+        let mended = apply(&unread, &json!({ "agents": [] })).unwrap();
+        assert!(mended.unread_entries.is_empty());
     }
 
     #[test]
