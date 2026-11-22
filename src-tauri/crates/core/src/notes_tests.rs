@@ -385,6 +385,56 @@ fn the_briefing_gives_the_open_items_first_whole_and_leaves_the_closed_out() {
     assert_eq!(notes.open_items("a").unwrap().len(), ITEMS_MOST);
 }
 
+/// Two sessions writing at once through their own connections cannot pass
+/// the bound between them: with five open, each opening seven, one waits
+/// for the other, then is refused.
+#[test]
+fn two_writers_at_once_cannot_pass_the_bound() {
+    let home = Scratch::new("notes-items-two-writers");
+    let first: Vec<String> = (0..ITEMS_MOST - 7).map(|n| format!("Owed {n}")).collect();
+    Notes::open(home.path())
+        .unwrap()
+        .change_items(
+            "a",
+            &first.iter().map(String::as_str).collect::<Vec<_>>(),
+            &[],
+            0,
+        )
+        .unwrap();
+    let start = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let writers: Vec<_> = (0..2)
+        .map(|writer| {
+            let (home, start) = (home.path().to_path_buf(), start.clone());
+            std::thread::spawn(move || {
+                let notes = Notes::open(&home).unwrap();
+                let texts: Vec<String> = (0..7).map(|n| format!("Writer {writer}, {n}")).collect();
+                start.wait();
+                notes.change_items(
+                    "a",
+                    &texts.iter().map(String::as_str).collect::<Vec<_>>(),
+                    &[],
+                    0,
+                )
+            })
+        })
+        .collect();
+    let done: Vec<_> = writers.into_iter().map(|one| one.join().unwrap()).collect();
+    assert_eq!(done.iter().filter(|one| one.is_ok()).count(), 1, "{done:?}");
+    let refused = done.iter().find_map(|one| one.clone().err()).unwrap();
+    assert!(
+        refused.contains("That would make 19 open items"),
+        "{refused}"
+    );
+    assert_eq!(
+        Notes::open(home.path())
+            .unwrap()
+            .open_items("a")
+            .unwrap()
+            .len(),
+        ITEMS_MOST
+    );
+}
+
 #[test]
 fn the_page_has_the_open_items_first_and_the_closed_last() {
     let home = Scratch::new("notes-items-page");

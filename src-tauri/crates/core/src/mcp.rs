@@ -1769,18 +1769,26 @@ fn items_to_open(arguments: &Value) -> Result<Vec<&str>, String> {
     }
 }
 
-/// The items a note call closes: one number or a list of them.
+/// The items a note call closes: one number or a list of them, each named
+/// once however often it was given.
 fn items_to_close(arguments: &Value) -> Result<Vec<i64>, String> {
     let number = |one: &Value| {
         one.as_i64()
             .or_else(|| one.as_str().and_then(|text| text.trim().parse().ok()))
             .ok_or_else(|| "close takes the numbers of open items.".to_string())
     };
-    match arguments.get("close") {
-        None | Some(Value::Null) => Ok(Vec::new()),
-        Some(Value::Array(many)) => many.iter().map(number).collect(),
-        Some(one) => Ok(vec![number(one)?]),
+    let named: Vec<i64> = match arguments.get("close") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Array(many)) => many.iter().map(number).collect::<Result<_, _>>()?,
+        Some(one) => vec![number(one)?],
+    };
+    let mut close = Vec::new();
+    for id in named {
+        if !close.contains(&id) {
+            close.push(id);
+        }
     }
+    Ok(close)
 }
 
 /// Item numbers as an answer says them: "3", "3 and 4", "3, 4 and 5".
@@ -1793,8 +1801,8 @@ fn item_numbers(ids: &[i64]) -> String {
 }
 
 /// Keeps a note, the brief, or both, in the workbench's own store, and
-/// opens and closes items. A change to the items is checked before
-/// anything is kept, so a refused one keeps nothing of the call.
+/// opens and closes items, all in one transaction, so a refused call keeps
+/// nothing of it and another session's write waits for it.
 fn note_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
     let owner = notes_owner(session)?;
     let text = |key: &str| {
@@ -1817,49 +1825,49 @@ fn note_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Va
         );
     }
     let notes = crate::notes::Notes::open(home)?;
-    if itemed {
-        notes.checked_items(owner, &open, &close)?;
-    }
     let now = crate::notes::now();
-    let mut answer = Vec::new();
-    if let Some(brief) = brief {
-        notes.set_brief(owner, brief, now)?;
-        answer.push("Brief kept.".to_string());
-    }
-    if noted {
-        let id = notes.add(
-            owner,
-            &crate::notes::NewNote {
-                title: title.unwrap_or(""),
-                summary: summary.unwrap_or(""),
-                body: body.unwrap_or(""),
-                replaces,
-            },
-            now,
-        )?;
-        answer.push(match replaces {
-            Some(old) => format!("Kept as note #{id}, in place of #{old}."),
-            None => format!("Kept as note #{id}."),
-        });
-    }
-    if itemed {
-        let opened = notes.change_items(owner, &open, &close, now)?;
-        let plural = |ids: &[i64]| if ids.len() > 1 { "items" } else { "item" };
-        if !close.is_empty() {
-            answer.push(format!(
-                "Closed {} {}.",
-                plural(&close),
-                item_numbers(&close)
-            ));
+    let answer = notes.at_once(|notes| {
+        let mut answer = Vec::new();
+        if let Some(brief) = brief {
+            notes.set_brief(owner, brief, now)?;
+            answer.push("Brief kept.".to_string());
         }
-        if !opened.is_empty() {
-            answer.push(format!(
-                "Opened {} {}.",
-                plural(&opened),
-                item_numbers(&opened)
-            ));
+        if noted {
+            let id = notes.add(
+                owner,
+                &crate::notes::NewNote {
+                    title: title.unwrap_or(""),
+                    summary: summary.unwrap_or(""),
+                    body: body.unwrap_or(""),
+                    replaces,
+                },
+                now,
+            )?;
+            answer.push(match replaces {
+                Some(old) => format!("Kept as note #{id}, in place of #{old}."),
+                None => format!("Kept as note #{id}."),
+            });
         }
-    }
+        if itemed {
+            let opened = notes.change_items(owner, &open, &close, now)?;
+            let plural = |ids: &[i64]| if ids.len() > 1 { "items" } else { "item" };
+            if !close.is_empty() {
+                answer.push(format!(
+                    "Closed {} {}.",
+                    plural(&close),
+                    item_numbers(&close)
+                ));
+            }
+            if !opened.is_empty() {
+                answer.push(format!(
+                    "Opened {} {}.",
+                    plural(&opened),
+                    item_numbers(&opened)
+                ));
+            }
+        }
+        Ok(answer)
+    })?;
     Ok(said(answer.join(" ")))
 }
 
@@ -3179,8 +3187,27 @@ mod tests {
             "{listed}"
         );
         assert!(!listed.contains("Docs"), "{listed}");
+        // A number given twice is closed and said once.
+        assert_eq!(
+            call(Some("t-1"), "note", json!({ "open": "Twice" })),
+            said("Opened item 5.")
+        );
+        assert_eq!(
+            call(Some("t-1"), "note", json!({ "close": [5, "5"] })),
+            said("Closed item 5.")
+        );
 
-        // Refused whole: the brief given with a closed item is not kept.
+        // Refused whole: the brief given with a note that cannot be kept,
+        // or with a closed item, is not kept.
+        assert!(
+            call(
+                Some("t-1"),
+                "note",
+                json!({ "brief": "Chord.", "title": "Half" })
+            )
+            .0
+        );
+        assert!(!call(Some("t-1"), "notes", json!({})).1.contains("Chord."));
         let (refused, why) = call(
             Some("t-1"),
             "note",

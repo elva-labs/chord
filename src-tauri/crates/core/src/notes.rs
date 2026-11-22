@@ -506,7 +506,7 @@ impl Notes {
     /// to open as its one line, and each number to close one of the
     /// owner's open items. Refused when it would leave more than
     /// [`ITEMS_MOST`] open.
-    pub fn checked_items(
+    fn checked_items(
         &self,
         owner: &str,
         open: &[&str],
@@ -556,29 +556,44 @@ impl Notes {
         close: &[i64],
         at: i64,
     ) -> Result<Vec<i64>, String> {
+        self.at_once(|notes| {
+            let texts = notes.checked_items(owner, open, close)?;
+            for id in close {
+                notes
+                    .conn
+                    .execute(
+                        "UPDATE items SET closed = ?1 WHERE owner = ?2 AND id = ?3 AND closed IS NULL",
+                        params![at, owner, id],
+                    )
+                    .map_err(failed)?;
+            }
+            let mut opened = Vec::new();
+            for text in &texts {
+                notes
+                    .conn
+                    .execute(
+                        "INSERT INTO items (owner, text, at) VALUES (?1, ?2, ?3)",
+                        params![owner, text, at],
+                    )
+                    .map_err(failed)?;
+                opened.push(notes.conn.last_insert_rowid());
+            }
+            Ok(opened)
+        })
+    }
+
+    /// Makes the writes of `change` in one immediate transaction, so a
+    /// write from another session waits for it, and keeps none of them when
+    /// it fails. Called inside one already, it makes them in that one.
+    pub fn at_once<T>(&self, change: impl FnOnce(&Self) -> Result<T, String>) -> Result<T, String> {
+        if !self.conn.is_autocommit() {
+            return change(self);
+        }
         let transaction = Transaction::new_unchecked(&self.conn, TransactionBehavior::Immediate)
             .map_err(failed)?;
-        let texts = self.checked_items(owner, open, close)?;
-        for id in close {
-            transaction
-                .execute(
-                    "UPDATE items SET closed = ?1 WHERE owner = ?2 AND id = ?3 AND closed IS NULL",
-                    params![at, owner, id],
-                )
-                .map_err(failed)?;
-        }
-        let mut opened = Vec::new();
-        for text in &texts {
-            transaction
-                .execute(
-                    "INSERT INTO items (owner, text, at) VALUES (?1, ?2, ?3)",
-                    params![owner, text, at],
-                )
-                .map_err(failed)?;
-            opened.push(transaction.last_insert_rowid());
-        }
+        let made = change(self)?;
         transaction.commit().map_err(failed)?;
-        Ok(opened)
+        Ok(made)
     }
 
     /// Lets go of everything kept for these owners.
