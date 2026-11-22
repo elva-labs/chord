@@ -24,6 +24,7 @@
     agents,
     initials,
     installedAgents,
+    LONGEST_TITLE,
     loadInstalled,
     newAgent,
     ownAgents,
@@ -257,7 +258,7 @@
       <input
         type="text"
         bind:value={draft.title}
-        maxlength={80}
+        maxlength={LONGEST_TITLE}
         spellcheck="false"
         autocomplete="off"
         data-testid="agent-title"
@@ -365,7 +366,7 @@
       <div class="ro" data-testid="agent-text">{described(reading)}</div>
     </div>
     <p class="runs" data-testid="agent-facts">{@render facts(reading)}</p>
-    <p class="foot note" data-testid="agent-whence">
+    <p class="whence note" data-testid="agent-whence">
       {#if reading.kind === "shipped"}
         Chord ships this agent; it cannot be changed here.
       {:else}
@@ -673,6 +674,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--divider, var(--rule));
+  }
+
+  /* Under a rule as the form's foot is, but running as one line of text. */
+  .whence {
     padding-top: 12px;
     border-top: 1px solid var(--divider, var(--rule));
   }
