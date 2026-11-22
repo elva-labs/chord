@@ -753,6 +753,15 @@ describe("an integrated session behind its row", () => {
     expect(conversationOf(session.key).messages[failed]).toMatchObject({ state: "failed", error: "no such session" });
   });
 
+  it("cuts the four arrow controls from a message and nothing else", async () => {
+    const { session } = await started();
+    send(session.key, "go\u001d on\u001c\n\tnow\f\u0085\u001b[31mok\uf8ff");
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "send").at(-1)).toMatchObject({
+      text: "go on\n\tnow\f\u0085\u001b[31mok\uf8ff",
+    });
+  });
+
   it("sends the first prompt of a session another session started", async () => {
     const { session } = await started({ prompt: "Scan the history" });
     expect(fake.calls.find((call) => call.method === "send")).toMatchObject({ text: "Scan the history" });

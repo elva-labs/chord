@@ -1,4 +1,5 @@
 import { tick } from "svelte";
+import { withoutArrowControls } from "$lib/strayKeys";
 import { dirFor } from "$lib/accounts.svelte";
 import { filesBackNote, spoken } from "$lib/instructions";
 import { unsent, type Sent } from "$lib/mention";
@@ -1238,6 +1239,7 @@ export function send(
   from: string | null = null,
   mentions: readonly Sent[] = [],
 ): string | null {
+  words = withoutArrowControls(words);
   const link = links.get(key);
   const session = byKey(key);
   if (link === undefined || link.handle === null || session === null) return null;
