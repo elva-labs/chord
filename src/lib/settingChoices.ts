@@ -22,6 +22,8 @@ export interface Choice {
   on?: boolean;
   /** It cannot be chosen here: its line says why. */
   off?: boolean;
+  /** A rule is drawn above it, setting it apart from the choices before. */
+  rule?: boolean;
 }
 
 /** Claude Code's entry for its own default model. */

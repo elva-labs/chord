@@ -20,7 +20,7 @@
   } from "$lib/settingChoices";
   import { asksFirst } from "$lib/lastChosen.svelte";
   import type { AgentId, Workflow } from "$lib/core";
-  import { clock, modelName, tokens } from "$lib/thread";
+  import { clock, modelName, offeredModel, tokens } from "$lib/thread";
   import { modelLabel as knownModelLabel } from "$lib/models";
   import {
     allNamed,
@@ -1049,11 +1049,25 @@
     const session = byKey(sessionKey);
     return session === null || profile === null ? null : (profileOf(session.project, session.account, profile)?.model ?? null);
   });
-  let modelMenu = $derived(
-    modelChoices(conversation).map((choice) =>
-      choice.value === profileModel ? { ...choice, about: `As ${profile}.config.toml sets it` } : choice,
-    ),
-  );
+  /** The entry that stands for the model the profile's file sets. */
+  const PROFILE_DEFAULT = "profile-default";
+  /** Under a profile whose file sets a model, the menu leads with that
+      model as the session's default, above a rule and the provider's list. */
+  let modelMenu = $derived.by(() => {
+    const listed = modelChoices(conversation);
+    if (profile === null || profileModel === null) return listed;
+    const current = conversation.settings.model;
+    const standing = current === null || (offeredModel(conversation, current)?.value ?? current) === profileModel;
+    return [
+      {
+        value: PROFILE_DEFAULT,
+        name: "Codex default",
+        about: `${modelName(conversation, profileModel) ?? profileModel}, as ${profile}.config.toml sets it`,
+        on: standing,
+      },
+      ...listed.map((choice, at) => ({ ...choice, on: standing ? false : choice.on, rule: at === 0 })),
+    ];
+  });
 
   /** The effort as the status bar has it too: none for a model that takes
       none. */
@@ -1567,7 +1581,7 @@
           head={profile === null ? null : `Models of the ${profile} profile's provider`}
           choices={modelMenu}
           note={conversation.current !== null ? "A model chosen now is used from the next turn." : null}
-          onpick={(value) => pick("model", value)}
+          onpick={(value) => pick("model", value === PROFILE_DEFAULT && profileModel !== null ? profileModel : value)}
           onclose={closeMenu}
           pointer={byPointer}
           testid="model-menu"
