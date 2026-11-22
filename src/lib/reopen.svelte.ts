@@ -4,6 +4,7 @@ import { isProfileName } from "$lib/codexProfiles.svelte";
 import { pendingMove, recordMove } from "$lib/sessionMoves.svelte";
 import { cameBackOver, carryOver, workOver } from "$lib/conductor.svelte";
 import { handleOf, reattach } from "$lib/integrated.svelte";
+import { pluginStarted, pluginStartOf, type PluginStart } from "$lib/pluginStarts.svelte";
 import {
   activeSession,
   forProject,
@@ -33,7 +34,9 @@ import {
  * line from the user or from its starter starts it in its row. The record
  * says whether its work was over at the quit, so one that was only resting
  * toward being put away goes on resting toward it, and one the quit cut
- * off at work stays until it is woken, closed or stopped.
+ * off at work stays until it is woken, closed or stopped. A row a plugin
+ * started is on record with that start, so its next run tells the core
+ * again whose it is.
  *
  * A row comes back unread if it was unread at the quit, with the line under
  * its name, as the sessions keep it by id; the one the restore puts on
@@ -86,13 +89,33 @@ interface Open {
       toward being put away. A record from before says nothing, which reads
       as not, so the row stays until it is woken, closed or stopped. */
   over?: boolean;
+  /** The plugin's start the user said yes to, when a plugin started it,
+      which every run of the row tells the core again. */
+  plugin?: PluginStart;
 }
+
+const isPluginStart = (start: unknown): start is PluginStart => {
+  if (typeof start !== "object" || start === null) return false;
+  const { source, plugin, project, request } = start as Record<string, unknown>;
+  return (
+    typeof source === "string" &&
+    typeof plugin === "string" &&
+    typeof project === "string" &&
+    typeof request === "string"
+  );
+};
 
 /** The way a row is due to move to and has not yet, as the record keeps
     it. */
 function movesOf(session: Session): { moves?: SessionKind } {
   const to = pendingMove(session);
   return to === null ? {} : { moves: to };
+}
+
+/** The plugin's start a row is on record with, when a plugin started it. */
+function pluginOf(session: Session): { plugin?: PluginStart } {
+  const start = pluginStartOf(session.key);
+  return start === null ? {} : { plugin: { ...start } };
 }
 
 function onRecord(session: Session): boolean {
@@ -106,8 +129,25 @@ function onRecord(session: Session): boolean {
 
 function isOpenEntry(entry: unknown): entry is Open {
   if (typeof entry !== "object" || entry === null) return false;
-  const { project, id, agent, startIn, model, runsOn, account, profile, kind, handle, spoken, token, own, moves, made, over } =
-    entry as Record<string, unknown>;
+  const {
+    project,
+    id,
+    agent,
+    startIn,
+    model,
+    runsOn,
+    account,
+    profile,
+    kind,
+    handle,
+    spoken,
+    token,
+    own,
+    moves,
+    made,
+    over,
+    plugin,
+  } = entry as Record<string, unknown>;
   return (
     typeof project === "string" &&
     typeof id === "string" &&
@@ -124,7 +164,8 @@ function isOpenEntry(entry: unknown): entry is Open {
     (own === undefined || typeof own === "boolean") &&
     (moves === undefined || moves === "terminal" || moves === "integrated") &&
     (made === undefined || typeof made === "boolean") &&
-    (over === undefined || typeof over === "boolean")
+    (over === undefined || typeof over === "boolean") &&
+    (plugin === undefined || (isPluginStart(plugin) && plugin.project === project))
   );
 }
 
@@ -222,6 +263,7 @@ export function reopen(
     row.profile = entry.profile ?? null;
     if (entry.over === true) cameBackOver(row.key);
     if (entry.moves !== undefined) recordMove(row.key, entry.moves);
+    if (entry.plugin !== undefined) pluginStarted(row.key, entry.plugin);
     // A window reloaded while the core still runs the session takes it up
     // where it is; after a restart there is nothing to take up, and the
     // row waits to be resumed like any other.
@@ -301,6 +343,7 @@ export function reopen(
             ...(session.madeTree ? { made: true } : {}),
             ...(workOver(session) ? { over: true } : {}),
             ...movesOf(session),
+            ...pluginOf(session),
             ...(session.kind === "integrated"
               ? { handle: handleOf(session.key), spoken: session.engaged, token: session.token }
               : {}),

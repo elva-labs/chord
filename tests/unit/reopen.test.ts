@@ -3,6 +3,7 @@ import type { SpawnOptions } from "$lib/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { conductor, PUT_AWAY_AFTER, resetConductor, startedFor, unheard, watchStops } from "$lib/conductor.svelte";
 import { childrenOf } from "$lib/orchestrator.svelte";
+import { pluginStarted, pluginStartOf, resetPluginStarts } from "$lib/pluginStarts.svelte";
 import { reopen, settleWhen, startup } from "$lib/reopen.svelte";
 import {
   activeSession,
@@ -77,6 +78,7 @@ beforeEach(() => {
   resetSessions();
   resetWorkspace();
   resetConductor();
+  resetPluginStarts();
   workspace.open.push(repo(A), repo(B));
   workspace.active = A;
 });
@@ -183,6 +185,20 @@ describe("keeping the record", () => {
     expect((record().open[0] as { made?: boolean }).made).toBe(true);
   });
 
+  it("keeps the plugin's start a session was made by", () => {
+    stop = reopen();
+    const session = create(A, null, "claude-code", null, "Fix issue 12");
+    pluginStarted(session.key, { source: "local", plugin: "github", project: A, request: "req-1" });
+    started(session.key, "pty-1", "one");
+    flushSync();
+    expect((record().open[0] as { plugin?: object }).plugin).toEqual({
+      source: "local",
+      plugin: "github",
+      project: A,
+      request: "req-1",
+    });
+  });
+
   it("keeps the model a session said it ran on, beside the one chosen for it", () => {
     stop = reopen();
     const session = create(A, "one", "codex");
@@ -278,6 +294,29 @@ describe("coming back", () => {
     wake(under.key);
     await launch(under.key, 80, 24, () => {});
     expect(spawned.at(-1)).toMatchObject({ session: "one", profile: "fast" });
+  });
+
+  it("brings back the plugin's start a session was made by, and its next run tells the core again", async () => {
+    const plugin = { source: "local", plugin: "github", project: A, request: "req-1" };
+    onRecord([{ ...entry(A, "one"), plugin }], null);
+    stop = reopen();
+    const [row] = forProject(A);
+    expect(pluginStartOf(row.key)).toEqual(plugin);
+    wake(row.key);
+    await launch(row.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ session: "one", pluginStart: "req-1" });
+  });
+
+  it("drops an entry whose plugin's start names another project", () => {
+    onRecord(
+      [
+        { ...entry(A, "one"), plugin: { source: "local", plugin: "github", project: B, request: "req-1" } },
+        entry(A, "two"),
+      ],
+      null,
+    );
+    stop = reopen();
+    expect(forProject(A).map((session) => session.id)).toEqual(["two"]);
   });
 
   it("brings back that a session runs in a worktree made for it, which a record from before does not say", () => {

@@ -10,8 +10,8 @@
    * What the agent said and did, in order: its text as written, its plan
    * and the questions it asked in sight, and each stretch of work between
    * them folded into one line. A subagent's own run is drawn the same way
-   * under the step that started it. The last thinking before the
-   * workbench's own calls is in sight, marked as its thinking.
+   * under the step that started it. Thinking the workbench's own calls
+   * follow is in sight, marked as its thinking.
    */
   interface Props {
     parts: Part[];

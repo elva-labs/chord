@@ -188,6 +188,30 @@ test.describe("an integrated session", () => {
       await expect(thought).toContainText("Five tests are wrong. Fix them as one commit?");
       await expect(run.getByTestId("agent-text")).toHaveText("Shall I make those five changes as one commit?");
     });
+
+    test(`draws thinking before a wait in sight when more work comes after it, in the ${look} look`, async ({ page }) => {
+      await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], look } });
+      await page.goto("/");
+      await page.getByTestId("start-agent").click();
+      await startNew(page);
+      await agent(
+        page,
+        `f.send("${H}", crypto.randomUUID(), "Start the reviews.");
+         f.startTurn("${H}");
+         f.think("${H}", "Both reviews are started; waiting on them.");
+         const w = f.startTool("${H}", "mcp__chord__wait", {}, { kind: "mcp" });
+         f.finishTool("${H}", w, "Both stopped.");
+         f.tool("${H}", "Bash", { command: "git log" }, "ok", { kind: "command" });
+         f.emit("${H}", { type: "text", block: "a", parent: null, text: "Both reviews are in.", done: true });`,
+      );
+      const run = page.getByTestId("agent-run");
+      const thought = run.getByTestId("agent-thought");
+      await expect(thought).toContainText("Summary of the agent's thinking");
+      await expect(thought).toContainText("Both reviews are started; waiting on them.");
+      await expect(run.getByTestId("work-line")).toHaveCount(1);
+      await expect(run.getByTestId("work-line")).toContainText(/ran 1 command$/);
+      await expect(run.getByTestId("agent-text")).toHaveText("Both reviews are in.");
+    });
   }
 
   test("grows streaming text in place and says what the agent does meanwhile", async ({ page }) => {

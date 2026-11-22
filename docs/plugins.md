@@ -134,8 +134,8 @@ the tree moved; a shell command a session ran, for a plugin that asked to
 hear it; an action taken, with its row, any input given and the session
 whose section it is on; a tool called, with its arguments and the session that
 called it, by the agent's own id as the session events give it, or none
-where that is not known yet; a message from the plugin's view; a request
-to stop.
+where that is not known yet; a message from the plugin's view; what came
+of a line it sent a session; a request to stop.
 
 From the plugin to the app: a greeting with its name and version and the
 full shape of what the manifest declared, the tools with their
@@ -143,8 +143,9 @@ descriptions and input schemas, the sections with their actions, the view
 with its width; a section's rows for a project, with its title, its line
 of detail and whether it starts folded, sent whenever they change, for the
 project or for one session in it; a mark on a session's row; a web
-address to open in the user's browser; the result of a tool call or an
-action; a place to open in the viewer, a
+address to open in the user's browser, a session to start or a line for a
+session it started, each in answer to the user; the result of a tool call
+or an action; a place to open in the viewer, a
 file's diff, files to present, or a line for a session's row, the same
 means the agent has; the view's page and the data the view shows. The app
 never polls a plugin, and a plugin that has nothing to say stays silent.
@@ -289,6 +290,11 @@ that started it.
 
 `startedBy` names the session that started this one, when another session
 did and is still known to the window. A session the user started has none.
+
+`ref` is on the lines of a session the plugin itself asked to start, as
+the plugin gave it with the start, and only on the lines that go to that
+plugin. Every other plugin is told the same line without it. A session
+that goes on from its notes under a new id keeps it.
 
 A session that ends is told with the same fields and `"event": "ended"`.
 
@@ -526,32 +532,129 @@ the plugin names. A new mark from the same plugin for the same session
 replaces the last one. A mark with no icon
 takes it away, and so does the plugin stopping or the session ending.
 
-## Web addresses
+## Answering the user
 
-An action can open a web address in the user's browser:
+What the user does in a plugin goes to it with an id: an action, as its
+`id`, and a message from the plugin's page that came of a click or a key
+in the page, as its `id` too. Only the first message of a click or a key
+carries one, so however many the page sends, one click is one id. A
+message the page sent on its own carries no id. The app sees no clicks
+inside a page, only that one came shortly before a message, so a message
+within 5 seconds of the last that carried an id carries none, whatever was
+clicked between, until the page sends one on its own or the user leaves
+the page and comes back. A quick second click, on the same button or
+another, then reaches the plugin without an id: the page can ask the user
+to click again in a moment rather than do nothing. For 30 seconds after it
+was sent, the plugin may answer that id once in each of three ways: open
+one web address, ask to start one session, and send one line to a
+session it started. A line that names no such id, one sent to another
+plugin, one over 30 seconds old, or one of a kind that id has already
+had, is dropped, and the plugin hears nothing of it. An id's right goes
+when the plugin stops, as well.
+
+### Web addresses
 
 ```json
 {
   "type": "open_url",
   "project": "/srv/orbit-api",
-  "action": "9d1e…",
+  "answers": "9d1e…",
   "url": "https://github.com/acme/orbit-api/pull/42"
 }
 ```
 
-`action` is the `id` of the action it answers, as the action message gave
-it. The address opens only when all of these hold, and is dropped
-otherwise:
+The address opens in the user's browser when it is `http` or `https`, at
+most 2048 characters, with no whitespace. A line that names an action by
+`action` in place of `answers` opens only while that action still waits
+for its result.
 
-- it is `http` or `https`, at most 2048 characters, with no whitespace;
-- the action went to this plugin and still waits for its result;
-- the action went to it less than 30 seconds ago;
-- no address has been opened for that action yet.
+### Starting a session
 
-So the browser opens once because the user asked something of the plugin,
-and at no other time. An action's right to open an address goes when the
-plugin answers it, when the plugin stops, and 30 seconds after it was
-sent.
+```json
+{
+  "type": "start",
+  "answers": "9d1e…",
+  "project": "/srv/orbit-api",
+  "prompt": "Address the review on pull request 42.",
+  "name": "Review of #42",
+  "ref": "pr-42",
+  "worktree": true
+}
+```
+
+Nothing starts on this line alone. The app asks the user, every time, on
+the same card a session's request to start one is put to them: it names
+the plugin, shows the prompt whole, and offers this one session or none,
+never an answer that stands for the next. A plugin has one card up or
+waiting at a time: a start it asks for meanwhile is a no, and its cards
+are taken down as no when it is turned off, removed or fails. The user picks the
+agent and the model it runs on there, the ones last chosen to begin with.
+On a yes the session starts in the project, in a worktree of its own when
+`worktree` is true, with the prompt as its first message. It appears
+under its project, and the window stays on what the user was looking at.
+A conversation shows that message as the plugin's. On a no nothing
+starts, and the plugin is told nothing.
+
+- `project` is a project open in the app, and not the orchestrator's folder.
+- `prompt` is at most 8 KiB. One that begins with `/`, whatever the
+  command, or with `!`, once the characters that draw nothing are passed
+  over, is a command, not words, and the app asks nothing for it.
+- `name` is the session's name until its agent gives it one, on one line
+  and cut to 60 characters. A name another session has, or one that reads
+  as the user's, is passed over.
+- `ref` is a string of at most 256 bytes, which the app hands back on the
+  session's lines to this plugin alone and shows to no one. A `ref` that is
+  not a string, or a `worktree` that is not true or false, asks nothing.
+
+The plugin learns its session started from the session lines: the one
+that carries its `ref`. The session is the plugin's from then on, under
+every id it runs by: across a quit of the app, the plugin turned off and
+on, and its process started again after it died. It stops being the
+plugin's when the plugin is removed or added again. A plugin holds 300
+sessions at most this way, and a start that begins one past that lets go
+of the one that ran longest ago.
+
+### Sending a line
+
+```json
+{
+  "type": "send",
+  "answers": "9d1e…",
+  "session": "6f2a…",
+  "text": "The reviewer asked for a test as well."
+}
+```
+
+`session` names a session the plugin started, by any id the session lines
+gave it. A session the user started, or another session or plugin did, is
+sent nothing, and the plugin hears `gone`. `text` is at most 4 KiB.
+
+The app puts the text to the session as the plugin's, shown as its words,
+and brings the session on screen. A session put away to rest is resumed
+with it. An integrated session is sent the text whole. A terminal is typed
+it as one line, and only while it is idle: at rest after a turn, asking
+nothing, and with nothing of the user's half written on its line. If that
+ends while the line is being typed, the line stops short of its Enter. The
+plugin hears what came of it:
+
+```json
+{
+  "type": "sent",
+  "answers": "9d1e…",
+  "session": "6f2a…",
+  "outcome": "delivered"
+}
+```
+
+- `delivered`: the session has the line, or was resumed with it.
+- `gone`: the session will not come back, or is not the plugin's. It
+  ended, its row was closed, the worktree it ran in is gone, or the plugin
+  did not start it.
+- `refused`: the line was not put to the session. It begins with `/` or
+  `!`; the terminal is not idle, or stopped being idle before the line's
+  Enter; or the session is starting, being reopened, or could not be
+  written to. The same line may be sent again later, in answer to
+  something else the user does.
 
 ## Tools
 
@@ -600,7 +703,10 @@ but the frame has no origin, no storage and no way at the window or the
 machine. A bridge passes a fixed set of messages between the frame and the
 plugin, through the app: data from the plugin to the page, and from the
 page a request to open a file at lines, to put text in the agent's prompt,
-or a message for the plugin. The page reaches nothing else.
+or a message for the plugin. The page reaches nothing else. The first
+message the page sends of a click or a key in it reaches the plugin with
+an id, so a button on the page can open an address, start a session or
+send one a line, as an action can.
 
 The view declares how much room it wants. Wide is the viewer as a file
 opens it, beside the tree; full is the whole changes pane, the tree folded

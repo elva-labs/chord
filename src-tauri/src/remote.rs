@@ -246,7 +246,9 @@ pub fn homeward(host: &str, event: &str, mut payload: Value) -> Value {
         | chord_core::plugins::PLUGIN_VIEW
         | chord_core::plugins::PLUGIN_VIEW_DATA
         | chord_core::plugins::PLUGIN_MARK
-        | chord_core::plugins::PLUGIN_OPEN_URL => {
+        | chord_core::plugins::PLUGIN_OPEN_URL
+        | chord_core::plugins::PLUGIN_START
+        | chord_core::plugins::PLUGIN_SEND => {
             put_back(&mut payload, "project", |path| with_host(host, path));
         }
         _ => {}
@@ -803,7 +805,7 @@ mod tests {
     }
 
     #[test]
-    fn a_plugin_s_mark_and_web_address_come_home_the_same_way() {
+    fn a_plugin_s_mark_web_address_start_and_send_come_home_the_same_way() {
         let mark = homeward(
             "lab",
             chord_core::plugins::PLUGIN_MARK,
@@ -833,6 +835,25 @@ mod tests {
         );
         assert_eq!(open["project"], "ssh://lab/srv/api");
         assert_eq!(open["url"], "https://example.com/pull/1");
+
+        for event in [
+            chord_core::plugins::PLUGIN_START,
+            chord_core::plugins::PLUGIN_SEND,
+        ] {
+            let asked = homeward(
+                "lab",
+                event,
+                json!({
+                    "source": "src-1",
+                    "plugin": "github",
+                    "project": "/srv/api",
+                    "request": "r-1",
+                    "session": "s-1"
+                }),
+            );
+            assert_eq!(asked["project"], "ssh://lab/srv/api", "{event}");
+            assert_eq!(asked["session"], "s-1", "{event}");
+        }
     }
 
     #[test]

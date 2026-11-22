@@ -1096,6 +1096,26 @@ export async function installFakeCore(
             handler;
           return () => {};
         },
+        onPluginStart: async (handler: (event: unknown) => void) => {
+          (window as unknown as Record<string, unknown>).__pluginStart =
+            handler;
+          return () => {};
+        },
+        onPluginSend: async (handler: (event: unknown) => void) => {
+          (window as unknown as Record<string, unknown>).__pluginSend =
+            handler;
+          return () => {};
+        },
+        // Every outcome of a plugin's send, for a test to read back.
+        pluginSent: async (project: string, request: string, outcome: string) => {
+          const w = window as unknown as { __pluginSent?: unknown[] };
+          (w.__pluginSent ??= []).push({ project, request, outcome });
+        },
+        // How each plugin's start came out, for a test to read back.
+        pluginStartSettled: async (project: string, request: string, started: boolean) => {
+          const w = window as unknown as { __pluginStartSettled?: unknown[] };
+          (w.__pluginStartSettled ??= []).push({ project, request, started });
+        },
         onPluginHears: async (handler: (event: unknown) => void) => {
           (window as unknown as Record<string, unknown>).__pluginHears =
             handler;
@@ -1296,9 +1316,11 @@ export async function installFakeCore(
         notesKept: async (_project: string, token: string, page: boolean) => {
           // A test names the session by its agent's id, as the tools' calls do.
           const id = Object.keys(tokens).find((key) => tokens[key] === token) ?? token;
-          const kept = (window as unknown as { __notes?: Record<string, { standing: number; brief: boolean }> }).__notes?.[id];
-          if (kept === undefined) return { standing: 0, brief: false, page: null };
-          return { ...kept, page: page ? `/home/.workbench/notes/${token}/Notes.md` : null };
+          const kept = (
+            window as unknown as { __notes?: Record<string, { standing: number; brief: boolean; open?: number }> }
+          ).__notes?.[id];
+          if (kept === undefined) return { standing: 0, brief: false, open: 0, page: null };
+          return { open: 0, ...kept, page: page ? `/home/.workbench/notes/${token}/Notes.md` : null };
         },
         notesBriefing: async (_project: string, token: string) =>
           (window as unknown as { __briefings?: Record<string, string> }).__briefings?.[token] ?? null,

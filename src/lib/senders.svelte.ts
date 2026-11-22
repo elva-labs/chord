@@ -1,10 +1,11 @@
 import { lastSegment } from "$lib/paths";
+import { pluginOfMark } from "$lib/pluginStarts.svelte";
 import { sessions, shownName } from "$lib/sessions.svelte";
 
 /**
  * Who sent a message to a session, when it was not the user: a session
  * that started it, with its prompt, or one that spoke to it with the send
- * tool.
+ * tool, or a plugin that started it.
  */
 
 const KEY = "chord.senders";
@@ -76,6 +77,8 @@ export interface Sender {
   /** The workbench itself sent it, with what the sessions this one
       started did, and no session did. */
   workbench?: boolean;
+  /** A plugin sent it, which the thread shows as it was sent. */
+  plugin?: boolean;
 }
 
 /** What a message the workbench sent of its own is kept under as its
@@ -106,6 +109,8 @@ export function senderOf(message: { id: string }): Sender | null {
   const from = senders.byMessage[message.id] ?? null;
   if (from === null) return null;
   if (from === WORKBENCH) return { id: null, key: null, name: "Workbench", workbench: true };
+  const plugin = pluginOfMark(from);
+  if (plugin !== null) return { id: null, key: null, name: `the ${plugin} plugin`, plugin: true };
   const row =
     sessions.all.find((candidate) => candidate.token === from) ??
     sessions.all.find((candidate) => candidate.id === from) ??

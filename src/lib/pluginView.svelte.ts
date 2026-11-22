@@ -118,9 +118,10 @@ export function open(key: string, project: string) {
   showPluginView(page);
 }
 
-/** Carries a message from a page to its plugin. A plugin that is not there
-    for it drops it, as an action the plugin refused is dropped. */
-export async function send(key: string, project: string, payload: unknown) {
+/** Carries a message from a page to its plugin, `acted` when the user's
+    click or key in the page sent it. A plugin that is not there for it
+    drops it, as an action the plugin refused is dropped. */
+export async function send(key: string, project: string, payload: unknown, acted = false) {
   const page = pageAt(key, project);
   if (page === null) return;
   try {
@@ -129,10 +130,43 @@ export async function send(key: string, project: string, payload: unknown) {
       plugin: page.plugin,
       project,
       payload,
+      acted,
     });
   } catch {
     // The frame has nowhere to show this, and the page is still the truth.
   }
+}
+
+/** How long a click in a page lends it the user's act, as long as a
+    browser keeps a click's activation. */
+export const ACT_SPAN = 5000;
+
+/** When each page last passed on the user's act, by project and key. */
+const actedAt = new Map<string, number>();
+const actKey = (key: string, project: string) => `${project}\n${key}`;
+
+/**
+ * Whether a message a page sent while the user was clicking or typing in
+ * it carries the user's act. One click lends one: the first message in
+ * its span does, and the rest do not until the span is over or the user
+ * has left the page and come back. A page that sends fifty messages on
+ * one click gets one act for them.
+ */
+export function spendAct(key: string, project: string, activated: boolean, now = performance.now()): boolean {
+  const id = actKey(key, project);
+  if (!activated) {
+    actedAt.delete(id);
+    return false;
+  }
+  const last = actedAt.get(id);
+  if (last !== undefined && now - last < ACT_SPAN) return false;
+  actedAt.set(id, now);
+  return true;
+}
+
+/** The user left a page: their next click in it is a new act. */
+export function leftPage(key: string, project: string) {
+  actedAt.delete(actKey(key, project));
 }
 
 /** Test seam. */
@@ -140,4 +174,5 @@ export function resetPluginViews() {
   pluginViews.pages = [];
   pluginViews.data = null;
   seq = 0;
+  actedAt.clear();
 }
