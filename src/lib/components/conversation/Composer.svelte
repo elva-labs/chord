@@ -64,6 +64,7 @@
     resumesWords,
   } from "$lib/autoResume.svelte";
   import { byKey } from "$lib/sessions.svelte";
+  import { profileOf } from "$lib/codexProfiles.svelte";
   import ChoiceMenu from "../ChoiceMenu.svelte";
   import CompletionMenu, { rowId } from "./CompletionMenu.svelte";
   import Icon from "./Icon.svelte";
@@ -1041,6 +1042,18 @@
   let modelLabel = $derived(name === null ? "Default model" : name);
   /** A model chosen during a turn, which the next turn runs on. */
   let after = $derived(conversation.modelAfterTurn);
+  /** The Codex profile the session runs under, and the model its file
+      sets, which the menu says the session started on. */
+  let profile = $derived(byKey(sessionKey)?.profile ?? null);
+  let profileModel = $derived.by(() => {
+    const session = byKey(sessionKey);
+    return session === null || profile === null ? null : (profileOf(session.project, session.account, profile)?.model ?? null);
+  });
+  let modelMenu = $derived(
+    modelChoices(conversation).map((choice) =>
+      choice.value === profileModel ? { ...choice, about: `As ${profile}.config.toml sets it` } : choice,
+    ),
+  );
 
   /** The effort as the status bar has it too: none for a model that takes
       none. */
@@ -1551,7 +1564,8 @@
       {#if menu === "model" && workflow === null}
         <ChoiceMenu
           label="Model"
-          choices={modelChoices(conversation)}
+          head={profile === null ? null : `Models of the ${profile} profile's provider`}
+          choices={modelMenu}
           note={conversation.current !== null ? "A model chosen now is used from the next turn." : null}
           onpick={(value) => pick("model", value)}
           onclose={closeMenu}

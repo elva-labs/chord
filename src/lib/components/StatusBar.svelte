@@ -24,11 +24,12 @@
   /**
    * The window's foot. At the left the branch the session on screen works
    * on; at its right the account it runs under, once there is more than one,
-   * with that account's allowance, the share used of each limit window the
-   * agent reported, then how many sessions wait for you. A word in passing
-   * keeps its place between the branch and the allowance. The
-   * window's mode is the corner's switch to say, so the bar does not, and
-   * the model, the effort and the mode belong to the composer.
+   * and the Codex profile where it runs under one, with that account's
+   * allowance, the share used of each limit window the agent reported,
+   * then how many sessions wait for you. A word in passing keeps its place
+   * between the branch and the allowance. The window's mode is the corner's
+   * switch to say, so the bar does not, and the model, the effort and the
+   * mode belong to the composer.
    *
    * The allowance opens a popover with every window in full. A press opens
    * it, Escape or a press elsewhere puts it away, and the keyboard goes back
@@ -36,13 +37,13 @@
    * and stays where it went. What is open stays above its control as the
    * window changes size.
    *
-   * Short of room, the bar lets its parts go in order: the word "account:",
-   * then every figure but the one nearest its end, then the branch, then
-   * that figure's reset time. Only after that is the account's name cut
-   * short; what waits for you never is. A word in passing takes no room: it
-   * stands in the space before the allowance, and where that space is too short
-   * it is drawn over the parts before it while it shows, so nothing moves
-   * for it.
+   * Short of room, the bar lets its parts go in order: the words "account:"
+   * and "profile:", then every figure but the one nearest its end, then the
+   * branch, then that figure's reset time. Only after that is the account's
+   * name cut short; what waits for you never is. A word in passing takes no
+   * room: it stands in the space before the allowance, and where that space
+   * is too short it is drawn over the parts before it while it shows, so
+   * nothing moves for it.
    */
 
   /** What gives way, first to last. */
@@ -94,6 +95,7 @@
   });
 
   let account = $derived(session !== null && hasAccounts() ? accountLabel(session.account) : null);
+  let profile = $derived(session?.profile ?? null);
   let report = $derived(session === null ? null : limitsOf(hostOf(session.project), session.agent, session.account));
   let figures = $derived(report === null ? [] : figuresOf(report, now));
   let top = $derived(topFigure(figures));
@@ -111,7 +113,7 @@
         ? `${figure.name} reset`
         : `${figure.name} ${figure.percent}% used${figure.reached ? ", reached" : ""}`,
     );
-    const who = account === null ? "" : `Account ${account}. `;
+    const who = (account === null ? "" : `Account ${account}. `) + (profile === null ? "" : `Profile ${profile}. `);
     const old = age?.stale ? `. Figures from ${age.long}` : "";
     return `${who}Allowance: ${parts.join(", ")}${old}`;
   });
@@ -288,10 +290,13 @@
     </span>
   {/if}
 
-  {#if session !== null && (account !== null || figures.length > 0)}
+  {#if session !== null && (account !== null || profile !== null || figures.length > 0)}
     {#snippet who()}
       {#if account !== null}
         <span class="who" data-testid="account-readout"><span class="pre">{"account: "}</span><span class="name">{account}</span></span>
+      {/if}
+      {#if profile !== null}
+        <span class="who" data-testid="profile-readout"><span class="pre">{"profile: "}</span><span class="name">{profile}</span></span>
       {/if}
     {/snippet}
     {#if figures.length > 0}

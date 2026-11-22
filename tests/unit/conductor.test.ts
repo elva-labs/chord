@@ -1855,6 +1855,20 @@ describe("a start in the caller's own project, held to what the caller may do", 
     expect((await unasked({ project: A, agent: "codex" }, "sid-1", "codex-caller")).modeGiven).toBeNull();
   });
 
+  it("hands a Codex caller's profile on to a Codex session under its account, and to no other", async () => {
+    const caller = create(A, null, "codex", null, null, null, null, null);
+    caller.profile = "fast";
+    started(caller.key, "pty-codex", "codex-caller");
+    const by = { session: "codex-caller" };
+    const codex = (await startAllowed(call("start", { project: A, prompt: "Fix it", agent: "codex" }, by), "pty-1", "sid-1"))!;
+    expect(codex.profile).toBe("fast");
+    const claude = (await startAllowed(call("start", { project: A, prompt: "Fix it", agent: "claude-code" }, by), "pty-2", "sid-2"))!;
+    expect(claude.profile).toBeNull();
+    caller.profile = null;
+    const plain = (await startAllowed(call("start", { project: A, prompt: "Fix it", agent: "codex" }, by), "pty-3", "sid-3"))!;
+    expect(plain.profile).toBeNull();
+  });
+
   it("asks every time while the settings say so, offering this one session or none", async () => {
     live(A, "pty-caller", "caller-1");
     startAsk.every = true;

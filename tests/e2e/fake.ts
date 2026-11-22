@@ -859,6 +859,17 @@ export async function installFakeCore(
           if (w.__codexModels === undefined) throw new Error("codex: command not found");
           return { models: w.__codexModels };
         },
+        codexProfiles: async (project: string, configDir?: string) => {
+          // A test puts the profiles each Codex home holds in
+          // __codexProfiles, by directory, and reads what was asked in
+          // __codexProfilesAsked. With none, the home holds none.
+          const w = window as unknown as {
+            __codexProfiles?: Record<string, unknown[]>;
+            __codexProfilesAsked?: unknown[];
+          };
+          (w.__codexProfilesAsked ??= []).push({ project, configDir: configDir ?? null });
+          return w.__codexProfiles?.[configDir ?? ""] ?? [];
+        },
         integratedRewindPoints: async (id: string) => integrated().rewindPoints(id),
         integratedRewindPreview: async (id: string, message: string) =>
           integrated().rewindPreview(id, message),

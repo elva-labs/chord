@@ -9,7 +9,7 @@ import {
   selectedEntry,
   setView,
 } from "$lib/files.svelte";
-import { openRemote } from "$lib/remote.svelte";
+import { hostOf, openRemote } from "$lib/remote.svelte";
 import {
   focusPane,
   layout,
@@ -26,6 +26,15 @@ import {
   pickAccount,
 } from "$lib/accounts.svelte";
 import { agentLabel, installed, isReady } from "$lib/agent.svelte";
+import {
+  pickedBefore,
+  pickProfile,
+  profilesOf,
+  profileToStart,
+  readProfiles,
+} from "$lib/codexProfiles.svelte";
+import { catalogName } from "$lib/modelCatalog.svelte";
+import { chosenFor, defaultModelOf, modelToStart } from "$lib/lastChosen.svelte";
 import type { AgentId } from "$lib/core";
 import {
   overrideOf,
@@ -78,8 +87,10 @@ import { browser } from "$lib/browser.svelte";
  * named, then how it runs: under one of the workflows, the project's own
  * first, or as one agent with no workflow. The workflows are offered where
  * the project follows one, by its own choice or by the default for new
- * sessions. Each answer becomes a chip, and a step with nothing to choose
- * is not asked. The session starts on the last answer.
+ * sessions. Codex alone then asks which of the account's Codex profiles it
+ * runs under, where the account has any. Each answer becomes a chip, and a
+ * step with nothing to choose is not asked. The session starts on the last
+ * answer.
  */
 
 export type Mode = "goto" | "commands" | "new";
@@ -91,7 +102,8 @@ export type Step =
   | { kind: "project"; path: string }
   | { kind: "account"; account: string | null }
   | { kind: "agent"; agent: AgentId }
-  | { kind: "workflow"; workflow: string };
+  | { kind: "workflow"; workflow: string }
+  | { kind: "profile"; profile: string | null };
 
 export type StepKind = Step["kind"];
 
@@ -478,7 +490,8 @@ export function commandItems(query: string): PaletteItem[] {
 /** The question a new session asks next given the answers so far, or null
     when it has all it needs. How it runs is asked as "agent", and answered
     by an agent or a workflow; it is asked when there is more than one
-    agent, or a workflow on offer in the project, to pick between. */
+    agent, or a workflow on offer in the project, to pick between. The
+    profile is asked of Codex alone, where the account has profiles. */
 export function nextStep(steps: Step[]): StepKind | null {
   const has = (kind: StepKind) => steps.some((step) => step.kind === kind);
   if (!has("project")) return "project";
@@ -486,7 +499,23 @@ export function nextStep(steps: Step[]): StepKind | null {
   const project = projectOfSteps(steps);
   const how = installed().length > 1 || (project !== null && offered(project).length > 0);
   if (how && !has("agent") && !has("workflow")) return "agent";
+  if (project !== null && !has("profile") && !has("workflow") && agentOfSteps(steps, project) === "codex")
+    if (profilesOf(project, accountOfSteps(steps, project)).length > 0) return "profile";
   return null;
+}
+
+/** The agent the answers so far run alone: the one picked, else the one
+    the project used last. */
+function agentOfSteps(steps: Step[], project: string): AgentId {
+  const step = steps.find((candidate) => candidate.kind === "agent");
+  return step === undefined ? defaultAgent(project) : step.agent;
+}
+
+/** The account the answers so far run under: the one picked, else the
+    one a new session in the project starts under. */
+function accountOfSteps(steps: Step[], project: string): string | null {
+  const step = steps.find((candidate) => candidate.kind === "account");
+  return step === undefined ? accountToStart(project) : step.account;
 }
 
 /** The questions still to ask, the next first. */
@@ -500,7 +529,9 @@ export function stepsLeft(steps: Step[]): StepKind[] {
         ? { kind, path: "" }
         : kind === "account"
           ? { kind, account: null }
-          : { kind: "agent", agent: "claude-code" },
+          : kind === "profile"
+            ? { kind, profile: null }
+            : { kind: "agent", agent: "claude-code" },
     );
   }
   return left;
@@ -523,8 +554,13 @@ export function chipOf(step: Step): string {
       return agentLabel(step.agent);
     case "workflow":
       return step.workflow;
+    case "profile":
+      return step.profile ?? NO_PROFILE;
   }
 }
+
+export const PROFILES = "With which Codex profile";
+const NO_PROFILE = "No profile";
 
 export const WORKFLOWS = "Workflows";
 export const ALONE = "One agent, no workflow";
@@ -618,29 +654,70 @@ function accountChoices(project: string): PaletteItem[] {
   }));
 }
 
+/** The Codex profiles a new session can run under: no profile first, then
+    the account's, each with the model and effort its file sets and the
+    provider where it names one. No profile says what the session starts
+    on without one, as far as that is known. The one it starts under
+    unless another is picked says so where it was picked before. */
+function profileChoices(project: string, account: string | null): PaletteItem[] {
+  const host = hostOf(project);
+  const named = (model: string | null) =>
+    model === null ? null : (catalogName("codex", model, account, host) ?? model);
+  const start = profileToStart(project, account);
+  const last = (name: string | null) => (pickedBefore(project) && name === start ? "last used here" : null);
+  const end = (parts: (string | null)[]) => parts.filter((part) => part !== null && part !== "").join(" · ");
+  const none = modelToStart("codex", account) ?? defaultModelOf("codex", account);
+  return [
+    {
+      kind: "choice",
+      id: "profile:",
+      label: NO_PROFILE,
+      group: PROFILES,
+      step: { kind: "profile", profile: null },
+      detail: "config.toml",
+      end: end([named(none), chosenFor("codex").effort ?? null, last(null)]),
+    },
+    ...profilesOf(project, account).map(
+      (profile): PaletteItem => ({
+        kind: "choice",
+        id: `profile:${profile.name}`,
+        label: profile.name,
+        group: PROFILES,
+        step: { kind: "profile", profile: profile.name },
+        detail: `${profile.name}.config.toml`,
+        end: end([named(profile.model), profile.effort, profile.provider, last(profile.name)]),
+      }),
+    ),
+  ];
+}
+
 /** The answers a new session in a project starts on when none is changed:
     the project, then for each question it would ask, the account a new
-    session there starts under and the workflow it follows, else the agent
-    it used last. */
+    session there starts under, the workflow it follows, else the agent it
+    used last, and for Codex the profile it starts under. */
 export function defaultsFor(path: string): Step[] {
   const steps: Step[] = [{ kind: "project", path }];
-  for (const kind of stepsLeft(steps)) {
+  for (let kind = nextStep(steps); kind !== null && kind !== "project"; kind = nextStep(steps)) {
     if (kind === "account") steps.push({ kind, account: accountToStart(path) });
-    else if (kind === "agent") {
+    else if (kind === "profile") steps.push({ kind, profile: profileToStart(path, accountOfSteps(steps, path)) });
+    else {
       const own = workflowOf(path);
-      steps.push(own === null ? { kind, agent: defaultAgent(path) } : { kind: "workflow", workflow: own.name });
+      steps.push(own === null ? { kind: "agent", agent: defaultAgent(path) } : { kind: "workflow", workflow: own.name });
     }
   }
   return steps;
 }
 
 /** The line a new session's defaults read as: how it runs, the agent even
-    where it is not a question, then the account where accounts are named. */
+    where it is not a question, the profile where it runs under one, then
+    the account where accounts are named. */
 function readyLine(path: string, steps: Step[]): string {
   const how = steps.find((step) => step.kind === "agent" || step.kind === "workflow");
   const account = steps.find((step) => step.kind === "account");
+  const profile = steps.find((step) => step.kind === "profile" && step.profile !== null);
   return [
     how === undefined ? agentLabel(defaultAgent(path)) : chipOf(how),
+    ...(profile === undefined ? [] : [chipOf(profile)]),
     ...(account === undefined ? [] : [chipOf(account)]),
   ].join(" · ");
 }
@@ -663,10 +740,11 @@ function readyItems(path: string): PaletteItem[] {
 export const AGENTS = "Which agent";
 
 /** Everything Change would ask about a project's new session, narrowed by
-    what is typed: how it runs, then the account, each under its heading,
-    and in each the names the text begins first. */
+    what is typed: how it runs, then the account, then the Codex profile,
+    each under its heading, and in each the names the text begins first. */
 function readySearch(project: string, query: string): PaletteItem[] {
   const left = stepsLeft([{ kind: "project", path: project }]);
+  const defaults = defaultsFor(project);
   const how = left.includes("agent") ? runSections(project) : [];
   const alone = how.length === 1 && how[0].title === ALONE;
   const groups = [
@@ -674,6 +752,9 @@ function readySearch(project: string, query: string): PaletteItem[] {
       section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: AGENTS } : item)),
     ),
     left.includes("account") ? accountChoices(project) : [],
+    defaults.some((step) => step.kind === "profile")
+      ? profileChoices(project, accountOfSteps(defaults, project))
+      : [],
   ];
   const typed = query.trim().toLowerCase();
   const begins = (item: PaletteItem) => item.label.toLowerCase().startsWith(typed);
@@ -702,7 +783,9 @@ export function stepItems(
         ? accountChoices(project)
         : asking === "agent" && project !== null
           ? runSections(project).flatMap((section) => section.items)
-          : [];
+          : asking === "profile" && project !== null
+            ? profileChoices(project, accountOfSteps(steps, project))
+            : [];
   return all.filter((item) => matches(item.label, query));
 }
 
@@ -744,6 +827,8 @@ export function startingId(): string | null {
     const own = workflowOf(project);
     return own === null ? `agent:${defaultAgent(project)}` : `workflow:${own.name}`;
   }
+  if (asking === "profile")
+    return `profile:${profileToStart(project, accountOfSteps(palette.steps, project)) ?? ""}`;
   return null;
 }
 
@@ -755,14 +840,17 @@ function isOpen(path: string): boolean {
 /** Starts a session on the answers given: under the workflow picked, or
     the agent picked alone. The project's default account stands in for a
     question that was not asked, and a session not asked how to run runs as
-    a plain new one does. An account the user picked is the project's
-    default from then on, where the project names none of its own. A
-    project that has closed meanwhile gets none. */
+    a plain new one does. A Codex session not asked its profile runs under
+    the one it would start under. An account or a profile the user picked
+    is the project's default from then on, the account where the project
+    names none of its own. A project that has closed meanwhile gets none. */
 function startOn(steps: Step[], picked: boolean) {
   const path = projectOfSteps(steps);
   if (path === null || !isOpen(path)) return;
   const account = steps.find((step) => step.kind === "account");
   if (picked && account !== undefined) pickAccount(path, account.account);
+  const profile = steps.find((step) => step.kind === "profile");
+  if (picked && profile !== undefined) pickProfile(path, profile.profile);
   const agent = steps.find((step) => step.kind === "agent");
   const workflow = steps.find((step) => step.kind === "workflow");
   startSession(
@@ -770,12 +858,17 @@ function startOn(steps: Step[], picked: boolean) {
     agent?.agent,
     account === undefined ? undefined : account.account,
     workflow === undefined ? undefined : (workflowNamed(workflow.workflow) ?? undefined),
+    undefined,
+    profile === undefined ? profileToStart(path, accountOfSteps(steps, path)) : profile.profile,
   );
 }
 
 /** Takes an answer, and starts the session when it was the last one asked.
     The project's answer leads to the defaults' line instead. */
 function answer(steps: Step[]): Outcome {
+  const project = projectOfSteps(steps);
+  if (project !== null && isOpen(project) && installed().includes("codex"))
+    void readProfiles(project, accountOfSteps(steps, project));
   const ready = steps.length === 1 && steps[0].kind === "project";
   if (!ready && nextStep(steps) === null)
     return { type: "close", then: () => startOn(steps, true) };
@@ -893,9 +986,14 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       const path = projectOfSteps(palette.steps);
       if (path === null) return { type: "stay" };
       const kin = (step: Step) =>
-        item.step.kind === "account" ? step.kind === "account" : step.kind === "agent" || step.kind === "workflow";
+        item.step.kind === "account" || item.step.kind === "profile"
+          ? step.kind === item.step.kind
+          : step.kind === "agent" || step.kind === "workflow";
       const steps = defaultsFor(path).map((step) => (kin(step) ? item.step : step));
-      return { type: "close", then: () => startOn(steps, item.step.kind === "account") };
+      return {
+        type: "close",
+        then: () => startOn(steps, item.step.kind === "account" || item.step.kind === "profile"),
+      };
     }
     case "ready": {
       const steps = item.steps;

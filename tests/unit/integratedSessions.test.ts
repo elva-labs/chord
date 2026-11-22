@@ -1497,6 +1497,33 @@ describe("the model a session runs on", () => {
   });
 });
 
+describe("a Codex session under a profile", () => {
+  const lastStart = () =>
+    (fake.calls.filter((call) => call.method === "start").at(-1) as {
+      options: { model?: string; mode?: string; effort?: string; profile?: string };
+    }).options;
+
+  beforeEach(() => resetLastChosen());
+  afterEach(() => resetLastChosen());
+
+  it("starts under it in the mode last chosen alone, keeping no model or effort and telling the account nothing", async () => {
+    adoptLastChosen({ codex: { model: "gpt-5-codex", effort: "high", mode: "read-only" } });
+    const session = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    session.profile = "fast";
+    session.model = null;
+    await launch(session.key);
+    expect(lastStart()).toMatchObject({ agent: "codex", profile: "fast", mode: "read-only" });
+    expect(lastStart().model).toBeUndefined();
+    expect(lastStart().effort).toBeUndefined();
+    expect(catalogOf("codex", null, null)).toBeNull();
+    const conversation = conversationOf(session.key);
+    choose(session.key, conversation, "effort", "low");
+    choose(session.key, conversation, "mode", "auto");
+    await vi.waitFor(() => expect(chosenFor("codex").mode).toBe("auto"));
+    expect(chosenFor("codex")).toMatchObject({ model: "gpt-5-codex", effort: "high" });
+  });
+});
+
 describe("a session the core still runs after a reload", () => {
   it("is taken up from its snapshot, with the events heard meanwhile", async () => {
     // The session as the window before the reload left it.

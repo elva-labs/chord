@@ -136,16 +136,19 @@ export function modelInUse(conversation: Conversation): string | null {
 /** Switches the session to a model, an effort or a mode, unless it is on it
     already. Once the agent has taken it, it is what the next new session
     of the agent starts on; Claude Code's default model starts the next one
-    on its default again. */
+    on its default again. A session under a Codex profile keeps only its
+    mode so, as its model and effort are the profile's. */
 export function choose(
   key: string,
   conversation: Conversation,
   setting: "model" | "mode" | "effort",
   value: string,
 ) {
-  const agent = byKey(key)?.agent;
+  const session = byKey(key);
+  const agent = session?.agent;
   const keep = () => {
     if (agent === undefined || linkOf(key)?.configureError != null) return;
+    if (setting !== "mode" && (session?.profile ?? null) !== null) return;
     // Kept only once the agent runs on it. The agent's default model keeps
     // none, which needs no proof.
     if (setting === "model") {

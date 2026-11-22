@@ -247,19 +247,21 @@ export function goTo(key: string): boolean {
     workflow, starts alone; with neither, the session runs the way a plain
     new session does. The account is the one a new session in the project
     starts under unless named. It runs the way the agent's setting says, unless started the other
-    way. Starting one is the user using the project, so it counts as used.
-    Nothing new starts in the orchestrator folder. */
+    way. A Codex session alone runs under the Codex profile named, on the
+    model its file sets. Starting one is the user using the project, so it
+    counts as used. Nothing new starts in the orchestrator folder. */
 export function startSession(
   path: string,
   agent?: AgentId,
   account: string | null = accountToStart(path),
   workflow?: Workflow | null,
   kind?: SessionKind,
+  profile: string | null = null,
 ) {
   if (!startsIn(path)) return;
   if (workspace.active !== path) activate(path);
   touch(path);
-  create(
+  const live = create(
     path,
     null,
     agent,
@@ -270,6 +272,10 @@ export function startSession(
     workflow !== undefined ? workflow : agent === undefined ? undefined : null,
     kind,
   );
+  if (profile !== null && live.agent === "codex" && live.workflow === null) {
+    live.profile = profile;
+    live.model = null;
+  }
   focusPane("agent");
 }
 

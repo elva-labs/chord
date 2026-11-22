@@ -140,12 +140,14 @@ The status bar is the row along the window's foot, and it carries the
 what the account has left, so the pane headers carry only names and
 what is theirs to act on. From the left it names the branch checked out in
 the session's folder, after a small icon, then `account:` and the account
-it runs under, shown only once there is more than one account, with that
-account's allowance. A rule stands between the groups. At the right end
-stand how many sessions wait for you and, just before it, a word in
-passing, such as a new zoom, so they keep their place whatever the figures
-do. With no session on screen only those two remain. The pane that has the
-keyboard is marked on the pane itself, the session's state by the dot on
+it runs under, shown only once there is more than one account, then
+`profile:` and the [Codex profile](sessions.md#codex-profiles) where the
+session runs under one, with that account's allowance. A rule stands
+between the groups. At the right end stand how many sessions wait for
+you and, just before it, a word in passing, such as a new zoom, so they
+keep their place whatever the figures do. With no session on screen only
+those two remain. The pane that has the keyboard is marked on the pane
+itself, the session's state by the dot on
 its row, its folder by its row and its model by the composer's chip and
 the agent pane's header, and the window's mode by the switch in [the
 corner](#the-corner), so the bar does not say them. A plugin's additions to
@@ -194,9 +196,9 @@ it says how old each part is: `Some figures are from just now, the rest
 from 20 min ago`. How the bar's menus and the popover take the
 keyboard and give it back is in the [focus model](../focus-model.md#the-status-bar).
 
-Short of room, the bar lets its parts go in this order: the word
-`account:`, then every figure but the one nearest its end, then the branch,
-then that figure's reset time. It measures what fits rather than going by
+Short of room, the bar lets its parts go in this order: the words
+`account:` and `profile:`, then every figure but the one nearest its end,
+then the branch, then that figure's reset time. It measures what fits rather than going by
 the window's width, and only after all four is the account's name cut
 short. What waits for you is never cut. The word in
 passing takes no room in that measure, so nothing gives way for it: where

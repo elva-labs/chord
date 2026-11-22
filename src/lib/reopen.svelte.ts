@@ -1,5 +1,6 @@
 import type { AgentId } from "$lib/core";
 import type { SessionKind } from "$lib/sessionKind.svelte";
+import { isProfileName } from "$lib/codexProfiles.svelte";
 import { pendingMove, recordMove } from "$lib/sessionMoves.svelte";
 import { cameBackOver, carryOver, workOver } from "$lib/conductor.svelte";
 import { handleOf, reattach } from "$lib/integrated.svelte";
@@ -55,6 +56,8 @@ interface Open {
   /** The account it ran under, by name; null for the agents' own. A record
       from before there were accounts has none, which reads as null. */
   account?: string | null;
+  /** The Codex profile it ran under, by name. None for no profile. */
+  profile?: string;
   /** How it ran. A record from before there were integrated sessions has
       none, which reads as a terminal. */
   kind?: "terminal" | "integrated";
@@ -103,7 +106,7 @@ function onRecord(session: Session): boolean {
 
 function isOpenEntry(entry: unknown): entry is Open {
   if (typeof entry !== "object" || entry === null) return false;
-  const { project, id, agent, startIn, model, runsOn, account, kind, handle, spoken, token, own, moves, made, over } =
+  const { project, id, agent, startIn, model, runsOn, account, profile, kind, handle, spoken, token, own, moves, made, over } =
     entry as Record<string, unknown>;
   return (
     typeof project === "string" &&
@@ -113,6 +116,7 @@ function isOpenEntry(entry: unknown): entry is Open {
     (model === null || typeof model === "string") &&
     (runsOn === undefined || typeof runsOn === "string") &&
     (account === undefined || account === null || typeof account === "string") &&
+    (profile === undefined || (typeof profile === "string" && isProfileName(profile))) &&
     (kind === undefined || kind === "terminal" || kind === "integrated") &&
     (handle === undefined || handle === null || typeof handle === "string") &&
     (spoken === undefined || typeof spoken === "boolean") &&
@@ -215,6 +219,7 @@ export function reopen(
     );
     row.madeTree = entry.made === true;
     row.runsOn = entry.runsOn ?? null;
+    row.profile = entry.profile ?? null;
     if (entry.over === true) cameBackOver(row.key);
     if (entry.moves !== undefined) recordMove(row.key, entry.moves);
     // A window reloaded while the core still runs the session takes it up
@@ -290,6 +295,7 @@ export function reopen(
             model: session.model,
             ...(session.runsOn !== null ? { runsOn: session.runsOn } : {}),
             account: session.account,
+            ...(session.profile !== null ? { profile: session.profile } : {}),
             kind: session.kind,
             ...(session.ownWay ? { own: true } : {}),
             ...(session.madeTree ? { made: true } : {}),

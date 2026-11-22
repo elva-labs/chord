@@ -38,12 +38,17 @@ import { conductor, resetConductor } from "$lib/conductor.svelte";
 import "$lib/orchestrator.svelte";
 import { resetFolder } from "$lib/orchestratorFolder.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
+import { pickProfile, profileToStart, readProfiles, resetProfiles } from "$lib/codexProfiles.svelte";
+
+/** The Codex profiles the core lists, for any account. */
+const listed = vi.hoisted(() => ({ profiles: [] as unknown[] }));
 
 vi.mock("$lib/core", () => ({
   core: () => ({
     kill: async () => {},
     setBadge: async () => {},
     setWindowTitle: async () => {},
+    codexProfiles: async () => listed.profiles,
   }),
 }));
 
@@ -71,6 +76,8 @@ beforeEach(() => {
   resetKeys();
   resetPalette();
   resetAccounts();
+  resetProfiles();
+  listed.profiles = [];
   // No workflows unless a test has some.
   resetWorkflows();
   agent.availability = "ready";
@@ -1100,5 +1107,87 @@ describe("a new session", () => {
     beginNew(A);
     openCommands();
     expect(palette).toMatchObject({ mode: "commands", steps: [] });
+  });
+});
+
+describe("a Codex session's profile", () => {
+  const fast = { name: "fast", model: "gpt-6.1-terra", effort: "low", provider: null };
+  const local = { name: "local", model: "gpt-oss-20b", effort: null, provider: "ollama" };
+  const ends = () => stepItems("").map((item) => (item.kind === "choice" ? [item.label, item.detail, item.end] : null));
+
+  it("is asked where the account has profiles, and the one picked is started under and offered next", async () => {
+    agent.installed = ["codex"];
+    listed.profiles = [fast, local];
+    await readProfiles(A, null);
+    beginNew(A);
+    expect(stepsLeft(palette.steps)).toEqual(["profile"]);
+    expect(stepItems("")[0]).toMatchObject({ kind: "ready", detail: "Codex" });
+
+    choose("Change");
+    expect(nextStep(palette.steps)).toBe("profile");
+    expect(startingId()).toBe("profile:");
+    expect(ends()).toEqual([
+      ["No profile", "config.toml", ""],
+      ["fast", "fast.config.toml", "gpt-6.1-terra · low"],
+      ["local", "local.config.toml", "gpt-oss-20b · ollama"],
+    ]);
+    const outcome = choose("fast");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", profile: "fast", model: null });
+
+    beginNew(A);
+    expect(stepItems("")[0]).toMatchObject({ kind: "ready", detail: "Codex · fast" });
+    choose("Change");
+    expect(startingId()).toBe("profile:fast");
+    expect(ends()[1]).toEqual(["fast", "fast.config.toml", "gpt-6.1-terra · low · last used here"]);
+    expect(ends()[0]).toEqual(["No profile", "config.toml", ""]);
+  });
+
+  it("is not asked of Claude Code, of a workflow, or under an account with none", async () => {
+    agent.installed = ["claude-code", "codex"];
+    accounts.list = { Work: { claude: "~/.claude-work", codex: "~/.codex-work" } };
+    listed.profiles = [fast];
+    await readProfiles(A, null);
+    const project = { kind: "project", path: A } as const;
+    const personal = { kind: "account", account: null } as const;
+    expect(nextStep([project, personal, { kind: "agent", agent: "codex" }])).toBe("profile");
+    expect(nextStep([project, personal, { kind: "agent", agent: "claude-code" }])).toBeNull();
+    expect(nextStep([project, personal, { kind: "workflow", workflow: "Build and review" }])).toBeNull();
+    expect(nextStep([project, { kind: "account", account: "Work" }, { kind: "agent", agent: "codex" }])).toBeNull();
+  });
+
+  it("starts from the defaults' line under the one picked last, while the account still has it", async () => {
+    agent.installed = ["codex"];
+    listed.profiles = [fast];
+    await readProfiles(A, null);
+    pickProfile(A, "fast");
+    beginNew(A);
+    start();
+    expect(sessions.all[0]).toMatchObject({ agent: "codex", profile: "fast" });
+
+    listed.profiles = [];
+    await readProfiles(A, null);
+    expect(profileToStart(A, null)).toBeNull();
+    beginNew(A);
+    start();
+    expect(sessions.all[1]).toMatchObject({ agent: "codex", profile: null });
+  });
+
+  it("keeps no profile picked as the project's pick, and takes a name only from the list", async () => {
+    agent.installed = ["codex"];
+    listed.profiles = [fast, { name: "../outside", model: null, effort: null, provider: null }, { name: 5 }];
+    await readProfiles(A, null);
+    pickProfile(A, "fast");
+    beginNew(A);
+    choose("Change");
+    expect(stepItems("").map((item) => item.label)).toEqual(["No profile", "fast"]);
+    const outcome = choose("No profile");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ agent: "codex", profile: null });
+    expect(profileToStart(A, null)).toBeNull();
+    beginNew(A);
+    choose("Change");
+    expect(startingId()).toBe("profile:");
+    expect(ends()[0]).toEqual(["No profile", "config.toml", "last used here"]);
   });
 });

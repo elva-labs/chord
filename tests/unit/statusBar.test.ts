@@ -46,6 +46,16 @@ describe("the status bar's session words", () => {
     expect(screen.getByTestId("account-readout")).toHaveTextContent("account: Default");
   });
 
+  it("names the Codex profile the session runs under, and none for a session under none", async () => {
+    const session = create("/home/ada/dev/repo", null, "codex", null);
+    started(session.key, "pty-1", "sid-1");
+    select(session.key);
+    render(StatusBar);
+    expect(screen.queryByTestId("profile-readout")).toBeNull();
+    session.profile = "fast";
+    await waitFor(() => expect(screen.getByTestId("profile-readout")).toHaveTextContent("profile: fast"));
+  });
+
   it("reads the branch for a folder, and shows none for one that is no repository", async () => {
     open();
     render(StatusBar);

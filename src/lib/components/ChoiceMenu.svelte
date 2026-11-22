@@ -27,6 +27,8 @@
   interface Props {
     label: string;
     choices: Choice[];
+    /** A line over the choices, saying where they come from. */
+    head?: string | null;
     /** A line under the choices. */
     note?: string | null;
     onpick: (value: string) => void;
@@ -53,6 +55,7 @@
   let {
     label,
     choices,
+    head = null,
     note = null,
     onpick,
     onclose,
@@ -154,6 +157,9 @@
   {onkeydown}
   data-testid={testid}
 >
+  {#if head !== null}
+    <p class="menu-head" data-testid="{testid}-head">{head}</p>
+  {/if}
   {#each choices as choice (choice.value)}
     <button
       role={actions ? "menuitem" : "menuitemradio"}
@@ -273,6 +279,12 @@
     grid-column: 2;
     grid-row: 1;
     color: var(--accent);
+  }
+
+  .menu-head {
+    margin: 2px 8px 4px;
+    font-size: calc(var(--meta-size) - 0.5px);
+    color: var(--ink-2);
   }
 
   .menu-note {

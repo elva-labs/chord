@@ -11,6 +11,7 @@
     paletteItems,
     pickable,
     pickItem,
+    PROFILES,
     setQuery,
     startingId,
     stepBack,
@@ -185,7 +186,9 @@
           ? "Which project"
           : asking === "account"
             ? "Under which account"
-            : "How should it run",
+            : asking === "profile"
+              ? PROFILES
+              : "How should it run",
   );
   const heading = $derived(
     palette.mode === "goto" ? "Sessions and projects" : palette.mode === "commands" ? "Commands" : "New session",

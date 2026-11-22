@@ -41,6 +41,7 @@
     readsLikeAnother,
     loadHistory,
     loadMissingHistories,
+    rowModelLine,
     sessionModelName,
     earlierLabel,
     outsideFor,
@@ -1649,7 +1650,7 @@
       tabindex="-1"
       onclick={() => choose(session.key)}
       oncontextmenu={(e) => openSessionMenu(session.key, e)}
-      title={sessionModelName(session) ?? undefined}
+      title={rowModelLine(session) ?? undefined}
       data-testid="session-row"
     >
       <span
@@ -1749,8 +1750,8 @@
               title="Goes on by itself when the usage limit resets"
               data-testid="session-resumes">{resumes}</span
             >
-          {:else if news.length === 0 && (session.runsOn ?? session.model) !== null}
-            <span class="meta" data-testid="session-model">{sessionModelName(session)}</span>
+          {:else if news.length === 0 && rowModelLine(session) !== null}
+            <span class="meta" data-testid="session-model">{rowModelLine(session)}</span>
           {/if}
         </span>
       {/if}

@@ -94,6 +94,7 @@ import {
   markUnread,
   markRead,
   onScreenNow,
+  rowModelLine,
 } from "$lib/sessions.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 import {
@@ -3591,5 +3592,20 @@ describe("marking a session unread", () => {
     expect(dormant.unread).toBe(true);
     expect(dormant.status).toBe("dormant");
     expect(unreadCount()).toBe(3);
+  });
+});
+
+describe("what a row says of its model", () => {
+  it("names the model, then the Codex profile the session runs under", () => {
+    const row = create(A, null, "codex");
+    row.model = null;
+    row.runsOn = "gpt-5-codex";
+    expect(rowModelLine(row)).toBe("gpt-5-codex");
+    row.profile = "fast";
+    expect(rowModelLine(row)).toBe("gpt-5-codex · fast");
+    row.runsOn = null;
+    expect(rowModelLine(row)).toBe("fast");
+    row.profile = null;
+    expect(rowModelLine(row)).toBeNull();
   });
 });

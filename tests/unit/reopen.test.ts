@@ -192,6 +192,17 @@ describe("keeping the record", () => {
     expect(record().open[0]).toMatchObject({ model: null, runsOn: "gpt-5-codex" });
   });
 
+  it("keeps the Codex profile a session runs under, and says none for one under none", () => {
+    stop = reopen();
+    const under = create(A, "one", "codex");
+    under.profile = "fast";
+    started(under.key, "pty-1", "one");
+    started(create(A, "two", "codex").key, "pty-2", "two");
+    flushSync();
+    expect(record().open[0]).toMatchObject({ profile: "fast" });
+    expect(record().open[1]).not.toHaveProperty("profile");
+  });
+
   it("brings a session that follows a workflow back on that workflow after a quit", async () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
     stop = reopen();
@@ -253,6 +264,20 @@ describe("coming back", () => {
     await launch(said.key, 80, 24, () => {});
     expect(spawned.at(-1)?.session).toBe("one");
     expect(spawned.at(-1)?.model).toBeUndefined();
+  });
+
+  it("starts a session again under the Codex profile it ran under, and drops an entry naming no profile's name", async () => {
+    onRecord(
+      [{ ...entry(A, "one"), agent: "codex", profile: "fast" }, { ...entry(A, "two"), agent: "codex", profile: "../fast" }],
+      null,
+    );
+    stop = reopen();
+    expect(forProject(A).map((session) => session.id)).toEqual(["one"]);
+    const [under] = forProject(A);
+    expect(under.profile).toBe("fast");
+    wake(under.key);
+    await launch(under.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ session: "one", profile: "fast" });
   });
 
   it("brings back that a session runs in a worktree made for it, which a record from before does not say", () => {
