@@ -1,16 +1,16 @@
 # Sessions in Chord
 
-An in-Chord session is an agent run as a process the core talks to in
+An in-Chord session is a harness run as a process the core talks to in
 messages, with no terminal. The window draws the conversation from what
-the agent says, and sends it what the user types. The agent's own binary
+the harness says, and sends it what the user types. The harness's own binary
 does the work, so its login, settings, hooks, skills, plugins, MCP servers
 and instructions all apply as they do in its terminal interface, and the
 transcript it writes is the same one: a session started in Chord resumes
 in a terminal, and the other way round.
 
-Claude Code and Codex are the agents driven this way. The commands and
+Claude Code and Codex are the harnesses driven this way. The commands and
 events below are not particular to either: only the code that speaks an
-agent's own protocol is, and each agent's is kept apart from the rest and
+harness's own protocol is, and each harness's is kept apart from the rest and
 from the other's.
 
 ## How Claude Code is started
@@ -31,7 +31,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 
 The partial messages are the text as it streams; the forwarded subagent
 text is what a subagent says; the replayed user messages come back with
-the ids they were sent with, beside the agent's own lines saying when it
+the ids they were sent with, beside the harness's own lines saying when it
 took each; and the permission prompts come to the core instead of being
 refused. The session id is chosen by the workbench, as for a terminal
 session. The workbench's own tool server is attached to each session when
@@ -40,7 +40,7 @@ removed when it ends, so it needs no entry in the account's configuration.
 `--bare` is never used: it would skip the hooks, the instructions and the
 MCP servers, and refuse the user's login.
 
-The agent is also asked, through its environment, to say when its session
+The harness is also asked, through its environment, to say when its session
 goes idle: after a turn, and after the turns that report the subagents it
 left running. That is the moment nothing it began can still be at work. It
 is asked the same way to keep the files it changes as they were before
@@ -51,7 +51,7 @@ newest.
 
 A model name, a mode, an effort and a session id are checked before they
 go on the command line: letters and digits, and for a model name a few
-characters of punctuation besides. On Windows an agent installed as a
+characters of punctuation besides. On Windows a harness installed as a
 script runs through the command interpreter, so nothing that interpreter
 reads as more than a character may reach it.
 
@@ -150,9 +150,9 @@ says which.
 
 ## The mode a session starts in
 
-A session starts in the mode a terminal session of its agent would start
-in, chosen by the agent from the user's own settings, and the window shows
-the mode the agent says it runs in. The workbench names a mode at the start
+A session starts in the mode a terminal session of its harness would start
+in, chosen by the harness from the user's own settings, and the window shows
+the mode the harness says it runs in. The workbench names a mode at the start
 in four cases only. A session that starts again, or a conversation resumed
 or reopened in Chord, names the mode it last ran in in Chord, which the
 window keeps for each conversation; one reopened before anything was said
@@ -160,13 +160,13 @@ in it starts afresh, in the mode kept for the conversation it leaves. A
 Claude Code conversation resumed with no such mode names the one its transcript last records, the way Claude
 Code's terminal resumes a conversation, since its stream would start one as
 a new conversation. A new conversation another session started names the
-mode its starter gave it, the starter's own as far as its agent has it, so
+mode its starter gave it, the starter's own as far as its harness has it, so
 it begins in no more than the session that started it (see
 [orchestrator](orchestrator.md#what-the-user-is-asked)). A new session the
-user starts names the mode the user last chose for its agent, as
+user starts names the mode the user last chose for its harness, as
 [below](#what-a-new-session-starts-on) describes. None is ever bypassing
 permissions, nor any mode a session cannot be switched to; those are left
-to the agent's own settings. Nothing else names a mode, so a start never
+to the harness's own settings. Nothing else names a mode, so a start never
 grants more than those settings would in a terminal, than the user chose
 themselves, or than the session that started it held then, and every tool
 call that asks is answered in the window by the user.
@@ -182,15 +182,15 @@ window. A Codex session takes the approval policy and the sandbox of the
 user's configuration.
 
 The window keeps the mode each conversation last ran in by the
-conversation's id, only while it is one the agent offers to switch to. A
+conversation's id, only while it is one the harness offers to switch to. A
 terminal session that resumes the conversation starts in that mode, as
 Claude Code's permission mode or Codex's approval policy and sandbox,
-since the agent's own record of a conversation holds only what its
+since the harness's own record of a conversation holds only what its
 terminal wrote. The window cannot see a terminal's mode, and Claude Code
 writes down the mode its terminal ran in only as it shuts down, on a quit
 or a hang-up, having written the one it resumed in as it started. So the
 window keeps its record while that terminal runs, and lets it go once the
-run has shut down by itself: the agent's own record of that run decides
+run has shut down by itself: the harness's own record of that run decides
 the next start. A run that was killed, as a stop on Windows or a crash
 ends one, wrote nothing down, and the window's record decides the next
 start. A record still held by a terminal run when the window starts is
@@ -200,33 +200,33 @@ conversation takes another's.
 Changing the mode on the composer's chip changes it at once and is kept
 the same way. The composer's chips are the model, the effort and the mode,
 in that order. The model's chip is always there. The effort's is there
-whenever the session has an effort, because the agent names no default
+whenever the session has an effort, because the harness names no default
 effort. The mode's, the workflow's and going on's show while their value is
 away from the default: a mode that asks before anything changes, no
 workflow, going on off. At the default a chip is behind the `+` chip, and it
 goes again once the value is back at the default and the pointer and the
 keyboard have left the chip row; while either is in the row, or a menu of
 it is open, no chip is taken away, so nothing moves under the pointer. The model's says Default before the model's name while no
-model is chosen for the session, which then runs on the one the agent's
+model is chosen for the session, which then runs on the one the harness's
 own configuration names. In a Codex session given none, picking the model
 Codex already runs on chooses nothing, and the chip still says Default;
 picking it back after another model chooses it, and the chip names it
 alone, though the session runs on the same model as before. So Default
 means that no model was chosen, not that the session runs on the
 configured one. The effort's chip is there only while the model takes an
-effort, lists the efforts the agent says that model takes, from the least
-to the most and each with the line the agent gives for it, Codex's own
+effort, lists the efforts the harness says that model takes, from the least
+to the most and each with the line the harness gives for it, Codex's own
 words for ultra among them, and always names the one the status bar
 names. In a narrow pane it drops the word effort and keeps the level. The
 agent pane's header names the model by the same name the model's chip uses,
 never its id. An
-effort set with the agent's own command is shown but is not the one a new
+effort set with the harness's own command is shown but is not the one a new
 session starts on; only a pick on the chip or the status bar is.
 
 A workflow and going on after a limit sit behind one `+` chip on the
 composer while they are at their default; each shows as a chip of its own
 once set. The `+` opens a menu of what it holds, which also brings up the
-mode. The composer's box says `Message` and the agent's name until
+mode. The composer's box says `Message` and the harness's name until
 something is typed. Mode, effort, workflow and going on keep their shortcuts,
 and a change by shortcut to a value away from the default shows the chip. Every chip stays a stop on Tab.
 
@@ -234,38 +234,46 @@ A thread gives its messages no time each. A quiet time stands between them
 where more than five minutes passed, or the day changed, before the next
 one, and the exact time shows on hover.
 
-A mode the agent was asked to start in and did not, such as auto where the
+A mode the harness was asked to start in and did not, such as auto where the
 account or the model has none, is said in a notice, and the session runs in
-the one the agent chose. A session another started is switched instead to
-the nearest mode below the one it was given that its agent offers, said in
+the one the harness chose. A session another started is switched instead to
+the nearest mode below the one it was given that its harness offers, said in
 a second notice, so it runs in neither more than it was given nor less
-than it may. A mode from the agent's own settings that it does
+than it may. A mode from the harness's own settings that it does
 not offer to switch to, such as bypassing permissions or a Codex approval
 policy and sandbox that make none of its modes, is shown on the chip in
 plain words, and once another is chosen it comes back only in a new
 session.
 
+Apart from its mode, a session can read only, as the agent it works as
+sets it. Claude Code is then refused its own tools that change files,
+Edit, Write, MultiEdit and NotebookEdit, whatever the mode allows, while a
+command it runs is still left to the mode. Codex runs each turn in its
+read-only sandbox, and its asks to change files are turned down without
+asking the user. Reading only can be turned on and off while the session
+runs, and the window hears which.
+
 ## What a new session starts on
 
 A new session the user starts, in Chord or in a terminal, starts on the
 model, the effort and the permission mode the user last chose for its
-agent, each where one is kept, and otherwise on the agent's own default
+harness, each where one is kept, and otherwise on the harness's own default
 for it. An in-Chord session is started with all three, and its chips
-show them from the first frame, until the agent says what it runs on. A
+show them from the first frame, until the harness says what it runs on. A
 terminal session is started with the model and the mode, on the flags its
 start already takes for them; a terminal takes no effort from the
 workbench.
 
 What is kept is the user's own choice: a model, an effort or a mode picked
-on a conversation's chips once the agent runs on it. Only the window makes
-those picks, so only they can keep a mode that lets the agent do more
+on a conversation's chips once the harness runs on it. Only the window makes
+those picks, so only they can keep a mode that lets the harness do more
 without asking. A Claude Code terminal's hooks report its mode, and a
 switch they report after the first mode they reported for its run is kept
-only where it lets the agent do no more than the mode kept now, Default
+only where it lets the harness do no more than the mode kept now, Default
 standing in for none kept: what the hooks report can be written by any of
 the user's processes, so it can narrow what new sessions begin in and
-never widen it. The mode a run began in, the agent's own default, a mode
-an agent fell back to, the model a workflow sets and what a session
+never widen it. The mode a run began in, the harness's own default, a mode
+a harness fell back to, the model a workflow sets and what a session
 another started was given are not choices and change nothing.
 
 Plan, bypassing permissions and Codex's full access are never kept: a new
@@ -274,26 +282,26 @@ last one stood, and choosing one leaves the mode kept before. The rule
 holds where the choices are used as well as where they are made: the core
 refuses such a mode in the settings file, the window takes none from the
 file, and a start names none, so a file that names one, written by hand,
-by an agent's shell or by a later version, starts nothing in it. Claude
+by a harness's shell or by a later version, starts nothing in it. Claude
 Code's default model, chosen on the chip, keeps no model, and the settings
-let go of everything kept for an agent, as
+let go of everything kept for a harness, as
 [settings](settings.md#sessions) describes. The choices are kept for the
-machine in the settings file, by agent.
+machine in the settings file, by harness.
 
-They are kept per agent, not per account or per project, so they follow
+They are kept per harness, not per account or per project, so they follow
 the user into every project and account. What one account or project
 cannot take is settled when a session starts, and never changes what is
-kept. A model the agent does not offer the session's account starts it on
-the agent's default model, with a notice: for Codex the model its own
+kept. A model the harness does not offer the session's account starts it on
+the harness's default model, with a notice: for Codex the model its own
 configuration names where it offers that one, else the one it marks as
 its default, else the first it offers. Once a session under an account
 has said which models it offers, a new one under that account, while the
 window is open, is started on the default without asking for the model
-first. A mode the agent does not take, such as auto where the account or
+first. A mode the harness does not take, such as auto where the account or
 the project's settings give none, is switched to the nearest narrower
-mode the agent offers, with a notice, as for a session another started.
+mode the harness offers, with a notice, as for a session another started.
 An effort the model does not take is switched to the nearest lower one it
-does, lower as the agent orders its efforts, so a model without ultra
+does, lower as the harness orders its efforts, so a model without ultra
 runs at the deepest effort below it that it takes, max where it has max,
 and a model with none lower at its least. The chips then show what the
 session runs on. A resumed session goes on as its conversation
@@ -303,7 +311,7 @@ model the workflow sets.
 
 ## Trust
 
-Print mode skips the agent's own question of whether a folder's files are
+Print mode skips the harness's own question of whether a folder's files are
 to be trusted, and a trusted folder's hooks and MCP servers run. So before
 it starts a session, the core reads the record that question writes: the
 `hasTrustDialogAccepted` entry for the folder, or for a folder above it,
@@ -313,7 +321,7 @@ environment the Claude Code process starts with, else `.claude.json` in
 the user's home; the tool server's entry and the hooks' check of it use
 the same file. A start in a folder with no such entry fails with an error of its own kind, which the
 window can tell from other failures. The window asks the user, and on a
-yes the trust command writes the entry for the folder, where the agent's
+yes the trust command writes the entry for the folder, where the harness's
 own question would have, and the session can start. A worktree the
 workbench makes gets the entry when its project has one. Nothing is made
 for the session, not even the account's folder, before the folder is
@@ -326,7 +334,7 @@ absolute `CODEX_HOME` of the environment the Codex process starts with,
 else `.codex` in the user's home. That one home is also where the history
 list, a past session's title, the watching of a terminal Codex session and
 the trust copied to a new worktree are read and written, so they agree with
-the home the agent runs with when the app was launched from the Dock. A
+the home the harness runs with when the app was launched from the Dock. A
 Codex start reads the answer the way Codex
 does. The folder's own record decides when there is one, and only
 `trusted` is a yes. A folder with no record of its own takes the record of
@@ -342,7 +350,7 @@ a `.git` file, a submodule or one whose git directory is kept elsewhere,
 has no root, and only its own record counts. The trust command writes the
 folder's own record, leaving the rest of the file as the user wrote it.
 
-Running agents, the user's own terminal sessions among them, read and
+Running harnesses, the user's own terminal sessions among them, read and
 rewrite the same state file. The workbench reads it right before it
 changes it, and writes it whole to a file beside it that is then moved
 over it, so a reader never finds it half written. A link to the file is
@@ -366,19 +374,19 @@ the same way.
 | Send now | Sends every message that waits for a turn now, in the order sent, as described under [sending now](#sending-now), and answers whether the turn was stopped for them, takes them in, or found none waiting. Fails saying why while a request waits for an answer, while the conversation is being compacted, when no turn runs, or when nothing waits. |
 | Run | Runs a command the user typed with a leading `!`, under an id the window chose: a UUID it has not used in the session. It waits for what was sent before it, as described under [commands the user runs](#commands-the-user-runs). Fails with nothing to run, or while the session goes back. |
 | Stop command | Stops the user's command that runs. Fails when it does not run. |
-| Withdraw | Takes back a message, or a command of the user's, the agent has not taken yet, which then ends as withdrawn. Fails once the agent has taken it, or once the command runs. |
-| Compact | Compacts the conversation, the way the agent does it, with what the summary should keep where the agent takes that. Claude Code is sent a compact command as a message of its own, with those words after it, and Codex is asked to compact its thread, refusing words since it takes none; either way the turn it starts names no message of the window's. |
+| Withdraw | Takes back a message, or a command of the user's, the harness has not taken yet, which then ends as withdrawn. Fails once the harness has taken it, or once the command runs. |
+| Compact | Compacts the conversation, the way the harness does it, with what the summary should keep where the harness takes that. Claude Code is sent a compact command as a message of its own, with those words after it, and Codex is asked to compact its thread, refusing words since it takes none; either way the turn it starts names no message of the window's. |
 | Answer | Answers a permission request with one of the choices it offered. |
-| Reply | Answers a question the agent asked: for each question, the options picked or, where the question takes them, the user's own words. It can also decline to answer. |
+| Reply | Answers a question the harness asked: for each question, the options picked or, where the question takes them, the user's own words. It can also decline to answer. |
 | Configure | Switches the model, the mode or the effort, each that is given, all within 45 seconds, which is less than a call to another machine waits. A change that would be asked for once that time is up is not asked for at all. Answers with what the session now runs on. Codex takes the change with the next message. |
-| Snapshot | Says what a window that comes to the session late needs and no transcript holds: the session's state and whether a turn runs, its settings, what the agent said it offers when it was ready with its commands as they now are, every permission request and question still waiting for an answer, the messages no turn has taken yet, the user's commands that wait or run, the running one with its output so far, the account's limits as they were last told, every subagent still at work as its start went out, and for a conversation it resumed when this run of it began. It answers once every event that went out before it has, so it reflects those events and none after. |
-| History | Reads what a conversation said and did before, from where its agent keeps it, as described under history. It is addressed by the project's path and the conversation's id rather than by a session, so it needs no session running. It answers with none for an agent whose history is not read, and fails with why where the agent could not read it. |
-| Points | Says where a session's conversation can go back to: each message of the user's in it as the agent keeps it now, oldest first, whether the conversation can go back to before it, with why where it cannot, and whether the files can; or why none can. |
-| Preview | Says what putting the files back as they were before a message would change, as the agent's own dry run says: the files, and the lines that would come back and go. Changes nothing. Fails, in the agent's words, where it cannot put them back to there. |
+| Snapshot | Says what a window that comes to the session late needs and no transcript holds: the session's state and whether a turn runs, its settings, what the harness said it offers when it was ready with its commands as they now are, every permission request and question still waiting for an answer, the messages no turn has taken yet, the user's commands that wait or run, the running one with its output so far, the account's limits as they were last told, every subagent still at work as its start went out, and for a conversation it resumed when this run of it began. It answers once every event that went out before it has, so it reflects those events and none after. |
+| History | Reads what a conversation said and did before, from where its harness keeps it, as described under history. It is addressed by the project's path and the conversation's id rather than by a session, so it needs no session running. It answers with none for a harness whose history is not read, and fails with why where the harness could not read it. |
+| Points | Says where a session's conversation can go back to: each message of the user's in it as the harness keeps it now, oldest first, whether the conversation can go back to before it, with why where it cannot, and whether the files can; or why none can. |
+| Preview | Says what putting the files back as they were before a message would change, as the harness's own dry run says: the files, and the lines that would come back and go. Changes nothing. Fails, in the harness's words, where it cannot put them back to there. |
 | Go back | Takes a session at rest back to before a message of the user's: the conversation, the files the user was shown in a preview, or both, as described under [going back](#going-back). Answers with the session that goes on, the same one or one started again, its conversation's id, the files put back, and why a conversation that was to go back goes on whole where it does. Fails, with nothing changed, where it cannot go back there, or where the files to put back are no longer those shown. |
 | Undo | Undoes going back that started a session again, while nothing has gone on in it since, and answers as going back does. Fails, with nothing changed, where it cannot. |
 | Held | Says whether a conversation is held at the point it went back to, as described under going back. Like history, it is addressed by the project's path and the conversation's id, and needs no session running. |
-| Stop | Closes the agent's stdin, which ends the conversation. An agent still there a few seconds later is asked to end, and one still there after that is killed. |
+| Stop | Closes the harness's stdin, which ends the conversation. A harness still there a few seconds later is asked to end, and one still there after that is killed. |
 
 Events can name an id before the command that hands it back has answered:
 a session's first events can arrive before the start does. The window
@@ -387,9 +395,9 @@ does. Since the window chooses a message's id before sending it, the events
 that name a message never come before the window knows the id.
 
 The conversation's id is known at the start only where the workbench
-chooses it, as it does for Claude Code, or resumes one. An agent that
+chooses it, as it does for Claude Code, or resumes one. A harness that
 makes its own ids, as Codex does, has none to give yet. The ready event
-carries the agent's id in either case, and that is the one to keep for
+carries the harness's id in either case, and that is the one to keep for
 resuming.
 
 ## Permissions
@@ -402,17 +410,17 @@ words the window can show:
   as long as the session lives;
 - **allow always**: this call, and what the offer remembers from now on;
 - **deny**: not this call, and the turn goes on, with a message for the
-  agent where the offer takes one;
+  harness where the offer takes one;
 - **cancel**: not this call, and the turn stops.
 
-A choice that would remember something is offered only when the agent
+A choice that would remember something is offered only when the harness
 said precisely what. For Claude Code, that is the one rule it suggested
 for the call, such as `Bash(touch notes.txt)`, or for a tool with no rule
 of its own the permission mode it suggested, such as accepting edits for
 the session. Allowing always writes the rule into the project's
 uncommitted local settings, as the terminal's "don't ask again" does. A
 request with nothing suggested offers allow, deny and cancel alone. Only
-what the chosen offer names is sent back, never the rest of what the agent
+what the chosen offer names is sent back, never the rest of what the harness
 suggested.
 
 For Codex, allowing for the session remembers the command as it was
@@ -427,7 +435,7 @@ remembers them for the rest of the turn when allowed, or of the session,
 and offers no cancel. Codex takes no message with a denial, and its offers
 say so.
 
-A question the agent asks the user is a request of its own, answered with
+A question the harness asks the user is a request of its own, answered with
 a reply rather than a permission: each question with its options, whether
 more than one may be picked, whether the user may answer in words of their
 own, and whether the answer is a secret, such as a password, that is not
@@ -446,22 +454,22 @@ Everything the session says arrives as one event, `integrated_event`,
 naming the session and its kind:
 
 - **ready**, once, before anything else: the conversation's id, the model,
-  mode and effort, the agent's version, and what it offers: models (each
-  with the efforts it takes, in the agent's order and with its line for
+  mode and effort, the harness's version, and what it offers: models (each
+  with the efforts it takes, in the harness's order and with its line for
   each where it has one), modes, the efforts of the model it runs on,
   and its slash commands and skills. A mode can be one the list does not
   hold, when it comes from the user's own configuration.
-- **commands**: the slash commands and skills changed, or the agent said
+- **commands**: the slash commands and skills changed, or the harness said
   more of which is which; all of them as they now are. Each has its name,
   what it does, the hint of what it takes after its name, whether it is a
-  skill, whether it is the agent's own, and where one that is not comes
+  skill, whether it is the harness's own, and where one that is not comes
   from. Claude Code lists them together when it starts, with where one
   comes from written into its description, which the core takes out; the
   start of each turn names which are skills, and until the first does,
-  those that are not the agent's own count as skills. Commands that work
-  only in the agent's own terminal are left out, as are those whose name
+  those that are not the harness's own count as skills. Commands that work
+  only in the harness's own terminal are left out, as are those whose name
   begins with an underscore or holds a space, and of two by one name the
-  agent's own is kept. An MCP server's prompt, which Claude Code lists as
+  harness's own is kept. An MCP server's prompt, which Claude Code lists as
   the server and the prompt joined by a colon, is given the name a message
   calls it by, `mcp__`, the server and the prompt joined by two
   underscores, each with what is not a letter, a digit, an underscore or a
@@ -470,16 +478,16 @@ naming the session and its kind:
 - **configured**: the model, the mode or the effort changed. Claude Code
   says nothing in its stream of a model or an effort that a slash command
   such as `/model` or `/effort` sets, so after a turn that ran a command
-  the core reads the agent's settings again, and this follows where they
+  the core reads the harness's settings again, and this follows where they
   changed. Codex says when a thread's settings change; an effort it sets
   to none is the model's own default, and the chip shows that one.
-- **titled**: the user named the conversation through the agent's own
+- **titled**: the user named the conversation through the harness's own
   rename command, with the name. Codex, which takes no slash commands
   here, never says it.
-- **message**: a sent message went to the agent with nothing ahead of it,
+- **message**: a sent message went to the harness with nothing ahead of it,
   is queued behind a running turn, was taken into the running turn, was
-  dropped and will not be answered, because the agent refused, discarded
-  or cancelled it, or was withdrawn by the user before the agent took it.
+  dropped and will not be answered, because the harness refused, discarded
+  or cancelled it, or was withdrawn by the user before the harness took it.
   The first of these for a message carries its
   text and the images it attached, so that any window can draw it.
 - **command**: a command of the user's waits, runs, or is over: done, with
@@ -487,61 +495,61 @@ naming the session and its kind:
   by the user before it ran; or dropped because the session ended first.
   Each carries the command, and the last its output, both streams as they
   came, cut short past a megabyte and flagged so. Any that is over may
-  carry an error as well, such as the agent not being given the command,
+  carry an error as well, such as the harness not being given the command,
   and the window shows it under the command as bad news.
 - **command output**: the next piece of what a running command printed.
   Pieces stop past the limit, and the output the command ends with holds
   all that was kept.
 - **turn started**, with the messages it answers, and **turn ended**: how
   it ended (done, interrupted or failed, with why), its time and token
-  usage, and the agent's running total cost for its process so far, which
+  usage, and the harness's running total cost for its process so far, which
   is not the turn's own cost. Usage counts every token the model read,
   with how many came from a cache, and every token it wrote, with how
   many were reasoning. A turn stopped by an interrupt, or by cancelling a
   permission, ends as interrupted.
 - **text** and **thinking**, by block: pieces as they stream, then the
   whole block.
-- **tool started**, with the agent's name for the tool and what kind of
+- **tool started**, with the harness's name for the tool and what kind of
   tool it is (command, edit, read, search, web, MCP, agent or other);
-  **tool input**, streamed and then whole, in the agent's own shape; **tool
-  output**, streamed, for an agent that streams it; and **tool finished**:
+  **tool input**, streamed and then whole, in the harness's own shape; **tool
+  output**, streamed, for a harness that streams it; and **tool finished**:
   the result as text, and the files the call created, updated, deleted or
   moved, each with its content or its hunks.
-- **plan**: the agent's plan, written out or as a list of steps, whole
+- **plan**: the harness's plan, written out or as a list of steps, whole
   each time it changes; and **turn diff**: everything the turn has changed
-  so far as one diff, for an agent that keeps one.
+  so far as one diff, for a harness that keeps one.
 - **permission asked** and **question asked**; **answered**, with the
   choice, or for a question the answers, from whichever window answered,
   with a secret question's answer left out; and **withdrawn** when the
-  agent stops waiting for either.
+  harness stops waiting for either.
 - **task started**, **task progress** and **task finished**, for subagents
-  and background commands. A task the agent marks as housekeeping says so,
+  and background commands. A task the harness marks as housekeeping says so,
   and a window may leave it out. A task ends completed, failed, stopped,
-  or lost: ended with no word of how by the time the turn, or the agent's
-  work as a whole, was over. A finished task says whether the agent
+  or lost: ended with no word of how by the time the turn, or the harness's
+  work as a whole, was over. A finished task says whether the harness
   reports it in a turn of its own.
 - **compacting** and **compacted**, which says whether it was asked for or
-  the context window was full, or **compact failed**, with the agent's
+  the context window was full, or **compact failed**, with the harness's
   reason where it gives one, when the conversation is left as it was. A
   compaction is over with the turn it runs in either way.
 - **context**: how much of the model's context window the conversation
-  takes, and how big the window is, where the agent says.
+  takes, and how big the window is, where the harness says.
 - **limits**: the usage limits of the account the session runs under,
   whole each time, as described under account limits: each limit window
   with its kind, the model it counts alone where it counts one, the
-  percent used, when it resets and how near its end the agent reads it,
-  where the agent says; the plan, where the agent names it; when the last
+  percent used, when it resets and how near its end the harness reads it,
+  where the harness says; the plan, where the harness names it; when the last
   read of the limits was taken; and when a figure last moved. It names the
-  agent but not the account, which the window knows from the session.
+  harness but not the account, which the window knows from the session.
 - **limitReached**: the turn that ends next was refused by the account's
   own usage limit, as [going on after a limit](#going-on-after-a-limit)
   describes: the limit window that was used up, where it is one told
-  apart, and when it starts over, where the agent says. It comes just
+  apart, and when it starts over, where the harness says. It comes just
   before the turn's end, and for no turn that ended any other way.
-- **notice**: something the agent says that is neither an error nor part
+- **notice**: something the harness says that is neither an error nor part
   of a turn, such as that it fell back to another model, as information or
   as a warning.
-- **retrying**: a request to the model failed and the agent tries again;
+- **retrying**: a request to the model failed and the harness tries again;
   the turn goes on.
 - **skipped**: streamed pieces left out because the window or its
   connection fell behind, as described under failure.
@@ -565,7 +573,7 @@ as an error only when no turn runs.
 Codex's newer models call their tools from a script they write, which has
 no event: each command, edit and MCP call the script makes comes as a tool
 call of its own. A command the sandbox refuses comes as nothing at all, so
-the window shows only what the agent says of it.
+the window shows only what the harness says of it.
 
 A subagent's text, tool calls, plans and requests name the tool call that
 started it, so the window can draw them under that call.
@@ -587,21 +595,21 @@ does not tell the user twice.
 A message sent while a turn runs is not lost: it waits, and the core says
 so. Claude Code takes every message that waited during a turn into the
 next one, so one turn may answer several messages, and the turn names them
-all. Which messages a turn answers comes from the agent's own account of
+all. Which messages a turn answers comes from the harness's own account of
 when it took each, matched by the ids they were sent with, never from the
-order they were sent in. A turn with no message behind it is one the agent
+order they were sent in. A turn with no message behind it is one the harness
 started by itself, which happens when work it left running in the
-background finishes while the session is idle. A turn the agent ends
+background finishes while the session is idle. A turn the harness ends
 without having said it started is started first, so every end has a start.
 
 Codex folds a message sent while a turn runs into that turn, which then
 answers it along with what it was doing. The core holds each message for
-an agent like it instead, so that each message gets a turn of its own and
+a harness like it instead, so that each message gets a turn of its own and
 the settings it goes with. It hands one over
-only when the agent has said it is ready, no turn runs, and the agent has
+only when the harness has said it is ready, no turn runs, and the harness has
 named the one handed over before, in a turn's start or as dropped, and
 makes the line for it then, so that it goes with the conversation the
-agent has started and the settings the session runs on at that moment.
+harness has started and the settings the session runs on at that moment.
 
 Codex answers a message with the id of the turn it starts, and that turn
 is the one that names it, whatever other turn starts first, such as one
@@ -626,13 +634,13 @@ timing or hooks:
 Claude Code says which tasks run in the background as a whole list, in no
 promised order with the start and the end of each. A task the list leaves
 out is lost only if it is still left out, with no word of its end, when the
-turn ends or the agent says it is idle; a word that comes later is dropped.
+turn ends or the harness says it is idle; a word that comes later is dropped.
 A subagent that reports in a turn of its own may be told of after the turn
-ends, so it is judged only when the agent says it is idle: one that leaves
+ends, so it is judged only when the harness says it is idle: one that leaves
 the list with no word of its end keeps the session working until then. A
 subagent the main turn waited on is over with that turn.
 
-A tool call the agent leaves without a finish is finished by the core, as
+A tool call the harness leaves without a finish is finished by the core, as
 failed with no output: those of the main conversation when the turn ends,
 a subagent's when the subagent ends, and all of them when the session
 does.
@@ -640,25 +648,25 @@ does.
 ### Sending now
 
 A message that waits can be sent now, without waiting for the turn to
-end. Each agent takes it its own way, and the command answers how it went:
+end. Each harness takes it its own way, and the command answers how it went:
 stopped, when the running turn was stopped for the messages; delivering,
-when the running turn takes them in; or nothing waiting, when the agent
+when the running turn takes them in; or nothing waiting, when the harness
 had none waiting by then.
 
 - **Claude Code** takes a message sent during a turn into that turn by
   itself, once the step it is on is done, such as a command that runs.
   Where it lists `interrupt_send_now_v1` among its capabilities when a
   turn starts, sending now is its own send now: an interrupt that asks
-  for it and names the last message that waits. The agent then decides:
+  for it and names the last message that waits. The harness then decides:
   it moves what the turn waits on to the background so that the turn
   takes the messages in, or stops the turn as an interrupt does, after
   which it takes every message that waited into a turn of its own at
   once, in the order sent; with none waiting, or with the turn already
-  taking them, it does nothing. So an interrupt that reaches the agent
+  taking them, it does nothing. So an interrupt that reaches the harness
   just as the turn ends by itself does not stop the turn that answers the
-  messages. Only a turn the agent stopped ends as interrupted. The request
-  and its answer are marked internal in the agent's own description, and
-  the agent defines what an agent without them does: it takes the request
+  messages. Only a turn the harness stopped ends as interrupted. The request
+  and its answer are marked internal in the harness's own description, and
+  the harness defines what a harness without them does: it takes the request
   as a plain interrupt, which is what the workbench sends to one that
   does not list it.
 - **Codex** is given each held message in the turn it runs, in the order
@@ -672,10 +680,10 @@ had none waiting by then.
 
 Sending now is refused while a permission or a question waits for an
 answer, since the turn waits on the user then; while the conversation is
-being compacted; when no turn runs, since the agent takes the message
+being compacted; when no turn runs, since the harness takes the message
 next anyway; and when nothing waits.
 
-A message is withdrawn before the agent takes it. Claude Code is asked to
+A message is withdrawn before the harness takes it. Claude Code is asked to
 cancel it, and answers whether it did: one it took first stays as it is,
 and the command fails saying so. It can let go of a message and still
 answer that it did not, when the message was one of several it had
@@ -689,19 +697,19 @@ comes, whatever the command answers.
 ## Commands the user runs
 
 A line the user sends with a leading `!` is a command of their own. It
-runs in the session's folder, on the machine the agent runs on, and what
-it prints goes to the agent as context, with no turn of the agent's own:
-the agent reads it with the next message. One runs at a time, and a
+runs in the session's folder, on the machine the harness runs on, and what
+it prints goes to the harness as context, with no turn of the harness's own:
+the harness reads it with the next message. One runs at a time, and a
 message or a command sent while one runs or waits waits behind it, in the
-order sent. Each agent takes a command its own way.
+order sent. Each harness takes a command its own way.
 
 - **Claude Code** runs none of the user's commands itself, so the core
   runs it: with the user's shell, in the session's folder, with the
-  agent's own environment, with nothing to read from, and leading a
+  harness's own environment, with nothing to read from, and leading a
   process group of its own. It starts at once, even while a turn runs.
-  Once it has ended, the core gives it to the agent as the agent records
+  Once it has ended, the core gives it to the harness as the harness records
   a command the user ran in its own terminal: the line typed, what it
-  printed on each stream, each escaped as the agent escapes them, and,
+  printed on each stream, each escaped as the harness escapes them, and,
   where it did not exit with 0, its exit code. A command a signal ended
   has the code a shell gives it, 128 and the signal's number, and a line
   saying which signal ended it. Once the record is written, whatever the
@@ -711,10 +719,10 @@ order sent. Each agent takes a command its own way.
   its own, as a shell's job control or a daemon does, runs on everywhere.
   Claude Code takes that record once the running turn is over, or
   at once where none runs, in a turn that asks no model and is not told
-  as one. A message sent meanwhile waits until the agent has taken the
+  as one. A message sent meanwhile waits until the harness has taken the
   record, so that it reads the command first, and sending such a message
   now stops the running turn. Should Claude Code drop the record,
-  refusing, discarding or cancelling it, the window warns that the agent
+  refusing, discarding or cancelling it, the window warns that the harness
   has not seen what the command printed.
 - **Codex** runs the command itself, as its own shell command, in a turn
   of its own that asks no model and is not told as one, and keeps it in
@@ -725,7 +733,7 @@ order sent. Each agent takes a command its own way.
   what is left in the command's process group is ended with it.
 
 What a command prints streams to the window as it comes, up to a megabyte.
-The agent is given at most thirty thousand bytes of each stream, standard
+The harness is given at most thirty thousand bytes of each stream, standard
 output and standard error apart, so up to sixty thousand in all: past
 that, the start and the end of each, with a line between them saying how
 many lines were left out. Codex is given what Codex keeps.
@@ -749,13 +757,13 @@ that waits as dropped.
 ## Going back
 
 A session at rest goes back to before a message of the user's: the message
-and everything after it leave the conversation, the files the agent
+and everything after it leave the conversation, the files the harness
 changed since go back as they were before it, or both. At rest is ready,
 with no turn running, nothing waiting for a turn or for the user, no
 compaction and no subagent at work, and going back is refused otherwise.
 From then until going back has answered, the session refuses a message and
-a compaction, whoever asks, saying it is going back, since the agent would
-take them in a run that is about to end. Each agent goes back its own way.
+a compaction, whoever asks, saying it is going back, since the harness would
+take them in a run that is about to end. Each harness goes back its own way.
 
 Claude Code takes a conversation back only by starting again. The session
 is stopped, which ends the commands it left running in the background, its
@@ -771,7 +779,7 @@ session can switch to. The session started again has an id of its own,
 which the answer gives, and the one gone back from has ended by then.
 Going back to before the first message starts a new conversation, and
 leaves the old one as it was. Where the start fails, or does not come up,
-the agent having ended before it was ready, the conversation is started
+the harness having ended before it was ready, the conversation is started
 again whole, and the answer says why.
 
 A conversation Claude Code resumes is loaded from where it was last
@@ -779,12 +787,12 @@ compacted, and an entry before that is not found, so a message before the
 last compaction cannot be gone back to. Its files still can.
 
 The files go back first, while the message is still part of the
-conversation, since that is where the agent finds what it kept of them. The
+conversation, since that is where the harness finds what it kept of them. The
 window shows a dry run's files before the user chooses, and going back
 takes the files it showed. A dry run is made again then, and where it names
 a file the user was not shown, such as one the user saved in the meantime,
-nothing is put back and going back is refused; otherwise the agent puts
-them back. The agent
+nothing is put back and going back is refused; otherwise the harness puts
+them back. The harness
 keeps them as backups under the account's configuration directory, and
 removes them in time as its terminal does. It keeps none for a message
 typed while it worked, and none of what commands or subagents changed,
@@ -814,7 +822,7 @@ for good. So a terminal start that resumes a held conversation, from a row,
 from the list of past sessions or from the start tool, is refused with a
 reason of its own kind, which the window can tell from other failures,
 unless it says the user agreed to bring that back; then the point is let
-go and the terminal starts. The start tool answers the agent with the
+go and the terminal starts. The start tool answers the harness with the
 reason. The held command says whether a conversation is held, so that a
 window can say so before it opens one in a terminal, and offer to send a
 message first.
@@ -843,29 +851,29 @@ host on its id.
 
 An account's usage is metered over spans of time, called limit windows
 here: a session window of five hours, the week over every model, and for
-some plans the week for one model alone. The agent knows how much of each
+some plans the week for one model alone. The harness knows how much of each
 the account has used. An in-Chord session asks it as it goes, and for
 an account with no in-Chord session running, or one between turns, the
-workbench starts the agent to ask it, as [reading the limits with no
-session](#reading-the-limits-with-no-session) describes. Only the agent's
+workbench starts the harness to ask it, as [reading the limits with no
+session](#reading-the-limits-with-no-session) describes. Only the harness's
 own binary asks its provider: the workbench passes no token or key and
 calls no provider itself.
 
 The limits event carries every limit window the session knows of, each
 time, one of each kind and model and at most eight, with a model's name
-cut short past a few dozen characters. It goes out when the agent answers
-a read of the limits, and when what the agent pushes during a turn
-changes the figures. The session reads the limits once the agent is
+cut short past a few dozen characters. It goes out when the harness answers
+a read of the limits, and when what the harness pushes during a turn
+changes the figures. The session reads the limits once the harness is
 ready, and after a turn once the last read it asked for is five minutes
-old: what the agent pushes during a turn moves the session window and
+old: what the harness pushes during a turn moves the session window and
 the week in between, and a read that is never answered holds back none
 for longer than that. A limit window of a kind the workbench does not
 know is left out, and one whose reset time has passed is passed on as the
-agent last told it.
+harness last told it.
 
 A read gives every limit window and the plan, and a push moves only the
 windows it names, so the figures of one event can be of different ages.
-The event says when the last read the agent answered was taken, and when
+The event says when the last read the harness answered was taken, and when
 a figure last moved. Every figure was taken between the two, and the
 oldest is as old as the read, or, where no read was answered, as the
 event's own time.
@@ -881,13 +889,13 @@ the server's reading of how near its end it is. A row of no kind known
 here, or for one model with no model named, is left out. The server reads
 a limit window as critical close to its end as well as past it, so that
 reading counts as a warning, and the percent says which. During a turn
-the agent also reports, with each response of the model, the fraction
+the harness also reports, with each response of the model, the fraction
 used of the session window and the week, and whether either is near or
 at its end, which moves those two between reads. Claude Code answers its
 control requests one at a time, and a read can take it a few seconds,
 during which any line sent after it waits, a message or an interrupt
 among them. So besides waiting its five minutes, no read is made while a
-message waits for the agent to take it, and a read leaves out the scan of
+message waits for the harness to take it, and a read leaves out the scan of
 past transcripts that a full usage report makes.
 
 Codex is read with its rate limits request, which holds up nothing it is
@@ -903,7 +911,7 @@ length is left out, and of two of one length the primary is kept. Codex
 gives no reading of how near its end a limit window is.
 
 The usage request Claude Code answers is not a documented interface, and
-either agent may refuse a read or answer in a shape the workbench does not
+either harness may refuse a read or answer in a shape the workbench does not
 know. The session then goes on with no figures, or with the last ones it
 had, and says nothing of it.
 
@@ -933,7 +941,7 @@ figures hold a session window. An account metered some other way has no
 such window and is offered nothing. Codex and terminal sessions are not offered it: only a Claude
 Code conversation in Chord says for certain that the limit ended its turn.
 
-Only the agent's own word is taken that the limit ended a turn. Claude
+Only the harness's own word is taken that the limit ended a turn. Claude
 Code names a request that the account's usage limit refused with a kind
 of its own, on the message it writes for the refusal and on the result
 that ends the turn, and gives the limit window and the time it starts
@@ -995,7 +1003,7 @@ With each question the window says whether a session of the account
 worked since its figures were read: one is at work now, or was seen at
 work after the read. The core reads an account only when a read is due:
 when the newest full read of its limits, the core's own or one an
-in-Chord session's agent answered, is five minutes old where a session
+in-Chord session's harness answered, is five minutes old where a session
 worked since, or half an hour old where none did. A question can also
 name a time that figures read before say nothing of, as the wait for a
 limit to reset does, and a read is then due where the newest is older
@@ -1011,7 +1019,7 @@ fails holds back the next for a minute, then for twice as long after each
 failure since, up to an hour. An account whose directory is not there is
 not read.
 
-A read starts the agent's own binary under the account's directory, in a
+A read starts the harness's own binary under the account's directory, in a
 folder of the workbench's own beside its file that only the user can
 write, so no settings anyone else left in a shared folder are found.
 Claude Code runs as a stream that answers control requests, with no
@@ -1026,7 +1034,7 @@ no model: the answer itself says the process spent nothing. Codex runs its
 app-server with its plugins off and is asked for its rate limits after its
 handshake, with no thread started. A read has twenty seconds from the
 start of the process to its answer, and takes about a second, most of it
-the agent's start. The process's input is then closed, which ends it, and
+the harness's start. The process's input is then closed, which ends it, and
 whatever is left of its process group is ended a moment later.
 
 The core keeps the figures of each account's last full read in a file of
@@ -1037,21 +1045,21 @@ does not know.
 
 ## Failure
 
-The agent's protocol has no published format, so the code that reads it is
+The harness's protocol has no published format, so the code that reads it is
 kept apart and reads defensively, as the transcript readers are: an
 unknown message or field is ignored, a line that is not JSON is skipped,
-and a request from the agent that the workbench does not handle is refused
+and a request from the harness that the workbench does not handle is refused
 rather than left unanswered. A line longer than a few megabytes is skipped,
 with an error that says so. The driver still sees its bytes pass, and a
 tool call whose result was in it finishes at once as failed and cut short.
 
-Every wait on the process has a limit. The agent has a minute and a half
+Every wait on the process has a limit. The harness has a minute and a half
 to say it is ready, and is ended with an error if it does not. A line it
 does not take within half a minute means it has stopped reading: the
 session is ended with an error, so that nothing queued behind the line is
 written late. A control request it does not answer within half a minute
-fails, and the session goes on. A message handed to an agent that takes
-one at a time, and that the agent has not named within half a minute,
+fails, and the session goes on. A message handed to a harness that takes
+one at a time, and that the harness has not named within half a minute,
 in a turn's start or as dropped, is dropped, and the next one goes.
 
 A Codex permission request or question still waiting when its turn ends is
@@ -1062,15 +1070,15 @@ is answered no from what the start of the line says. What Codex says of a
 thread other than the session's own, such as one of its sub-agents, is
 left out, and a request from such a thread is answered no.
 
-The agent runs in a process group of its own. An agent the core ends, on a
+The harness runs in a process group of its own. A harness the core ends, on a
 stop or after an error, is first asked to end with a termination signal,
 and is killed with its whole group, its MCP servers among it, if it is
-still there a few seconds later. What is still in the group once the agent
+still there a few seconds later. What is still in the group once the harness
 has ended is asked to end too, and killed if it is still there a moment
 later. Claude Code runs a command it leaves in the background, such as a
-dev server, in a process group of its own, which killing the agent's group
+dev server, in a process group of its own, which killing the harness's group
 does not reach. It ends those commands itself when it is asked to end, so
-a stopped session takes them with it, but an agent that is killed
+a stopped session takes them with it, but a harness that is killed
 outright, or that dies, leaves them running. Codex runs each command in a
 process group of its own too. An interrupt ends the turn; a command Codex
 has said it started is left running, and one it has not yet said it
@@ -1090,8 +1098,8 @@ pieces of text, thinking and a tool call's input and output are left out,
 and the next event to go out after them is a skipped event saying how many;
 the whole that follows each piece holds all of it. Whole events and the
 answers to commands are never left out. When still more wait, the core
-stops reading the agent's output until there is room, which in time holds
-up the agent rather than any command. A process that dies fails the turn
+stops reading the harness's output until there is room, which in time holds
+up the harness rather than any command. A process that dies fails the turn
 it was in, finishes its open tool calls, withdraws what it asked, drops
 the messages that waited, says what its last words on stderr were, and
 ends with **ended**, so a session never hangs and never brings down the
@@ -1099,25 +1107,25 @@ core.
 
 ## What has no event
 
-Two things another agent offers have no event: the conversations of
+Two things another harness offers have no event: the conversations of
 Codex's own sub-agents, which it keeps as threads of their own, and forms
-an MCP server asks the user to fill in from a schema. A question the agent
+an MCP server asks the user to fill in from a schema. A question the harness
 asks covers options and words of the user's own, not such a form.
 
 ## History
 
 What a Claude Code conversation said before is read from its transcript,
-the file the agent writes as it goes. The workbench looks for it under the
+the file the harness writes as it goes. The workbench looks for it under the
 project's folder in the account's configuration directory, and under the
 folders of the directories inside the project, a worktree among them, since
-the agent files a session by the folder it ran in. A session resumed in
+the harness files a session by the folder it ran in. A session resumed in
 another folder is written there again under the same id, and the copy
 written last is read. Only a plain file is opened, and a request that names
 no project names no transcript. A session with no transcript there is an
 error that names the directory looked in. The account's directory is the
 settings' word, so a session the window starts before it has the settings,
 as one brought back at a start can be, is read once it has them, as its
-agent is started.
+harness is started.
 
 The transcript comes back as the events a live session would have sent, in
 order, each with the time its entry was written: each message of the user's
@@ -1131,25 +1139,25 @@ no result when its turn ended failed, as a live session's does. What a
 subagent said and did is read from its own transcript, beside the
 session's, and goes under the call that started it.
 
-A command the user ran themselves, here or in the agent's own terminal,
+A command the user ran themselves, here or in the harness's own terminal,
 comes back as a command that was done, under the id of the entry that
 gave it: the line typed, what it printed, and its exit code, which is 0
-where the agent wrote none. The agent writes such a command in one entry
+where the harness wrote none. The harness writes such a command in one entry
 or in two, the line first, and writes a placeholder where it printed
-nothing, which is read as no output. One the agent took while a turn ran
+nothing, which is read as no output. One the harness took while a turn ran
 comes back in that turn.
 
 A transcript can hold turns the user went back on. The conversation is the
 line from the last entry back through each entry's parent to the first,
-past a compaction to what it compacted, with the results of calls the agent
+past a compaction to what it compacted, with the results of calls the harness
 made at once, which hang off their calls. Where that line breaks off at a
 parent the transcript does not hold, every entry is kept in the order
-written. A last turn with no end in the transcript, no stop of the agent's
+written. A last turn with no end in the transcript, no stop of the harness's
 own and no note of how long it took, is left open, as one that may still
 run. A conversation the core holds at the point it went back to is read as
 far as that point, as described under [going back](#going-back).
 
-The format is internal to the agent and changes between versions, so the
+The format is internal to the harness and changes between versions, so the
 reader is kept apart and reads defensively, as the title reader does: an
 entry it cannot read is skipped, never an error; a last line still being
 written is skipped; a line of more than a few dozen megabytes is passed
@@ -1183,8 +1191,8 @@ Codex's own for one sent elsewhere, with its text and images; text and
 thinking whole; commands, edits, MCP and other tool calls with their
 input, result and the files they changed; plans; and compactions. A turn
 answers the first message of the user's that comes before anything the
-agent said in it, and a later one was taken into it. A turn with no
-message is one the agent began by itself, and a compaction in such a turn
+harness said in it, and a later one was taken into it. A turn with no
+message is one the harness began by itself, and a compaction in such a turn
 was asked for, while one in a turn the user began was made because the
 context was full. Codex's app-server names no model for a turn, so a turn
 read from it names none. An item of a kind the workbench does not know is
@@ -1196,8 +1204,8 @@ with the line as typed, taken out of the shell Codex ran it with: running
 while its turn still runs, done with its exit code and output, timed out,
 stopped where its turn was interrupted, or failed. Codex keeps no output of
 one stopped or out of time. A turn that only ran such commands is no turn
-of the agent's. A thread kept by an older Codex, which kept less, comes
-back with its messages and what the agent said, under ids of Codex's own
+of the harness's. A thread kept by an older Codex, which kept less, comes
+back with its messages and what the harness said, under ids of Codex's own
 that differ from those its live events had.
 
 Read from a process of its own, a turn that still runs comes back as
@@ -1227,7 +1235,7 @@ has to do itself:
   answer after the events they caused, going back after its rewound and,
   for a session started again, after the end of the one it went back
   from. The other commands answer once what they wrote
-  reached the agent, or the agent said it took it, and what they cause
+  reached the harness, or the harness said it took it, and what they cause
   can come after, such as the end of an interrupted turn.
 - **Going back.** Claude Code goes back by ending the session and starting
   another, whose events can come before the answer names it. So the window
@@ -1243,20 +1251,20 @@ has to do itself:
   back. What the window marked as told in a message gone back on, such as
   a report of a session it started, counts as not told again. Files put
   back while the conversation stayed as it was, with only the files or
-  where the answer says the conversation went on whole, leave the agent
+  where the answer says the conversation went on whole, leave the harness
   believing what it changed in them stands, so the window tells it ahead
   of the user's next message.
 - **The conversation's id.** The session's row, and resuming it, need the
-  conversation's id. For an agent that makes its own ids the start
+  conversation's id. For a harness that makes its own ids the start
   answers with none, and the id is known only from ready.
 - **Streaming.** Text, thinking and a tool call's input stream in pieces,
   then come whole. The pieces can have a gap, which a skipped event marks,
   and the whole holds all of it. A block or an input can also end with no
-  whole after it, when the turn is interrupted or the agent dies; the end
+  whole after it, when the turn is interrupted or the harness dies; the end
   of the turn, or of the session, is then its end too.
 - **Messages.** A message's id is the window's own, chosen before it is
-  sent. A turn names the messages it answers, several where the agent
-  took them together; a turn that names none is one the agent began by
+  sent. A turn names the messages it answers, several where the harness
+  took them together; a turn that names none is one the harness began by
   itself. The first message event for an id carries its text and images,
   so a second window can draw a message it did not send.
 - **Commands.** A command's id is the window's own too, and its first event
@@ -1277,7 +1285,7 @@ has to do itself:
   session late, after a reload or as a second window, listens first and
   then asks for a snapshot and for the history. It lays the history first,
   then the events it heard meanwhile, then the snapshot, which says what
-  no transcript holds: the state, the settings and what the agent offers,
+  no transcript holds: the state, the settings and what the harness offers,
   the requests waiting for an answer, which it can still answer, the
   messages that wait for a turn, and the account's limits. What both the
   history and the events hold, a call, a block of text or a message, has

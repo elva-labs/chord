@@ -105,8 +105,8 @@ ssh can be told, named in the second field of the Remote dialog.
 
 ## What is not there yet
 
-- Agents are detected here, not there. The new-session choice offers the
-  agents installed on this machine; an agent missing on the remote fails when
+- Harnesses are detected here, not there. The new-session choice offers the
+  harnesses installed on this machine; one missing on the remote fails when
   it starts, in the terminal.
 - Files dropped on a remote session's terminal type this machine's paths.
 - Windows remotes are untried. The daemon builds there, but `connect` and

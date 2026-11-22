@@ -69,7 +69,7 @@ Five palettes: teal, indigo, amber, rose and mono. Every colour in the app
 comes from a small set of semantic tokens, ink, surface, rule, accent, add,
 del, and a palette restates the accent and the cast of the greys for both
 appearances while add and del stay what they are. The terminal's sixteen
-ANSI colours are derived from the same tokens, so the agent's own interface
+ANSI colours are derived from the same tokens, so the harness's own interface
 sits in the palette rather than beside it, and the editor colours code in
 those sixteen too.
 

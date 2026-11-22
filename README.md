@@ -24,9 +24,9 @@ Each session has a row with a dot that says whether the agent is working, waitin
 
 Beside the agent, the project's changed files and their diffs refresh as it edits. When the agent moves into a git worktree, the pane follows it there. Open a file to read it whole, or rendered if it is Markdown, HTML, a diagram or an image.
 
-## The agent you already use
+## The harness you already use
 
-Claude Code and Codex run as themselves, with your login, settings, skills and MCP servers. A session runs in a terminal, with the agent's own interface, or in Chord, as a conversation the window draws, and the same conversation resumes either way. Past sessions are listed under their project, including the ones you ran from a plain terminal.
+Claude Code and Codex run as themselves, with your login, settings, skills and MCP servers. A session runs in a terminal, with the harness's own interface, or in Chord, as a conversation the window draws, and the same conversation resumes either way. Past sessions are listed under their project, including the ones you ran from a plain terminal.
 
 ## Make it yours
 
