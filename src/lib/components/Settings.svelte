@@ -125,7 +125,7 @@
   let problem = $state<{ action: ActionKey; text: string } | null>(null);
 
   let tabs: HTMLElement;
-  let tab = $state<Tab>(remembered);
+  let tab = $state<Tab>(settings.newAgent ? "agents" : remembered);
 
   let agentsTab: AgentsTab | undefined = $state();
 
@@ -161,6 +161,14 @@
   onMount(() => {
     dialog.focus();
     return returnFocus;
+  });
+
+  /** Opened on a new agent: its form, on the Agents tab. */
+  onMount(() => {
+    if (!settings.newAgent) return;
+    settings.newAgent = false;
+    remembered = "agents";
+    agentsTab?.create();
   });
 
   /** The plugin sources, read when the dialog opens. */
