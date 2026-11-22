@@ -22,6 +22,7 @@ import { applyDetect, resetAgent } from "$lib/agent.svelte";
 import {
   byKey,
   create,
+  drafting,
   ended,
   forProject,
   reset as resetSessions,
@@ -292,6 +293,23 @@ describe("a plugin's start", () => {
     ]);
   });
 
+  it("tells the core a start began none when showing why it failed throws as well", async () => {
+    const mock = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    mock.worktreeAdd = async () => {
+      throw {
+        toString() {
+          throw new Error("unreadable");
+        },
+      };
+    };
+    const failing = pluginStartAsked(start({ worktree: true }));
+    await until(() => conductor.asking !== null);
+    once();
+    await expect(failing).rejects.toThrow("unreadable");
+    expect(settledStarts).toEqual([{ project: A, request: "req-1", started: false }]);
+    expect(sessions.all).toHaveLength(0);
+  });
+
   it("does not name the session as the user", async () => {
     const row = await allowed(start({ name: "You" }));
     expect(row.title).toBeNull();
@@ -398,6 +416,11 @@ describe("a plugin's line", () => {
     byKey(row.key)!.needs = "permission";
     expect(await sending).toBe("refused");
     expect(written.map(([, data]) => data)).not.toContain("\r");
+    // The words left on the line are a draft: no later line joins them.
+    expect(drafting(row.key)).toBe(true);
+    byKey(row.key)!.needs = null;
+    expect(await pluginSendAsked(line({ request: "send-2" }))).toBe("refused");
+    expect(written).toHaveLength(1);
   });
 
   it("stops short of Enter when the user starts a line of their own meanwhile", async () => {

@@ -75,6 +75,7 @@ import {
   keysStillIn,
   knownName,
   label,
+  leftOnLine,
   toldName,
   sessionModelName,
   onClosed,
@@ -258,7 +259,8 @@ export function typingInto(key: string): boolean {
     then Enter on its own, after any other line being typed into it. The
     agent has been spoken to, as by a line typed into its terminal. `held`,
     asked before the text goes in and again before its Enter, stops it
-    there: the text then stays unsent, and the line fails. */
+    there and the line fails. Text it stops before Enter stays on the line
+    unsent, the session's draft, so nothing typed later joins it. */
 export async function typeLine(
   key: string,
   ptyId: string,
@@ -272,7 +274,10 @@ export async function typeLine(
       if (held?.() === true) throw new Error("held before the line");
       const wait = await typeWhole(key, ptyId, line);
       await pause(wait);
-      if (held?.() === true) throw new Error("held before Enter");
+      if (held?.() === true) {
+        leftOnLine(key);
+        throw new Error("held before Enter");
+      }
       await core().write(ptyId, "\r");
       spokenTo(ptyId);
     });

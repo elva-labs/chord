@@ -3071,6 +3071,13 @@ export function drafting(key: string): boolean {
   return drafts[key] === true;
 }
 
+/** Words the workbench typed into a session's terminal are on its line
+    unsent: a draft, as the user's own words are, until the agent takes a
+    line in or Ctrl+C empties it. */
+export function leftOnLine(key: string) {
+  drafts[key] = true;
+}
+
 /** How long until the user's keys in a session's terminal have been still
     for `quiet` milliseconds: nothing once they have. */
 export function keysStillIn(key: string, quiet: number, now = Date.now()): number {

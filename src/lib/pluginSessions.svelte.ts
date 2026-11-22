@@ -95,9 +95,13 @@ async function settled(asked: PluginStartEvent, started: boolean) {
  * the plugin on no: it hears of a start by the session's own lines.
  */
 export async function pluginStartAsked(asked: PluginStartEvent): Promise<string | null> {
-  const key = await startFor(asked);
-  await settled(asked, key !== null);
-  return key;
+  let key: string | null = null;
+  try {
+    key = await startFor(asked);
+    return key;
+  } finally {
+    await settled(asked, key !== null);
+  }
 }
 
 async function startFor(asked: PluginStartEvent): Promise<string | null> {
