@@ -2721,11 +2721,11 @@ async function startSession(request: Placed): Promise<Answered> {
   if (project === null) return refused("Starting a session needs a project.");
   if (prompt === null)
     return refused("Starting a session needs a prompt to give it.");
-  // A model's name means something to one agent only, so the agent is
+  // A model's name means something to one harness only, so the harness is
   // named with it rather than taken from the project's last one.
-  if (text(request, "model") !== null && text(request, "agent") === null)
+  if (text(request, "model") !== null && harnessText(request) === null)
     return refused(
-      "A start that names a model names the agent too, claude-code or codex: the model's name is the agent's to read.",
+      "A start that names a model names the harness too, claude-code or codex: the model's name is the harness's to read.",
     );
   if (!isStartable(project))
     return refused(`No project at ${project} is open in the workbench.`);
@@ -3176,7 +3176,7 @@ function fitStart(
     return {
       refusal: `The workflow ${quoted(workflow.name)} has no step called ${quoted(named)}. The steps are ${stepsText(workflow)}.`,
     };
-  const runs = modelFor(text(request, "agent"), text(request, "model"), step);
+  const runs = modelFor(harnessText(request), text(request, "model"), step);
   if ("refusal" in runs) return runs;
   const from = text(request, "work");
 
@@ -3336,7 +3336,7 @@ function modelFor(
           ? agent
           : `the model ${model}`;
     return {
-      refusal: `The step ${quoted(step.name)} does not allow ${asked}. It allows ${either(step.models.map(modelText))}. Leave the agent and the model out to use the first.`,
+      refusal: `The step ${quoted(step.name)} does not allow ${asked}. It allows ${either(step.models.map(modelText))}. Leave the harness and the model out to use the first.`,
     };
   }
   return {
@@ -4519,10 +4519,19 @@ function byId(sessionId: string): Session | null {
   return sessions.all.find((session) => session.id === sessionId) ?? null;
 }
 
-/** The agent to run: the one the call named when it is one the workbench
+/** The harness a start names, with harness, or with agent by one of the
+    harnesses' names, which starts still use for one release. */
+function harnessText(request: ConductRequest): string | null {
+  const named = text(request, "harness");
+  if (named !== null) return named;
+  const old = text(request, "agent");
+  return old === "claude-code" || old === "codex" ? old : null;
+}
+
+/** The harness to run: the one the call named when it is one the workbench
     drives, else the project's own. */
 function agentOf(request: ConductRequest, project: string): HarnessId {
-  const wanted = text(request, "agent");
+  const wanted = harnessText(request);
   if (wanted === "claude-code" || wanted === "codex") return wanted;
   return defaultAgent(project);
 }

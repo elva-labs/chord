@@ -836,7 +836,7 @@ describe("starting a session", () => {
     expect(plain.model).toBeNull();
   });
 
-  it("refuses a model named without an agent", async () => {
+  it("refuses a model named without a harness", async () => {
     await handle(
       call(
         "start",
@@ -844,7 +844,16 @@ describe("starting a session", () => {
         { session: "caller-1" },
       ),
     );
-    expect(last().error).toContain("names the agent too");
+    expect(last().error).toContain("names the harness too");
+    // agent names the harness only by one of the harnesses' names.
+    await handle(
+      call(
+        "start",
+        { project: A, prompt: "Fix it", model: "sonnet", agent: "Reviewer" },
+        { session: "caller-1" },
+      ),
+    );
+    expect(last().error).toContain("names the harness too");
     expect(conductor.asking).toBeNull();
     expect(forProject(A)).toHaveLength(0);
   });
@@ -1613,7 +1622,7 @@ describe("a start in the caller's own project", () => {
     expect((await begun("sid-4")).model).toBeNull();
     // A model the start names is the one.
     caller.model = "fable";
-    expect((await begun("sid-5", { agent: "claude-code", model: "haiku" })).model).toBe("haiku");
+    expect((await begun("sid-5", { harness: "claude-code", model: "haiku" })).model).toBe("haiku");
     expect(last().content).toContain("It runs on Haiku.");
     // Never above the default the account runs on, where the agent said.
     heardOffers("claude-code", null, ["default", "opus", "sonnet"], "claude-sonnet-5-5");
@@ -4174,12 +4183,12 @@ describe("starting in a workflow's shape", () => {
 
   it("refuses a model the step does not allow, with what it allows", async () => {
     orchestrating();
-    expect(await refusedWith({ step: "Work", agent: "claude-code", model: "opus" })).toBe(
-      'The step "Work" does not allow claude-code with the model opus. It allows claude-code with the model sonnet. Leave the agent and the model out to use the first.',
+    expect(await refusedWith({ step: "Work", harness: "claude-code", model: "opus" })).toBe(
+      'The step "Work" does not allow claude-code with the model opus. It allows claude-code with the model sonnet. Leave the harness and the model out to use the first.',
     );
   });
 
-  it("refuses an agent the step does not allow, with what it allows", async () => {
+  it("refuses a harness the step does not allow, named the old way too", async () => {
     orchestrating();
     expect(await refusedWith({ step: "Work", agent: "codex" })).toContain(
       'The step "Work" does not allow codex. It allows claude-code with the model sonnet.',
