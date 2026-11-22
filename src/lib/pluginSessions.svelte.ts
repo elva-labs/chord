@@ -96,9 +96,10 @@ async function settled(asked: PluginStartEvent, started: boolean) {
 /**
  * A plugin asks to start a session. The conductor's card asks the user,
  * every time, with the harness and model it runs on, the last chosen to
- * begin with, and the agent it works as; on yes the session starts the way
- * a session's start does, out of sight, and is the plugin's from then on. Nothing is said back to
- * the plugin on no: it hears of a start by the session's own lines.
+ * begin with, and the agent it works as; on yes the session starts the
+ * way a session's start does, out of sight, and is the plugin's from then
+ * on. Nothing is said back to the plugin on no: it hears of a start by the
+ * session's own lines.
  */
 export async function pluginStartAsked(asked: PluginStartEvent): Promise<string | null> {
   let key: string | null = null;
