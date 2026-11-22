@@ -7,6 +7,7 @@ import { mentionedIn, mentionsOf } from "$lib/mentioned.svelte";
 import { reservedName, shown } from "$lib/unseen";
 import { failureOf } from "$lib/turnFailure";
 import { senderOf, sentAt, sentBy, starterOf, WORKBENCH } from "$lib/senders.svelte";
+import { pluginMarkFor } from "$lib/pluginStarts.svelte";
 import { keepMode, modeOf } from "$lib/sessionModes";
 import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
 import { heardOffers } from "$lib/lastChosen.svelte";
@@ -691,7 +692,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
   rememberWorkflow(row);
   if (row.prompt !== null && !link.prompted && link.handle !== null) {
     link.prompted = true;
-    send(key, row.prompt, [], starterOf(key));
+    send(key, row.prompt, [], starterOf(key) ?? pluginMarkFor(key));
   }
 }
 

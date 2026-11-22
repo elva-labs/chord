@@ -36,6 +36,7 @@ import { holdMode, modeOf, terminalEnded } from "$lib/sessionModes";
 import { chosenFor, modelToStart, narrowTo } from "$lib/lastChosen.svelte";
 import { carriedOver } from "$lib/modeFit";
 import { starterOf } from "$lib/senders.svelte";
+import { pluginStartOf } from "$lib/pluginStarts.svelte";
 import { logUsage } from "$lib/usageLog";
 import { bareName, mixesScripts, readsAsWorkbench, reservedName, shown } from "$lib/unseen";
 import { failureOf, interruptedOnScreen, type Failure } from "$lib/turnFailure";
@@ -1791,9 +1792,11 @@ export function toldFor(session: Session): Told {
 
 /** What a start tells the core of where a session comes from, which the
     plugins are told in turn: the agent id of the session that started it,
-    and whether it runs in a worktree made for it. */
-export function originOf(session: Session): { starter?: string; madeWorktree?: boolean } {
+    whether it runs in a worktree made for it, and the request of the
+    plugin's start it is, when a plugin started it. */
+export function originOf(session: Session): { starter?: string; madeWorktree?: boolean; pluginStart?: string } {
   const starter = starterOf(session.key);
+  const plugin = pluginStartOf(session.key);
   // A starter is kept by its agent id until its token is known.
   const id =
     starter === null
@@ -1802,6 +1805,7 @@ export function originOf(session: Session): { starter?: string; madeWorktree?: b
   return {
     ...(id === null ? {} : { starter: id }),
     ...(session.madeTree && session.startIn !== null ? { madeWorktree: true } : {}),
+    ...(plugin === null ? {} : { pluginStart: plugin.request }),
   };
 }
 
@@ -3065,6 +3069,13 @@ function tookLine(key: string) {
     line that they have not sent. */
 export function drafting(key: string): boolean {
   return drafts[key] === true;
+}
+
+/** Words the workbench typed into a session's terminal are on its line
+    unsent: a draft, as the user's own words are, until the agent takes a
+    line in or Ctrl+C empties it. */
+export function leftOnLine(key: string) {
+  drafts[key] = true;
 }
 
 /** How long until the user's keys in a session's terminal have been still
