@@ -55,12 +55,12 @@ left, as on Linux.
 
 ## Opening folders from a terminal
 
-On macOS the Homebrew cask puts `awb` on the PATH. `awb` opens the folder
-the terminal is in as a project, and `awb <folder> ...` the folders it names.
+On macOS the Homebrew cask puts `chord` on the PATH. `chord` opens the folder
+the terminal is in as a project, and `chord <folder> ...` the folders it names.
 It hands them to the app through `open`, so the system starts the app when
 it is not running and sends them to it when it is. Folders named to
-`open -a "Chord"` arrive the same way. `awb --version` prints the
-version of the app it belongs to, and `awb help` how it is used.
+`open -a "Chord"` arrive the same way. `chord --version` prints the
+version of the app it belongs to, and `chord help` how it is used.
 
 On Linux and Windows the app takes folders as arguments. Started again while
 it runs, it hands its folders to the running app, which comes to the front,
