@@ -514,6 +514,42 @@ directory, so a session started under another account is listed under its
 project like the rest, with the account's name as a tag, and resumes under
 that account.
 
+## Codex profiles
+
+A Codex profile is a configuration of its own for Codex, a file named
+`<name>.config.toml` in the account's Codex home whose settings Codex
+takes over those of its `config.toml`. Where the account a new Codex
+session starts under has profiles on the project's machine, the session's
+line in the palette names the profile it starts under, and Change asks
+which, under `With which Codex profile`, after the account and the agent.
+No profile comes first, with the model and the effort the session would
+start on without one, where those are known. Each profile follows by name,
+with its file's name and the model, the effort and the provider the file
+sets, and how many of its settings are left out, such as `2 settings left
+out`. A new session, New session in Chord and in a terminal included,
+starts under the profile last picked in the project, marked `last used
+here`, while the account still has it, and otherwise under none. The pick, no profile included, is kept for the project only,
+and between runs. A session that follows a workflow is not asked and runs
+under none.
+
+A session under a profile starts on the model and the effort its file
+sets, Codex's own where it sets none, and takes only the permission mode
+from what is kept, as [what a new session starts
+on](../integrated.md#what-a-new-session-starts-on) describes. Its row
+shows the profile's name after the model. The status bar names it after
+the account, as `profile:` and the name, and its tooltip names the
+settings left out. The composer's model menu is
+headed with the profile's name and marks the model its file sets; a model
+picked there holds for that session alone. What a profile's file may set,
+and what is left out of it, is in [Codex
+profiles](../adapters.md#codex-profiles).
+
+A session another session starts runs under its starter's profile when
+both run Codex under the same account on the same machine, and under none
+otherwise; a start cannot name one. A session that comes back after a
+restart runs under the profile it ran under, and one resumed from the past
+sessions under none.
+
 ## Names
 
 A project is its folder's name. Two open projects with the same name each

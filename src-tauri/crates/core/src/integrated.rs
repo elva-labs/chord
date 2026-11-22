@@ -965,6 +965,10 @@ pub struct Launch<'a> {
     /// Whether the session starts reading only: the agent's own tools that
     /// change files are refused.
     pub reads_only: bool,
+    /// The settings of the Codex profile the session runs under, each a
+    /// `key=value` for `-c`, as [`crate::codex_profiles::settings`] gives
+    /// them. Empty for none.
+    pub profile: &'a [String],
 }
 
 /// How one agent is started and spoken to as an integrated session.
@@ -6020,6 +6024,7 @@ mod tests {
             compact_at: None,
             resume_at: None,
             reads_only: false,
+            profile: &[],
         };
         let sessions = Arc::new(Sessions::default());
         for (session, said) in [(None, None), (Some("resumed"), Some("resumed".to_string()))] {

@@ -41,6 +41,7 @@
     readsLikeAnother,
     loadHistory,
     loadMissingHistories,
+    rowModelLine,
     sessionModelName,
     earlierLabel,
     outsideFor,
@@ -103,6 +104,7 @@
   import { compact } from "$lib/compact.svelte";
   import { shown } from "$lib/unseen";
   import { openGoTo, openNew } from "$lib/palette.svelte";
+  import { profileToStartHeard } from "$lib/codexProfiles.svelte";
   import { openSettings } from "$lib/settings.svelte";
   import { chordFor, describe } from "$lib/keys.svelte";
   import { tick, untrack } from "svelte";
@@ -376,8 +378,10 @@
               id: "project-menu-other",
               label: other === "integrated" ? "New session in Chord" : "New session in a terminal",
               disabled: !isReady(),
-              run: () => {
-                startSession(path, agent, accountToStart(path), null, other);
+              run: async () => {
+                const account = accountToStart(path);
+                const profile = agent === "codex" ? await profileToStartHeard(path, account) : null;
+                startSession(path, agent, account, null, other, profile);
                 void reveal(path);
               },
             },
@@ -1649,7 +1653,7 @@
       tabindex="-1"
       onclick={() => choose(session.key)}
       oncontextmenu={(e) => openSessionMenu(session.key, e)}
-      title={sessionModelName(session) ?? undefined}
+      title={rowModelLine(session) ?? undefined}
       data-testid="session-row"
     >
       <span
@@ -1749,8 +1753,8 @@
               title="Goes on by itself when the usage limit resets"
               data-testid="session-resumes">{resumes}</span
             >
-          {:else if news.length === 0 && (session.runsOn ?? session.model) !== null}
-            <span class="meta" data-testid="session-model">{sessionModelName(session)}</span>
+          {:else if news.length === 0 && rowModelLine(session) !== null}
+            <span class="meta" data-testid="session-model">{rowModelLine(session)}</span>
           {/if}
         </span>
       {/if}

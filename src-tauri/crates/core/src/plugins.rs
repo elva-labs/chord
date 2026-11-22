@@ -39,6 +39,9 @@ pub const PLUGIN_VIEW: &str = "plugin_view";
 /// The event a message for an open page is told by.
 pub const PLUGIN_VIEW_DATA: &str = "plugin_view_data";
 
+/// The event a plugin's notification that names no session is told by.
+pub const PLUGIN_NOTIFY: &str = "plugin_notify";
+
 /// The event a plugin's mark on a session's row is told by.
 pub const PLUGIN_MARK: &str = "plugin_mark";
 
@@ -416,6 +419,18 @@ pub struct SendAsk {
 /// plugin hears it.
 pub const SENT: [&str; 3] = ["delivered", "gone", "refused"];
 
+/// A plugin's notification that names no session, for the window to
+/// show as the plugin's. A click on it opens the plugin's page, which is
+/// handed the target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Notified {
+    pub source: String,
+    pub plugin: String,
+    pub project: String,
+    pub text: String,
+    pub target: Option<String>,
+}
+
 /// What a plugin said went wrong with an action, for the window to show.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Notice {
@@ -516,6 +531,52 @@ const NAME_MOST: usize = 60;
 
 /// The most a plugin's own ref for a session may hold, in bytes.
 const REF_MOST: usize = 256;
+
+/// The most a plugin's target for its page may hold, in bytes.
+const TARGET_MOST: usize = 256;
+
+/// The most notifications a plugin may give that name no session, in any
+/// span of `NOTIFY_SPAN`. One over it is dropped.
+const NOTIFY_MOST: usize = 3;
+
+/// The span `NOTIFY_MOST` counts over.
+const NOTIFY_SPAN: Duration = Duration::from_secs(60);
+
+/// Whether a character shows nothing of its own or changes how others
+/// show: a control (Cc), a format character (Cf), a line or paragraph
+/// separator (Zl, Zp), or a default-ignorable code point. These are the
+/// characters the window treats as unseen.
+fn unseen(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c as u32,
+            0x00AD
+                | 0x034F
+                | 0x0600..=0x0605
+                | 0x061C
+                | 0x06DD
+                | 0x070F
+                | 0x0890..=0x0891
+                | 0x08E2
+                | 0x115F..=0x1160
+                | 0x17B4..=0x17B5
+                | 0x180B..=0x180F
+                | 0x200B..=0x200F
+                | 0x2028..=0x202E
+                | 0x2060..=0x206F
+                | 0x3164
+                | 0xFE00..=0xFE0F
+                | 0xFEFF
+                | 0xFFA0
+                | 0xFFF0..=0xFFFB
+                | 0x110BD
+                | 0x110CD
+                | 0x13430..=0x1343F
+                | 0x1BCA0..=0x1BCA3
+                | 0x1D173..=0x1D17A
+                | 0xE0000..=0xE0FFF
+        )
+}
 
 /// The most starts a plugin is kept owning: the ones whose sessions last
 /// ran, so the record stays small however many it asks for.
@@ -699,8 +760,9 @@ struct Inner {
     acts: Mutex<HashMap<String, Act>>,
     /// The sessions plugins asked to start, by request: on disk once a
     /// session runs under one, until the plugin's source is removed or
-    /// added afresh, the window says its start began none, or the plugin
-    /// has `OWNED_MOST` newer that began one.
+    /// added afresh, the window says its start began none or its row was
+    /// closed for good, or the plugin has `OWNED_MOST` newer that began
+    /// one.
     owned: Mutex<HashMap<String, Owned>>,
     /// The lines plugins sent to sessions, by request, until the window
     /// says what came of each.
@@ -727,6 +789,9 @@ struct Inner {
     ptys: Mutex<HashMap<String, Pty>>,
     /// The session and call of the commands plugins were told of last.
     told: Mutex<VecDeque<(String, String)>>,
+    /// When each plugin last gave notifications that name no session, the
+    /// ones within `NOTIFY_SPAN`.
+    notifying: Mutex<HashMap<Key, VecDeque<Instant>>>,
 }
 
 /// The sources and their processes. Shared with the threads that read a
@@ -1193,6 +1258,7 @@ impl Plugins {
                 projects: Mutex::new(Vec::new()),
                 ptys: Mutex::new(HashMap::new()),
                 told: Mutex::new(VecDeque::new()),
+                notifying: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -1348,8 +1414,9 @@ impl Plugins {
     /// Whether a plugin's start began a session. One that did is kept
     /// among the plugin's `OWNED_MOST`, past which the start that ran
     /// longest ago goes. One that did not, the user's no, a start the
-    /// window refused or one that failed, is the plugin's no longer. The
-    /// plugin hears nothing of it.
+    /// window refused or one that failed, is the plugin's no longer, and
+    /// so is one whose session's row was closed for good. The plugin hears
+    /// nothing of it.
     pub fn start_settled(&self, request: &str, started: bool) {
         self.inner.start_settled(request, started);
     }
@@ -3046,6 +3113,13 @@ impl Inner {
             }
             "view" => self.viewed(source_id, name, message),
             "view_data" => self.view_data(source_id, name, message),
+            "notify"
+                if message
+                    .get("session")
+                    .is_none_or(|session| session.is_null()) =>
+            {
+                self.notify_asked(source_id, name, message)
+            }
             "open" | "diff" | "present" | "notify" => self.requested(kind, message),
             "mark" => self.marked(source_id, name, message),
             "open_url" => self.open_url(source_id, name, message),
@@ -3389,7 +3463,8 @@ impl Inner {
     }
 
     /// A start that began a session takes its place among its plugin's
-    /// `OWNED_MOST`; one that began none is the plugin's no longer.
+    /// `OWNED_MOST`; one that began none, or whose row was closed for
+    /// good, is the plugin's no longer.
     fn start_settled(&self, request: &str, started: bool) {
         let mut owned = self.owned.lock().expect("plugins lock");
         let changed = if started {
@@ -3586,6 +3661,74 @@ impl Inner {
                 ..section
             });
         }
+    }
+
+    /// One `notify` line that names no session: the plugin's own
+    /// notification, for a project open here. Its text is one line of
+    /// 120 characters at most, with no character that shows nothing or
+    /// moves others (`unseen`), and a text left empty asks for none; a
+    /// target over its size is none. Past `NOTIFY_MOST` in `NOTIFY_SPAN` a
+    /// plugin's line is dropped.
+    fn notify_asked(&self, source_id: &str, name: &str, message: &serde_json::Value) {
+        let text = |key: &str| {
+            message
+                .get(key)
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        };
+        let (Some(project), Some(said)) = (text("project"), text("text")) else {
+            return;
+        };
+        // Whitespace stays for `one_line` to make single spaces of.
+        let seen: String = said
+            .chars()
+            .filter(|c| c.is_whitespace() || !unseen(*c))
+            .collect();
+        let line = crate::show::one_line(&seen);
+        if line.is_empty() {
+            return;
+        }
+        if !self
+            .projects
+            .lock()
+            .expect("plugins lock")
+            .iter()
+            .any(|open| open == project)
+        {
+            return;
+        }
+        let target = text("target")
+            .filter(|target| target.len() <= TARGET_MOST)
+            .map(str::to_string);
+        {
+            let now = Instant::now();
+            let mut notifying = self.notifying.lock().expect("plugins lock");
+            let times = notifying
+                .entry((source_id.to_string(), name.to_string()))
+                .or_default();
+            while times
+                .front()
+                .is_some_and(|at| now.duration_since(*at) >= NOTIFY_SPAN)
+            {
+                times.pop_front();
+            }
+            if times.len() >= NOTIFY_MOST {
+                return;
+            }
+            times.push_back(now);
+        }
+        crate::events::emit(
+            &self.sink,
+            PLUGIN_NOTIFY,
+            &Notified {
+                source: source_id.to_string(),
+                plugin: name.to_string(),
+                project: project.to_string(),
+                text: line,
+                target,
+            },
+        );
     }
 
     /// What the agent's own tools ask for, asked for by a plugin: a place
@@ -4158,7 +4301,7 @@ done
     const UNSEEN: &str = r#"#!/bin/sh
 echo '{"type":"hello","name":"quiet","version":"1.0.0"}'
 echo '{"type":"view","project":"PROJECT","html":"<h1>Nothing</h1>","open":true}'
-echo '{"type":"notify","project":"PROJECT","text":"no view here"}'
+echo '{"type":"notify","project":"PROJECT","session":"s-unknown","text":"no view here"}'
 while IFS= read -r line; do
   case "$line" in
     *'"type":"stop"'*) exit 0;;
@@ -6505,6 +6648,106 @@ run = ["sh", "main.sh"]
     }
 
     #[test]
+    fn a_plugin_s_notification_that_names_no_session_is_its_own_bounded() {
+        let home = Scratch::absent("plugins-notify-home");
+        let recorder = Arc::new(Recorder::default());
+        let plugins = plugins_at(&home, recorder.clone());
+        plugins.set_projects(vec!["/p".to_string()]);
+        let say = |plugin: &str, line: serde_json::Value| {
+            plugins.inner.said("source", plugin, "notify", &line);
+        };
+        let told = || -> Vec<serde_json::Value> {
+            recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(event, _)| event == PLUGIN_NOTIFY)
+                .map(|(_, payload)| payload.clone())
+                .collect()
+        };
+
+        say(
+            "github",
+            serde_json::json!({
+                "type": "notify",
+                "project": "/p",
+                "text": "  review\nasked\u{7} of you ",
+                "target": "pr/7",
+            }),
+        );
+        assert_eq!(
+            told(),
+            vec![serde_json::json!({
+                "source": "source",
+                "plugin": "github",
+                "project": "/p",
+                "text": "review asked of you",
+                "target": "pr/7",
+            })]
+        );
+
+        // A project not open here, no text, or a session named asks for
+        // none of the plugin's own.
+        say(
+            "github",
+            serde_json::json!({"project": "/elsewhere", "text": "x"}),
+        );
+        say("github", serde_json::json!({"project": "/p", "text": "  "}));
+        say(
+            "github",
+            serde_json::json!({"project": "/p", "text": "x", "session": "s-1"}),
+        );
+        assert_eq!(told().len(), 1);
+
+        // The text is cut, and a target over its size is none.
+        say(
+            "github",
+            serde_json::json!({
+                "project": "/p",
+                "text": "a".repeat(500),
+                "target": "t".repeat(TARGET_MOST + 1),
+            }),
+        );
+        let long = told().pop().unwrap();
+        assert_eq!(long["text"].as_str().unwrap().chars().count(), 120);
+        assert_eq!(long["target"], serde_json::Value::Null);
+
+        // A character that shows nothing or reorders others is dropped, and
+        // a text of only such characters asks for none.
+        say(
+            "bidi",
+            serde_json::json!({"project": "/p", "text": "a\u{202E}b\u{200B}c\u{2028}d"}),
+        );
+        assert_eq!(told().pop().unwrap()["text"], "abc d");
+        say(
+            "bidi",
+            serde_json::json!({"project": "/p", "text": "\u{202E}\u{200B}\u{FEFF}"}),
+        );
+        assert_eq!(told().len(), 3);
+
+        // Past its count in the span a plugin's line is dropped; another
+        // plugin's still goes.
+        say(
+            "github",
+            serde_json::json!({"project": "/p", "text": "third"}),
+        );
+        say(
+            "github",
+            serde_json::json!({"project": "/p", "text": "fourth"}),
+        );
+        say(
+            "other",
+            serde_json::json!({"project": "/p", "text": "its own"}),
+        );
+        let texts: Vec<_> = told().iter().map(|told| told["text"].clone()).collect();
+        assert!(texts.contains(&serde_json::json!("third")));
+        assert!(!texts.contains(&serde_json::json!("fourth")));
+        assert!(texts.contains(&serde_json::json!("its own")));
+        assert_eq!(told().len(), NOTIFY_MOST + 2);
+    }
+
+    #[test]
     fn a_plugin_makes_room_only_for_a_start_that_began_a_session() {
         let home = Scratch::absent("plugins-room-home");
         let recorder = Arc::new(Recorder::default());
@@ -6579,6 +6822,11 @@ run = ["sh", "main.sh"]
         assert_eq!(ids.len(), IDS_MOST);
         assert_eq!(ids.first().map(String::as_str), Some("t-3"));
         assert_eq!(ids.last().map(String::as_str), Some("t-2"));
+
+        // A start whose row was closed for good is the plugin's no longer,
+        // its ids with it.
+        plugins.start_settled(&started, false);
+        assert!(!owned().contains_key(&started));
     }
 
     #[test]

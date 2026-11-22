@@ -66,7 +66,7 @@
   import ActionInput from "$lib/components/ActionInput.svelte";
   import { cancelAction, noticed as pluginNoticed, pluginSections, sectionChanged } from "$lib/pluginSections.svelte";
   import { markChanged } from "$lib/pluginMarks.svelte";
-  import { dataArrived as pluginViewData, viewChanged as pluginViewChanged } from "$lib/pluginView.svelte";
+  import { dataArrived as pluginViewData, pluginNotified, viewChanged as pluginViewChanged } from "$lib/pluginView.svelte";
   import { pluginSendAsked, pluginStartAsked, takeDownCardsOf } from "$lib/pluginSessions.svelte";
   import { loadMedia, presented } from "$lib/media.svelte";
   import {
@@ -283,6 +283,9 @@
       .then((unlisten) => offs.push(unlisten));
     core()
       .onPluginNotice((event) => pluginNoticed(event))
+      .then((unlisten) => offs.push(unlisten));
+    core()
+      .onPluginNotify((event) => pluginNotified(event))
       .then((unlisten) => offs.push(unlisten));
     core()
       .onPluginMark((event) => markChanged(event))

@@ -1562,7 +1562,7 @@ describe("SessionsPane", () => {
     expect(startSession).not.toHaveBeenCalled();
     startReady();
     expect(startSession).toHaveBeenCalledTimes(1);
-    expect(startSession).toHaveBeenLastCalledWith("/two", undefined, undefined, undefined);
+    expect(startSession).toHaveBeenLastCalledWith("/two", undefined, undefined, undefined, undefined, null);
     expect(Date.now() - projects.used["/two"]).toBeLessThan(1000);
 
     applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
@@ -1575,7 +1575,7 @@ describe("SessionsPane", () => {
     expect(startSession).toHaveBeenCalledTimes(1);
     if (outcome.type === "close") outcome.then();
     expect(startSession).toHaveBeenCalledTimes(2);
-    expect(startSession).toHaveBeenLastCalledWith("/one", "codex", undefined, undefined);
+    expect(startSession).toHaveBeenLastCalledWith("/one", "codex", undefined, undefined, undefined, null);
     expect(sessions.all.map((session) => [session.project, session.agent])).toEqual([
       ["/two", "claude-code"],
       ["/one", "codex"],

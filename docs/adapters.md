@@ -35,6 +35,43 @@ the harness uses its own. The past sessions a project lists are read from
 the same directory. The core is given directories rather than names, so a
 session on a remote machine runs under directories on that machine.
 
+## Codex profiles
+
+A Codex profile is a file named `<name>.config.toml` in an account's Codex
+home, beside its `config.toml`, whose settings Codex takes over that
+file's. A new Codex session can run under one, as [the sessions
+reference](reference/sessions.md#codex-profiles) describes. The core lists
+the files on the project's machine whose names are at most 64 letters,
+digits, `-` and `_`, the first 64 by name, with the model, the effort and
+the provider each file sets; a file it cannot read is listed with none of
+them, and a session started under it fails with the reason. A profile is
+only ever named from that list, never from text a session or a file gives.
+A core too old to list profiles lists none.
+
+Codex's app-server takes no profile by name, so the core reads the file
+and gives its settings to Codex as `-c key=value` overrides, in a terminal
+and in Chord alike. They come before every setting Chord gives the
+session, so Chord's own win where both name one, and as overrides they
+also win over the project's own Codex configuration. The file is read as
+untrusted. One over 64 KiB, or one that is not TOML, starts nothing. Of
+the rest only the settings that pass unchanged through any command line
+are given, the first 64 of them in the file's order: a dotted key of
+letters, digits, `-` and `_`, at most 128 characters, whose value is true
+or false, a finite number, or a word of at most 256 letters, digits and
+`-_.:/@+~` that starts with a letter or one of `/~_@` and that Codex reads
+back as that same text. Tables give their settings one by one; arrays,
+dates and every other value are left out. No quote, space, `<`, `>`, `&`,
+`|`, `^` or `%` reaches a command line, so a Codex installed as a script
+on Windows, which goes through cmd, is as safe as one installed as a
+program. The settings Chord sets for a session are never taken from a
+profile, with every key under them: the MCP servers, the approval policy
+and who reviews approvals, the sandbox and permissions, the developer
+instructions, the multi-agent switches, notify, hooks, the profile
+settings themselves, the Windows settings, and whether the Codex home may
+be a link. For a setting left out the session runs on what the account's
+configuration says, and the core lists the keys of the first 64 left out
+with the profile, which the palette counts and the status bar names.
+
 ## Naming the session to its tools
 
 Every session is given a token the workbench chose, in its environment as

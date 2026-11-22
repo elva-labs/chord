@@ -14,13 +14,14 @@ import {
 import { handleOf, launch, listenIntegrated, resetIntegrated } from "$lib/integrated.svelte";
 import { modelToStart, resetLastChosen } from "$lib/lastChosen.svelte";
 import { pluginSendAsked, pluginStartAsked, PROMPT_MOST, startRefusal, takeDownCardsOf, TEXT_MOST } from "$lib/pluginSessions.svelte";
-import { pluginMark, pluginStartOf, resetPluginStarts } from "$lib/pluginStarts.svelte";
+import { pluginMark, pluginStarted, pluginStartOf, resetPluginStarts } from "$lib/pluginStarts.svelte";
 import { resetGoingOn } from "$lib/goingOn.svelte";
 import { resetSenders, senderOf } from "$lib/senders.svelte";
 import { resetSessionKinds, setKind } from "$lib/sessionKind.svelte";
 import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import {
   byKey,
+  close,
   create,
   drafting,
   ended,
@@ -535,20 +536,72 @@ describe("a plugin's line", () => {
     expect(byKey(row.key)!.status).toBe("dormant");
   });
 
-  it("finds its session after the window was loaded afresh, by the start the core tied it to", async () => {
+  it("finds its session after the window was loaded afresh, by the start its row came back with", async () => {
+    const row = await runningTerminal();
+    const start = pluginStartOf(row.key)!;
+    resetPluginStarts();
+    // The record of open rows brings the row back with its plugin start.
+    pluginStarted(row.key, start);
+    expect(await pluginSendAsked(line())).toBe("delivered");
+  });
+
+  it("answers gone for a row that came back without its plugin start, and binds nothing", async () => {
     const row = await runningTerminal();
     resetPluginStarts();
-    expect(await pluginSendAsked(line())).toBe("delivered");
-    expect(pluginStartOf(row.key)?.request).toBe("req-1");
+    expect(await pluginSendAsked(line())).toBe("gone");
+    expect(pluginStartOf(row.key)).toBeNull();
+    expect(written).toHaveLength(0);
   });
 
   it("finds a session that went on from its notes under a new id", async () => {
     const row = await runningTerminal("sid-2");
-    resetPluginStarts();
     resetGoingOn();
     localStorage.setItem("chord.wentOn", JSON.stringify({ "sid-2": "sid-1" }));
     expect(await pluginSendAsked(line({ session: "sid-1" }))).toBe("delivered");
     expect(sessions.active).toBe(row.key);
+  });
+
+  it("answers gone for a send naming another row's id under its own start", async () => {
+    await runningTerminal();
+    const users = create(A, null, "claude-code", null, null, null, null, null);
+    started(users.key, "pty-users", "sid-users");
+    expect(await pluginSendAsked(line({ session: "sid-users" }))).toBe("gone");
+    expect(pluginStartOf(users.key)).toBeNull();
+    expect(written).toHaveLength(0);
+  });
+
+  it("answers gone for a send naming a row no plugin started, and binds nothing", async () => {
+    const users = create(A, null, "claude-code", null, null, null, null, null);
+    started(users.key, "pty-users", "sid-users");
+    byKey(users.key)!.turnEnd = "done";
+    // The core's record, tampered, says the plugin's start runs under the
+    // user's session.
+    expect(await pluginSendAsked(line({ session: "sid-users", started: "req-forged" }))).toBe("gone");
+    expect(pluginStartOf(users.key)).toBeNull();
+    expect(written).toHaveLength(0);
+  });
+
+  it("answers gone for a send naming a row bound to another request, and binds nothing", async () => {
+    const first = await runningTerminal();
+    const second = await allowed(start({ request: "req-2", name: "Issue 13" }));
+    started(second.key, "pty-sid-2", "sid-2");
+    flushSync();
+    byKey(second.key)!.turnEnd = "done";
+    expect(await pluginSendAsked(line({ session: "sid-2", started: "req-1" }))).toBe("gone");
+    expect(await pluginSendAsked(line({ session: "sid-2", started: "req-3" }))).toBe("gone");
+    expect(pluginStartOf(first.key)?.request).toBe("req-1");
+    expect(pluginStartOf(second.key)?.request).toBe("req-2");
+    expect(written).toHaveLength(0);
+  });
+
+  it("lets go of the start when its row is closed for good", async () => {
+    const row = await runningTerminal();
+    settledStarts.length = 0;
+    close(row.key);
+    expect(pluginStartOf(row.key)).toBeNull();
+    await until(() => settledStarts.length === 1);
+    expect(settledStarts).toEqual([{ project: A, request: "req-1", started: false }]);
+    expect(await pluginSendAsked(line())).toBe("gone");
   });
 
   it("sends an integrated session the text whole, as the plugin's words", async () => {

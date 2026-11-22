@@ -4,7 +4,7 @@ A session is one agent at work in one project. Open a folder as a project and st
 
 ## Starting and closing
 
-- Every new session starts in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. A project's New session and the + open it there with the project chosen. One line says what the session starts on, such as `Claude Code · Work`, and <kbd>Enter</kbd> starts it. Change picks another harness, account or workflow.
+- Every new session starts in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. A project's New session and the + open it there with the project chosen. One line says what the session starts on, such as `Claude Code · Work`, and <kbd>Enter</kbd> starts it. Change picks another harness, account or workflow, and for Codex a [profile](reference/sessions.md#codex-profiles) where the account has any.
 - <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project.
 - New session in Chord or New session in a terminal, in the project's ⋯ menu and the palette, starts one the other way from the setting.
 - The × on a live row stops the session and keeps it in the project's past sessions. Closing a project stops everything running in it.
@@ -22,7 +22,7 @@ The dot says what the agent is doing:
 | Yellow | Left open at the last quit, not running yet |
 | Grey | Done or ended |
 
-When the agent leaves a line for you, it shows under the row's name, with the model the session runs on. A session you have not looked at since it changed is marked unread. With the window in the background, a system notification says when a session starts waiting for you ([notifications](settings.md#notifications)). <kbd>Cmd</kbd><kbd>.</kbd> goes to the next session that needs you.
+When the agent leaves a line for you, it shows under the row's name, with the model the session runs on and the Codex profile it runs under, if any. A session you have not looked at since it changed is marked unread. With the window in the background, a system notification says when a session starts waiting for you ([notifications](settings.md#notifications)). <kbd>Cmd</kbd><kbd>.</kbd> goes to the next session that needs you.
 
 How well the dot keeps up depends on the harness and on whether [hooks](hooks.md) are on: [what a row says](reference/sessions.md#what-a-row-says) has the detail.
 

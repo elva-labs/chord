@@ -24,7 +24,7 @@
   } from "$lib/settingChoices";
   import { asksFirst } from "$lib/lastChosen.svelte";
   import type { HarnessId, Workflow } from "$lib/core";
-  import { clock, modelName, tokens } from "$lib/thread";
+  import { clock, modelName, offeredModel, tokens } from "$lib/thread";
   import { harnessLabel } from "$lib/harness.svelte";
   import {
     allNamed,
@@ -68,6 +68,7 @@
     resumesWords,
   } from "$lib/autoResume.svelte";
   import { byKey } from "$lib/sessions.svelte";
+  import { profileOf } from "$lib/codexProfiles.svelte";
   import ChoiceMenu from "../ChoiceMenu.svelte";
   import CompletionMenu, { rowId } from "./CompletionMenu.svelte";
   import Icon from "./Icon.svelte";
@@ -1056,6 +1057,32 @@
   let modelLabel = $derived(name === null ? "Default model" : name);
   /** A model chosen during a turn, which the next turn runs on. */
   let after = $derived(conversation.modelAfterTurn);
+  /** The Codex profile the session runs under, and the model its file
+      sets, which the menu says the session started on. */
+  let profile = $derived(byKey(sessionKey)?.profile ?? null);
+  let profileModel = $derived.by(() => {
+    const session = byKey(sessionKey);
+    return session === null || profile === null ? null : (profileOf(session.project, session.account, profile)?.model ?? null);
+  });
+  /** The entry that stands for the model the profile's file sets. */
+  const PROFILE_DEFAULT = "profile-default";
+  /** Under a profile whose file sets a model, the menu leads with that
+      model as the session's default, above a rule and the provider's list. */
+  let modelMenu = $derived.by(() => {
+    const listed = modelChoices(conversation);
+    if (profile === null || profileModel === null) return listed;
+    const current = conversation.settings.model;
+    const standing = current === null || (offeredModel(conversation, current)?.value ?? current) === profileModel;
+    return [
+      {
+        value: PROFILE_DEFAULT,
+        name: "Codex default",
+        about: `${modelName(conversation, profileModel) ?? profileModel}, as ${profile}.config.toml sets it`,
+        on: standing,
+      },
+      ...listed.map((choice, at) => ({ ...choice, on: standing ? false : choice.on, rule: at === 0 })),
+    ];
+  });
 
   /** The effort as the status bar has it too: none for a model that takes
       none. */
@@ -1648,10 +1675,10 @@
       {#if menu === "model" && workflow === null}
         <ChoiceMenu
           label="Model"
-          heading="Model · {harnessLabel(harness)}"
-          choices={modelChoices(conversation)}
+          heading={profile === null ? `Model · ${harnessLabel(harness)}` : `Models of the ${profile} profile's provider`}
+          choices={modelMenu}
           note={conversation.current !== null ? "A model chosen now is used from the next turn." : null}
-          onpick={(value) => pick("model", value)}
+          onpick={(value) => pick("model", value === PROFILE_DEFAULT && profileModel !== null ? profileModel : value)}
           onclose={closeMenu}
           pointer={byPointer}
           testid="model-menu"

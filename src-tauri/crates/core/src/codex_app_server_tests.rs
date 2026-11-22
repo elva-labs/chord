@@ -29,6 +29,7 @@ fn launch_with<'a>(
         compact_at: None,
         resume_at: None,
         reads_only: false,
+        profile: &[],
     };
     adjust(&mut launch);
     AppServer::new(&launch)
@@ -2125,6 +2126,7 @@ fn the_command_runs_the_app_server_under_the_account_s_home() {
         ("CHORD_SESSION".to_string(), "the-parent".to_string()),
     ]);
     let home = PathBuf::from("/home/ada/.codex-work");
+    let profile = ["model=gpt-6.1-terra".to_string()];
     let launch = Launch {
         project: &dir,
         env: &vars,
@@ -2143,6 +2145,7 @@ fn the_command_runs_the_app_server_under_the_account_s_home() {
         compact_at: None,
         resume_at: None,
         reads_only: false,
+        profile: &profile,
     };
     let prepared = CODEX_APP_SERVER.command(&launch).unwrap();
     assert!(prepared.files.is_empty());
@@ -2151,7 +2154,7 @@ fn the_command_runs_the_app_server_under_the_account_s_home() {
         .get_args()
         .map(|arg| arg.to_string_lossy().to_string())
         .collect();
-    assert_eq!(args, ["app-server"]);
+    assert_eq!(args, ["app-server", "-c", "model=gpt-6.1-terra"]);
     let env: HashMap<String, String> = prepared
         .command
         .get_envs()

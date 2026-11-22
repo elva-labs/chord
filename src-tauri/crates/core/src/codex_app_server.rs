@@ -229,6 +229,11 @@ impl Protocol for CodexAppServer {
         }
         let mut command = process(&binary, launch.env);
         command.arg("app-server");
+        // After the subcommand, where a `-c` stands above the user's
+        // configuration; the thread's own settings stand above these.
+        for setting in launch.profile {
+            command.arg("-c").arg(setting);
+        }
         prepare_process(&mut command, launch.project, launch.env);
         // The hooks read which session they serve from these; the tool
         // server is given them in the thread's configuration, since Codex

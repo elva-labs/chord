@@ -129,7 +129,7 @@ import { agentNote, atWorkLine, holdsAgentNote, OUTCOME_ASK, OUTCOME_ASK_TERMINA
 import { agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
 import { startAs } from "$lib/sessionAgents.svelte";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
-import { pluginMark } from "$lib/pluginStarts.svelte";
+import { pluginMark, pluginStarted, pluginStartOf } from "$lib/pluginStarts.svelte";
 import { mixesScripts, readsAsWorkbench, readsAsYou, reservedName, shown } from "$lib/unseen";
 import { within } from "$lib/show.svelte";
 import { handOver, printable } from "$lib/terminals.svelte";
@@ -2904,6 +2904,7 @@ async function startFitted(
     null,
   );
   session.madeTree = startIn !== null;
+  session.profile = profileHandedOn(callingSession(request), agent, account, project);
   // The agent's effort is its own harness's, so it goes only with its model
   // or where it names none.
   if (role !== null)
@@ -3028,6 +3029,21 @@ const TIERS = ["fable", "opus", "sonnet", "haiku"];
 function familyOf(model: string): string | null {
   const family = model.toLowerCase().replace(/^claude-/, "").replace(/\[.*\]$/, "").split("-")[0];
   return TIERS.includes(family) ? family : null;
+}
+
+/** The Codex profile a started session runs under: its starter's, where
+    both run Codex under the same account on the same machine, so the same
+    file is found by the same name. None otherwise; the start tool names
+    no profile. */
+function profileHandedOn(
+  starter: Session | null,
+  agent: HarnessId,
+  account: string | null,
+  project: string,
+): string | null {
+  if (starter === null || starter.profile === null) return null;
+  if (starter.agent !== "codex" || agent !== "codex" || starter.account !== account) return null;
+  return hostOf(starter.project) === hostOf(project) ? starter.profile : null;
 }
 
 /**
@@ -3550,9 +3566,10 @@ async function resumeSession(
     // line and model, and is at work again whatever it was at the quit. A
     // row that ended is its transcript again; the resumed session takes
     // its place rather than sitting beside it, with the shells opened
-    // beside it.
+    // beside it and the plugin start it was made by.
     const now = byId(id);
     const left = now !== null && now.status === "dormant" ? now : null;
+    const plugin = now !== null && left === null ? pluginStartOf(now.key) : null;
     if (now !== null && left === null) close(now.key, true);
     const looking = sessions.active;
     const given = prompt === null ? null : `${oneLine(prompt)} ${outcomeAsk(agent)}`;
@@ -3568,6 +3585,7 @@ async function resumeSession(
       session = create(project, id, agent, worktree, given, model, entry.account ?? null, null);
       // A started session runs in a worktree only when one was made for it.
       session.madeTree = worktree !== null;
+      if (plugin !== null) pluginStarted(session.key, plugin);
     }
     conductor.startedBy[session.key] = caller;
     // It has a row again, so why the last one went is past.

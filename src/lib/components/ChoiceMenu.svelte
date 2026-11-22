@@ -241,6 +241,7 @@
 >
   {#if heading !== null}<p class="heading" data-testid="{testid}-heading">{heading}</p>{/if}
   {#each shown as choice (choice.value)}
+    {#if choice.rule}<div class="rule" role="separator" data-testid="{testid}-rule"></div>{/if}
     {@render entry(choice, actions)}
   {/each}
   {#if said !== null}
@@ -356,12 +357,6 @@
     color: var(--ink-3);
   }
 
-  .rule {
-    height: 1px;
-    margin: 4px -4px;
-    background: var(--divider, var(--rule));
-  }
-
   .menu:focus {
     outline: none;
   }
@@ -376,6 +371,12 @@
     grid-column: 2;
     grid-row: 1;
     color: var(--accent);
+  }
+
+  .rule {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--divider, var(--rule));
   }
 
   .heading {

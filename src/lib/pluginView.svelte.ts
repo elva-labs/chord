@@ -8,16 +8,23 @@
  *
  * Messages between the page and the plugin pass through here: data from the
  * plugin reaches the frame that is open on it, and what the frame sends
- * goes back to the plugin by its source and name.
+ * goes back to the plugin by its source and name. The page is also told
+ * what is around it: the session on screen and the theme it is painted in.
  */
 
 import {
   core,
+  type PluginNotifyEvent,
   type PluginViewDataEvent,
   type PluginViewEvent,
 } from "$lib/core";
+import { attention } from "$lib/attention.svelte";
 import { closeViewer, files, showPluginView } from "$lib/files.svelte";
-import { workspace } from "$lib/workspace.svelte";
+import { wentOnFrom } from "$lib/goingOn.svelte";
+import { tell } from "$lib/notify.svelte";
+import { activeSession, sessions } from "$lib/sessions.svelte";
+import { resolvedTheme, theme, type LookName } from "$lib/theme.svelte";
+import { activate, goTo, projectLabel, workspace } from "$lib/workspace.svelte";
 
 /** A page as one project has it. */
 export interface PluginPage {
@@ -39,6 +46,14 @@ export const pluginViews = $state({
     key: string;
     project: string;
     data: unknown;
+    seq: number;
+  } | null,
+  /** What a click on the plugin's notification hands its page, counted as
+      the data is. */
+  target: null as {
+    key: string;
+    project: string;
+    target: string;
     seq: number;
   } | null,
 });
@@ -118,6 +133,35 @@ export function open(key: string, project: string) {
   showPluginView(page);
 }
 
+/** A plugin's notification that names no session, for a project open
+    here: told only while the window has no focus, as a session's is, and
+    as the settings allow, titled with the project and "The <name>
+    plugin", so it never reads as a session's, whose title is the
+    session's name. Its text is the body, which the system shows as text.
+    One again with the same target takes the place of the last. A click
+    brings the project forward and opens the plugin's page there, handed
+    the target; a plugin with no page for the project opens none. */
+export function pluginNotified(event: PluginNotifyEvent) {
+  const { project } = event;
+  if (attention.focused) return;
+  if (!workspace.open.some((open) => open.path === project)) return;
+  const key = keyOf(event);
+  const name = JSON.stringify(["plugin", event.source, event.plugin, project, event.target ?? ""]);
+  tell(name, `${projectLabel(project)} · The ${event.plugin} plugin`, event.text, () =>
+    openAt(key, project, event.target),
+  );
+}
+
+/** Brings the project forward and opens the plugin's page in it, with the
+    target handed to the page. */
+export function openAt(key: string, project: string, target: string | null) {
+  if (!workspace.open.some((open) => open.path === project)) return;
+  if (workspace.active !== project) activate(project);
+  if (pageAt(key, project) === null) return;
+  open(key, project);
+  pluginViews.target = target === null ? null : { key, project, target, seq: ++seq };
+}
+
 /** Carries a message from a page to its plugin, `acted` when the user's
     click or key in the page sent it. A plugin that is not there for it
     drops it, as an action the plugin refused is dropped. */
@@ -169,10 +213,78 @@ export function leftPage(key: string, project: string) {
   actedAt.delete(actKey(key, project));
 }
 
+/** The theme's tokens a page is handed, named without their dashes. */
+export const TOKENS = [
+  "bg",
+  "surface",
+  "surface-2",
+  "well",
+  "ink",
+  "ink-2",
+  "ink-3",
+  "rule",
+  "rule-strong",
+  "accent",
+  "accent-soft",
+  "add",
+  "del",
+  "mono",
+  "sans",
+  "radius",
+  "radius-sm",
+] as const;
+
+/** The most a token's value or a session's id holds, in characters. */
+export const TOKEN_MOST = 200;
+export const SESSION_MOST = 128;
+
+/** What a page is told of what is around it. */
+export interface PageContext {
+  /** The agent's id for the session on screen, while it is one of the
+      page's project; null otherwise. */
+  session: string | null;
+  scheme: "light" | "dark";
+  look: LookName;
+  tokens: Record<string, string>;
+}
+
+/** What a page of `project` is told now, with the tokens as `read` reads
+    them off the window. A value past its most is told as empty. */
+export function contextFor(project: string, read: (token: string) => string): PageContext {
+  const row = activeSession();
+  const id = row !== null && row.project === project ? row.id : null;
+  const tokens: Record<string, string> = {};
+  for (const name of TOKENS) {
+    const value = read(`--${name}`).trim();
+    tokens[name] = value.length > TOKEN_MOST ? "" : value;
+  }
+  return {
+    session: id !== null && id.length <= SESSION_MOST ? id : null,
+    scheme: resolvedTheme(),
+    look: theme.look,
+    tokens,
+  };
+}
+
+/** A page asks to bring a session on screen. It is brought only on the
+    user's act in the page, only while the page's project is the one on
+    screen, and only for a session of that project the page names by its
+    id, or by the id of a conversation that went on to it. Whether it was
+    brought is all the page could learn, and it is told nothing. */
+export function showAsked(project: string, session: unknown, acted: boolean): boolean {
+  if (!acted || workspace.active !== project) return false;
+  if (typeof session !== "string" || session === "" || session.length > SESSION_MOST) return false;
+  const row = sessions.all.find(
+    (row) => row.project === project && row.id !== null && (row.id === session || wentOnFrom(session) === row.id),
+  );
+  return row !== undefined && goTo(row.key);
+}
+
 /** Test seam. */
 export function resetPluginViews() {
   pluginViews.pages = [];
   pluginViews.data = null;
+  pluginViews.target = null;
   seq = 0;
   actedAt.clear();
 }

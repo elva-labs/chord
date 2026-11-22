@@ -83,13 +83,17 @@ function waitingName(key: string): string {
   return JSON.stringify(["waiting", key]);
 }
 
-/** The notifications sent and not yet over, by name, with the row a click
-    on each goes to, or null for a question put over the whole window. */
-const sent = new Map<string, string | null>();
+/** Where a click on a notification goes: a row by its key, somewhere of
+    the caller's own, or nowhere, for a question put over the whole window. */
+type ClickTo = string | (() => void) | null;
+
+/** The notifications sent and not yet over, by name, with where a click
+    on each goes. */
+const sent = new Map<string, ClickTo>();
 
 /** Says something through the system, as the settings allow: the
     notification under its name, and the chime. */
-export function tell(name: string, title: string, body: string, at: string | null) {
+export function tell(name: string, title: string, body: string, at: ClickTo) {
   if (notify.notifications) {
     sent.set(name, at);
     attempt(() => core().notify(title, body, name));
@@ -110,11 +114,13 @@ export function seen(key: string) {
 
 /** A notification was clicked, with the window brought forward: the
     window goes to the row it was about, with the keyboard in its agent
-    pane. The system has taken the notification away. */
+    pane, or where its caller said. The system has taken the notification
+    away. */
 export function clicked(name: string) {
   const at = sent.get(name) ?? null;
   sent.delete(name);
-  if (at !== null && goTo(at)) focusPane("agent");
+  if (typeof at === "function") at();
+  else if (at !== null && goTo(at)) focusPane("agent");
 }
 
 function ring() {

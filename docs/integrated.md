@@ -312,7 +312,11 @@ and a model with none lower at its least. The chips then show what the
 session runs on. A resumed session goes on as its conversation
 did, a session another started begins as its starter says, and a session
 that follows a workflow takes the mode and the effort but runs on the
-model the workflow sets.
+model the workflow sets. A session under a [Codex
+profile](reference/sessions.md#codex-profiles) takes the mode alone and
+runs on the model and the effort the profile's file sets. It does not
+tell new sessions which models the account offers, and a model or an
+effort picked in it is not kept.
 
 ## Trust
 

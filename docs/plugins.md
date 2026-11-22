@@ -5,6 +5,9 @@ section under the file tree with rows and actions, and a view in the
 changes pane. It comes from a git repository, runs on the machine the
 project is on with the user's own privileges, and produces data the app
 draws in its own hand. Nothing a plugin does reaches the window's DOM.
+The app bounds what a plugin's lines can do, not what its process can: a
+plugin that writes the app's own data, as anything running as the user
+can, could forge which sessions are its own.
 
 ## Where plugins come from
 
@@ -532,6 +535,39 @@ the plugin names. A new mark from the same plugin for the same session
 replaces the last one. A mark with no icon
 takes it away, and so does the plugin stopping or the session ending.
 
+## Notifications
+
+A plugin can say one line to the user.
+
+```json
+{
+  "type": "notify",
+  "project": "/srv/orbit-api",
+  "text": "A review was asked of you on #42",
+  "target": "pr/42"
+}
+```
+
+A line that names a session, by the agent's id as `session`, is that
+session's: it shows on the session's row, as a line from the agent's own
+notify tool does, and is dropped when no running session answers to the id.
+A line that names no session is the plugin's own, told as a session's
+notification is, only while the app's window is not in front and only as
+the settings allow: titled with the project and the plugin's name,
+"orbit-api · The github plugin", so it never passes for a session's, with
+the text as its body. The project must be one open in the app. The text is
+one line of 120 characters at most, shown as plain text, with every
+character that shows nothing or reorders others taken out; a text with
+nothing left is dropped. A plugin gives three such lines a minute at most;
+the rest are dropped. A newer line with the same target takes the place of
+the last where the system allows.
+
+A click on it brings the project forward and opens the plugin's page there,
+and the page is handed the target, a string of 256 bytes at most, so it can
+scroll to the row the line was about. A target over its size is dropped and
+the page opens without one; a plugin with no page for the project opens
+none.
+
 ## Answering the user
 
 What the user does in a plugin goes to it with an id: an action, as its
@@ -703,10 +739,28 @@ but the frame has no origin, no storage and no way at the window or the
 machine. A bridge passes a fixed set of messages between the frame and the
 plugin, through the app: data from the plugin to the page, and from the
 page a request to open a file at lines, to put text in the agent's prompt,
-or a message for the plugin. The page reaches nothing else. The first
+or a message for the plugin. The page reaches nothing else. A page opened
+by a click on one of the plugin's notifications is handed its target, which
+`window.workbench.onTarget(fn)` receives, even when the handler is set after the
+target arrived. The first
 message the page sends of a click or a key in it reaches the plugin with
 an id, so a button on the page can open an address, start a session or
 send one a line, as an action can.
+
+The page is told what is around it once it has loaded, and again whenever that changes. `window.workbench.context` holds the latest, and `window.workbench.onContext(fn)` receives each, the latest at once when the handler is set after it arrived:
+
+```json
+{
+  "session": "the agent's id for the session on screen, or null",
+  "scheme": "light",
+  "look": "modern",
+  "tokens": { "bg": "#f4f6f5", "ink": "...", "accent": "...", "mono": "...", "radius": "..." }
+}
+```
+
+`session` is the session on screen while it is one of the page's project, and null otherwise; an id longer than 128 characters is told as null. `scheme` is `light` or `dark`, as the app paints it, and `look` is `modern` or `terminal`. `tokens` holds the theme's colours, fonts and radii by name: `bg`, `surface`, `surface-2`, `well`, `ink`, `ink-2`, `ink-3`, `rule`, `rule-strong`, `accent`, `accent-soft`, `add`, `del`, `mono`, `sans`, `radius` and `radius-sm`. A value longer than 200 characters is told as empty. The same tokens are set on the page's root as custom properties, `--workbench-bg`, `--workbench-ink` and so on, so a page's stylesheet can follow the theme with no script of its own.
+
+`window.workbench.show(session)` asks to bring a session on screen, by the agent's id for it or the id of a conversation that went on to it. The app brings it only when the call is the first message of a click or a key in the page, as for a start or a send, only while the page's project is on screen, and only for a session of that project. Anything else is dropped, and the page is told nothing either way.
 
 The view declares how much room it wants. Wide is the viewer as a file
 opens it, beside the tree; full is the whole changes pane, the tree folded
