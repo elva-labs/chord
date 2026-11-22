@@ -18,7 +18,7 @@ import { pluginSendAsked, pluginStartAsked, PROMPT_MOST, startRefusal, takeDownC
 import { pluginMark, pluginStarted, pluginStartOf, resetPluginStarts } from "$lib/pluginStarts.svelte";
 import { resetGoingOn } from "$lib/goingOn.svelte";
 import { resetSenders, senderOf } from "$lib/senders.svelte";
-import { agentByTitle, reset as resetAgents } from "$lib/agents.svelte";
+import { agentByTitle, removeAgent, reset as resetAgents, saveAgent } from "$lib/agents.svelte";
 import { agentNote } from "$lib/instructions";
 import { agentOfRow, agentStartsAt, forgetAgentRow, lastAgent, lastPick } from "$lib/sessionAgents.svelte";
 import { resetSessionKinds, setKind } from "$lib/sessionKind.svelte";
@@ -568,6 +568,74 @@ describe("the agent a plugin's start works as", () => {
     expect(pluginPickOf(ask)?.role).toBe("chord:Tester");
     once();
     expect(agentOfRow((await starting)!, null)).toMatchObject({ key: "chord:Tester" });
+  });
+
+  it("for a review, gives way to the plugin's suggestion once the agent last picked is deleted", async () => {
+    expect(saveAgent({ title: "Auditor", description: "Audits the change.", model: null, effort: null, readsOnly: true }, null)).toBeNull();
+    let { starting, ask } = await asked(start({ purpose: "review", agent: "Reviewer" }));
+    roleForPlugin(ask, "own:Auditor");
+    once();
+    await starting;
+    expect(lastAgent("review")).toBe("own:Auditor");
+
+    removeAgent("Auditor");
+    ({ starting, ask } = await asked(start({ request: "req-2", purpose: "review", agent: "Reviewer" })));
+    expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "opus", role: "chord:Reviewer" });
+    refuse();
+    await starting;
+  });
+
+  describe("with Codex here too", () => {
+    beforeEach(() => {
+      applyDetect(
+        { id: "codex", path: "/usr/local/bin/codex", caps: { resumable: true, titles: true, acp: false, integrated: true }, fromLoginShell: true },
+        true,
+      );
+      setKind("codex", "integrated");
+      expect(
+        saveAgent({ title: "Porter", description: "Ports the change.", model: { harness: "codex", model: "gpt-5.5" }, effort: "high", readsOnly: false }, null),
+      ).toBeNull();
+    });
+
+    it("starts a Codex session for an agent on a Codex model, told its agent, at its effort", async () => {
+      const { starting, ask } = await asked(start({ agent: "Porter" }));
+      expect(pluginPickOf(ask)).toEqual({ agent: "codex", model: "gpt-5.5", role: "own:Porter" });
+      // Back on the harness and model the card began on with no agent.
+      roleForPlugin(ask, null);
+      expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "default", role: null });
+      roleForPlugin(ask, "own:Porter");
+      once();
+      const row = byKey((await starting)!)!;
+      expect(row.agent).toBe("codex");
+      expect(row.model).toBe("gpt-5.5");
+      expect(row.prompt).toBe(`${agentNote("Porter", "Ports the change.")}\n\nFix issue 12: the cache is stale`);
+      expect(agentOfRow(row.key, null)).toEqual({ key: "own:Porter", title: "Porter", readsOnly: false });
+      expect(agentStartsAt(row.key)).toBe("high");
+      expect(modelToStart("codex", null)).toBeNull();
+    });
+
+    it("keeps the harness the user picked for an agent on another, without the agent's effort", async () => {
+      const { starting, ask } = await asked(start({ agent: "Porter" }));
+      pickForPlugin(ask, { agent: "claude-code", model: "sonnet" });
+      once();
+      const row = byKey((await starting)!)!;
+      expect(row.agent).toBe("claude-code");
+      expect(row.model).toBe("sonnet");
+      expect(agentOfRow(row.key, null)).toMatchObject({ key: "own:Porter" });
+      expect(agentStartsAt(row.key)).toBeNull();
+    });
+  });
+
+  it("starts on the card's harness for an agent on a harness that is not here", async () => {
+    expect(
+      saveAgent({ title: "Porter", description: "Ports the change.", model: { harness: "codex", model: "gpt-5.5" }, effort: "high", readsOnly: false }, null),
+    ).toBeNull();
+    const { starting, ask } = await asked(start({ agent: "Porter" }));
+    expect(pluginPickOf(ask)).toEqual({ agent: "claude-code", model: "default", role: "own:Porter" });
+    once();
+    const row = byKey((await starting)!)!;
+    expect(row.agent).toBe("claude-code");
+    expect(agentStartsAt(row.key)).toBeNull();
   });
 
   it("is none in a terminal, which is never told an agent's description", async () => {
