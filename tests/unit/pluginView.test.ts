@@ -5,6 +5,7 @@ import type {
   PluginViewEvent,
   PluginViewMessageRequest,
 } from "$lib/core";
+import { attention, resetAttention } from "$lib/attention.svelte";
 import { clear, deselect, files, showMedia } from "$lib/files.svelte";
 import { layout } from "$lib/layout.svelte";
 import { clicked, resetNotify } from "$lib/notify.svelte";
@@ -70,6 +71,7 @@ beforeEach(() => {
   resetPluginViews();
   resetNotify();
   resetSessions();
+  resetAttention();
   sent.length = 0;
   notified.length = 0;
   refuse = null;
@@ -271,12 +273,26 @@ describe("a plugin's notification that names no session", () => {
     );
   };
 
+  beforeEach(() => {
+    attention.focused = false;
+  });
+
   it("is told under the project and the plugin's name, with its text as the body", () => {
     openBoth();
     pluginNotified(told());
     expect(notified).toHaveLength(1);
     expect(notified[0].title).toBe("orbit-api · The github plugin");
     expect(notified[0].body).toBe("A review was asked of you");
+  });
+
+  it("is told only while the window has no focus, as a session's is", () => {
+    openBoth();
+    attention.focused = true;
+    pluginNotified(told());
+    expect(notified).toHaveLength(0);
+    attention.focused = false;
+    pluginNotified(told());
+    expect(notified).toHaveLength(1);
   });
 
   it("is told for no project that is not open", () => {
