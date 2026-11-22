@@ -1,12 +1,14 @@
-# Agents
+# Harnesses
 
-The workbench drives two agents, both full-screen TUIs in a pty: Claude Code
+The workbench drives two harnesses, both full-screen TUIs in a pty: Claude Code
 and Codex CLI. Either can also run as an
 [session in Chord](integrated.md), driven in messages with the
 conversation drawn by the window: Claude Code in print mode with JSON
 lines, Codex through its app-server. The differences between them sit behind
-one seam; everything above it sees a session with an agent id, a project,
-and an id to resume by.
+one seam; everything above it sees a session with a harness id, a project,
+and an id to resume by. An agent, in Chord, is a role a session takes on
+rather than the program it runs in; the
+[settings](reference/settings.md#agents) keep them.
 
 |               | Claude Code                                                        | Codex CLI                                                |
 | ------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
@@ -22,14 +24,14 @@ and an id to resume by.
 
 ## Accounts
 
-Each agent keeps its login, its settings and its record of past sessions in
+Each harness keeps its login, its settings and its record of past sessions in
 one directory, `~/.claude` and `~/.codex` by default, and reads another
 from the variable named above. An account in the settings names a
-directory for either agent or both, and a session under it is started with
-the agent's variable set to the account's directory for that agent, so the
-agent logs in, reads its settings and files its transcript there. An
-account with no directory for the agent leaves the variable as it is, and
-the agent uses its own. The past sessions a project lists are read from
+directory for either harness or both, and a session under it is started with
+the harness's variable set to the account's directory for that harness, so the
+harness logs in, reads its settings and files its transcript there. An
+account with no directory for the harness leaves the variable as it is, and
+the harness uses its own. The past sessions a project lists are read from
 the same directory. The core is given directories rather than names, so a
 session on a remote machine runs under directories on that machine.
 
@@ -167,7 +169,7 @@ with, a changed workflow or none, says so over the session in one line,
 Resumed as it began, until it is put away; a new session starts as the
 workflow is now.
 
-Where the workflow delegates only through the workbench, each agent loses
+Where the workflow delegates only through the workbench, each harness loses
 its own ways of handing work to agents the user cannot see. Claude Code is
 started without `Agent`, its subagents, `Workflow`, its multi-agent
 workflows, `SendMessage` and `ListAgents`, which reach other agents, and
@@ -177,13 +179,13 @@ multi-agent features off and its native collaboration tools turned off:
 `interrupt_agent` and `followup_task`, which a model on its newer
 multi-agent version is given whatever the multi-agent features say. A
 Codex from before that version passes over the second setting without a
-word, and the first takes its multi-agent tools away. What remains is the shell, from which either agent could run
+word, and the first takes its multi-agent tools away. What remains is the shell, from which either harness could run
 another copy of itself, and Claude Code's skills, some of which run in a
 subagent of their own; the instructions tell the orchestrator to hand out
 every piece with `start`.
 
 Such a session has the workbench's tools whatever its project was told
-about live updates. In a terminal, where the agent's configuration for the
+about live updates. In a terminal, where the harness's configuration for the
 directory does not already point at the tool server, the server is named
 when the session starts: to Claude Code in a configuration file of the
 session's own, to Codex as one of its servers on the command line. An
@@ -191,7 +193,7 @@ in-Chord session is given the server whatever its configuration says, as
 [sessions in Chord](integrated.md) describes. A machine with no tool
 server does not start a session under a workflow, and says why.
 
-On Windows an agent installed as a script runs through the command
+On Windows a harness installed as a script runs through the command
 interpreter, which ends a command at its first line break. Claude Code's
 command line holds only file names there. Codex would lose all but the
 first line of a workflow's instructions, so a Codex session under a
@@ -210,17 +212,17 @@ the project's configuration names it.
 
 ## Detection
 
-Each agent is looked for once, on the login shell's PATH. A machine with one
+Each harness is looked for once, on the login shell's PATH. A machine with one
 of them shows no sign of the other, and a new session starts it. With
 both, a new session opens the choice in place under the project's name, a
-row per agent, and the
+row per harness, and the
 list of earlier sessions to resume says whose each one is; the session
-rows themselves carry no agent tag. The cursor starts on
-the agent last started in the project, marked `last used`, else the first
-installed; Up and Down move it, Enter or a click starts that agent, alone
+rows themselves carry no harness tag. The cursor starts on
+the harness last started in the project, marked `last used`, else the first
+installed; Up and Down move it, Enter or a click starts that harness, alone
 whatever workflow the project follows, Escape closes the choice.
 
-## Ids that the agent mints
+## Ids that the harness mints
 
 Claude Code takes the id it is given, so a running session and the
 transcript it writes are the same thing from the start. Codex mints its own.
@@ -234,16 +236,16 @@ needs no watching: its thread's id comes with the session's ready event.
 
 ## What is quarantined
 
-Both indexes and Codex's session log are the agents' own and move with their
+Both indexes and Codex's session log are the harnesses' own and move with their
 versions. Every line that reads one is kept apart, and every failure there
 is an empty answer: a
 project with no history, never a pane that will not open. Codex leaves an
 old index behind when its schema moves; the newest is read.
 
-The protocols the in-Chord sessions speak move with the agents' versions
+The protocols the in-Chord sessions speak move with the harnesses' versions
 too, and are read the same way, as [sessions in Chord](integrated.md)
 describes, and so is what a past conversation said, which
-[history](integrated.md#history) describes for each agent. Codex
+[history](integrated.md#history) describes for each harness. Codex
 generates its app-server's protocol from its own code for each version,
 and a version can drop what an earlier one had. Everything the workbench
 reads from that protocol and writes to it, each method, field, status and

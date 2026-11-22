@@ -10,13 +10,13 @@
   import ConversationView from "$lib/components/conversation/ConversationView.svelte";
   import { core } from "$lib/core";
   import {
-    AGENTS,
-    agent,
-    agentLabel,
+    HARNESSES,
+    harnesses,
+    harnessLabel,
     applyDetect,
     detectFailed,
     unavailableReason,
-  } from "$lib/agent.svelte";
+  } from "$lib/harness.svelte";
   import { agentVisible, layout, overlayHoldsKeyboard } from "$lib/layout.svelte";
   import {
     activeSession,
@@ -62,7 +62,7 @@
       and again on request: installing one should not need a restart. */
   function detect() {
     const hasCore = Boolean(window.__CHORD_CORE__ || window.__TAURI_INTERNALS__);
-    for (const id of AGENTS) {
+    for (const id of HARNESSES) {
       core()
         .detect(id)
         .then((report) => applyDetect(report, hasCore))
@@ -84,7 +84,7 @@
       ? "Agent"
       : integrated
         ? (rowName(current) ?? "New session")
-        : `Agent · ${agentLabel(current.agent)}`,
+        : `Agent · ${harnessLabel(current.agent)}`,
   );
 
   /** The model the session runs on, by the name the composer's chip uses. */
@@ -246,7 +246,7 @@
     {#if blocked !== null}
       <div class="overlay" data-testid="agent-status">
         <p class="message">{blocked}</p>
-        {#if agent.availability === "missing"}
+        {#if harnesses.availability === "missing"}
           <button onclick={detect} data-testid="retry-detect">Look again</button>
         {/if}
       </div>

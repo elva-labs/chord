@@ -1180,7 +1180,7 @@ impl Core {
 
     /// The settings a session of `agent` is given for the Codex profile
     /// named, from the account's Codex home: none for no profile, or for
-    /// an agent other than Codex.
+    /// a harness other than Codex.
     fn profile_settings(
         &self,
         agent: &str,
@@ -1193,6 +1193,27 @@ impl Core {
         };
         let home = self.home.as_deref().ok_or("there is no home folder")?;
         crate::codex_profiles::settings(&account::codex_home(home, config_dir, vars), profile)
+    }
+
+    /// The agents installed for each harness: Claude Code's under the
+    /// account whose configuration directory is given, or its own, then the
+    /// project's, then Codex's roles under the account's home, or its own.
+    pub fn installed_agents(
+        &self,
+        project: &Path,
+        claude_dir: Option<&str>,
+        codex_home: Option<&str>,
+    ) -> Vec<crate::agents::InstalledAgent> {
+        let Some(home) = self.home.as_deref() else {
+            return Vec::new();
+        };
+        let vars = &env::environment().vars;
+        crate::agents::installed(
+            home,
+            project,
+            &account::claude_dir(home, claude_dir, vars),
+            &account::codex_home(home, codex_home, vars),
+        )
     }
 
     /// What a conversation said and did before, read from where its agent

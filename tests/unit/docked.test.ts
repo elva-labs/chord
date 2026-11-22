@@ -5,7 +5,7 @@ import { conductor, resetConductor } from "$lib/conductor.svelte";
 import { dockedFor, askDockedIn } from "$lib/docked.svelte";
 import { handleOf, launch, listenIntegrated, resetIntegrated } from "$lib/integrated.svelte";
 import { byKey, create, reset as resetSessions, sessions, started, type Session } from "$lib/sessions.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetSenders } from "$lib/senders.svelte";
 import { fakeIntegrated, type FakeIntegrated } from "../fakeIntegrated";
@@ -58,7 +58,7 @@ beforeEach(async () => {
   resetIntegrated();
   resetConductor();
   resetWorkspace();
-  resetAgent();
+  resetHarnesses();
   localStorage.clear();
   resetSenders();
   applyDetect(

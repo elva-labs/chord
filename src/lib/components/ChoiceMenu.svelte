@@ -26,9 +26,9 @@
    */
   interface Props {
     label: string;
+    /** A heading over the choices, where the menu shows one. */
+    heading?: string | null;
     choices: Choice[];
-    /** A line over the choices, saying where they come from. */
-    head?: string | null;
     /** A line under the choices. */
     note?: string | null;
     onpick: (value: string) => void;
@@ -54,8 +54,8 @@
 
   let {
     label,
+    heading = null,
     choices,
-    head = null,
     note = null,
     onpick,
     onclose,
@@ -157,9 +157,7 @@
   {onkeydown}
   data-testid={testid}
 >
-  {#if head !== null}
-    <p class="menu-head" data-testid="{testid}-head">{head}</p>
-  {/if}
+  {#if heading !== null}<p class="heading" data-testid="{testid}-heading">{heading}</p>{/if}
   {#each choices as choice (choice.value)}
     {#if choice.rule}<div class="rule" role="separator" data-testid="{testid}-rule"></div>{/if}
     <button
@@ -288,10 +286,13 @@
     background: var(--divider, var(--rule));
   }
 
-  .menu-head {
-    margin: 2px 8px 4px;
+  .heading {
+    margin: 2px 8px 2px;
     font-size: calc(var(--meta-size) - 0.5px);
-    color: var(--ink-2);
+    font-weight: 600;
+    letter-spacing: var(--label-track-fine);
+    text-transform: var(--label-case);
+    color: var(--ink-3);
   }
 
   .menu-note {

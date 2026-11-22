@@ -847,6 +847,12 @@ export async function installFakeCore(
           (w.__limitsAsked ??= []).push(asked);
           return w.__accountLimits?.[`${asked.agent} ${asked.configDir ?? ""}`] ?? null;
         },
+        installedAgents: async () => {
+          // A test puts the agents installed for each harness in
+          // __installedAgents. With none, nothing is installed.
+          const w = window as unknown as { __installedAgents?: unknown[] };
+          return w.__installedAgents ?? [];
+        },
         codexModels: async (project: string, configDir?: string) => {
           // A test puts the models Codex lists in __codexModels, and reads
           // what was asked in __codexModelsAsked. With none, Codex is not
@@ -1939,7 +1945,7 @@ export async function installFakeCore(
                     Object.values(entry).some((one) => one !== null && typeof one !== "string"),
                 )
               )
-                throw new Error("lastChosen is a table by agent of the model, the effort and the mode last chosen");
+                throw new Error("lastChosen is a table by harness of the model, the effort and the mode last chosen");
             } else if (field === "cards") {
               if (
                 typeof value !== "object" ||
@@ -1948,7 +1954,7 @@ export async function installFakeCore(
                 Object.values(value).some((share) => typeof share !== "number" || share < 0 || share > 0.25)
               )
                 throw new Error("cards is a table of shares by palette or theme, each from 0 to 0.25");
-            } else if (!["keys", "hooks", "accounts", "workflows", "themes"].includes(field)) {
+            } else if (!["keys", "hooks", "accounts", "workflows", "agents", "themes"].includes(field)) {
               throw new Error(`there is no setting called ${field}`);
             }
           }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { agentProfile } from "$lib/agent.svelte";
+  import { harnessProfile } from "$lib/harness.svelte";
   import { dirFor } from "$lib/accounts.svelte";
   import {
     aloneOn,
@@ -63,7 +63,7 @@
 
   let link = $derived(linkFor(session.key));
   let conversation = $derived(link.conversation);
-  let profile = $derived(agentProfile(session.agent));
+  let profile = $derived(harnessProfile(session.agent));
   let agent = $derived(profile.product);
   let folder = $derived(session.startIn ?? session.project);
 
@@ -457,8 +457,8 @@
           root={sessionRoot(session)}
           dir={session.cwd ?? folder}
           project={projectLabel(session.project)}
-          agentId={session.agent}
-          alone={agentProfile(aloneOn(session)).name}
+          harness={session.agent}
+          alone={harnessProfile(aloneOn(session)).name}
           workflow={session.workflow}
           {choosable}
         />

@@ -1,8 +1,8 @@
 //! The user's preferences for the workbench, kept in one file per machine.
 //!
 //! The appearance, the look, the palette, the two fonts, the chords the app
-//! claims, the answer on agent hooks, the workflows and the user's own
-//! themes are the user's, not a window's, so
+//! claims, the answer on agent hooks, the workflows, the user's own agents
+//! and the user's own themes are the user's, not a window's, so
 //! they live here under the app's home and every window on the machine
 //! reads the same ones. A change is written whole and moved into place, and
 //! announced as an event carrying the settings as they now are. The file is
@@ -182,11 +182,12 @@ pub struct Hooks {
 }
 
 /// What the file holds and the app does not use, with the rule it breaks: an
-/// entry of the keys, the hooks, the accounts or the themes, a choice of
-/// account that names one, a value of a setting, or a field that is not a
-/// setting. It is written back where it stood by every save, until a change
-/// names the entry again, sets the choice to something else, sets the
-/// setting, or replaces the field it belongs to.
+/// entry of the keys, the hooks, the accounts or the themes, one of the
+/// user's agents, a choice of account that names one, a value of a
+/// setting, or a field that is not a setting. It is written back where it
+/// stood by every save, until a change names the entry again, sets the
+/// choice to something else, sets the setting, or replaces the field it
+/// belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnreadEntry {
     /// The field of the file it is in, as the file spells it.
@@ -200,9 +201,13 @@ pub struct UnreadEntry {
     pub reason: String,
     /// The entry as the file holds it.
     pub entry: Value,
+    /// Where it stands in the field's list, for an entry of a list: an
+    /// agent, whose name is its title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<usize>,
 }
 
-/// What the user last chose for one agent's sessions, each left out where
+/// What the user last chose for one harness's sessions, each left out where
 /// nothing was chosen.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Chosen {
@@ -231,14 +236,14 @@ fn carried_over(agent: &str, mode: &str) -> bool {
     }
 }
 
-/// The choices a value holds, or why it will not do: a table by agent of
+/// The choices a value holds, or why it will not do: a table by harness of
 /// a model, an effort and a mode, each a short line of text.
 fn last_chosen(value: &Value) -> Result<BTreeMap<String, Chosen>, String> {
     const SHAPE: &str =
-        "lastChosen is a table by agent of the model, the effort and the mode last chosen";
+        "lastChosen is a table by harness of the model, the effort and the mode last chosen";
     let table = value.as_object().ok_or(SHAPE)?;
     if table.len() > MOST_CHOSEN {
-        return Err(format!("lastChosen names {MOST_CHOSEN} agents at most"));
+        return Err(format!("lastChosen names {MOST_CHOSEN} harnesses at most"));
     }
     let line = |text: &Value| -> Result<Option<String>, String> {
         match text {
@@ -293,7 +298,7 @@ pub struct Account {
 }
 
 /// The user's own accounts by name, the one every project uses, and the
-/// projects that say otherwise, by path. No name is the agents' own
+/// projects that say otherwise, by path. No name is the harnesses' own
 /// directories, which every setup has without naming them.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Accounts {
@@ -321,14 +326,18 @@ pub struct Settings {
     /// window fills in whatever an action has no chord for.
     pub keys: BTreeMap<String, Chord>,
     pub hooks: Hooks,
-    /// The agents' logins kept apart, and which project runs under which.
+    /// The harnesses' logins kept apart, and which project runs under which.
     pub accounts: Accounts,
     /// The workflows sessions can follow, the one new sessions start with,
     /// and which project chooses another.
     pub workflows: Workflows,
+    /// The user's own agents, in the order the user keeps them. A file
+    /// from before has none.
+    #[serde(default)]
+    pub agents: Vec<crate::agents::Agent>,
     /// How long a past session stays listed under its project.
     pub past_sessions: String,
-    /// The agents whose sessions run integrated, drawn by the window; the
+    /// The harnesses whose sessions run integrated, drawn by the window; the
     /// others run in a terminal.
     pub integrated: Vec<String>,
     /// How long a project goes unused before the sessions pane folds it.
@@ -368,8 +377,8 @@ pub struct Settings {
     #[serde(default)]
     pub auto_resume: bool,
     /// The model, the effort and the permission mode the user last chose
-    /// for each agent's sessions, by the agent's id, which a new session of
-    /// that agent starts on. A file from before has none.
+    /// for each harness's sessions, by the harness's id, which a new session
+    /// on that harness starts on. A file from before has none.
     #[serde(default)]
     pub last_chosen: BTreeMap<String, Chosen>,
     /// What the file holds that is not used. Not a setting: it is read from the file and written back to it.
@@ -392,6 +401,7 @@ impl Default for Settings {
             },
             accounts: Accounts::default(),
             workflows: Workflows::default(),
+            agents: Vec::new(),
             past_sessions: "forever".into(),
             integrated: Vec::new(),
             inactive_after: "week".into(),
@@ -503,7 +513,29 @@ fn unused(
         name: name.into(),
         reason,
         entry: entry.clone(),
+        at: None,
     });
+}
+
+/// The user's agents that read, each on its own; the rest are unread.
+fn agents_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> Vec<crate::agents::Agent> {
+    let Some(list) = value.as_array() else {
+        let reason = "agents is a list of agents".into();
+        unused(unread, "agents", "", "", reason, value);
+        return Vec::new();
+    };
+    let (agents, aside) = crate::agents::read_lenient(list);
+    for entry in aside {
+        unread.push(UnreadEntry {
+            field: "agents".into(),
+            section: String::new(),
+            name: entry.title,
+            reason: entry.reason,
+            entry: entry.entry,
+            at: Some(entry.at),
+        });
+    }
+    agents
 }
 
 /// The chords that read, each entry on its own; the rest are unread.
@@ -646,7 +678,7 @@ fn accounts_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> Accounts {
 pub const OWN_ACCOUNT: &str = "Default";
 
 /// Why an account's name will not do: empty, too long, or the name the
-/// agents' own login goes by.
+/// harnesses' own login goes by.
 fn account_name(name: &str) -> Result<(), String> {
     if name.trim().is_empty() || name.chars().count() > LONGEST_ACCOUNT {
         return Err(format!(
@@ -655,7 +687,7 @@ fn account_name(name: &str) -> Result<(), String> {
     }
     if name.trim().eq_ignore_ascii_case(OWN_ACCOUNT) {
         return Err(format!(
-            "{OWN_ACCOUNT} is the agents' own login, so no account can be called that"
+            "{OWN_ACCOUNT} is the harnesses' own login, so no account can be called that"
         ));
     }
     Ok(())
@@ -684,6 +716,7 @@ const TABLES: &[&str] = &[
     "backgrounds",
     "cards",
     "workflows",
+    "agents",
 ];
 
 /// Whether the settings hold again the entry an unread one stands for. A
@@ -699,6 +732,13 @@ fn holds(settings: &Settings, entry: &UnreadEntry) -> bool {
         ("hooks", "overrides") => settings.hooks.overrides.contains_key(name),
         ("accounts", "list") => settings.accounts.list.contains_key(name),
         ("accounts", "overrides") => settings.accounts.overrides.contains_key(name),
+        ("agents", "") if entry.at.is_some() => {
+            !name.is_empty()
+                && settings
+                    .agents
+                    .iter()
+                    .any(|agent| agent.title.eq_ignore_ascii_case(name))
+        }
         _ => true,
     }
 }
@@ -1141,13 +1181,13 @@ fn cards_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> BTreeMap<Strin
     kept
 }
 
-/// The agents a value names as running integrated, each once, in the order
-/// the adapters list them, or why it will not do. Which agents can is the
-/// adapters' to say.
+/// The harnesses a value names as running integrated, each once, in the
+/// order the adapters list them, or why it will not do. Which harnesses
+/// can is the adapters' to say.
 fn integrated(value: &Value) -> Result<Vec<String>, String> {
     let named = value
         .as_array()
-        .ok_or("integrated is a list of the agents whose sessions run integrated")?;
+        .ok_or("integrated is a list of the harnesses whose sessions run integrated")?;
     let able = crate::adapter::integrated_agents();
     for agent in named {
         match agent.as_str() {
@@ -1242,6 +1282,11 @@ fn set_field(settings: &mut Settings, field: &str, value: &Value) -> Result<(), 
             settings.workflows = workflow::read(value)?;
             mend(&before, settings, "workflows");
         }
+        "agents" => {
+            let before = settings.clone();
+            settings.agents = crate::agents::read(value)?;
+            mend(&before, settings, "agents");
+        }
         "pastSessions" => settings.past_sessions = one_of(field, value, PAST_SESSIONS)?,
         "integrated" => settings.integrated = integrated(value)?,
         "inactiveAfter" => settings.inactive_after = one_of(field, value, INACTIVE_AFTER)?,
@@ -1288,9 +1333,9 @@ fn settle_palette(settings: &mut Settings) {
 
 /// The settings a file's text holds. Each value that does not read is left
 /// at its default and set aside with the rule it breaks, as is each key,
-/// hook, account or theme entry that does not read, each choice of account
-/// that names one, and each field that is not a setting; each workflow that
-/// does not read is left out and kept by the workflows. None when the text
+/// hook, account, theme entry or agent that does not read, each choice of
+/// account that names one, and each field that is not a setting; each
+/// workflow that does not read is left out and kept by the workflows. None when the text
 /// is not a JSON object at all.
 pub fn parse(text: &str) -> Option<Settings> {
     let fields: Map<String, Value> = serde_json::from_str(text).ok()?;
@@ -1309,6 +1354,8 @@ pub fn parse(text: &str) -> Option<Settings> {
             settings.backgrounds = backgrounds_lenient(value, &mut unread);
         } else if field == "cards" {
             settings.cards = cards_lenient(value, &mut unread);
+        } else if field == "agents" {
+            settings.agents = agents_lenient(value, &mut unread);
         } else if field == "workflows" {
             if value.is_object() && value.get("list").is_none_or(Value::is_array) {
                 settings.workflows = workflow::read_lenient(value);
@@ -1427,6 +1474,15 @@ fn is_choice(entry: &UnreadEntry) -> bool {
 
 /// Writes an unread entry back where the file had it.
 fn put_back(fields: &mut Map<String, Value>, entry: &UnreadEntry) {
+    if let Some(at) = entry.at {
+        let field = fields
+            .entry(entry.field.clone())
+            .or_insert_with(|| Value::Array(Vec::new()));
+        if let Some(list) = field.as_array_mut() {
+            list.insert(at.min(list.len()), entry.entry.clone());
+        }
+        return;
+    }
     if entry.section.is_empty() && entry.name.is_empty() {
         fields.insert(entry.field.clone(), entry.entry.clone());
         return;
@@ -1458,7 +1514,11 @@ fn render(settings: &Settings) -> String {
     if let Some(fields) = value.as_object_mut() {
         fields.insert("workflows".into(), workflow::for_file(&settings.workflows));
         fields.remove("unreadEntries");
-        for entry in &settings.unread_entries {
+        // An entry of a list goes back in order, so each lands where it
+        // stood.
+        let mut entries: Vec<&UnreadEntry> = settings.unread_entries.iter().collect();
+        entries.sort_by_key(|entry| entry.at);
+        for entry in entries {
             put_back(fields, entry);
         }
     }
@@ -2190,7 +2250,7 @@ mod tests {
             )
             .unwrap_err();
             assert!(
-                error.contains("Default is the agents' own login"),
+                error.contains("Default is the harnesses' own login"),
                 "{error}"
             );
         }
@@ -3174,6 +3234,84 @@ mod tests {
         assert_eq!(unread.unread_entries[0].field, "lastChosen");
         let written: Value = serde_json::from_str(&render(&unread)).unwrap();
         assert_eq!(written["lastChosen"], "opus");
+    }
+
+    #[test]
+    fn the_users_own_agents_are_set_by_a_change_whole_and_kept_as_written() {
+        assert!(Settings::default().agents.is_empty());
+        let agent = json!({
+            "title": "Migrations",
+            "description": "Checks migrations for locks.\n\nYou read them.",
+            "model": { "harness": "claude-code", "model": "opus" },
+            "effort": "high",
+            "readsOnly": true,
+        });
+        let next = apply(&Settings::default(), &json!({ "agents": [agent.clone()] })).unwrap();
+        assert_eq!(next.agents.len(), 1);
+        assert_eq!(next.agents[0].title, "Migrations");
+        let written: Value = serde_json::from_str(&render(&next)).unwrap();
+        assert_eq!(written["agents"], json!([agent]));
+        assert_eq!(parse(&render(&next)).unwrap(), next);
+        // A change that will not do is refused whole.
+        assert!(apply(
+            &next,
+            &json!({ "agents": [{ "title": "Developer", "description": "x" }] })
+        )
+        .is_err());
+        assert!(apply(&next, &json!({ "agents": {} })).is_err());
+        assert!(parse(r#"{ "chime": true }"#).unwrap().agents.is_empty());
+        // A field this version does not know survives a round trip.
+        let mut later = agent.clone();
+        later["colour"] = json!("red");
+        let read = parse(&json!({ "agents": [later.clone()] }).to_string()).unwrap();
+        assert!(read.unread_entries.is_empty());
+        let written: Value = serde_json::from_str(&render(&read)).unwrap();
+        assert_eq!(written["agents"], json!([later]));
+    }
+
+    #[test]
+    fn an_agent_in_the_file_that_does_not_read_is_set_aside_and_kept_across_a_save() {
+        let good = json!({ "title": "Migrations", "description": "Checks migrations." });
+        let shipped = json!({ "title": "Tester", "description": "Mine." });
+        let broken = json!({ "title": "Broken", "description": "Mine.", "model": "opus" });
+        let file = json!({ "agents": [shipped.clone(), good.clone(), broken.clone()] });
+        let read = parse(&file.to_string()).unwrap();
+        assert_eq!(read.agents.len(), 1);
+        assert_eq!(read.agents[0].title, "Migrations");
+        let aside: Vec<(&str, Option<usize>)> = read
+            .unread_entries
+            .iter()
+            .map(|entry| (entry.name.as_str(), entry.at))
+            .collect();
+        assert_eq!(aside, [("Tester", Some(0)), ("Broken", Some(2))]);
+        assert!(read.unread_entries[0].reason.contains("Chord ships"));
+        // A save of the agents that read keeps the others where they stood.
+        let added = json!({ "title": "Docs", "description": "Writes docs." });
+        let saved = apply(&read, &json!({ "agents": [good.clone(), added.clone()] })).unwrap();
+        assert_eq!(saved.unread_entries.len(), 2);
+        let written: Value = serde_json::from_str(&render(&saved)).unwrap();
+        let titles: Vec<&str> = written["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|agent| agent["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, ["Tester", "Migrations", "Broken", "Docs"]);
+        assert_eq!(written["agents"][2], broken);
+        // An agent the change names again takes the place of the one set
+        // aside, and a list that is not a list is set aside whole.
+        let mended = json!({ "title": "broken", "description": "Mended." });
+        let next = apply(&saved, &json!({ "agents": [good, mended] })).unwrap();
+        assert_eq!(next.unread_entries.len(), 1);
+        assert_eq!(next.unread_entries[0].name, "Tester");
+        let whole = parse(r#"{ "agents": { "Tester": {} } }"#).unwrap();
+        assert_eq!(whole.unread_entries[0].at, None);
+        let written: Value = serde_json::from_str(&render(&whole)).unwrap();
+        assert_eq!(written["agents"], json!({ "Tester": {} }));
+        assert!(apply(&whole, &json!({ "agents": [] }))
+            .unwrap()
+            .unread_entries
+            .is_empty());
     }
 
     #[test]

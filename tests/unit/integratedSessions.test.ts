@@ -67,7 +67,7 @@ import { choose } from "$lib/settingChoices";
 import { create as createShell, forOwner, reset as resetShells } from "$lib/terminals.svelte";
 import { conductor, resetConductor, startedFor } from "$lib/conductor.svelte";
 import { attention, resetAttention } from "$lib/attention.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows, unknowWorkflows } from "$lib/workflows.svelte";
 import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
@@ -1405,7 +1405,7 @@ describe("the workflow a session follows, kept for it", () => {
       );
   });
   afterEach(() => {
-    resetAgent();
+    resetHarnesses();
     localStorage.removeItem("chord.workflows");
   });
 
@@ -1783,7 +1783,7 @@ describe("a session reopened the other way", () => {
     );
   });
   afterEach(() => {
-    resetAgent();
+    resetHarnesses();
     resetConductor();
     resetShells();
   });
@@ -1845,7 +1845,7 @@ describe("a session reopened the other way", () => {
     expect(otherWayFor(session)).toBe("terminal");
     const fresh = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "terminal");
     expect(otherWayFor(fresh)).toBeNull();
-    resetAgent();
+    resetHarnesses();
     expect(otherWayFor(session)).toBeNull();
   });
 
@@ -2213,7 +2213,7 @@ describe("a new conversation put under a workflow", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: null, overrides: {} });
   });
   afterEach(() => {
-    resetAgent();
+    resetHarnesses();
     localStorage.removeItem("chord.workflows");
     localStorage.removeItem("chord.tokens");
   });
@@ -2485,7 +2485,7 @@ describe("a new conversation put under a workflow", () => {
   });
 
   it("refuses a workflow whose orchestrator's agent is not here", async () => {
-    resetAgent();
+    resetHarnesses();
     applyDetect(
       { id: "claude-code", path: "/usr/local/bin/claude", caps: { resumable: true, titles: true, acp: false, integrated: true }, fromLoginShell: true },
       true,

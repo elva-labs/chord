@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Conversation } from "$lib/conversation.svelte";
 import { effortChoices, effortInUse, heldModel, modeChoices, modeName, workflowChoices } from "$lib/settingChoices";
 import { defaultOffered, effortScale, lowerEffort } from "$lib/integrated.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 
 const MODELS = [
@@ -158,7 +158,7 @@ describe("the workflows a new conversation can follow", () => {
       true,
     );
   });
-  afterEach(() => resetAgent());
+  afterEach(() => resetHarnesses());
 
   it("are none first, then each workflow with who directs, works and reviews, the one followed ticked", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: null, overrides: {} });

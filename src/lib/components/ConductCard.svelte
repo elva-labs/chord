@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { installed } from "$lib/agent.svelte";
+  import { installed } from "$lib/harness.svelte";
   import {
     accountWords,
     answerConduct,
@@ -10,8 +10,8 @@
     type Ask,
     type Choice,
   } from "$lib/conductor.svelte";
-  import type { AgentId } from "$lib/core";
-  import { AGENT_LABELS, modelFromKey, modelKey, offeredAgents, offeredModels } from "$lib/models";
+  import type { HarnessId } from "$lib/core";
+  import { HARNESS_LABELS, modelFromKey, modelKey, offeredHarnesses, offeredModels } from "$lib/models";
   import AskCard from "$lib/components/AskCard.svelte";
   import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
   import Plain from "$lib/components/conversation/Plain.svelte";
@@ -89,12 +89,12 @@
 
   /** What a plugin's start runs on, as picked on the card. */
   let pick = $derived(ask.plugin === undefined ? null : pluginPickOf(ask));
-  let agents = $derived(pick === null ? [] : offeredAgents(installed(), [pick.agent]));
+  let agents = $derived(pick === null ? [] : offeredHarnesses(installed(), [pick.agent]));
 
   /** The models offered for an agent: its own default first, where the
       list does not hold it, then those it offers, then the one picked
       when the list does not hold it either. */
-  function modelsFor(agent: AgentId) {
+  function modelsFor(agent: HarnessId) {
     const offered = offeredModels(agent);
     const own = offered.some((option) => option.model === "default") ? [] : [{ agent, model: "default", label: "Default" }];
     const listed = [...own, ...offered];
@@ -151,7 +151,7 @@
       <span>Runs on</span>
       <select value={modelKey(pick)} onchange={picked} data-testid="conduct-model">
         {#each agents as agent (agent)}
-          <optgroup label={AGENT_LABELS[agent]}>
+          <optgroup label={HARNESS_LABELS[agent]}>
             {#each modelsFor(agent) as option (option.model)}
               <option value={modelKey(option)}>{option.label}</option>
             {/each}

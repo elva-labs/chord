@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import { accountLabel, hasAccounts } from "$lib/accounts.svelte";
-  import { agentLabel } from "$lib/agent.svelte";
+  import { harnessLabel } from "$lib/harness.svelte";
   import { profileOf, profilesKnown, readProfiles } from "$lib/codexProfiles.svelte";
   import { core } from "$lib/core";
   import { flash } from "$lib/flash.svelte";
@@ -276,9 +276,9 @@
     if (open === "allowance" && figures.length === 0) untrack(() => close(true));
   });
 
-  let heading = $derived(account ?? (session === null ? "" : agentLabel(session.agent)));
+  let heading = $derived(account ?? (session === null ? "" : harnessLabel(session.agent)));
   let subheading = $derived(
-    [account === null || session === null ? null : agentLabel(session.agent), planName(report?.plan ?? null)]
+    [account === null || session === null ? null : harnessLabel(session.agent), planName(report?.plan ?? null)]
       .filter((part) => part !== null)
       .join(" · "),
   );

@@ -16,7 +16,7 @@ import SessionsPane from "$lib/panes/SessionsPane.svelte";
 import { create, reopened, reset as resetSessions, sessions, started } from "$lib/sessions.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { conductor, resetConductor } from "$lib/conductor.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { resetProjects } from "$lib/projects.svelte";
 
 /** A window of the given number of projects, each with three live rows and
@@ -68,7 +68,7 @@ afterEach(() => {
   resetSessions();
   resetWorkspace();
   resetConductor();
-  resetAgent();
+  resetHarnesses();
 });
 
 describe("the sessions pane's cost", () => {

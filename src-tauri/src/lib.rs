@@ -568,14 +568,43 @@ async fn codex_profiles(
     project: String,
     config_dir: Option<String>,
 ) -> Result<Value, String> {
-    let core = Arc::clone(&core);
-    let remotes = Arc::clone(&remotes);
-    blocking(move || match route(&project) {
-        Route::Local(_) => value(core.codex_profiles(config_dir.as_deref())),
-        Route::Remote { host, .. } => remotes
-            .connection(&host)?
-            .call("codex_profiles", json!({ "configDir": config_dir })),
-    })
+    let for_remote = config_dir.clone();
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "codex_profiles",
+        move |_| json!({ "configDir": for_remote }),
+        move |core, _| Ok(core.codex_profiles(config_dir.as_deref())),
+    )
+    .await
+}
+
+/// The agents installed for each harness, read on the machine the project
+/// is on, under the account whose directories are given.
+#[tauri::command]
+async fn installed_agents(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    claude_dir: Option<String>,
+    codex_home: Option<String>,
+) -> Result<Value, String> {
+    let for_local = (claude_dir.clone(), codex_home.clone());
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "installed_agents",
+        move |rest| json!({ "project": rest, "claudeDir": claude_dir, "codexHome": codex_home }),
+        move |core, project| {
+            Ok(core.installed_agents(
+                Path::new(project),
+                for_local.0.as_deref(),
+                for_local.1.as_deref(),
+            ))
+        },
+    )
     .await
 }
 
@@ -2477,6 +2506,7 @@ pub fn run() {
             session_title,
             hook_status,
             hook_status_many,
+            installed_agents,
             hook_install,
             hook_uninstall,
             git_status,

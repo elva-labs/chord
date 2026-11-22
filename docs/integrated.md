@@ -68,7 +68,7 @@ the same flags: its subagent tools disallowed where the workflow delegates
 only through the workbench, the instructions added to its system prompt
 from a file of the session's own, and, resumed with other instructions than
 its conversation began with, the system prompt it recorded turned off. See
-[agents](adapters.md#under-a-workflow). Such a session is not started where
+[harnesses](adapters.md#under-a-workflow). Such a session is not started where
 the workbench has no tool server to attach, and the start says so before
 the folder is asked about.
 

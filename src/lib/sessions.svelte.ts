@@ -1,7 +1,7 @@
 import {
   core,
   isHeld,
-  type AgentId,
+  type HarnessId,
   type SessionEnded,
   type SessionEvent,
   type PastSessions,
@@ -24,12 +24,12 @@ import {
 } from "$lib/workflows.svelte";
 import { persist } from "$lib/persist";
 import { identifiedZoom } from "$lib/zoom.svelte";
-import { AGENTS, agentLabel, agentProfile, installed } from "$lib/agent.svelte";
+import { HARNESSES, harnessLabel, harnessProfile, installed } from "$lib/harness.svelte";
 import { attention } from "$lib/attention.svelte";
 import { hostOf } from "$lib/remote.svelte";
 import { closeOwner } from "$lib/browser.svelte";
 import { handOver, sessionClosed as closeShells } from "$lib/terminals.svelte";
-import { isReady } from "$lib/agent.svelte";
+import { isReady } from "$lib/harness.svelte";
 import { claim, resetExits } from "$lib/exits";
 import { canIntegrate, kindFor, type SessionKind } from "$lib/sessionKind.svelte";
 import { isInstalled } from "$lib/hook.svelte";
@@ -87,8 +87,8 @@ export interface Session {
   token: string;
   /** The project this session belongs to, as an absolute path. */
   project: string;
-  /** Which agent is running in it. */
-  agent: AgentId;
+  /** Which harness runs it. */
+  agent: HarnessId;
   /** How it runs: the agent's own interface in a pty, or integrated, the
       conversation drawn by the window. */
   kind: SessionKind;
@@ -140,7 +140,7 @@ export interface Session {
   account: string | null;
   /** The Codex profile the session runs under, by a name listed for its
       account, whose settings lie over the account's own. Null for none,
-      and for any other agent. */
+      and for any other harness. */
   profile: string | null;
   /** The workflow the session follows, as it was when this run of it
       started: it directs the others by it. Null for none. A change to the
@@ -271,7 +271,10 @@ const MINE_KEY = "chord.mine";
 const NAMES_KEY = "chord.names";
 const OWN_NAMES_KEY = "chord.ownNames";
 const TOKENS_KEY = "chord.tokens";
-const PREFERRED_KEY = "chord.agents";
+const PREFERRED_KEY = "chord.harnesses";
+/** Where the version before keeps the same. It is read when the new key
+    is missing and written beside it, so that version still finds it. */
+const PREFERRED_KEY_BEFORE = "chord.agents";
 const WORKFLOWS_KEY = "chord.workflows";
 const WAITING_KEY = "chord.waiting";
 /** The record of the rows open at the last quit, whose flag says the
@@ -325,7 +328,7 @@ export interface KeptToken {
     of the account whose directory holds it, or null for the agents' own.
     It resumes under that account. */
 export type HistoryEntry = Transcript & {
-  agent: AgentId;
+  agent: HarnessId;
   account: string | null;
 };
 
@@ -339,7 +342,7 @@ export const sessions = $state({
   history: {} as Record<string, HistoryEntry[]>,
   /** The agent last started in each project: what the choice for a new
       session offers first. */
-  preferred: {} as Record<string, AgentId>,
+  preferred: {} as Record<string, HarnessId>,
   /**
    * Session ids this app has run, by project path. Claude Code keeps every
    * transcript for a directory in one place, whichever terminal it came from;
@@ -435,13 +438,13 @@ function pruneDormant(project: string | null = null) {
     agent on its own directory is that directory, read once as the agents'
     own. */
 function historySources(): {
-  agent: AgentId;
+  agent: HarnessId;
   account: string | null;
   dir?: string;
 }[] {
-  const sources: { agent: AgentId; account: string | null; dir?: string }[] =
+  const sources: { agent: HarnessId; account: string | null; dir?: string }[] =
     [];
-  for (const agent of AGENTS) {
+  for (const agent of HARNESSES) {
     sources.push({ agent, account: null });
     for (const account of names()) {
       const dir = dirFor(account, agent);
@@ -626,7 +629,7 @@ function stopHistoryClock() {
 
 /** The agent a new session in the project starts with: the one last started
     there, else the first one installed. */
-export function defaultAgent(project: string): AgentId {
+export function defaultAgent(project: string): HarnessId {
   const preferred = sessions.preferred[project];
   if (preferred !== undefined && installed().includes(preferred))
     return preferred;
@@ -650,11 +653,13 @@ export function otherWay(project: string): SessionKind | null {
   return newSessionKind(project) === "integrated" ? "terminal" : "integrated";
 }
 
-function prefer(project: string, agent: AgentId) {
+function prefer(project: string, agent: HarnessId) {
   if (sessions.preferred[project] === agent) return;
   sessions.preferred[project] = agent;
   try {
-    localStorage.setItem(PREFERRED_KEY, JSON.stringify(sessions.preferred));
+    const kept = JSON.stringify(sessions.preferred);
+    localStorage.setItem(PREFERRED_KEY, kept);
+    localStorage.setItem(PREFERRED_KEY_BEFORE, kept);
   } catch {
     // Non-fatal: the choice does not survive a restart.
   }
@@ -774,14 +779,16 @@ export function loadRemembered() {
     // No session follows a workflow, then.
   }
   try {
+    const before = localStorage.getItem(PREFERRED_KEY_BEFORE);
+    if (before !== null && localStorage.getItem(PREFERRED_KEY) === null) localStorage.setItem(PREFERRED_KEY, before);
     const raw = localStorage.getItem(PREFERRED_KEY);
     if (raw !== null) {
       const stored: unknown = JSON.parse(raw);
       if (typeof stored === "object" && stored !== null) {
-        const preferred: Record<string, AgentId> = {};
-        for (const [project, agent] of Object.entries(stored)) {
-          if (agent === "claude-code" || agent === "codex")
-            preferred[project] = agent;
+        const preferred: Record<string, HarnessId> = {};
+        for (const [project, harness] of Object.entries(stored)) {
+          if (harness === "claude-code" || harness === "codex")
+            preferred[project] = harness;
         }
         sessions.preferred = preferred;
       }
@@ -1147,7 +1154,7 @@ export function historyFor(project: string): HistoryEntry[] {
     agent's, or every agent's. */
 export function outsideFor(
   project: string,
-  agent: AgentId | null = null,
+  agent: HarnessId | null = null,
 ): HistoryEntry[] {
   return closed(project).filter(
     (transcript) =>
@@ -1215,7 +1222,7 @@ export function earlierLabel(count: number): string {
     by those names, else as `modelLabel` reads it. Null for a session that
     names no model. */
 export function sessionModelName(session: {
-  agent: AgentId;
+  agent: HarnessId;
   model: string | null;
   runsOn?: string | null;
   account: string | null;
@@ -1437,7 +1444,7 @@ export function readsAsAgent(name: string): boolean {
   // Its letters and digits alone, so no mark between the words gets past.
   const letters = (text: string) => bareName(text).replace(/[^\p{L}\p{N}]/gu, "");
   const bare = letters(name);
-  return AGENTS.some((id) => letters(agentProfile(id).name) === bare || letters(agentLabel(id)) === bare);
+  return HARNESSES.some((id) => letters(harnessProfile(id).name) === bare || letters(harnessLabel(id)) === bare);
 }
 
 /** Whether a name reads as the name of another live session, `except`
@@ -1665,7 +1672,7 @@ export function cycle(project: string, direction: 1 | -1): boolean {
 export function create(
   project: string,
   resumedFrom: string | null = null,
-  agent?: AgentId,
+  agent?: HarnessId,
   startIn: string | null = null,
   prompt: string | null = null,
   model: string | null = null,
@@ -1683,7 +1690,7 @@ export function create(
         : agent === undefined || nothingToPick()
           ? workflowOf(project)
           : null;
-  let runs: AgentId = agent ?? defaultAgent(project);
+  let runs: HarnessId = agent ?? defaultAgent(project);
   if (following !== null) {
     if (resumedFrom === null) runs = following.orchestrator.agent;
     if (model === null && runs === following.orchestrator.agent)
@@ -1699,7 +1706,7 @@ export function create(
   const resolving = workflow === undefined && resumedFrom !== null;
   const missing =
     following !== null && resumedFrom === null && !installed().includes(runs)
-      ? `The workflow "${following.name}" runs its orchestrator on ${agentLabel(runs)}, which is not installed here. Pick an agent to start one alone, or choose another workflow for this project in the settings.`
+      ? `The workflow "${following.name}" runs its orchestrator on ${harnessLabel(runs)}, which is not installed here. Pick a harness to start one alone, or choose another workflow for this project in the settings.`
       : null;
   if (missing === null) prefer(project, runs);
   const live = added(
@@ -1834,8 +1841,8 @@ export function originOf(session: Session): { starter?: string; madeWorktree?: b
     agent is not installed here, or runs only in a terminal. */
 export function cannotDirect(workflow: Workflow): string | null {
   const runs = workflow.orchestrator.agent;
-  if (!installed().includes(runs)) return `Directed by ${agentLabel(runs)}, which is not installed here`;
-  if (!canIntegrate(runs)) return `Directed by ${agentLabel(runs)}, which runs only in a terminal`;
+  if (!installed().includes(runs)) return `Directed by ${harnessLabel(runs)}, which is not installed here`;
+  if (!canIntegrate(runs)) return `Directed by ${harnessLabel(runs)}, which runs only in a terminal`;
   return null;
 }
 
@@ -1847,7 +1854,7 @@ export function cannotDirect(workflow: Workflow): string | null {
  * caller's to start again. False when the workflow cannot direct a
  * conversation here.
  */
-export function putUnder(key: string, workflow: Workflow | null, alone: AgentId): boolean {
+export function putUnder(key: string, workflow: Workflow | null, alone: HarnessId): boolean {
   const session = byKey(key);
   if (session === null) return false;
   if (workflow !== null && cannotDirect(workflow) !== null) return false;
@@ -2001,7 +2008,7 @@ function nothingToPick(): boolean {
 export function reopened(
   project: string,
   id: string,
-  agent: AgentId,
+  agent: HarnessId,
   startIn: string | null,
   model: string | null,
   account: string | null,
@@ -2044,7 +2051,7 @@ export function wake(key: string) {
 function row(
   project: string,
   resumedFrom: string | null,
-  agent: AgentId,
+  agent: HarnessId,
   startIn: string | null,
   prompt: string | null,
   model: string | null,
@@ -3572,7 +3579,7 @@ export function exact(
   }
   // The model a terminal session's own picker or configuration left it on,
   // which its row and pane name in place of the one it was started with.
-  if (typeof more.model === "string" && more.model !== "" && agentProfile(session.agent).namesRunningModel)
+  if (typeof more.model === "string" && more.model !== "" && harnessProfile(session.agent).namesRunningModel)
     session.runsOn = more.model;
   answered.delete(session.key);
   // The line a run that a reopen stops leaves on its way out is not left

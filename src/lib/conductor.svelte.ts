@@ -50,7 +50,7 @@ import {
   namesOwn,
   OWN_LABEL,
 } from "$lib/accounts.svelte";
-import { agentLabel } from "$lib/agent.svelte";
+import { harnessLabel } from "$lib/harness.svelte";
 import { untrack } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { keepMode } from "$lib/sessionModes";
@@ -92,7 +92,7 @@ import {
   type Session,
   type SessionStatus,
 } from "$lib/sessions.svelte";
-import type { AgentId, ReviewStep, Workflow, WorkflowStep, WorkStep } from "$lib/core";
+import type { HarnessId, ReviewStep, Workflow, WorkflowStep, WorkStep } from "$lib/core";
 import { CODEX_DEFAULT } from "$lib/models";
 import { hostOf } from "$lib/remote.svelte";
 import { forgetNotes } from "$lib/notes";
@@ -166,7 +166,7 @@ export const GATHER_MOST = 120_000;
     does not record, is taken to last an hour too. A cold starter's wake
     waits until nothing it started is at work, and at most COLD_MOST after
     the first came to rest. */
-export const COLD_AFTER: Record<AgentId, number> = { "claude-code": 58 * 60_000, codex: 58 * 60_000 };
+export const COLD_AFTER: Record<HarnessId, number> = { "claude-code": 58 * 60_000, codex: 58 * 60_000 };
 export const COLD_MOST = 20 * 60_000;
 /** How long the user's keys in a starter's terminal have been still
     before the workbench types into it. */
@@ -530,7 +530,7 @@ export interface Ask {
     so the agent runs on its own. */
 export interface Login {
   account: string | null;
-  bare: AgentId | null;
+  bare: HarnessId | null;
 }
 
 /** A round of a review past the workflow's limit, which only the user can
@@ -556,7 +556,7 @@ export interface Named {
   projects: boolean;
   /** The agent being started, when the account keeps no directory for it
       and the agent runs on its own. */
-  bare: AgentId | null;
+  bare: HarnessId | null;
 }
 
 /** What the question says of the account a session would run under. */
@@ -565,7 +565,7 @@ export function accountWords(named: Named): string {
     ? `Under the project's account, ${named.label}.`
     : `Under the ${named.label} account, not the project's own.`;
   if (named.bare === null) return which;
-  const agent = agentLabel(named.bare);
+  const agent = harnessLabel(named.bare);
   return `${which} ${named.label} has no ${agent} directory, so ${agent} uses the ${OWN_LABEL} one.`;
 }
 
@@ -576,7 +576,7 @@ function underWords(named: Named | null): string {
     ? `, under the project's account, ${named.label}`
     : `, under the ${named.label} account`;
   if (named.bare === null) return which;
-  const agent = agentLabel(named.bare);
+  const agent = harnessLabel(named.bare);
   return `${which}, which has no ${agent} directory, so ${agent} uses the ${OWN_LABEL} one`;
 }
 
@@ -590,7 +590,7 @@ export interface Started {
   project: string;
   /** The worktree it ran in, when it did not run in the project itself. */
   worktree: string | null;
-  agent: AgentId;
+  agent: HarnessId;
   /** The name the caller gave the work, when it gave one. */
   name: string | null;
   /** The account it ran under, by name; null for the agents' own. A record
@@ -1139,7 +1139,7 @@ const owners = $derived.by(() => {
 export interface WasOpen {
   project: string;
   id: string;
-  agent: AgentId;
+  agent: HarnessId;
   startIn: string | null;
 }
 
@@ -2734,11 +2734,11 @@ async function startSession(request: Placed): Promise<Answered> {
   if (project === null) return refused("Starting a session needs a project.");
   if (prompt === null)
     return refused("Starting a session needs a prompt to give it.");
-  // A model's name means something to one agent only, so the agent is
+  // A model's name means something to one harness only, so the harness is
   // named with it rather than taken from the project's last one.
-  if (text(request, "model") !== null && text(request, "agent") === null)
+  if (text(request, "model") !== null && harnessText(request) === null)
     return refused(
-      "A start that names a model names the agent too, claude-code or codex: the model's name is the agent's to read.",
+      "A start that names a model names the harness too, claude-code or codex: the model's name is the harness's to read.",
     );
   if (!isStartable(project))
     return refused(`No project at ${project} is open in the workbench.`);
@@ -2778,7 +2778,7 @@ function wantedAccount(request: Placed): { named: { account: string | null } | n
   if (wanted === null) return { named: null };
   if (namesOwn(wanted)) return { named: { account: null } };
   if (wanted in accounts.list) return { named: { account: wanted } };
-  const own = `${OWN_LABEL} for the agents' own login`;
+  const own = `${OWN_LABEL} for the harnesses' own login`;
   return {
     refusal:
       names().length === 0
@@ -2800,7 +2800,7 @@ export function nameCut(name: string): string {
 /** The sentence a started session's prompt ends with, by the way its
     agent runs: a conversation's row reads its last message, a terminal's
     the line it gives the notify tool. */
-function outcomeAsk(agent: AgentId): string {
+function outcomeAsk(agent: HarnessId): string {
   return kindFor(agent) === "integrated" ? OUTCOME_ASK : OUTCOME_ASK_TERMINAL;
 }
 
@@ -2953,7 +2953,7 @@ async function startFitted(
         : "";
   const runsOn =
     model === null
-      ? ` It runs on ${agentLabel(agent)}'s default model.`
+      ? ` It runs on ${harnessLabel(agent)}'s default model.`
       : below !== null
         ? ` It runs on ${sessionModelName({ agent, model, account, project })}, one model below yours, since the start named none: name a model to choose another.`
         : ` It runs on ${sessionModelName({ agent, model, account, project })}.`;
@@ -3012,7 +3012,7 @@ function familyOf(model: string): string | null {
     no profile. */
 function profileHandedOn(
   starter: Session | null,
-  agent: AgentId,
+  agent: HarnessId,
   account: string | null,
   project: string,
 ): string | null {
@@ -3034,7 +3034,7 @@ function profileHandedOn(
  * agent, and where the model below would be above the default the account
  * runs on, as far as the window has heard.
  */
-function modelBelow(starter: Session | null, agent: AgentId, account: string | null): string | null {
+function modelBelow(starter: Session | null, agent: HarnessId, account: string | null): string | null {
   if (starter === null || starter.kind !== "integrated" || starter.model === null) return null;
   if (starter.agent !== "claude-code" || agent !== "claude-code") return null;
   const at = TIERS.indexOf(familyOf(starter.model) ?? "");
@@ -3068,7 +3068,7 @@ function modelBelow(starter: Session | null, agent: AgentId, account: string | n
 function underFor(
   request: Placed,
   project: string,
-  agent: AgentId,
+  agent: HarnessId,
   wanted: { account: string | null } | null,
 ): { account: string | null; say: boolean } {
   const own = accountOf(project);
@@ -3101,7 +3101,7 @@ function underFor(
  * is asked about, an agent the workbench did not start, which has no
  * project of its own to the workbench, among them.
  */
-function ownStart(request: Placed, project: string, agent: AgentId, account: string | null): boolean {
+function ownStart(request: Placed, project: string, agent: HarnessId, account: string | null): boolean {
   const calling = callingSession(request);
   if (calling === null || calling.project !== project || calling.agent !== agent || calling.account !== account)
     return false;
@@ -3131,7 +3131,7 @@ function modeNow(session: Session): string | null {
     starter's own as far as that agent has it, else the mode the starter
     was started in, as a cap on a start the user allowed. Null where
     neither is known, or on the scale. */
-function givenMode(starter: Session | null, agent: AgentId): string | null {
+function givenMode(starter: Session | null, agent: HarnessId): string | null {
   const mode = starter === null ? null : (modeNow(starter) ?? starter.modeNamed);
   return starter === null || mode === null ? null : fitMode(starter.agent, mode, agent);
 }
@@ -3148,7 +3148,7 @@ function callingSession(request: Placed): Session | null {
     the call. */
 interface Fit {
   place: Place;
-  agent: AgentId | null;
+  agent: HarnessId | null;
   model: string | null;
   /** For a round past the review's limit, what the user is asked to allow. */
   beyond: Beyond | null;
@@ -3205,7 +3205,7 @@ function fitStart(
     return {
       refusal: `The workflow ${quoted(workflow.name)} has no step called ${quoted(named)}. The steps are ${stepsText(workflow)}.`,
     };
-  const runs = modelFor(text(request, "agent"), text(request, "model"), step);
+  const runs = modelFor(harnessText(request), text(request, "model"), step);
   if ("refusal" in runs) return runs;
   const from = text(request, "work");
 
@@ -3347,8 +3347,8 @@ function modelFor(
   agent: string | null,
   model: string | null,
   step: WorkflowStep,
-): { agent: AgentId | null; model: string | null } | { refusal: string } {
-  const named: AgentId | null =
+): { agent: HarnessId | null; model: string | null } | { refusal: string } {
+  const named: HarnessId | null =
     agent === "claude-code" || agent === "codex" ? agent : null;
   if (step.models.length === 0) return { agent: named, model };
   const fits = step.models.filter(
@@ -3365,7 +3365,7 @@ function modelFor(
           ? agent
           : `the model ${model}`;
     return {
-      refusal: `The step ${quoted(step.name)} does not allow ${asked}. It allows ${either(step.models.map(modelText))}. Leave the agent and the model out to use the first.`,
+      refusal: `The step ${quoted(step.name)} does not allow ${asked}. It allows ${either(step.models.map(modelText))}. Leave the harness and the model out to use the first.`,
     };
   }
   return {
@@ -4554,10 +4554,19 @@ function byId(sessionId: string): Session | null {
   return sessions.all.find((session) => session.id === sessionId) ?? null;
 }
 
-/** The agent to run: the one the call named when it is one the workbench
+/** The harness a start names, with harness, or with agent by one of the
+    harnesses' names, which starts still use for one release. */
+function harnessText(request: ConductRequest): string | null {
+  const named = text(request, "harness");
+  if (named !== null) return named;
+  const old = text(request, "agent");
+  return old === "claude-code" || old === "codex" ? old : null;
+}
+
+/** The harness to run: the one the call named when it is one the workbench
     drives, else the project's own. */
-function agentOf(request: ConductRequest, project: string): AgentId {
-  const wanted = text(request, "agent");
+function agentOf(request: ConductRequest, project: string): HarnessId {
+  const wanted = harnessText(request);
   if (wanted === "claude-code" || wanted === "codex") return wanted;
   return defaultAgent(project);
 }
@@ -4630,7 +4639,7 @@ function askUser(
 /** What a plugin's start runs on: the agent, and its model by name, or
     `default` for the one the agent picks itself. */
 export interface PluginPick {
-  agent: AgentId;
+  agent: HarnessId;
   model: string;
 }
 
@@ -4833,7 +4842,7 @@ export function revoke(callerId: string, project: string) {
 /** A standing answer: the caller, the project, and what the sessions it
     allowed run on, the account and the agent where the account keeps no
     directory for it. */
-type Allowance = [string, string, string | null, AgentId | null];
+type Allowance = [string, string, string | null, HarnessId | null];
 
 function allowance(caller: string, project: string, login: Login): string {
   return JSON.stringify([

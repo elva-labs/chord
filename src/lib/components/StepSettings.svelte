@@ -12,8 +12,8 @@
    */
   import { tick } from "svelte";
   import type { Workflow, WorkflowModel } from "$lib/core";
-  import { installed } from "$lib/agent.svelte";
-  import { AGENT_LABELS, offeredAgents, offeredModels, sameModel } from "$lib/models";
+  import { installed } from "$lib/harness.svelte";
+  import { HARNESS_LABELS, offeredHarnesses, offeredModels, sameModel } from "$lib/models";
   import {
     MOST_PARALLEL,
     MOST_ROUNDS,
@@ -66,7 +66,7 @@
   let root = $state<HTMLElement | null>(null);
 
   const agents = $derived(
-    offeredAgents(installed(), [
+    offeredHarnesses(installed(), [
       ...workflow.steps.flatMap((other) => other.models.map((model) => model.agent)),
     ]),
   );
@@ -271,7 +271,7 @@
             </label>
           </div>
           {#each agents as agent (agent)}
-            <div class="group">{AGENT_LABELS[agent]}</div>
+            <div class="group">{HARNESS_LABELS[agent]}</div>
             {#each optionsFor(agent) as option (option.model)}
               <div class="check">
                 <label>

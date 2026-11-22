@@ -1,4 +1,4 @@
-import type { AgentId, IntegratedEventBody, IntegratedLimitWindow } from "$lib/core";
+import type { HarnessId, IntegratedEventBody, IntegratedLimitWindow } from "$lib/core";
 
 /**
  * The usage limits of each account, as the agents report them.
@@ -7,7 +7,7 @@ import type { AgentId, IntegratedEventBody, IntegratedLimitWindow } from "$lib/c
  * account shows the same figures, integrated or in a terminal. So the
  * figures are kept by machine, agent and account, the machine being the
  * host a session's project is on, null for this one, and the account the
- * session's, null for the agents' own login. The same account name on two
+ * session's, null for the harnesses' own login. The same account name on two
  * machines is two logins. The report taken last wins, whoever sent it.
  * Reports come from the limits event, from the snapshot a window asks for
  * when it comes to a session late, and from the machine's own reads, which
@@ -65,7 +65,7 @@ export function heardLimits(host: string | null, account: string | null, report:
 
 /** The last report for an agent under an account on a machine, or null
     before one. */
-export function limitsOf(host: string | null, agent: AgentId, account: string | null): LimitsReport | null {
+export function limitsOf(host: string | null, agent: HarnessId, account: string | null): LimitsReport | null {
   return known[keyOf(host, agent, account)] ?? null;
 }
 

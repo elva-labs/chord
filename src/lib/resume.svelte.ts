@@ -9,7 +9,7 @@
  */
 
 import { treeMadeFor } from "$lib/conductor.svelte";
-import type { AgentId } from "$lib/core";
+import type { HarnessId } from "$lib/core";
 import { focusPane } from "$lib/layout.svelte";
 import { lastSegment } from "$lib/paths";
 import { touch } from "$lib/projects.svelte";
@@ -23,13 +23,13 @@ import {
 export const resume = $state({
   open: false,
   project: null as string | null,
-  agent: null as AgentId | null,
+  agent: null as HarnessId | null,
   query: "",
 });
 
 /** Opens the dialog over a project's earlier sessions: one agent's, or
     every agent's with no agent named. */
-export function openResume(project: string, agent: AgentId | null = null) {
+export function openResume(project: string, agent: HarnessId | null = null) {
   resume.project = project;
   resume.agent = agent;
   resume.query = "";

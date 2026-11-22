@@ -66,7 +66,7 @@ test("leads the model menu with the profile's model, above a rule and the provid
   await paletteChoice(page, "fast").click();
   await page.getByTestId("model-chip").click();
   const menu = page.getByTestId("model-menu");
-  await expect(page.getByTestId("model-menu-head")).toHaveText("Models of the fast profile's provider");
+  await expect(page.getByTestId("model-menu-heading")).toHaveText("Models of the fast profile's provider");
   const options = page.getByTestId("model-option");
   await expect(options).toHaveCount(2);
   const first = options.first();
@@ -95,6 +95,6 @@ test("asks nothing and shows no profile where the account has none", async ({ pa
   await expect(page.getByTestId("composer-input")).toBeFocused();
   await expect(page.getByTestId("profile-readout")).toHaveCount(0);
   await page.getByTestId("model-chip").click();
-  await expect(page.getByTestId("model-menu-head")).toHaveCount(0);
+  await expect(page.getByTestId("model-menu-heading")).toHaveText("Model · Codex");
   await expect(page.getByTestId("model-menu-rule")).toHaveCount(0);
 });

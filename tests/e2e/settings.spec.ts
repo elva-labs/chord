@@ -89,7 +89,7 @@ test.describe("the tabs", () => {
     await current("sessions");
     await expect(page.getByTestId("settings-live")).toBeVisible();
     await page.keyboard.press("ArrowRight");
-    await current("workflows");
+    await current("agents");
     await page.keyboard.press("ArrowUp");
     await current("sessions");
     await page.keyboard.press("ArrowLeft");
@@ -295,8 +295,8 @@ test.describe("the hooks notice", () => {
   test("turns hooks on for every project from the offer, and goes for good", async ({ page }) => {
     const notice = page.getByTestId("hooks-notice");
     await expect(notice).toBeVisible();
-    await expect(notice).toHaveAccessibleName("Let agents talk to Chord?");
-    await expect(notice).toContainText("Shows when an agent works, waits or asks. In every project.");
+    await expect(notice).toHaveAccessibleName("Let sessions talk to Chord?");
+    await expect(notice).toContainText("Shows when a session works, waits or asks. In every project.");
     await page.getByTestId("hooks-notice-turn-on").click();
     await expect(notice).toHaveCount(0);
     await page.keyboard.press(`${MOD}+,`);

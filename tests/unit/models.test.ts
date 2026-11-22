@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { AGENT_ORDER, modelLabel, modelsOf, mostCapable, offeredModels, sameModel } from "$lib/models";
+import { HARNESS_ORDER, modelLabel, modelsOf, mostCapable, offeredModels, sameModel } from "$lib/models";
 import { heardCatalog, resetCatalogs } from "$lib/modelCatalog.svelte";
 
 describe("the models an agent offers", () => {
@@ -18,7 +18,7 @@ describe("the models an agent offers", () => {
   });
 
   it("belongs each model to one agent", () => {
-    for (const agent of AGENT_ORDER) {
+    for (const agent of HARNESS_ORDER) {
       for (const option of modelsOf(agent)) expect(option.agent).toBe(agent);
     }
     expect(sameModel({ agent: "claude-code", model: "opus" }, { agent: "codex", model: "opus" })).toBe(false);

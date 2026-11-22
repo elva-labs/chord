@@ -25,7 +25,7 @@ import {
   lastPicked,
   pickAccount,
 } from "$lib/accounts.svelte";
-import { agentLabel, installed, isReady } from "$lib/agent.svelte";
+import { harnessLabel, installed, isReady } from "$lib/harness.svelte";
 import {
   pickedBefore,
   pickProfile,
@@ -37,7 +37,7 @@ import {
 } from "$lib/codexProfiles.svelte";
 import { catalogName } from "$lib/modelCatalog.svelte";
 import { chosenFor, defaultModelOf, modelToStart } from "$lib/lastChosen.svelte";
-import type { AgentId } from "$lib/core";
+import type { HarnessId } from "$lib/core";
 import {
   overrideOf,
   workflowGist,
@@ -103,7 +103,7 @@ export type CommandId = "new" | "newHere" | "newOther" | "open" | "remote" | "go
 export type Step =
   | { kind: "project"; path: string }
   | { kind: "account"; account: string | null }
-  | { kind: "agent"; agent: AgentId }
+  | { kind: "agent"; agent: HarnessId }
   | { kind: "workflow"; workflow: string }
   | { kind: "profile"; profile: string | null };
 
@@ -501,14 +501,14 @@ export function nextStep(steps: Step[]): StepKind | null {
   const project = projectOfSteps(steps);
   const how = installed().length > 1 || (project !== null && offered(project).length > 0);
   if (how && !has("agent") && !has("workflow")) return "agent";
-  if (project !== null && !has("profile") && !has("workflow") && agentOfSteps(steps, project) === "codex")
+  if (project !== null && !has("profile") && !has("workflow") && harnessOfSteps(steps, project) === "codex")
     if (profilesOf(project, accountOfSteps(steps, project)).length > 0) return "profile";
   return null;
 }
 
-/** The agent the answers so far run alone: the one picked, else the one
+/** The harness the answers so far run alone: the one picked, else the one
     the project used last. */
-function agentOfSteps(steps: Step[], project: string): AgentId {
+function harnessOfSteps(steps: Step[], project: string): HarnessId {
   const step = steps.find((candidate) => candidate.kind === "agent");
   return step === undefined ? defaultAgent(project) : step.agent;
 }
@@ -553,7 +553,7 @@ export function chipOf(step: Step): string {
     case "account":
       return accountLabel(step.account);
     case "agent":
-      return agentLabel(step.agent);
+      return harnessLabel(step.agent);
     case "workflow":
       return step.workflow;
     case "profile":
@@ -565,7 +565,7 @@ export const PROFILES = "With which Codex profile";
 const NO_PROFILE = "No profile";
 
 export const WORKFLOWS = "Workflows";
-export const ALONE = "One agent, no workflow";
+export const ALONE = "No workflow";
 
 /** The workflows a new session in a project is offered: none unless the
     project follows one, by its own choice or by the default. */
@@ -605,7 +605,7 @@ function runSections(
       items: installed().map((agent): PaletteItem => ({
         kind: "choice",
         id: `agent:${agent}`,
-        label: agentLabel(agent),
+        label: harnessLabel(agent),
         group: ALONE,
         step: { kind: "agent", agent },
         detail: "",
@@ -703,7 +703,7 @@ function profileChoices(project: string, account: string | null): PaletteItem[] 
 
 /** The answers a new session in a project starts on when none is changed:
     the project, then for each question it would ask, the account a new
-    session there starts under, the workflow it follows, else the agent it
+    session there starts under, the workflow it follows, else the harness it
     used last, and for Codex the profile it starts under. */
 export function defaultsFor(path: string): Step[] {
   const steps: Step[] = [{ kind: "project", path }];
@@ -726,7 +726,7 @@ function readyLine(path: string, steps: Step[]): string {
   const account = steps.find((step) => step.kind === "account");
   const profile = steps.find((step) => step.kind === "profile" && step.profile !== null);
   return [
-    how === undefined ? agentLabel(defaultAgent(path)) : chipOf(how),
+    how === undefined ? harnessLabel(defaultAgent(path)) : chipOf(how),
     ...(profile === undefined ? [] : [chipOf(profile)]),
     ...(account === undefined ? [] : [chipOf(account)]),
   ].join(" · ");
@@ -747,7 +747,7 @@ function readyItems(path: string): PaletteItem[] {
   return steps.length > 1 ? [ready, change] : [ready];
 }
 
-export const AGENTS = "Which agent";
+export const WHICH_HARNESS = "Which harness";
 
 /** Everything Change would ask about a project's new session, narrowed by
     what is typed: how it runs, then the account, then the Codex profile,
@@ -759,7 +759,7 @@ function readySearch(project: string, query: string): PaletteItem[] {
   const alone = how.length === 1 && how[0].title === ALONE;
   const groups = [
     ...how.map((section) =>
-      section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: AGENTS } : item)),
+      section.items.map((item): PaletteItem => (alone && item.kind === "choice" ? { ...item, group: WHICH_HARNESS } : item)),
     ),
     left.includes("account") ? accountChoices(project) : [],
     defaults.some((step) => step.kind === "profile")
@@ -885,7 +885,7 @@ function onceProfilesHeard(steps: Step[], again: () => Outcome): Outcome | null 
   const project = projectOfSteps(steps);
   if (project === null || !isOpen(project) || !installed().includes("codex")) return null;
   if (steps.some((step) => step.kind === "profile" || step.kind === "workflow")) return null;
-  if (agentOfSteps(steps, project) !== "codex") return null;
+  if (harnessOfSteps(steps, project) !== "codex") return null;
   const account = accountOfSteps(steps, project);
   if (profilesKnown(project, account)) return null;
   const hold = ++holds;

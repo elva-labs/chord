@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  agent,
+  harnesses,
   applyDetect,
   detectFailed,
   installed,
   isInstalled,
   isReady,
-  resetAgent,
+  resetHarnesses,
   unavailableReason,
-} from "$lib/agent.svelte";
+} from "$lib/harness.svelte";
 
 const claude = {
   id: "claude-code",
@@ -20,13 +20,13 @@ const codex = { id: "codex", path: "/usr/local/bin/codex", caps: null, fromLogin
 const noClaude = { ...claude, path: null };
 const noCodex = { ...codex, path: null };
 
-beforeEach(resetAgent);
+beforeEach(resetHarnesses);
 
 describe("detection", () => {
   it("is ready once one binary is found", () => {
     applyDetect(claude, true);
-    expect(agent.availability).toBe("ready");
-    expect(agent.paths["claude-code"]).toBe("/usr/local/bin/claude");
+    expect(harnesses.availability).toBe("ready");
+    expect(harnesses.paths["claude-code"]).toBe("/usr/local/bin/claude");
     expect(isReady()).toBe(true);
     expect(unavailableReason()).toBeNull();
   });
@@ -45,16 +45,16 @@ describe("detection", () => {
   // One missing binary is not the answer: the other may still be there.
   it("keeps looking until every agent has been asked for", () => {
     applyDetect(noClaude, true);
-    expect(agent.availability).toBe("unknown");
+    expect(harnesses.availability).toBe("unknown");
     expect(unavailableReason()).toContain("Looking for");
     applyDetect(noCodex, true);
-    expect(agent.availability).toBe("missing");
+    expect(harnesses.availability).toBe("missing");
     expect(isReady()).toBe(false);
   });
 
   it("says so when there is no core behind the window", () => {
     applyDetect(noClaude, false);
-    expect(agent.availability).toBe("detached");
+    expect(harnesses.availability).toBe("detached");
     expect(unavailableReason()).toContain("Not connected");
   });
 
@@ -74,20 +74,20 @@ describe("detection", () => {
 
   it("reports the error when the lookup itself failed", () => {
     detectFailed("the core went away");
-    expect(agent.availability).toBe("missing");
+    expect(harnesses.availability).toBe("missing");
     expect(unavailableReason()).toBe("the core went away");
   });
 
   it("does not let one failed lookup hide an agent that was found", () => {
     applyDetect(claude, true);
     detectFailed("codex lookup failed");
-    expect(agent.availability).toBe("ready");
+    expect(harnesses.availability).toBe("ready");
   });
 
   it("clears a previous error on a fresh look", () => {
     detectFailed("transient");
     applyDetect(claude, true);
-    expect(agent.error).toBeNull();
+    expect(harnesses.error).toBeNull();
     expect(unavailableReason()).toBeNull();
   });
 
