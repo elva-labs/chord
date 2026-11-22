@@ -60,6 +60,7 @@ import { HOLD } from "$lib/hold";
 import { setThemes, theme } from "$lib/theme.svelte";
 import { resetUserStyles, userStyles } from "$lib/userStyles.svelte";
 import { compact, resetCompact } from "$lib/compact.svelte";
+import { heardCatalog, resetCatalogs } from "$lib/modelCatalog.svelte";
 import {
   addWorkflow,
   adoptWorkflows,
@@ -652,8 +653,23 @@ describe("workflows", () => {
     expect(text).toContain("New sessions start with the workflow Build and review.");
     expect(text).toContain("workflow argument");
     expect(text).toContain("claude-code takes the models fable, opus, sonnet, haiku");
-    expect(text).toContain("codex takes default");
+    expect(text).toContain("codex takes default, its own default, or the id of a model Codex lists.");
     expect(text).toContain("Which workflow a project follows is the user's to choose.");
+  });
+
+  it("name the models Codex listed, as the pickers offer them", async () => {
+    heardCatalog("codex", null, null, [
+      { value: "gpt-6.2-sol", name: "GPT-6.2-Sol" },
+      { value: "gpt-6.1-terra", name: null },
+    ]);
+    try {
+      await handle(request("settings"));
+      expect(answers[0].content).toContain(
+        "codex takes default, its own default, or the id of a model Codex lists: gpt-6.2-sol (GPT-6.2-Sol), gpt-6.1-terra.",
+      );
+    } finally {
+      resetCatalogs();
+    }
   });
 
   it("are said to be none when there are none", async () => {
