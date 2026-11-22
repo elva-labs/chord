@@ -4,7 +4,10 @@
   import type { Attached } from "$lib/integrated.svelte";
   import type { Conversation } from "$lib/conversation.svelte";
   import { register, unregister } from "$lib/drops.svelte";
-  import { compact, follow, goOnIfCold, interrupt, linkFor, run, send } from "$lib/integrated.svelte";
+  import { compact, configure, follow, goOnIfCold, interrupt, linkFor, run, send, workAs } from "$lib/integrated.svelte";
+  import { agentByKey, agents, allAgents, loadInstalled } from "$lib/agents.svelte";
+  import { agentOfRow } from "$lib/sessionAgents.svelte";
+  import { openNewAgent } from "$lib/settings.svelte";
   import { bangLine } from "$lib/bang";
   import { layout, overlayHoldsKeyboard } from "$lib/layout.svelte";
   import {
@@ -120,6 +123,17 @@
    * is sent the choice is kept, and the chip goes. While the session
    * follows a workflow the model chip shows the orchestrator's model and
    * holds it, saying the workflow sets it.
+   *
+   * The agent chip, first after Attach, names the agent the session works
+   * as, and sits behind the plus while it works as none. Its list names
+   * each agent, with a lock on those that only read, and typing narrows
+   * it. Picking one applies its model where it runs on the session's
+   * harness, its effort and reads only, and its description goes ahead of
+   * the next message. Before the first message the list starts with No
+   * agent and ends with New agent, which opens the settings on a new one;
+   * after it, only the agents are offered, from the next message. While
+   * the session reads only, the mode chip says so with a lock, and picking
+   * a mode ends it.
    */
   interface Props {
     sessionKey: string;
@@ -156,6 +170,8 @@
     /** Whether the workflow can still be chosen: nothing has been said in
         the session yet. */
     choosable?: boolean;
+    /** Whether nothing has been said in the session yet. */
+    fresh?: boolean;
     /** Sends the messages that wait now, or with `written` makes what is
         about to be sent go now with them; false when they cannot go now. */
     onSendNow?: (written: boolean) => boolean;
@@ -190,6 +206,7 @@
     alone = agent,
     workflow = null,
     choosable = false,
+    fresh = false,
     onSendNow,
     onTakeBack,
     onUp,
@@ -324,7 +341,7 @@
   let field = $state<HTMLTextAreaElement | null>(null);
   let box = $state<HTMLDivElement | null>(null);
   /** The menu open over the composer's bar, if one is. */
-  type Setting = "mode" | "effort" | "workflow" | "resume";
+  type Setting = "agent" | "mode" | "effort" | "workflow" | "resume";
   let menu = $state<"model" | Setting | "more" | null>(null);
   /** It was opened with the pointer rather than a key. */
   let byPointer = $state(false);
@@ -1050,9 +1067,12 @@
   let modes = $derived(conversation.ready?.modes ?? []);
   let mode = $derived(conversation.settings.mode);
   let modeLabel = $derived(mode === null ? "Mode" : modeName(conversation, mode));
+  /** Whether the session only reads, as its agent set or a start asked. */
+  let readsOnly = $derived(conversation.readsOnly);
 
   function pick(setting: "model" | "effort" | "mode", value: string) {
     menu = null;
+    if (setting === "mode" && readsOnly) void configure(sessionKey, { readsOnly: false }, false);
     choose(sessionKey, conversation, setting, value);
     field?.focus();
   }
@@ -1111,14 +1131,53 @@
     if (!choosable && untrack(() => menu) === "workflow") menu = null;
   });
 
+  // ---- the agent ----
+
+  /** The agent the session works as, or null for none. */
+  let working = $derived(row === null ? null : agentOfRow(sessionKey, row.id));
+  let projectPath = $derived(row?.project ?? null);
+  let workingAgent = $derived(working === null ? undefined : agentByKey(working.key, projectPath));
+  /** New agent's value, which no agent's key is. */
+  const NEW_AGENT = "new";
+  let agentChoices = $derived.by(() => {
+    if (menu !== "agent") return [];
+    const listed = allAgents(projectPath).map((role) => ({
+      value: role.key,
+      name: role.title,
+      about: null,
+      lock: role.readsOnly,
+      on: role.key === working?.key,
+    }));
+    return fresh ? [{ value: "", name: "No agent", about: null, on: working === null }, ...listed] : listed;
+  });
+
+  // The agents installed for the project are read once its list opens.
+  $effect(() => {
+    if (menu === "agent" && projectPath !== null && untrack(() => agents.installed[projectPath!]) === undefined)
+      void loadInstalled(projectPath);
+  });
+
+  function pickRole(value: string) {
+    menu = null;
+    if (value === NEW_AGENT) {
+      openNewAgent();
+      return;
+    }
+    workAs(sessionKey, value === "" ? null : (allAgents(projectPath).find((role) => role.key === value) ?? null));
+    field?.focus();
+  }
+
   // ---- what shows, and what waits behind the plus ----
 
   /** One rule for every chip: it shows while its value is away from its
       default. The mode's default is the one that asks before anything
-      changes; a workflow's and going on's are none and off. The agent names
-      no default effort, so a model's effort always shows. */
+      changes, and reading only is away from it; an agent's, a workflow's
+      and going on's are none, none and off. The harness names no default
+      effort, so a model's effort always shows. An agent and a workflow are
+      not both chosen: either one leaves the other off the plus. */
   let away = $derived({
-    mode: mode !== null && !asksFirst(harness, mode),
+    agent: working !== null && workflow === null,
+    mode: mode !== null && (readsOnly || !asksFirst(harness, mode)),
     effort: effort !== null,
     workflow: choosable && workflow !== null,
     resume: resumable && (resumeOn || resumes !== null),
@@ -1127,13 +1186,13 @@
   /** Chips kept while the pointer or the keyboard is in the row or a menu
       of it is open, so nothing moves under the pointer; they go once the
       row is left. */
-  let kept = $state({ mode: false, effort: false, workflow: false, resume: false });
+  let kept = $state({ agent: false, mode: false, effort: false, workflow: false, resume: false });
   let pointerIn = $state(false);
   let focusIn = $state(false);
   let inRow = $derived(pointerIn || focusIn);
   $effect(() => {
     const busy = inRow || menu !== null;
-    for (const which of ["mode", "effort", "workflow", "resume"] as const) {
+    for (const which of ["agent", "mode", "effort", "workflow", "resume"] as const) {
       const keep = busy && (away[which] || untrack(() => kept[which]));
       if (untrack(() => kept[which]) !== keep) kept[which] = keep;
     }
@@ -1143,6 +1202,7 @@
   const settleFocus = (row: HTMLElement) =>
     setTimeout(() => (focusIn = row.contains(document.activeElement)), 0);
 
+  let showAgent = $derived(away.agent || kept.agent);
   let showEffort = $derived(away.effort || kept.effort);
   let showMode = $derived(away.mode || kept.mode);
   let showWorkflow = $derived(away.workflow || kept.workflow);
@@ -1152,9 +1212,11 @@
       are not shown. */
   let more = $derived.by(() => {
     const list: { value: Setting; name: string; about: string }[] = [];
+    if (workflow === null && !showAgent)
+      list.push({ value: "agent", name: "Agent", about: "Who the session works as" });
     if (modes.length > 0 && mode !== null && !showMode)
       list.push({ value: "mode", name: "Mode", about: "What the session may do without asking" });
-    if (choosable && !showWorkflow)
+    if (choosable && !showWorkflow && working === null)
       list.push({ value: "workflow", name: "Workflow", about: "Who directs, works and reviews" });
     if (resumable && resumeFollows === null && !showResume)
       list.push({ value: "resume", name: "Auto-resume", about: "Go on by itself when the usage limit resets" });
@@ -1523,6 +1585,37 @@
       title={shell !== null ? "A command takes no files" : "Attach files"}
       data-testid="attach"><Icon name="clip" /></button
     >
+    {#if showAgent}
+      <div class="picker">
+        <button
+          class="chip"
+          tabindex="0"
+          onclick={(e) => openMenu("agent", e)}
+          disabled={!ready}
+          aria-haspopup="menu"
+          aria-expanded={menu === "agent"}
+          aria-label="Agent: {working?.title ?? 'none'}"
+          title={workingAgent?.firstLine ?? "Who the session works as"}
+          data-testid="agent-chip"
+          ><Icon name="agent" size={13} /><Plain text={working?.title ?? "No agent"} /><Icon name="down" size={12} /></button
+        >
+        {#if menu === "agent"}
+          <ChoiceMenu
+            label="Agent"
+            heading={fresh ? "Agents" : "Agent, from your next message"}
+            choices={agentChoices}
+            extra={fresh ? [{ value: NEW_AGENT, name: "New agent…", about: null, icon: "plus" }] : []}
+            onpick={pickRole}
+            onclose={closeMenu}
+            pointer={byPointer}
+            filter
+            most={fresh ? 9 : 8}
+            testid="agent-menu"
+            optionTestid="agent-option"
+          />
+        {/if}
+      </div>
+    {/if}
     <div class="picker">
       {#if workflow !== null && heldName !== null}
         <!-- The workflow sets the orchestrator's model, so it is not a
@@ -1603,13 +1696,24 @@
           disabled={modes.length === 0 || !ready}
           aria-haspopup="menu"
           aria-expanded={menu === "mode"}
-          title="What the session may do without asking"
-          data-testid="mode-chip"><Plain text={modeLabel} /><Icon name="down" size={12} /></button
+          title={readsOnly
+            ? working?.readsOnly
+              ? `Set by ${working.title}`
+              : "Reads only: no file is changed"
+            : "What the session may do without asking"}
+          data-testid="mode-chip"
+          data-reads-only={readsOnly ? "" : undefined}
+          >{#if readsOnly}<span class="lock"><Icon name="lock" size={12} /></span>Reads only{:else}<Plain
+              text={modeLabel}
+            />{/if}<Icon name="down" size={12} /></button
         >
         {#if menu === "mode"}
           <ChoiceMenu
             label="Mode"
-            choices={modeChoices(conversation)}
+            choices={readsOnly
+              ? modeChoices(conversation).map((choice) => ({ ...choice, on: false }))
+              : modeChoices(conversation)}
+            note={readsOnly ? "Picking a mode ends reads only." : null}
             onpick={(value) => pick("mode", value)}
             onclose={closeMenu}
             pointer={byPointer}
@@ -2235,6 +2339,12 @@
   /* A chip that says something is under way: the wait to go on. */
   .chip.lit {
     color: var(--ink);
+  }
+
+  /* The lock of a session that only reads. */
+  .chip .lock {
+    display: flex;
+    color: var(--accent);
   }
 
   :global(.conv.tight) .chip .word {

@@ -455,6 +455,7 @@
           alone={harnessProfile(aloneOn(session)).name}
           workflow={session.workflow}
           {choosable}
+          fresh={unspoken(session)}
         />
       {/if}
     </div>
