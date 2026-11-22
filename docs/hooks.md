@@ -364,11 +364,13 @@ again.
 
 ![The user asks one session to run the tests and moves to another. When the tests finish, the first agent's line appears under its row with the dot lit, and goes when the row is opened.](tools-notify.gif)
 
-`note` keeps a note of the conversation, or its brief, and `notes` reads
-them back: the brief and the list, one note whole, or those found by their
-words. The agent is told to keep a note whenever something settles, in the
-same step as another call, and to read the matching ones before asking the
-user about something it has no context for. [Notes](sessions.md#notes)
+`note` keeps a note of the conversation, or its brief, and opens and closes
+its open items, and `notes` reads them back: the open items, the brief and
+the list, one note whole, or those found by their words. The agent is told
+to keep a note whenever something settles and an item for whatever is
+owed and not done in the turn, in the same step as another call, to read
+the open items before saying where things stand, and the matching notes
+before asking the user about something it has no context for. [Notes](sessions.md#notes)
 says what they are for and where they are kept.
 
 Ten more read and drive a tab of the embedded browser, within the session's

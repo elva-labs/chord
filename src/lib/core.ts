@@ -1523,11 +1523,12 @@ export interface GoingOn {
 }
 
 /** What a session keeps in its notes: how many notes stand, whether it
-    has a brief, and the path of their readable copy when one was asked
-    for and there is anything to read. */
+    has a brief, how many items are open, and the path of their readable
+    copy when one was asked for and there is anything to read. */
 export interface NotesKept {
   standing: number;
   brief: boolean;
+  open: number;
   page: string | null;
 }
 
@@ -2759,7 +2760,7 @@ const detachedCore: Core = {
     return () => {};
   },
   async notesKept() {
-    return { standing: 0, brief: false, page: null };
+    return { standing: 0, brief: false, open: 0, page: null };
   },
   async notesBriefing() {
     return null;

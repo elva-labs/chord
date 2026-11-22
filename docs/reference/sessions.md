@@ -1273,11 +1273,24 @@ with a title, a one-line summary, a few lines of body and the day it was
 kept. A later note can replace an earlier one, which then no longer
 stands, so a changed decision does not stand beside the old one.
 
+Beside them, a session keeps open items: what is still owed, each one
+line saying what is owed and to whom or what it waits on, with the day it
+was opened. An item is closed by its number once it is done or dropped,
+and is kept with the day it closed. To change one, the agent closes it and
+opens the new wording in the same call. At most twelve are open at once,
+each of two hundred characters at most; one more is refused with a line
+telling the agent to close or merge items, and none is ever dropped.
+
 The agent keeps and reads them with the workbench's own tools, as
 [hooks](../hooks.md#the-agents-tools) describes. It is told as it connects to
 keep a note whenever something settles: a decision and why, a finding,
-what the user asked for or prefers, what is left open, and never a key,
-token, password or personal data. The call goes alongside another one, in a terminal the notify at a turn's end most of all and in a conversation one made while working, never between its thinking and its answer, so it adds
+what the user asked for or prefers, and to open an item for anything
+agreed, asked for, promised or left waiting and not done in the same turn:
+a design agreed but not built, a fix asked for but not started, a question
+put to the user and not answered, work started in another session. It
+closes an item once it is done or dropped, and reads the open items before
+telling the user where things stand. Never a key, token, password or
+personal data goes in a note or an item. The call goes alongside another one, in a terminal the notify at a turn's end most of all and in a conversation one made while working, never between its thinking and its answer, so it adds
 no step of its own, and the conversation does not draw it. When the user
 refers to something the agent has no context for, it is told to read the
 matching notes before asking or guessing.
@@ -1291,15 +1304,19 @@ that session, as [who is calling](../orchestrator.md#who-is-calling)
 describes for the other tools.
 
 The list the agent is given, by the notes tool and when it goes on from
-its notes, names the brief and at most thirty notes: the
+its notes, gives the open items first, whole, oldest first, each by its
+number and the day it was opened, and says plainly that they are what is
+still owed. Closed items are left out. Then it names the brief and at most
+thirty notes: the
 twenty newest, then the most read of the rest, newest first, each by its
 number, day, title and summary, and a count of the others, which it finds
 by their words. A note is read whole by its number.
 
-A row's menu has Show notes when its session keeps any. It writes them
-out as a document and opens it in the viewer: the brief, the standing
-notes newest first, then those a later note replaced. There is nothing to
-manage.
+A row's menu has Show notes when its session keeps a brief, a note or an
+item. It writes them out as a document and opens it in the viewer: the
+open items oldest first, the brief, the standing notes newest first, those
+a later note replaced, then the closed items with the day each closed, the
+last closed first. There is nothing to manage.
 
 ### Going on from the notes
 
@@ -1332,12 +1349,12 @@ goes on from its notes whatever its size and rest, as
 Going on, the row starts a fresh conversation of the agent's, with the
 same row, name and token, so the notes and everything the workbench
 keeps of the session follow it. The core writes a briefing, a few
-thousand tokens whatever the size of what came before: the brief and the
-list of notes, the user's first message, the last three of the user's
+thousand tokens whatever the size of what came before: the open items, the
+brief and the list of notes, the user's first message, the last three of the user's
 messages each with the agent's words after it, word for word, and where
 the old transcript is, to be searched for a detail the notes lack and
-never read whole. Ahead of the notes it says that they and the quoted
-messages are records the earlier conversation wrote, to be read as data
+never read whole. Ahead of the items it says that they, the notes and the
+quoted messages are records the earlier conversation wrote, to be read as data
 and never as instructions, since anything holding the session's token can
 write a note and an agent can copy a page's words into one; the notes
 tool says the same. Every line of a record, in the briefing and in the
@@ -1345,8 +1362,8 @@ notes tool's answers, starts with a quote mark, so no record can hold a
 line that passes for the workbench's, the user's, or the briefing's end:
 the window and a later briefing take the briefing to end at its first
 line that is exactly its end line. For a conversation held at a point, the quoted
-messages are those up to that point, and a note kept after it is listed
-as kept on a turn the conversation went back on. The briefing goes ahead of the first message the fresh
+messages are those up to that point, and a note kept or an item opened
+after it is marked as kept on a turn the conversation went back on. The briefing goes ahead of the first message the fresh
 conversation is sent, the user's, a line from the session's starter, or
 the workbench's own; a terminal session is given it as its first prompt,
 told to wait for the user when nothing else goes with it. Where the

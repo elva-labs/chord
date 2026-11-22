@@ -232,11 +232,199 @@ fn forgetting_lets_go_of_the_notes_and_their_page() {
     let written = std::fs::read_to_string(&page).unwrap();
     assert!(written.contains("## Brief\n\nBrief."));
     assert!(written.contains("### One"));
+    notes.change_items("a", &["Owed"], &[], 0).unwrap();
     forget(home.path(), &["a".to_string()]).unwrap();
     assert!(!Path::new(&page).exists());
     assert!(!Path::new(&page).parent().unwrap().exists());
     assert_eq!(briefing(home.path(), "a"), None);
     assert_eq!(kept(home.path(), "b", false).unwrap().standing, 1);
+}
+
+#[test]
+fn items_are_opened_and_closed_and_a_closed_one_is_kept_with_its_day() {
+    let home = Scratch::new("notes-items");
+    let notes = Notes::open(home.path()).unwrap();
+    let opened = notes
+        .change_items(
+            "a",
+            &["Build the export dialog,\n as agreed", "Ask which licence"],
+            &[],
+            86_400,
+        )
+        .unwrap();
+    assert_eq!(opened.len(), 2);
+    let other = notes.change_items("b", &["Another's"], &[], 0).unwrap()[0];
+    assert_eq!(
+        notes.open_items("a").unwrap()[0].text,
+        "Build the export dialog, as agreed"
+    );
+    // Closing and opening go together in one change.
+    let merged = notes
+        .change_items(
+            "a",
+            &["Ask which licence, by Friday"],
+            &[opened[1]],
+            2 * 86_400,
+        )
+        .unwrap()[0];
+    let open: Vec<i64> = notes
+        .open_items("a")
+        .unwrap()
+        .iter()
+        .map(|i| i.id)
+        .collect();
+    assert_eq!(open, vec![opened[0], merged]);
+    let all = notes.items("a").unwrap();
+    let closed = all.iter().find(|item| item.id == opened[1]).unwrap();
+    assert_eq!(closed.closed, Some(2 * 86_400));
+    assert_eq!(closed.text, "Ask which licence");
+    // Only the owner's open items close, and a refused change keeps nothing.
+    let refused = notes
+        .change_items("a", &["Never kept"], &[opened[1]], 0)
+        .unwrap_err();
+    assert!(
+        refused.contains("closed already, on 1970-01-03"),
+        "{refused}"
+    );
+    assert!(notes
+        .change_items("a", &[], &[other], 0)
+        .unwrap_err()
+        .contains(&format!("no item {other}")));
+    assert_eq!(notes.items("a").unwrap().len(), 3);
+    assert_eq!(notes.open_items("b").unwrap().len(), 1);
+}
+
+#[test]
+fn open_items_are_bounded_and_one_more_is_refused_never_dropped() {
+    let home = Scratch::new("notes-items-bounded");
+    let notes = Notes::open(home.path()).unwrap();
+    let texts: Vec<String> = (0..ITEMS_MOST).map(|n| format!("Owed {n}")).collect();
+    let ids = notes
+        .change_items(
+            "a",
+            &texts.iter().map(String::as_str).collect::<Vec<_>>(),
+            &[],
+            0,
+        )
+        .unwrap();
+    let refused = notes.change_items("a", &["One more"], &[], 0).unwrap_err();
+    assert!(refused.contains("close those done or dropped"), "{refused}");
+    assert!(refused.contains("merge"), "{refused}");
+    let open = notes.open_items("a").unwrap();
+    assert_eq!(open.len(), ITEMS_MOST);
+    assert_eq!(open[0].text, "Owed 0");
+    // At the bound, closing one makes room for one in the same change.
+    notes
+        .change_items("a", &["One more"], &[ids[0]], 1)
+        .unwrap();
+    assert_eq!(notes.open_items("a").unwrap().len(), ITEMS_MOST);
+    // An item is one line of a bounded length.
+    let long = "x".repeat(ITEM_MOST + 1);
+    assert!(notes
+        .change_items("a", &[long.as_str()], &[ids[1]], 1)
+        .unwrap_err()
+        .contains(&ITEM_MOST.to_string()));
+    assert!(notes.change_items("a", &[" \n "], &[ids[1]], 1).is_err());
+    assert_eq!(notes.open_items("a").unwrap()[0].id, ids[1]);
+}
+
+#[test]
+fn the_briefing_gives_the_open_items_first_whole_and_leaves_the_closed_out() {
+    let home = Scratch::new("notes-items-briefing");
+    let notes = Notes::open(home.path()).unwrap();
+    let long = format!("Port the importer {}", "and its tests ".repeat(12));
+    let ids = notes
+        .change_items("a", &[long.as_str(), "Done soon"], &[], 100)
+        .unwrap();
+    // Open items alone are a briefing.
+    assert!(briefing(home.path(), "a")
+        .unwrap()
+        .starts_with("Open items, what is still owed,"));
+    notes
+        .change_items("a", &["Went back on"], &[ids[1]], 200)
+        .unwrap();
+    notes.set_brief("a", "Chord.", 0).unwrap();
+    let note = notes
+        .add("a", &note("Default model", "Sonnet."), 0)
+        .unwrap();
+    let text = briefing_since(home.path(), "a", Some(150)).unwrap();
+    let items = text.find("Open items").unwrap();
+    let brief = text.find("Brief (").unwrap();
+    let listed = text.find(&format!("> #{note} ")).unwrap();
+    assert!(items < brief && brief < listed, "{text}");
+    assert!(text.contains(&format!("\n> {}. 1970-01-01 {}\n", ids[0], long.trim())));
+    assert!(!text.contains("Done soon"));
+    assert!(text
+        .lines()
+        .find(|line| line.contains("Went back on"))
+        .unwrap()
+        .contains("opened on a turn the conversation went back on"));
+}
+
+#[test]
+fn the_page_has_the_open_items_first_and_the_closed_last() {
+    let home = Scratch::new("notes-items-page");
+    let notes = Notes::open(home.path()).unwrap();
+    let ids = notes
+        .change_items("a", &["Still owed", "Was owed"], &[], 0)
+        .unwrap();
+    notes.change_items("a", &[], &[ids[1]], 86_400).unwrap();
+    let told = kept(home.path(), "a", false).unwrap();
+    assert_eq!((told.open, told.standing, told.brief), (1, 0, false));
+    notes.set_brief("a", "Brief.", 0).unwrap();
+    let page =
+        std::fs::read_to_string(kept(home.path(), "a", true).unwrap().page.unwrap()).unwrap();
+    assert!(page.find("## Open items").unwrap() < page.find("## Brief").unwrap());
+    assert!(page.contains(&format!(
+        "## Open items\n\n- Still owed · *opened 1970-01-01 · item {}*\n",
+        ids[0]
+    )));
+    assert!(page.ends_with(&format!(
+        "## Closed items\n\n- Was owed · *opened 1970-01-01 · closed 1970-01-02 · item {}*\n",
+        ids[1]
+    )));
+    forget(home.path(), &["a".to_string()]).unwrap();
+    assert!(notes.items("a").unwrap().is_empty());
+}
+
+#[test]
+fn a_store_kept_before_items_opens_with_its_notes_as_they_were() {
+    let home = Scratch::new("notes-items-older");
+    let dir = folder(home.path());
+    std::fs::create_dir_all(&dir).unwrap();
+    let conn = Connection::open(dir.join(FILE)).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE briefs (owner TEXT PRIMARY KEY, text TEXT NOT NULL, at INTEGER NOT NULL);
+        CREATE TABLE notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            body TEXT NOT NULL,
+            at INTEGER NOT NULL,
+            replaces INTEGER,
+            replaced_by INTEGER,
+            reads INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX notes_by_owner ON notes (owner, id);
+        INSERT INTO briefs VALUES ('a', 'Chord.', 0);
+        INSERT INTO notes (owner, title, summary, body, at, reads)
+            VALUES ('a', 'Kept', 'Before items.', 'Body.', 0, 2);",
+    )
+    .unwrap();
+    drop(conn);
+
+    let notes = Notes::open(home.path()).unwrap();
+    let kept = notes.all("a").unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(
+        (kept[0].title.as_str(), kept[0].body.as_str(), kept[0].reads),
+        ("Kept", "Body.", 2)
+    );
+    assert_eq!(notes.brief("a").unwrap().unwrap().text, "Chord.");
+    assert!(notes.items("a").unwrap().is_empty());
+    notes.change_items("a", &["Owed"], &[], 0).unwrap();
+    assert_eq!(notes.open_items("a").unwrap().len(), 1);
 }
 
 #[test]
