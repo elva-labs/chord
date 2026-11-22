@@ -170,6 +170,7 @@
           onchange={pickedRole}
           disabled={roleless}
           title={roleless ? "A session in a terminal works as no agent" : undefined}
+          class="as"
           data-testid="conduct-agent"
         >
           <option value="">No agent</option>
@@ -235,6 +236,15 @@
     font-family: var(--chrome);
     font-size: var(--field-size);
     color: var(--ink);
+  }
+
+  /* A native select is as wide as its widest option: the agent's is held
+     to a width of its own, so a long title anywhere in the list is cut
+     short rather than widening the card. */
+  .runs .as {
+    min-width: 0;
+    max-width: 14em;
+    text-overflow: ellipsis;
   }
 
   .runs select:disabled {

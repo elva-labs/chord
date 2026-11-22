@@ -231,6 +231,16 @@ async function withInstalled(page: Page) {
         text: "You check pull requests.",
         path: `${project}/.claude/agents/pr-checker.md`,
       },
+      {
+        source: "project",
+        name: "Pull request reviewer for the payments service and its many migrations",
+        description: "Reviews the payments service.",
+        model: null,
+        effort: null,
+        readsOnly: false,
+        text: "You review the payments service.",
+        path: `${project}/.claude/agents/payments.md`,
+      },
     ];
   }, PROJECT);
 }
@@ -275,7 +285,7 @@ for (const [appearance, look] of [
     const options = await role.locator("option").allTextContents();
     expect(options[0]).toBe("No agent");
     expect(options).toContain("Security reviewer");
-    expect(options.at(-1)).toBe("pr-checker");
+    expect(options).toContain("pr-checker");
 
     // Both selects sit on one line, the agent's first, in the card's own type.
     const roleBox = (await role.boundingBox())!;
@@ -283,7 +293,18 @@ for (const [appearance, look] of [
     expect(Math.abs(roleBox.y - modelBox.y)).toBeLessThan(2);
     expect(roleBox.x).toBeLessThan(modelBox.x);
     expect(await role.evaluate((el) => getComputedStyle(el).font)).toBe(await model.evaluate((el) => getComputedStyle(el).font));
+    // A long title in the list keeps the agent's select inside the card.
+    const cardBox = (await ask.boundingBox())!;
+    expect(roleBox.x + roleBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    expect(modelBox.x + modelBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
     if (SHOTS !== undefined) await ask.screenshot({ path: `${SHOTS}/start-card-${appearance}-${look}.png` });
+
+    // Picked, the long title is cut short inside the select.
+    await role.selectOption("project:Pull request reviewer for the payments service and its many migrations");
+    const longBox = (await role.boundingBox())!;
+    expect(longBox.x + longBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    expect(Math.abs(longBox.y - (await model.boundingBox())!.y)).toBeLessThan(2);
+    if (SHOTS !== undefined) await ask.screenshot({ path: `${SHOTS}/start-card-long-${appearance}-${look}.png` });
 
     await role.selectOption("chord:Security reviewer");
     await expect(model).toHaveValue("claude-code:opus");
