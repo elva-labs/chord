@@ -513,6 +513,61 @@ fn a_gate_on_some_paths_is_needed_when_the_change_cannot_be_read() {
 }
 
 #[test]
+fn a_held_lead_goes_on_and_a_hand_over_is_refused_until_the_gates_pass() {
+    let (home, dir) = started("stop", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    let going_on = stop_held(home.path(), "lead").unwrap();
+    assert!(going_on.starts_with("Handing over is held: "), "{going_on}");
+    assert_eq!(
+        stop_held(home.path(), "rev"),
+        None,
+        "a member ends its turn"
+    );
+    assert_eq!(stop_held(home.path(), "other"), None);
+
+    let refused = command_held(home.path(), "lead", "git push origin main").unwrap();
+    assert!(refused.starts_with("Handing over is held: "), "{refused}");
+    assert!(command_held(home.path(), "rev", "gh pr create --fill").is_some());
+    assert_eq!(command_held(home.path(), "lead", "git status"), None);
+    assert_eq!(command_held(home.path(), "other", "git push"), None);
+
+    for round in 1..=ROUNDS {
+        write(&dir, "src/main.rs", &format!("// round {round}\n"));
+        given(home.path(), "rev", When::Change, false, "Fix it.", None).unwrap();
+    }
+    assert_eq!(
+        stop_held(home.path(), "lead"),
+        None,
+        "a gate waiting for the user lets the lead stop"
+    );
+    assert!(command_held(home.path(), "lead", "git push").is_some());
+
+    waive(home.path(), "lead", 1, "Checked it myself.").unwrap();
+    assert_eq!(stop_held(home.path(), "lead"), None);
+    assert_eq!(command_held(home.path(), "lead", "git push"), None);
+}
+
+#[test]
+fn a_hand_over_is_refused_when_the_run_cannot_be_read() {
+    let (home, _dir) = started("unread", QUICK_FIX, &[]);
+    let dir = folder(home.path());
+    for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+        std::fs::remove_file(entry.path()).unwrap();
+    }
+    std::fs::write(dir.join(FILE), "not a database, not at all").unwrap();
+    let refused = command_held(home.path(), "lead", "git push").unwrap();
+    assert!(
+        refused.starts_with("Handing over is held: the team's run"),
+        "{refused}"
+    );
+    assert_eq!(command_held(home.path(), "lead", "git status"), None);
+    assert_eq!(
+        stop_held(home.path(), "lead"),
+        None,
+        "a broken store never keeps a lead going"
+    );
+}
+
+#[test]
 fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
     for command in [
         "gh pr create --fill",
@@ -528,6 +583,102 @@ fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
         "gh pr --repo owner/app create",
         "x=$(git push)",
         "git --no-pager -c a=b push",
+        "git send-pack origin main",
+        "git -c alias.ship=push ship",
+        "gh api repos/owner/app/pulls -f title=Login -f head=login",
+        "gh api -X PUT repos/owner/app/pulls/3/merge",
+        "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
+        "git subtree push --prefix d origin main",
+        "\"$(git --exec-path)/git-push\" origin main",
+        "sh -c 'git push'",
+        "env FOO=1 git push",
+        "FOO=1 git push",
+        "sudo -u x git push",
+        "bash -lc 'git push'",
+        "git push 2>&1",
+        "git push origin main > /tmp/out",
+        "timeout 60 git push",
+        "eval 'git push'",
+        "echo \"$(git push)\"",
+        "for b in a c; do git push origin $b; done",
+        "git log && \\\n  git push",
+        "echo $((1<<2))\ngit push",
+        "(( x = 1<<2 ))\ngit push",
+        "bash <<EOF\ngit push\nEOF",
+        "bash <<< 'git push'",
+        "git push -n --no-dry-run",
+        "git push --dry-run --no-dry",
+        "git push --push-option -n origin main",
+        "git push --push-opt -n origin main",
+        "git push -o -n origin main",
+        "git push -on origin main",
+        "git send-pack -n origin main",
+        "stdbuf -oL git push",
+        "ionice -c 3 git push",
+        "setsid git push",
+        "caffeinate -t 60 git push",
+        "flock /tmp/lock git push",
+        "flock -w 5 /tmp/lock -c 'git push'",
+        "parallel -j 2 git push ::: origin backup",
+        "watch -n 5 git push",
+        "watch 'git push'",
+        "coproc git push",
+        "coproc pusher { git push; }",
+        "find . -name x -exec git push \\;",
+        "git --namespace push --dry-run push origin",
+        "GIT push",
+        "Git push origin main",
+        "git PUSH",
+        "$(echo git) push",
+        "`echo git` push",
+        "$g push",
+        "$\"git\" push",
+        "$(echo git push)",
+        "echo 'git push' | sh",
+        "echo git push | bash -s",
+        "printf 'git push' |& env bash",
+        "echo push | xargs git",
+        "printf 'git push\\n' \\|| sh",
+        "echo git push | sh -",
+        "echo git push | bash /dev/stdin",
+        "echo git push | source /dev/stdin",
+        "bash <(echo git push)",
+        ". <(echo git push)",
+        "sh < <(echo git push)",
+        "sh < push.sh",
+        "echo git push | bash --rcfile x",
+        "bash --rcfile x -c 'git push'",
+        "echo push | xargs -I{} git {} origin",
+        "echo push | xargs -I X git X origin",
+        "echo push | xargs --replace git {} origin",
+        "echo push | parallel git",
+        "parallel git :::: subcommands.txt",
+        "parallel -I X git X ::: push",
+        "git $cmd origin main",
+        "git subtree $sub --prefix d origin main",
+        "gh $sub create --fill",
+        "gh pr $what --fill",
+        "gh api \"$endpoint\" -X PUT",
+        "$g $sub",
+        "git -c include.path=/tmp/x ship",
+        "git -c includeIf.onbranch:main.path=/tmp/x ship",
+        "HOME=/tmp/x git ship",
+        "XDG_CONFIG_HOME=/tmp/x git ship",
+        "GIT_DIR=/tmp/x/.git git ship",
+        "echo 'create --fill' | xargs gh pr",
+        "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p",
+        "env GIT_CONFIG_GLOBAL=/tmp/c git p",
+        "git --config-env alias.p=SHIP p",
+        "git --config-env=alias.p=SHIP p",
+        "git -c Alias.p=push p",
+        "gh api graphql -F query=@merge.graphql",
+        "gh api graphql --input query.json",
+        "gh api -X PATCH repos/owner/app/git/refs/heads/main -f sha=abc",
+        "gh api -X PUT repos/owner/app/contents/a.txt -f message=x",
+        "parallel git ::: push",
+        "parallel git {} ::: push",
+        "watch watch watch watch watch ls",
+        "find . -exec find . -exec find . -exec find . -exec find . -exec ls",
     ] {
         assert!(hands_over(command), "{command}");
     }
@@ -538,9 +689,55 @@ fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
         "git log --grep push",
         "gh pr checks 3",
         "git -C push status",
+        "gh api repos/owner/app/pulls",
+        "gh api -X POST repos/owner/app/issues -f title=Bug",
+        "git commit -m \"fix git push docs\"",
+        "grep -rn \"git push\" docs",
+        "rg 'gh pr create' src",
+        "echo git push",
+        "echo 'run git push'; git status",
+        "git push --dry-run",
+        "git push -n origin main",
+        "git push -nv",
+        "git push --dry origin main",
+        "git push -o ci.skip -n origin main",
+        "git push origin main -n",
+        "find . -name '*.rs' -exec grep push {} +",
+        "command -v git push",
+        "git status # then git push",
+        "git commit -F - <<'EOF'\nWhy git push failed\nso gh pr create waits\nEOF\ngit status",
+        "echo 'git push' > notes.txt",
+        "cat notes.txt | sh build.sh",
+        "echo hi | bash -c 'cat'",
+        "git status || sh",
+        "git ls-files | xargs git add",
+        "GIT_CONFIG_NOSYSTEM=1 git status",
+        "git status || sh build.sh",
+        "sh build.sh < input.txt",
+        "git commit -m \"$message\"",
+        "git checkout $branch",
+        "gh api \"$endpoint\"",
+        "find . -name '*.rs' | xargs -I{} git add {}",
+        "parallel gzip ::: a b",
+        "$EDITOR notes.md",
+        "gh api graphql -f query='{ viewer { login } }'",
+        "gh api repos/owner/app/contents/a.txt",
+        "watch -n 5 git status",
     ] {
         assert!(!hands_over(command), "{command}");
     }
+}
+
+#[test]
+fn a_long_command_of_commands_that_run_others_is_read_quickly() {
+    let started = std::time::Instant::now();
+    let watches = format!("watch watch watch {}", "x ".repeat(20_000));
+    assert!(!hands_over(&watches));
+    let finds = format!("find {}", "-exec find -exec x ".repeat(3));
+    assert!(!hands_over(&format!("{finds}{}", "y ".repeat(20_000))));
+    let wrapped = format!("watch {}ls", "env watch ".repeat(200));
+    assert!(hands_over(&wrapped));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
 }
 
 #[test]
@@ -555,14 +752,6 @@ fn an_agents_version_is_its_hash_when_it_is_the_users() {
     assert!(agent_version(&own, "Reviewer").is_some());
     assert_eq!(agent_version(&own, "Developer"), None);
     assert_ne!(Some(linter), agent_version(&own, "Reviewer"));
-}
-
-/// Whether a session's run holds handing over, as it does when the run
-/// cannot be read.
-fn held(home: &Path, token: &str) -> bool {
-    state_of(home, token).map_or(true, |state| {
-        state.is_some_and(|state| state.handing_over_held().is_some())
-    })
 }
 
 /// A worktree of `dir` on a branch of its own, beside it.
@@ -598,7 +787,7 @@ fn a_push_from_a_members_worktree_is_judged_on_the_change_there() {
     .unwrap();
     write(&tree_dir, "src/main.rs", "fn main() { work() }\n");
     assert!(
-        held(home.path(), "dev"),
+        command_held(home.path(), "dev", "git push origin work").is_some(),
         "the change in the worktree is not approved"
     );
     let now = state(home.path(), "lead").unwrap().unwrap();
@@ -625,13 +814,16 @@ fn a_push_from_a_members_worktree_is_judged_on_the_change_there() {
     assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
     let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
     assert!(same(given[0].folder.as_deref().unwrap(), &tree_dir));
-    assert!(!held(home.path(), "dev"));
+    assert_eq!(
+        command_held(home.path(), "dev", "git push origin work"),
+        None
+    );
 
     write(&tree_dir, "src/main.rs", "fn main() { more() }\n");
     let gate = standing(home.path(), REVIEWER, When::Change);
     assert_eq!(gate.standing, Standing::OutOfDate, "{}", gate.reason);
-    assert!(held(home.path(), "dev"));
-    assert!(held(home.path(), "lead"));
+    assert!(command_held(home.path(), "dev", "git push origin work").is_some());
+    assert!(command_held(home.path(), "lead", "git push origin work").is_some());
 
     write(&dir, "README.md", "lead's own\n");
     let gate = standing(home.path(), REVIEWER, When::Change);
@@ -646,7 +838,10 @@ fn a_push_from_a_members_worktree_is_judged_on_the_change_there() {
     );
     given_in(home.path(), Some(&tree_dir)).unwrap();
     given_in(home.path(), Some(&dir)).unwrap();
-    assert!(!held(home.path(), "dev"));
+    assert_eq!(
+        command_held(home.path(), "dev", "git push origin work"),
+        None
+    );
     let _ = std::fs::remove_dir_all(&tree_dir);
 }
 
@@ -670,7 +865,7 @@ fn a_commit_in_a_worktree_before_its_member_joined_is_in_the_change() {
     let now = state(home.path(), "lead").unwrap().unwrap();
     assert_eq!(now.paths, vec!["src/early.rs"]);
     assert!(
-        held(home.path(), "dev"),
+        command_held(home.path(), "dev", "git push origin early").is_some(),
         "the commit made before joining is not approved"
     );
     let _ = std::fs::remove_dir_all(&tree_dir);
@@ -798,5 +993,5 @@ fn a_store_kept_by_a_later_build_is_not_read() {
         .unwrap();
     let refused = Runs::open(home.path()).err().unwrap();
     assert!(refused.contains("kept by a later Chord"), "{refused}");
-    assert!(held(home.path(), "lead"));
+    assert!(command_held(home.path(), "lead", "git push").is_some());
 }

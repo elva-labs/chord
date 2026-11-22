@@ -1427,6 +1427,39 @@ pub fn start_held(home: &Path, caller: &str, reads_only: bool) -> Result<Option<
     Ok(state_of(home, caller)?.and_then(|state| state.building_held()))
 }
 
+/// Why the lead of a run goes on rather than ending its turn: a gate holds
+/// the hand-over and something the lead does can move it on, so the turn
+/// would end with the work not handed over. None for a session that leads
+/// no run, when nothing holds, when every open gate waits for the user, or
+/// when the run cannot be read, so a broken store never keeps a lead going.
+pub fn stop_held(home: &Path, token: &str) -> Option<String> {
+    let state = state(home, token).ok().flatten()?;
+    if state.waits_for_the_user() {
+        return None;
+    }
+    state.handing_over_held().map(|held| {
+        format!("{held} The gates tool says what each gate waits on. Ask for the verdicts it names and wait for them, or stop to ask the user.")
+    })
+}
+
+/// Why a shell command a session in a run would run is refused: it hands
+/// the work over while a gate holds that. A run that cannot be read holds
+/// it too. None for a command that hands nothing over, a session in no
+/// run, or a run with no gate open.
+pub fn command_held(home: &Path, token: &str, command: &str) -> Option<String> {
+    if !hands_over(command) {
+        return None;
+    }
+    match state_of(home, token) {
+        Ok(state) => state?.handing_over_held().map(|held| {
+            format!("{held} Pushing and opening or merging a pull request wait until every gate passes or the user waives it.")
+        }),
+        Err(e) => Some(format!(
+            "Handing over is held: the team's run this session is in cannot be read: {e}"
+        )),
+    }
+}
+
 /// The member of the caller's run that a resumed session's id names, by
 /// the id or a prefix of it eight characters long at least that names one
 /// member alone.
@@ -1466,51 +1499,9 @@ pub fn member_by_session(
 /// it.
 pub const SESSION_PREFIX: usize = 8;
 
-/// Whether a shell command hands the work over: a pull request opened or
-/// merged with gh, or a push with git, wherever in the command it stands,
-/// quoted for another shell or not. A push a script, an alias or another
-/// tool makes is not seen.
-pub fn hands_over(command: &str) -> bool {
-    let words: Vec<String> = command
-        .split(|c: char| c.is_whitespace() || matches!(c, ';' | '&' | '|' | '(' | ')' | '`' | '$'))
-        .map(|word| word.replace(['"', '\'', '\\'], ""))
-        .filter(|word| !word.is_empty())
-        .collect();
-    (0..words.len()).any(|at| {
-        let after = &words[at + 1..];
-        match words[at].rsplit('/').next() {
-            Some("git") => subcommands(after, GIT_VALUED).first() == Some(&"push"),
-            Some("gh") => matches!(
-                subcommands(after, GH_VALUED).as_slice(),
-                ["pr", "create" | "merge", ..]
-            ),
-            _ => false,
-        }
-    })
-}
-
-/// git's own options that take the next word as their value.
-const GIT_VALUED: &[&str] = &["-C", "-c", "--git-dir", "--work-tree", "--namespace"];
-/// gh's own options that take the next word as their value.
-const GH_VALUED: &[&str] = &["-R", "--repo", "--hostname"];
-
-/// The first two words after a command's options, skipping the values of
-/// those that take one.
-fn subcommands<'a>(words: &'a [String], valued: &[&str]) -> Vec<&'a str> {
-    let mut found = Vec::new();
-    let mut rest = words.iter();
-    while let Some(word) = rest.next() {
-        if valued.contains(&word.as_str()) {
-            rest.next();
-        } else if !word.starts_with('-') {
-            found.push(word.as_str());
-            if found.len() == 2 {
-                break;
-            }
-        }
-    }
-    found
-}
+#[path = "run_command.rs"]
+mod command;
+pub use command::hands_over;
 
 #[cfg(test)]
 #[path = "run_tests.rs"]
