@@ -735,13 +735,13 @@ plugin, through the app: data from the plugin to the page, and from the
 page a request to open a file at lines, to put text in the agent's prompt,
 or a message for the plugin. The page reaches nothing else. A page opened
 by a click on one of the plugin's notifications is handed its target, which
-`workbench.onTarget(fn)` receives, even when the handler is set after the
+`window.workbench.onTarget(fn)` receives, even when the handler is set after the
 target arrived. The first
 message the page sends of a click or a key in it reaches the plugin with
 an id, so a button on the page can open an address, start a session or
 send one a line, as an action can.
 
-The page is told what is around it once it has loaded, and again whenever that changes. `workbench.context` holds the latest, and `workbench.onContext(fn)` receives each, the latest at once when the handler is set after it arrived:
+The page is told what is around it once it has loaded, and again whenever that changes. `window.workbench.context` holds the latest, and `window.workbench.onContext(fn)` receives each, the latest at once when the handler is set after it arrived:
 
 ```json
 {
@@ -754,7 +754,7 @@ The page is told what is around it once it has loaded, and again whenever that c
 
 `session` is the session on screen while it is one of the page's project, and null otherwise; an id longer than 128 characters is told as null. `scheme` is `light` or `dark`, as the app paints it, and `look` is `modern` or `terminal`. `tokens` holds the theme's colours, fonts and radii by name: `bg`, `surface`, `surface-2`, `well`, `ink`, `ink-2`, `ink-3`, `rule`, `rule-strong`, `accent`, `accent-soft`, `add`, `del`, `mono`, `sans`, `radius` and `radius-sm`. A value longer than 200 characters is told as empty. The same tokens are set on the page's root as custom properties, `--workbench-bg`, `--workbench-ink` and so on, so a page's stylesheet can follow the theme with no script of its own.
 
-`workbench.show(session)` asks to bring a session on screen, by the agent's id for it or the id of a conversation that went on to it. The app brings it only when the call is the first message of a click or a key in the page, as for a start or a send, only while the page's project is on screen, and only for a session of that project. Anything else is dropped, and the page is told nothing either way.
+`window.workbench.show(session)` asks to bring a session on screen, by the agent's id for it or the id of a conversation that went on to it. The app brings it only when the call is the first message of a click or a key in the page, as for a start or a send, only while the page's project is on screen, and only for a session of that project. Anything else is dropped, and the page is told nothing either way.
 
 The view declares how much room it wants. Wide is the viewer as a file
 opens it, beside the tree; full is the whole changes pane, the tree folded
