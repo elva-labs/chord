@@ -202,6 +202,22 @@ fn an_earlier_briefing_is_not_quoted_again() {
     assert_eq!(without_briefing("plain words"), "plain words");
 }
 
+/// A transcript named with Windows' `\\?\` prefix, as a Codex index can
+/// hold its rollout, is named without it: tools the agent opens a file
+/// with read such a path wrongly or not at all.
+#[cfg(windows)]
+#[test]
+fn a_transcript_named_with_a_verbatim_prefix_is_named_without_it() {
+    let text = briefing(
+        None,
+        None,
+        &[],
+        Path::new(r"\\?\C:\Users\dev\.codex\sessions\rollout.jsonl"),
+    );
+    assert!(text.contains(r" is at C:\Users\dev\.codex\sessions\rollout.jsonl. "));
+    assert!(!text.contains(r"\\?\"));
+}
+
 /// The notes and the quoted messages are given as records of the earlier
 /// conversation, never as the workbench's word: a note can hold what a page
 /// or another agent planted in it.

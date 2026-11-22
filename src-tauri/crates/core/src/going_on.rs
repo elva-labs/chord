@@ -91,7 +91,9 @@ pub fn without_briefing(text: &str) -> &str {
 
 /// The briefing a fresh conversation goes on with. `notes` is the brief
 /// and list as the notes module gives them, each line of a record already
-/// quoted; the quoted messages are quoted here.
+/// quoted; the quoted messages are quoted here. The transcript is named
+/// without a Windows `\\?\` prefix where it can do without one, as a path
+/// every tool the agent has opens.
 pub fn briefing(
     notes: Option<&str>,
     began: Option<&str>,
@@ -131,7 +133,10 @@ pub fn briefing(
     }
     text.push_str(&format!(
         "\n\nThe whole earlier conversation is at {}. When the user refers to something neither the notes nor the above cover, read the matching notes first, then search that file for the detail with your own tools; never read it whole. Keep notes from here on as before.\n{END}",
-        transcript.display().to_string().replace(LINE_BREAKS, " ")
+        dunce::simplified(transcript)
+            .display()
+            .to_string()
+            .replace(LINE_BREAKS, " ")
     ));
     text
 }

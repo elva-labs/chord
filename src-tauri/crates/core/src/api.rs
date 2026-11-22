@@ -2421,12 +2421,10 @@ mod tests {
         }
     }
 
-    /// A cold and large Codex conversation is found by its thread in the
-    /// account's index and goes on from its rollout; one the index does not
-    /// hold is resumed whole.
     /// A Codex account's folder holding a cold and large conversation's
-    /// rollout, and, made by `index` with `{dir}` for the folder, its thread
-    /// index; none where `index` is None.
+    /// rollout, and, made by `index`, its thread index; none where `index`
+    /// is None. `{dir}` in `index` stands for the folder and the separator
+    /// after it, a path written as Codex writes one on each system.
     fn codex_account(home: &Scratch, index: Option<&str>) -> (PathBuf, PathBuf) {
         let codex = home.path().join("codex-account");
         std::fs::create_dir_all(&codex).unwrap();
@@ -2440,15 +2438,22 @@ mod tests {
         if let Some(index) = index {
             rusqlite::Connection::open(codex.join("state_5.sqlite"))
                 .unwrap()
-                .execute_batch(&index.replace("{dir}", &codex.display().to_string()))
+                .execute_batch(&index.replace(
+                    "{dir}",
+                    &format!("{}{}", codex.display(), std::path::MAIN_SEPARATOR),
+                ))
                 .unwrap();
         }
         (codex, rollout)
     }
 
-    const CODEX_INDEX: &str = "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
-                               INSERT INTO threads VALUES ('thread', '{dir}/rollout-thread.jsonl');";
+    const CODEX_INDEX: &str =
+        "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+         INSERT INTO threads VALUES ('thread', '{dir}rollout-thread.jsonl');";
 
+    /// A cold and large Codex conversation is found by its thread in the
+    /// account's index and goes on from its rollout; one the index does not
+    /// hold is resumed whole.
     #[test]
     fn a_codex_conversation_is_taken_up_from_its_rollout() {
         let home = Scratch::new("api-codex-taken-up");
@@ -2511,7 +2516,7 @@ mod tests {
             "api-codex-no-rollout-path",
             Some(
                 "CREATE TABLE threads (id TEXT PRIMARY KEY, path TEXT NOT NULL); \
-                 INSERT INTO threads VALUES ('thread', '{dir}/rollout-thread.jsonl');",
+                 INSERT INTO threads VALUES ('thread', '{dir}rollout-thread.jsonl');",
             ),
         );
     }
@@ -2522,7 +2527,7 @@ mod tests {
             "api-codex-rollout-gone",
             Some(
                 "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
-                 INSERT INTO threads VALUES ('thread', '{dir}/gone.jsonl');",
+                 INSERT INTO threads VALUES ('thread', '{dir}gone.jsonl');",
             ),
         );
     }
