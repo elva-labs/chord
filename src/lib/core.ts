@@ -1405,6 +1405,8 @@ export type InactiveAfter = "day" | "week" | "month" | "never";
     says what it does, and what it runs on. A model or an effort that is
     null leaves the session's own. */
 export interface OwnAgent {
+  /** The title a shipped agent the user changed ships under. */
+  shipped?: string;
   title: string;
   description: string;
   model: { harness: HarnessId; model: string } | null;

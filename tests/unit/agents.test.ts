@@ -44,10 +44,13 @@ import {
   loadInstalled,
   MOST_AGENTS,
   newAgent,
+  ownAgents,
   removeAgent,
   reset,
+  resetShipped,
   saveAgent,
   SHIPPED,
+  shippedAgents,
 } from "$lib/agents.svelte";
 
 const mine = (title: string, description = "Checks migrations for locks.\n\nYou read each migration."): OwnAgent => ({
@@ -92,9 +95,57 @@ describe("the shipped agents", () => {
     expect(agentFacts(agentByKey("chord:Developer", null)!)).toEqual(["Sonnet", "High", "Changes files"]);
   });
 
-  it("are never stored", () => {
+  it("are never stored as they ship", () => {
     adoptAgents([mine("Migrations")]);
     expect(agentsSettings().map((agent) => agent.title)).toEqual(["Migrations"]);
+  });
+});
+
+describe("a shipped agent the user changed", () => {
+  const reviewer = (): OwnAgent => ({ shipped: "Reviewer", ...JSON.parse(JSON.stringify(SHIPPED[4])) });
+
+  it("is kept with the user's own and listed in its place under its key", () => {
+    expect(saveAgent({ ...reviewer(), title: "Code reviewer", effort: "max" }, "Reviewer")).toBeNull();
+    expect(agents.own).toEqual([{ ...reviewer(), title: "Code reviewer", effort: "max" }]);
+    expect(sent).toEqual([{ agents: [{ ...reviewer(), title: "Code reviewer", effort: "max" }] }]);
+    expect(ownAgents()).toEqual([]);
+    const listed = shippedAgents().find((agent) => agent.key === "chord:Reviewer")!;
+    expect(listed).toMatchObject({ kind: "shipped", title: "Code reviewer", effort: "max", changed: true });
+    expect(shippedAgents().map((agent) => agent.key)).toEqual(SHIPPED.map((agent) => `chord:${agent.title}`));
+    expect(agentByKey("chord:Reviewer", null)?.title).toBe("Code reviewer");
+    expect(agentByTitle("reviewer", null)?.key).toBe("chord:Reviewer");
+    expect(agentByTitle("code reviewer", null)?.key).toBe("chord:Reviewer");
+    expect(saveAgent({ ...reviewer(), title: "Code reviewer", effort: "low" }, "Code reviewer")).toBeNull();
+    expect(agents.own).toHaveLength(1);
+    expect(agents.own[0].effort).toBe("low");
+  });
+
+  it("is dropped when kept as it ships, or reset", () => {
+    saveAgent({ ...reviewer(), effort: "max" }, "Reviewer");
+    saveAgent(mine("Migrations"), null);
+    expect(saveAgent(reviewer(), "Reviewer")).toBeNull();
+    expect(agents.own.map((agent) => agent.title)).toEqual(["Migrations"]);
+    expect(shippedAgents()[4].changed).toBeUndefined();
+    saveAgent({ ...reviewer(), effort: "max" }, "Reviewer");
+    removeAgent("Reviewer");
+    expect(agents.own).toHaveLength(2);
+    resetShipped("Reviewer");
+    expect(agents.own.map((agent) => agent.title)).toEqual(["Migrations"]);
+    expect(sent.at(-1)).toEqual({ agents: [mine("Migrations")] });
+  });
+
+  it("is held to the rules, and not counted with the user's own", () => {
+    adoptAgents([{ ...reviewer(), title: "Code reviewer" }]);
+    expect(agentProblem({ ...reviewer(), title: "REVIEWER" }, "Code reviewer")).toBeNull();
+    expect(agentProblem({ ...reviewer(), title: "Tester" }, "Code reviewer")).toMatch(/Chord ships/);
+    expect(agentProblem(mine("code reviewer"), null)).toMatch(/taken/);
+    expect(agentProblem({ ...reviewer(), shipped: "Tester", title: "Code reviewer" }, "Tester")).toMatch(/taken/);
+    adoptAgents([
+      { ...reviewer(), title: "Code reviewer" },
+      ...Array.from({ length: MOST_AGENTS }, (_, at) => mine(`Agent ${at}`)),
+    ]);
+    expect(agentProblem(mine("One more"), null)).toMatch(/32 agents of your own/);
+    expect(agentProblem({ ...reviewer(), shipped: "Tester", title: "Tester" }, "Tester")).toBeNull();
   });
 });
 
@@ -143,7 +194,7 @@ describe("the user's own agents", () => {
     expect(agentProblem(mine("Cost", "  "), null)).toMatch(/description is needed/);
     expect(agentProblem(mine("Cost", "x".repeat(8001)), null)).toMatch(/8000/);
     adoptAgents(Array.from({ length: MOST_AGENTS }, (_, at) => mine(`Agent ${at}`)));
-    expect(agentProblem(mine("One more"), null)).toMatch(/32 agents/);
+    expect(agentProblem(mine("One more"), null)).toMatch(/32 agents of your own/);
     expect(agentProblem(mine("Agent 3 again"), "Agent 3")).toBeNull();
     expect(sent).toEqual([]);
   });

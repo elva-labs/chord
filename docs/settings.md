@@ -48,7 +48,7 @@ See [sessions](reference/settings.md#sessions).
 
 ## Agents
 
-An agent is a role: a title, a description whose first line is what lists show, and the model, effort and whether it reads only. The Agents tab lists the agents Chord ships, which cannot be changed, then your own, which you make, change and remove there, and under them the agents you installed for Claude Code or Codex, read from where those keep them and never written. See [agents](reference/settings.md#agents).
+An agent is a role: a title, a description whose first line is what lists show, and the model, effort and whether it reads only. The Agents tab lists the agents Chord ships, which you can change and reset, then your own, which you make, change and remove there, and under them the agents you installed for Claude Code or Codex, read from where those keep them and never written. See [agents](reference/settings.md#agents).
 
 ## Workflows
 

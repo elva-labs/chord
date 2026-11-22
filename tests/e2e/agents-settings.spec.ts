@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { PROJECT, SETTINGS_FILE, installFakeCore } from "./fake";
 
 /**
- * The Agents settings page: the shipped agents and the ones installed for the
- * harnesses are read there, and the user's own are made, changed and removed
- * there, each change kept in the settings file.
+ * The Agents settings page: the user's own agents are made, changed and
+ * removed there, and the shipped ones changed and reset, each change kept in
+ * the settings file; the ones installed for the harnesses are read there.
  */
 
 const AGENT = "section[data-pane='agent']";
@@ -61,7 +61,7 @@ test("makes, changes and removes the user's own agent", async ({ page }) => {
   await expect.poll(() => kept(page)).toEqual([]);
 });
 
-test("reads the shipped and installed agents without changing them", async ({ page }) => {
+test("changes a shipped agent in place and resets it, and reads an installed one", async ({ page }) => {
   await page.addInitScript((path) => {
     (window as unknown as { __installedAgents: unknown[] }).__installedAgents = [
       {
@@ -80,12 +80,28 @@ test("reads the shipped and installed agents without changing them", async ({ pa
   await page.goto("/");
   await openAgents(page);
 
-  await page.locator("[data-agent='chord:Reviewer']").click();
-  await expect(page.getByTestId("agent-text")).toContainText("Checks a change for bugs, design and fit.");
-  await expect(page.getByTestId("agent-facts")).toHaveText(/Runs on Opus\s·\sHigh\s·\sReads only/);
-  await expect(page.getByTestId("agent-whence")).toContainText("Chord ships this agent");
-  await expect(page.getByTestId("agent-save")).toHaveCount(0);
-  await page.getByTestId("agent-back").click();
+  const reviewer = page.locator("[data-agent='chord:Reviewer']");
+  await reviewer.click();
+  await expect(page.getByTestId("agent-title")).toHaveValue("Reviewer");
+  await expect(page.getByTestId("agent-description")).toHaveValue(/^Checks a change for bugs, design and fit\./);
+  await expect(page.getByTestId("agent-reset")).toHaveCount(0);
+  await expect(page.getByTestId("agent-remove")).toHaveCount(0);
+  await page.getByTestId("agent-title").fill("Code reviewer");
+  await page.getByTestId("agent-fold").click();
+  await page.getByTestId("agent-effort").selectOption("max");
+  await page.getByTestId("agent-save").click();
+  await expect(reviewer).toContainText("Code reviewer");
+  await expect(page.getByTestId("agent-list").getByTestId("agent-row")).toHaveCount(8);
+  await expect
+    .poll(() => kept(page))
+    .toEqual([expect.objectContaining({ shipped: "Reviewer", title: "Code reviewer", effort: "max" })]);
+
+  await reviewer.click();
+  await page.getByTestId("agent-reset").click();
+  await page.getByTestId("agent-reset-ask-confirm").click();
+  await expect(reviewer).toContainText("Reviewer");
+  await expect(reviewer).not.toContainText("Code reviewer");
+  await expect.poll(() => kept(page)).toEqual([]);
 
   const installed = page.locator("[data-testid='agent-installed'][data-source='project']");
   await expect(installed).toContainText("Writes the release notes.");
@@ -93,6 +109,7 @@ test("reads the shipped and installed agents without changing them", async ({ pa
   await expect(page.getByTestId("agent-text")).toHaveText(
     "Writes the release notes.\n\nYou write release notes from the merged pull requests.",
   );
+  await expect(page.getByTestId("agent-save")).toHaveCount(0);
   await expect(page.getByTestId("agent-whence")).toContainText(".claude/agents/release-notes.md");
 });
 

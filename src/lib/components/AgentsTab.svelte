@@ -6,10 +6,12 @@
    * installed for the active project's harnesses, a list for each place
    * they are read from, shown only when there are some.
    *
-   * A row opens its agent in place of the lists. One of the user's own
-   * opens to edit: its title, its description and, folded into one line,
-   * what it runs on, kept on Save and left as it was on Cancel. The others
-   * open to read.
+   * A row opens its agent in place of the lists. A shipped one and one of
+   * the user's own open to edit: its title, its description and, folded
+   * into one line, what it runs on, kept on Save and left as it was on
+   * Cancel. A shipped one the user changed is put back as it ships with
+   * Reset to shipped, where one of the user's own has Remove. An installed
+   * one opens to read.
    */
   import { tick } from "svelte";
   import type { HarnessId, InstalledAgent, OwnAgent } from "$lib/core";
@@ -22,6 +24,7 @@
     agentEfforts,
     agentFacts,
     agents,
+    changeOf,
     initials,
     installedAgents,
     LONGEST_TITLE,
@@ -29,7 +32,9 @@
     newAgent,
     ownAgents,
     removeAgent,
+    resetShipped,
     saveAgent,
+    SHIPPED,
     shippedAgents,
   } from "$lib/agents.svelte";
   import { installed } from "$lib/harness.svelte";
@@ -63,8 +68,12 @@
   });
 
   /** What the tab shows: the lists, one of the user's agents being made
-      (`editing` null) or edited, or another agent to read. */
-  type View = { kind: "list" } | { kind: "edit"; editing: string | null } | { kind: "read"; key: string };
+      (`editing` null) or edited, a shipped one edited (`shipped` the title
+      it ships under), or an installed one to read. */
+  type View =
+    | { kind: "list" }
+    | { kind: "edit"; editing: string | null; shipped?: string }
+    | { kind: "read"; key: string };
   let view = $state<View>({ kind: "list" });
   /** The agent last opened or kept, marked in the list. */
   let last = $state<string | null>(null);
@@ -72,10 +81,15 @@
   let draft = $state<OwnAgent>(newAgent());
   let folded = $state(true);
   let problem = $state<string | null>(null);
+  /** Remove, or Reset to shipped, asked and not yet confirmed. */
   let removing = $state(false);
 
   const reading = $derived(view.kind === "read" ? agentByKey(view.key, project) : undefined);
   const editing = $derived(view.kind === "edit" ? view.editing : null);
+  const shipped = $derived(view.kind === "edit" ? (view.shipped ?? null) : null);
+  const changed = $derived(shipped !== null && changeOf(shipped) !== undefined);
+  /** The button in the foot that asks before it acts, if any. */
+  const asker = $derived(shipped !== null ? "agent-reset" : "agent-remove");
 
   let section: HTMLElement;
 
@@ -108,11 +122,19 @@
 
   function open(agent: Agent) {
     last = agent.key;
-    if (agent.kind !== "own") {
+    if (agent.kind === "installed") {
       void show({ kind: "read", key: agent.key });
       return;
     }
-    const own = agents.own.find((one) => one.title === agent.title);
+    if (agent.kind === "shipped") {
+      const title = agent.key.slice("chord:".length);
+      const as = changeOf(title) ?? SHIPPED.find((one) => one.title === title);
+      if (as === undefined) return;
+      draft = { shipped: title, ...JSON.parse(JSON.stringify(as)) };
+      void show({ kind: "edit", editing: agent.title, shipped: title });
+      return;
+    }
+    const own = agents.own.find((one) => one.shipped === undefined && one.title === agent.title);
     if (own === undefined) return;
     draft = $state.snapshot(own);
     void show({ kind: "edit", editing: own.title });
@@ -129,22 +151,27 @@
       problem = said;
       return;
     }
-    last = `own:${draft.title.trim()}`;
+    last = shipped !== null ? `chord:${shipped}` : `own:${draft.title.trim()}`;
     void show({ kind: "list" });
   }
 
   function remove() {
-    if (editing === null) return;
-    removeAgent(editing);
-    last = null;
+    if (shipped !== null) {
+      resetShipped(shipped);
+      last = `chord:${shipped}`;
+    } else if (editing !== null) {
+      removeAgent(editing);
+      last = null;
+    }
     void show({ kind: "list" });
   }
 
-  /** Remove asked and not confirmed: the keyboard goes back to Remove. */
+  /** Remove or Reset to shipped asked and not confirmed: the keyboard goes
+      back to the button that asked. */
   async function keep() {
     removing = false;
     await tick();
-    section.querySelector<HTMLElement>('[data-testid="agent-remove"]')?.focus();
+    section.querySelector<HTMLElement>(`[data-testid="${asker}"]`)?.focus();
   }
 
   // The harnesses whose models the editor offers: those installed, and the
@@ -331,7 +358,15 @@
       <p class="error" role="alert" data-testid="agent-problem">{problem}</p>
     {/if}
 
-    {#if removing && editing !== null}
+    {#if removing && shipped !== null}
+      <ConfirmStrip
+        question={`Put "${shipped}" back as Chord ships it?`}
+        action="Reset"
+        onConfirm={remove}
+        onCancel={keep}
+        testid="agent-reset-ask"
+      />
+    {:else if removing && editing !== null}
       <ConfirmStrip
         question={`Remove the agent "${editing}"?`}
         action="Remove"
@@ -341,7 +376,13 @@
       />
     {:else}
       <div class="foot">
-        {#if editing !== null}
+        {#if shipped !== null}
+          {#if changed}
+            <button type="button" class="btn quiet" onclick={() => (removing = true)} data-testid="agent-reset"
+              >Reset to shipped</button
+            >
+          {/if}
+        {:else if editing !== null}
           <button type="button" class="btn danger" onclick={() => (removing = true)} data-testid="agent-remove"
             >Remove</button
           >
@@ -367,11 +408,7 @@
     </div>
     <p class="runs" data-testid="agent-facts">{@render facts(reading)}</p>
     <p class="whence note" data-testid="agent-whence">
-      {#if reading.kind === "shipped"}
-        Chord ships this agent; it cannot be changed here.
-      {:else}
-        Read from <code>{reading.path}</code>; it is changed where it is kept.
-      {/if}
+      Read from <code>{reading.path}</code>; it is changed where it is kept.
     </p>
   {:else}
     <div class="pg-h">

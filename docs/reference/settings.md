@@ -366,24 +366,30 @@ whether it reads only or changes files.
 The tab lists the agents Chord ships first, Researcher, Developer,
 Debugger, Tester, Reviewer, Security reviewer, Cloud architect and Docs
 writer, then the user's own in the order they were made, and New agent at
-the foot. A lock marks an agent that reads only. Opening a shipped agent
-shows its description and what it runs on, and says Chord ships it and it
-cannot be changed there.
+the foot. A lock marks an agent that reads only.
 
 New agent opens a form: the title, the description, and the line of what
 it runs on, which opens to choose the model, the effort, and Reads only or
-Changes files. A new agent starts on Sonnet on Claude Code, at high effort,
-reading only. The models are those the [workflows](#workflows) offer, by
-harness. Save keeps the agent, Cancel goes back without it, and Remove, on
-an agent already kept, asks once and takes it away. Opening one of the
-user's own opens the same form with what it holds. A title is one line of
-40 characters at most, no other agent's, ignoring case, and none of the
-shipped agents'; a description is needed, of 8000 characters at most; and
-the settings hold 32 agents of the user's own at most. A save that breaks
-a rule says which under the form and keeps nothing. An agent the file
-holds that breaks a rule is named under the list with the rule, not used,
-and kept as written. The agents are the user's to change, and an agent's
-settings tools refuse them.
+Changes files. A new agent starts on Sonnet on Claude Code, at high
+effort, reading only. The models are those the [workflows](#workflows)
+offer, by harness. Save keeps the agent, Cancel goes back without it, and
+Remove, on an agent already kept, asks once and takes it away. Opening one
+of the user's own opens the same form with what it holds. Opening a
+shipped agent opens the same form too: a shipped agent the user saved
+changed is kept in the settings among the user's own, naming the agent it
+ships as, and stands in that agent's place in every list, under the
+shipped agent's name as well as its own, so whatever names the shipped
+agent finds it changed. Reset to shipped, on one changed, asks once and
+puts it back as Chord ships it, as does saving it as it ships. A title is
+one line of 40 characters at most and no other agent's, ignoring case, a
+shipped agent's among them, though a changed shipped agent may keep the
+title it ships under; a description is needed, of 8000 characters at most;
+and the settings hold 32 agents of the user's own at most, the shipped
+ones changed not counted. A save that breaks a rule says which under the
+form and keeps nothing. An agent the file holds that breaks a rule is
+named under the list with the rule, not used, and kept as written. The
+agents are the user's to change, and an agent's settings tools refuse
+them.
 
 Under them, the agents the user installed for the harnesses in the
 active project are listed under where each was found. From Claude Code

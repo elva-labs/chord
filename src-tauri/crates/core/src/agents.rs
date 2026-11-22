@@ -7,9 +7,11 @@
 //! A session keeps its own for each one the agent leaves out.
 //!
 //! The settings file holds the user's own agents. The agents Chord ships
-//! are the window's and are never stored; their titles are here so no
-//! agent of the user's takes one. The agents installed for a harness are
-//! the harness's own, and are read here, never written.
+//! are the window's; one the user changed is held among the user's own,
+//! naming the title it ships under, and stands in its place. The shipped
+//! titles are here so no other agent of the user's takes one. The agents
+//! installed for a harness are the harness's own, and are read here, never
+//! written.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,8 +22,9 @@ use toml_edit::{DocumentMut, TableLike};
 
 use crate::workflow::AGENTS as HARNESSES;
 
-/// How many agents the settings may hold, how long a title may be, how
-/// long a description, and how long a model's name or an effort.
+/// How many agents of the user's own the settings may hold besides the
+/// shipped ones changed, how long a title may be, how long a description,
+/// and how long a model's name or an effort.
 pub const MOST_AGENTS: usize = 32;
 pub const LONGEST_TITLE: usize = 40;
 pub const LONGEST_DESCRIPTION: usize = 8000;
@@ -49,11 +52,14 @@ pub struct AgentModel {
     pub later: Map<String, Value>,
 }
 
-/// One of the user's own agents. A field this version does not know is
-/// kept as written.
+/// One of the user's own agents, or a shipped one the user changed, which
+/// names the title it ships under in `shipped`. A field this version does
+/// not know is kept as written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Agent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shipped: Option<String>,
     pub title: String,
     pub description: String,
     #[serde(default)]
@@ -99,12 +105,19 @@ fn check(agent: &Agent) -> Result<(), String> {
             agent.title
         ));
     }
-    if SHIPPED_TITLES
-        .iter()
-        .any(|shipped| shipped.eq_ignore_ascii_case(title))
-    {
+    if let Some(shipped) = &agent.shipped {
+        if !SHIPPED_TITLES.contains(&shipped.as_str()) {
+            return Err(format!(
+                "{shipped:?} is not an agent Chord ships, which are {}",
+                SHIPPED_TITLES.join(", ")
+            ));
+        }
+    }
+    if let Some(taken) = SHIPPED_TITLES.iter().find(|shipped| {
+        shipped.eq_ignore_ascii_case(title) && agent.shipped.as_deref() != Some(**shipped)
+    }) {
         return Err(format!(
-            "{title} is an agent Chord ships, so no agent of your own can be called that"
+            "{taken} is an agent Chord ships, so no other agent can be called that"
         ));
     }
     let description = agent.description.trim();
@@ -140,7 +153,7 @@ fn check(agent: &Agent) -> Result<(), String> {
 
 /// The agent an entry holds, its title and description trimmed, or the
 /// reason it will not do beside the agents read before it. Titles are
-/// unique, ignoring case.
+/// unique, ignoring case, and a shipped agent is changed once.
 fn one(entry: &Value, earlier: &[Agent]) -> Result<Agent, String> {
     let mut agent: Agent = serde_json::from_value(entry.clone()).map_err(|_| ONE_SHAPE)?;
     check(&agent)?;
@@ -152,38 +165,59 @@ fn one(entry: &Value, earlier: &[Agent]) -> Result<Agent, String> {
     {
         return Err(format!("there is already an agent called {}", agent.title));
     }
+    if let Some(shipped) = &agent.shipped {
+        if earlier
+            .iter()
+            .any(|kept| kept.shipped.as_ref() == Some(shipped))
+        {
+            return Err(format!("{shipped} is changed once already"));
+        }
+    }
     Ok(agent)
+}
+
+/// How many of the agents are the user's own rather than shipped ones
+/// changed.
+fn own_count(agents: &[Agent]) -> usize {
+    agents
+        .iter()
+        .filter(|agent| agent.shipped.is_none())
+        .count()
 }
 
 /// The agents a value holds, or the reason one will not do. A change sets
 /// the agents this way, whole or not at all.
 pub fn read(value: &Value) -> Result<Vec<Agent>, String> {
     let list = value.as_array().ok_or(SHAPE)?;
-    if list.len() > MOST_AGENTS {
-        return Err(format!("the settings hold {MOST_AGENTS} agents at most"));
+    let most = format!("the settings hold {MOST_AGENTS} agents of your own at most");
+    if list.len() > MOST_AGENTS + SHIPPED_TITLES.len() {
+        return Err(most);
     }
     let mut agents: Vec<Agent> = Vec::with_capacity(list.len());
     for entry in list {
         let agent = one(entry, &agents)?;
         agents.push(agent);
     }
+    if own_count(&agents) > MOST_AGENTS {
+        return Err(most);
+    }
     Ok(agents)
 }
 
 /// The agents a settings file's list holds, read one at a time: each one
-/// that does not read or keep the rules, one whose title an earlier one
-/// has and one past the most the settings hold is set aside with the
-/// reason, and the rest are used.
+/// that does not read or keep the rules, one whose title or shipped agent
+/// an earlier one has, and one of the user's own past the most the
+/// settings hold is set aside with the reason, and the rest are used.
 pub fn read_lenient(list: &[Value]) -> (Vec<Agent>, Vec<SetAside>) {
     let mut agents: Vec<Agent> = Vec::new();
     let mut aside = Vec::new();
     for (at, entry) in list.iter().enumerate() {
         let reason = match one(entry, &agents) {
-            Ok(agent) if agents.len() < MOST_AGENTS => {
+            Ok(agent) if agent.shipped.is_some() || own_count(&agents) < MOST_AGENTS => {
                 agents.push(agent);
                 continue;
             }
-            Ok(_) => format!("the settings hold {MOST_AGENTS} agents at most"),
+            Ok(_) => format!("the settings hold {MOST_AGENTS} agents of your own at most"),
             Err(reason) => reason,
         };
         let title = entry.get("title").and_then(Value::as_str).unwrap_or("");
@@ -742,6 +776,47 @@ mod tests {
         let mut over = most;
         over.push(agent("One more"));
         assert!(read(&Value::Array(over)).unwrap_err().contains("at most"));
+    }
+
+    #[test]
+    fn a_shipped_agent_the_user_changed_stands_in_its_place() {
+        let changed = |shipped: &str, title: &str| json!({ "shipped": shipped, "title": title, "description": "Mine." });
+        let kept = one(changed("Reviewer", "Code reviewer")).unwrap();
+        assert_eq!(kept[0].shipped.as_deref(), Some("Reviewer"));
+        assert_eq!(
+            serde_json::to_value(&kept[0]).unwrap()["shipped"],
+            json!("Reviewer")
+        );
+        assert!(one(changed("Reviewer", "reviewer")).is_ok());
+        assert!(one(changed("Reviewer", "Tester"))
+            .unwrap_err()
+            .contains("Chord ships"));
+        assert!(one(changed("Planner", "Planner"))
+            .unwrap_err()
+            .contains("not an agent Chord ships"));
+        let twice = read(&json!([
+            changed("Reviewer", "Reviewer"),
+            changed("Reviewer", "Second look")
+        ]))
+        .unwrap_err();
+        assert!(twice.contains("changed once"), "{twice}");
+        // The shipped agents changed are not counted among the user's own.
+        let mut list: Vec<Value> = (0..MOST_AGENTS)
+            .map(|n| json!({ "title": format!("Agent {n}"), "description": "Does it." }))
+            .collect();
+        list.extend(SHIPPED_TITLES.iter().map(|title| changed(title, title)));
+        assert_eq!(
+            read(&Value::Array(list.clone())).unwrap().len(),
+            MOST_AGENTS + SHIPPED_TITLES.len()
+        );
+        let (kept, aside) = read_lenient(&list);
+        assert_eq!((kept.len(), aside.len()), (list.len(), 0));
+        list.push(json!({ "title": "One more", "description": "Does it." }));
+        assert!(read(&Value::Array(list.clone()))
+            .unwrap_err()
+            .contains("at most"));
+        let (_, aside) = read_lenient(&list);
+        assert_eq!(aside[0].title, "One more");
     }
 
     fn write(path: &Path, text: &str) {
