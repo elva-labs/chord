@@ -260,7 +260,8 @@ const NAMES_KEY = "chord.names";
 const OWN_NAMES_KEY = "chord.ownNames";
 const TOKENS_KEY = "chord.tokens";
 const PREFERRED_KEY = "chord.harnesses";
-/** Where an earlier version kept the same, read once and moved. */
+/** Where the version before keeps the same. It is read when the new key
+    is missing and written beside it, so that version still finds it. */
 const PREFERRED_KEY_BEFORE = "chord.agents";
 const WORKFLOWS_KEY = "chord.workflows";
 const WAITING_KEY = "chord.waiting";
@@ -644,7 +645,9 @@ function prefer(project: string, agent: HarnessId) {
   if (sessions.preferred[project] === agent) return;
   sessions.preferred[project] = agent;
   try {
-    localStorage.setItem(PREFERRED_KEY, JSON.stringify(sessions.preferred));
+    const kept = JSON.stringify(sessions.preferred);
+    localStorage.setItem(PREFERRED_KEY, kept);
+    localStorage.setItem(PREFERRED_KEY_BEFORE, kept);
   } catch {
     // Non-fatal: the choice does not survive a restart.
   }
@@ -764,10 +767,7 @@ export function loadRemembered() {
   }
   try {
     const before = localStorage.getItem(PREFERRED_KEY_BEFORE);
-    if (before !== null) {
-      if (localStorage.getItem(PREFERRED_KEY) === null) localStorage.setItem(PREFERRED_KEY, before);
-      localStorage.removeItem(PREFERRED_KEY_BEFORE);
-    }
+    if (before !== null && localStorage.getItem(PREFERRED_KEY) === null) localStorage.setItem(PREFERRED_KEY, before);
     const raw = localStorage.getItem(PREFERRED_KEY);
     if (raw !== null) {
       const stored: unknown = JSON.parse(raw);

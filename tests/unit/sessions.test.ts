@@ -1055,13 +1055,20 @@ describe("an agent that mints its own id", () => {
     expect(defaultAgent(A)).toBe("codex");
   });
 
-  it("moves the harness an earlier version kept for a project to where it is kept now", () => {
+  it("reads the harness an earlier version kept for a project and leaves it for that version", () => {
     applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
     localStorage.removeItem("chord.harnesses");
     localStorage.setItem("chord.agents", JSON.stringify({ [A]: "codex" }));
     loadRemembered();
     expect(defaultAgent(A)).toBe("codex");
-    expect(localStorage.getItem("chord.agents")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("chord.agents")!)).toEqual({ [A]: "codex" });
+    expect(JSON.parse(localStorage.getItem("chord.harnesses")!)).toEqual({ [A]: "codex" });
+  });
+
+  it("keeps a harness picked now where the earlier version reads it too", () => {
+    applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
+    create(A, null, "codex");
+    expect(JSON.parse(localStorage.getItem("chord.agents")!)).toEqual({ [A]: "codex" });
     expect(JSON.parse(localStorage.getItem("chord.harnesses")!)).toEqual({ [A]: "codex" });
   });
 
