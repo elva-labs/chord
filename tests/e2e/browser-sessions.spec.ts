@@ -87,9 +87,11 @@ async function twoSessions(page: Page) {
 
 /** Waits for the panes to stop moving: opening the browser eases the columns
     to their new widths, and a button clicked while its column still slides
-    is missed. */
-const settled = (page: Page) =>
-  expect
+    is missed. The shell says when a column is on its way or waits to move;
+    the page's own animations cover the rest. */
+const settled = async (page: Page) => {
+  await expect(page.getByTestId("shell")).not.toHaveAttribute("data-moving");
+  await expect
     .poll(() =>
       page.evaluate(
         () =>
@@ -103,6 +105,7 @@ const settled = (page: Page) =>
       ),
     )
     .toBe(0);
+};
 
 /** Opens a tab by hand from the fold and gives it an address. */
 async function openByHand(page: Page, address: string) {

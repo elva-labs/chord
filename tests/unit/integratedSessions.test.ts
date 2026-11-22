@@ -386,8 +386,13 @@ describe("a row at rest whose conversation went cold and large", () => {
 });
 
 describe("a session the usage limit cut short", () => {
-  /** The reset the agent names, two minutes gone, in seconds. */
-  const reset = () => Math.floor(Date.now() / 1000) - 120;
+  /** The reset the agent names, two minutes gone, in seconds. Read once per
+      test, so a second ticking over never moves it. */
+  let named = 0;
+  beforeEach(() => {
+    named = Math.floor(Date.now() / 1000) - 120;
+  });
+  const reset = () => named;
   const notes = (conversation: ReturnType<typeof conversationOf>) =>
     conversation.entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []));
 
