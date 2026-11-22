@@ -188,6 +188,22 @@
     return new Set(last.values());
   });
 
+  /** The agent each turn worked as, by the turn's id: the one the user's
+      last message so far was picked to go out as, where any was. */
+  let workedAs = $derived.by(() => {
+    const titles = new Map<number, string>();
+    let title: string | null = null;
+    for (const turn of Object.values(conversation.turns).sort((a, b) => a.id - b.id)) {
+      for (const id of turn.messages) {
+        const said = conversation.messages[id];
+        if (said === undefined || (sender?.(said) ?? null) !== null) continue;
+        title = spoken(said.text, true).agent?.title ?? title;
+      }
+      if (title !== null) titles.set(turn.id, title);
+    }
+    return titles;
+  });
+
   /** A cheap reading of what the thread holds, which changes whenever
       something new comes: more entries, a longer last part, a request,
       more output from the command that runs. */
@@ -1233,9 +1249,12 @@
         {@const turn = conversation.turns[entry.turn]}
         {@const live = entry.key === liveKey}
         {@const doing = live ? nowDoing(conversation, entry.parts) : null}
+        {@const as = workedAs.get(entry.turn)}
         <article class="msg agent" data-testid="agent-run" data-turn={entry.turn} data-copy-host="message">
           <header class="who" title={entry.at === null ? undefined : exactTime(entry.at)}>
-            {#if entry.at !== null}<time class="said-at" datetime={new Date(entry.at).toISOString()}>{exactTime(entry.at)}</time>{/if}<i class="mark"></i><b><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></b>
+            {#if entry.at !== null}<time class="said-at" datetime={new Date(entry.at).toISOString()}>{exactTime(entry.at)}</time>{/if}<i class="mark"></i>{#if as !== undefined}<b data-testid="agent-run-as"><Plain text={as} /></b><span
+                ><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></span
+              >{:else}<b><Plain text={speaker(conversation, models ? (turn?.model ?? null) : null, agent)} /></b>{/if}
             {#if entry.parts.some((part) => part.kind === "text" && part.text.trim() !== "")}
               <Copy label="Copy as Markdown" text={() => replyMarkdown(entry.parts)} host="message" place="end" testid="copy-reply" />
             {/if}
@@ -1403,6 +1422,20 @@
                 >{/if}{/if}{/each}</p
         >{/if}
     </div>
+    {#if words.agent !== undefined}
+      {@const shown = `${said.id}:agent`}
+      <button
+        class="link instructions"
+        tabindex="-1"
+        data-thread-item
+        onclick={() => (unfolded[shown] = !unfolded[shown])}
+        aria-expanded={unfolded[shown] === true}
+        data-testid="workbench-agent">As <Plain text={words.agent.title} /></button
+      >
+      {#if unfolded[shown]}<p class="state briefing" data-testid="workbench-agent-text"
+          ><Plain text={words.agent.text} /></p
+        >{/if}
+    {/if}
     {#if words.filesBack !== null}
       {@const shown = `${said.id}:files`}
       <button
