@@ -2100,6 +2100,8 @@ test.describe("the file viewer", () => {
   }) => {
     await row(page, "mod.rs").click();
     await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "reviewing");
+    // The tree is measured where the opening viewer leaves it.
+    await columnsAtRest(page);
 
     const tree = await page.locator(TREE).boundingBox();
     if (!tree) throw new Error("no tree");
