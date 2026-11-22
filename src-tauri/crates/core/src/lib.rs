@@ -52,6 +52,7 @@ pub mod shell;
 pub(crate) mod short_lived;
 pub mod show;
 pub mod styles;
+pub mod team;
 pub mod transcripts;
 pub mod usage;
 pub mod user_command;
