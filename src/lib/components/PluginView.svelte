@@ -1,6 +1,6 @@
 <script lang="ts">
   import { typeWhole } from "$lib/conductor.svelte";
-  import { type PluginPage, pluginViews, send } from "$lib/pluginView.svelte";
+  import { leftPage, type PluginPage, pluginViews, send, spendAct } from "$lib/pluginView.svelte";
   import { activeSession, typed } from "$lib/sessions.svelte";
   import { showPlace } from "$lib/show.svelte";
   import { printable } from "$lib/terminals.svelte";
@@ -78,7 +78,8 @@
     typeWhole(session.key, session.ptyId, text).catch(() => {});
   }
 
-  /** Whether the user has just clicked or typed in this frame. */
+  /** Whether the user has just clicked or typed in this frame, which
+      `spendAct` lets count once. */
   function acted(): boolean {
     return (
       navigator.userActivation?.isActive === true &&
@@ -99,7 +100,7 @@
       }
       if (data.workbench === "open") openPlace(data);
       else if (data.workbench === "agent") toAgent(data);
-      else if (data.workbench === "send") void send(page.key, page.project, data.payload, acted());
+      else if (data.workbench === "send") void send(page.key, page.project, data.payload, spendAct(page.key, page.project, acted()));
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -126,6 +127,7 @@
   sandbox="allow-scripts"
   title={page.plugin}
   onload={() => (loaded = page.html)}
+  onblur={() => leftPage(page.key, page.project)}
   class:waiting={loaded === null}
   style:height="{height}px"
   data-testid="plugin-page"

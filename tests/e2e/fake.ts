@@ -1100,6 +1100,11 @@ export async function installFakeCore(
           const w = window as unknown as { __pluginSent?: unknown[] };
           (w.__pluginSent ??= []).push({ project, request, outcome });
         },
+        // How each plugin's start came out, for a test to read back.
+        pluginStartSettled: async (project: string, request: string, started: boolean) => {
+          const w = window as unknown as { __pluginStartSettled?: unknown[] };
+          (w.__pluginStartSettled ??= []).push({ project, request, started });
+        },
         onPluginHears: async (handler: (event: unknown) => void) => {
           (window as unknown as Record<string, unknown>).__pluginHears =
             handler;

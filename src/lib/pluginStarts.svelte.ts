@@ -3,8 +3,9 @@
  * said yes to. Every run of such a row tells the core that request, which
  * is how the core knows the session as the plugin's own: the plugin is
  * told of it, by the `ref` it asked with, and may send it lines. The
- * window keeps it only while it runs: after a restart a row is no
- * plugin's, and the core, which keeps it the same way, knows it as none.
+ * record of open rows keeps it with the row, and the core keeps its own
+ * on disk, so a row is the plugin's across a restart for as long as it is
+ * open and the plugin's source is installed.
  */
 
 export interface PluginStart {

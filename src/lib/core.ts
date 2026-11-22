@@ -1829,6 +1829,9 @@ export interface Core {
   onPluginSend(handler: (event: PluginSendEvent) => void): Promise<() => void>;
   /** Tells the plugin what came of its line. */
   pluginSent(project: string, request: string, outcome: PluginSentOutcome): Promise<void>;
+  /** Tells the core whether a plugin's start began a session, so it keeps
+      the request only for one that did. The plugin hears nothing of it. */
+  pluginStartSettled(project: string, request: string, started: boolean): Promise<void>;
   onSessionEnded(handler: (ended: SessionEnded) => void): Promise<() => void>;
   /** An agent that mints its own ids has written one down for a session. */
   onSessionIdentified(
@@ -2399,6 +2402,8 @@ const tauriCore: Core = {
   },
   pluginSent: (project, request, outcome) =>
     invoke<void>("plugin_sent", { project, request, outcome }),
+  pluginStartSettled: (project, request, started) =>
+    invoke<void>("plugin_start_settled", { project, request, started }),
 
   async onSessionEnded(handler) {
     return listen<SessionEnded>("session_ended", (event) =>
@@ -2807,6 +2812,7 @@ const detachedCore: Core = {
     return () => {};
   },
   async pluginSent() {},
+  async pluginStartSettled() {},
   async ptyCwd() {
     return null;
   },

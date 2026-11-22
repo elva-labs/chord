@@ -2283,9 +2283,11 @@ const waking = new Set<string>();
     a wake typed into a terminal up if that turn has not begun in time. */
 const wakeTurns = new Map<string, ReturnType<typeof setTimeout> | null>();
 
-/** Whether a session is idle in the way a wake asks. A run being moved the
-    other way is on its way out, and the next run takes the wake. */
-function idle(starter: Session): boolean {
+/** Whether a session is idle in the way a line typed into it asks: at
+    rest after a turn, asking nothing, and with nothing of the user's half
+    written. A run being moved the other way is on its way out, and the
+    next run takes the line. */
+export function idle(starter: Session): boolean {
   if (starter.status !== "running" || starter.working || starter.needs !== null) return false;
   if (reopeningRow(starter.key)) return false;
   if (starter.turnEnd !== "done") return false;
@@ -3787,6 +3789,12 @@ export function runsShell(line: string): boolean {
   return asTyped(line).startsWith("!");
 }
 
+/** Whether a line begins with a slash, read as `mayChangeModel` reads it:
+    an agent may take it for a command, whichever command it names. */
+export function slashLed(line: string): boolean {
+  return asTyped(line).startsWith("/");
+}
+
 /** What a caller is told of a line for a session's terminal, or a prompt
     for a session that runs in one, that begins with !. */
 const SHELL_LINE =
@@ -4631,13 +4639,22 @@ export interface PluginAsk {
   worktree: boolean;
 }
 
+/** Whether a question is one a plugin put. */
+const putBy = (ask: Ask, source: string, plugin: string) =>
+  ask.plugin?.source === source && ask.plugin.plugin === plugin;
+
 /**
  * Puts a plugin's start to the user, always: a plugin never has a
  * standing answer, nor is given one. The question waits behind any other
  * that is up, and the answer comes with what the user picked to run the
- * session on, starting from `pick`.
+ * session on, starting from `pick`. A plugin has one question up or
+ * waiting at most: another start it asks for meanwhile is a no.
  */
 export function askForPlugin(asked: PluginAsk, pick: PluginPick): Promise<{ choice: Choice; pick: PluginPick }> {
+  const waiting =
+    (conductor.asking !== null && putBy(conductor.asking, asked.source, asked.plugin)) ||
+    queue.some((item) => putBy(item.ask, asked.source, asked.plugin));
+  if (waiting) return Promise.resolve({ choice: "no", pick });
   const request: Placed = {
     id: asked.request,
     tool: "start",
@@ -4687,6 +4704,24 @@ function withdrawGone() {
     settle?.("no");
     nextAsk();
   });
+}
+
+/** Takes down every question a plugin put, on screen or waiting, as no:
+    one turned off or removed has nothing it asked for done. */
+export function withdrawPlugin(source: string, plugin: string) {
+  const its = queue.filter((item) => putBy(item.ask, source, plugin));
+  if (its.length > 0) {
+    const others = queue.filter((item) => !putBy(item.ask, source, plugin));
+    queue.splice(0, queue.length, ...others);
+    for (const item of its) item.settle("no");
+  }
+  const ask = conductor.asking;
+  if (ask === null || !putBy(ask, source, plugin)) return;
+  const settle = pending;
+  conductor.asking = null;
+  pending = null;
+  settle?.("no");
+  nextAsk();
 }
 
 /** Puts up the next question, passing over those whose caller has stopped

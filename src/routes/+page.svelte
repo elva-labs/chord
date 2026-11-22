@@ -29,6 +29,7 @@
     cancelled as conductCancelled,
     conductor,
     handle as conductRequested,
+    withdrawPlugin,
   } from "$lib/conductor.svelte";
   import { handle as browserRequested } from "$lib/browserTools.svelte";
   import { handle as settingsRequested, settingsAsk } from "$lib/settingsTools.svelte";
@@ -272,7 +273,11 @@
       .onWindowFocus((focused) => windowFocused(focused))
       .then((unlisten) => offs.push(unlisten));
     core()
-      .onPluginState((event) => pluginStateChanged(event))
+      .onPluginState((event) => {
+        pluginStateChanged(event);
+        // A plugin turned off or removed has no start of its own to ask.
+        if (event.state === "off") withdrawPlugin(event.source, event.name);
+      })
       .then((unlisten) => offs.push(unlisten));
     core()
       .onPluginSection((event) => sectionChanged(event))
