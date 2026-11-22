@@ -242,10 +242,11 @@ pub fn installed(
     claude_dir: &Path,
     codex_home: &Path,
 ) -> Vec<InstalledAgent> {
-    let mut agents = claude_agents(&claude_dir.join("agents"), Source::Claude);
+    let mut agents = claude_agents(&claude_dir.join("agents"), Source::Claude, None);
     agents.extend(claude_agents(
         &project.join(".claude").join("agents"),
         Source::Project,
+        Some(project),
     ));
     agents.extend(codex_agents(home, codex_home));
     agents
@@ -259,10 +260,20 @@ fn read_small(path: &Path) -> Option<String> {
     fs::read_to_string(path).ok()
 }
 
+/// Whether a file, its links followed, is inside a folder.
+fn lies_within(path: &Path, folder: &Path) -> bool {
+    match (fs::canonicalize(path), fs::canonicalize(folder)) {
+        (Ok(path), Ok(folder)) => path.starts_with(folder),
+        _ => false,
+    }
+}
+
 /// Claude Code's agents in a folder: each a Markdown file whose
 /// frontmatter names it and says what it does, and whose body is what the
-/// session is told.
-fn claude_agents(dir: &Path, source: Source) -> Vec<InstalledAgent> {
+/// session is told. Of files that give the same name, ignoring case, the
+/// first by path is read. A file that links out of `within`, where one is
+/// given, is left out.
+fn claude_agents(dir: &Path, source: Source, within: Option<&Path>) -> Vec<InstalledAgent> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -272,11 +283,25 @@ fn claude_agents(dir: &Path, source: Source) -> Vec<InstalledAgent> {
         .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
         .collect();
     paths.sort();
-    let mut agents: Vec<InstalledAgent> = paths
-        .into_iter()
-        .filter_map(|path| claude_agent(path, source))
-        .take(MOST_INSTALLED)
-        .collect();
+    let mut agents: Vec<InstalledAgent> = Vec::new();
+    for path in paths {
+        if agents.len() == MOST_INSTALLED {
+            break;
+        }
+        if within.is_some_and(|folder| !lies_within(&path, folder)) {
+            continue;
+        }
+        let Some(agent) = claude_agent(path, source) else {
+            continue;
+        };
+        if agents
+            .iter()
+            .any(|kept| kept.name.eq_ignore_ascii_case(&agent.name))
+        {
+            continue;
+        }
+        agents.push(agent);
+    }
     agents.sort_by_key(|agent| agent.name.to_lowercase());
     agents
 }
@@ -771,6 +796,75 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&agents[2]).unwrap()["source"],
             json!("project")
+        );
+    }
+
+    #[test]
+    fn the_installed_agents_of_a_place_are_bounded_and_unique_by_name() {
+        let home = crate::scratch::Scratch::new("agents-bounds-home");
+        let claude = home.join(".claude");
+        let place = claude.join("agents");
+        let agent = |name: &str, body: &str| {
+            format!("---\nname: {name}\ndescription: Does it.\n---\n{body}\n")
+        };
+        for n in 0..=MOST_INSTALLED {
+            write(
+                &place.join(format!("agent-{n:03}.md")),
+                &agent(&format!("agent-{n:03}"), "First."),
+            );
+        }
+        // Read after agent-000.md by path, so the first of the name stands.
+        write(&place.join("agent-000x.md"), &agent("Agent-000", "Copy."));
+        write(
+            &place.join("aaa-large.md"),
+            &agent("large", &"x".repeat(LARGEST_FILE as usize)),
+        );
+        let agents = installed(&home, &home.join("project"), &claude, &home.join("none"));
+        assert_eq!(agents.len(), MOST_INSTALLED);
+        assert_eq!(agents[0].name, "agent-000");
+        assert_eq!(agents[0].text, "First.");
+        assert_eq!(
+            agents[MOST_INSTALLED - 1].name,
+            format!("agent-{:03}", MOST_INSTALLED - 1)
+        );
+        assert!(agents.iter().all(|agent| agent.name != "large"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_project_agent_that_links_out_of_the_project_is_left_out() {
+        use std::os::unix::fs::symlink;
+        let home = crate::scratch::Scratch::new("agents-links-home");
+        let project = home.join("project");
+        let place = project.join(".claude").join("agents");
+        let agent = |name: &str| format!("---\nname: {name}\ndescription: Does it.\n---\nBody.\n");
+        write(&home.join("outside.md"), &agent("outside"));
+        write(&project.join("docs").join("inside.md"), &agent("inside"));
+        write(&place.join("plain.md"), &agent("plain"));
+        symlink(home.join("outside.md"), place.join("outside.md")).unwrap();
+        symlink(
+            project.join("docs").join("inside.md"),
+            place.join("inside.md"),
+        )
+        .unwrap();
+        let claude = home.join(".claude");
+        fs::create_dir_all(claude.join("agents")).unwrap();
+        symlink(
+            home.join("outside.md"),
+            claude.join("agents").join("mine.md"),
+        )
+        .unwrap();
+        let names: Vec<(String, Source)> = installed(&home, &project, &claude, &home.join("none"))
+            .into_iter()
+            .map(|agent| (agent.name, agent.source))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("outside".to_string(), Source::Claude),
+                ("inside".to_string(), Source::Project),
+                ("plain".to_string(), Source::Project),
+            ]
         );
     }
 

@@ -391,7 +391,10 @@ reads the Markdown files in the `agents` folder of the configuration
 directory of the project's [account](#accounts), and From this project
 those in the project's `.claude/agents`: a file's frontmatter gives the
 name, the description and the model, and its body how it works; one whose
-`tools` leave out every tool that changes files reads only. From Codex
+`tools` leave out every tool that changes files reads only. Of files that
+give the same name, ignoring case, the first by file name is listed. Each
+place lists 64 agents at most and skips a file over 256 KB, and a file in
+the project that links out of the project is not read. From Codex
 reads the roles in the `[agents.<name>]` tables of the `config.toml` in
 the home of the project's account, each with a file of its own giving its
 model, its reasoning effort and its instructions; one with a read-only
