@@ -178,7 +178,7 @@ const LARGEST_FILE: u64 = 256 * 1024;
 
 /// The tools that change files. A Claude Code agent whose tools leave all
 /// of them out reads only.
-const CHANGING_TOOLS: &[&str] = &["Edit", "Write", "MultiEdit", "NotebookEdit"];
+pub(crate) const CHANGING_TOOLS: &[&str] = &["Edit", "Write", "MultiEdit", "NotebookEdit"];
 
 /// The agents installed for each harness, in the order a list shows them:
 /// Claude Code's own under `claude_dir`, the project's, then Codex's roles

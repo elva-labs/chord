@@ -191,6 +191,7 @@ fn start_in(
         afresh: false,
         compact_at: None,
         resume_at: None,
+        reads_only: false,
     };
     adjust(&mut launch);
     let started = super::start(
@@ -306,6 +307,7 @@ impl Harness {
             afresh: false,
             compact_at: None,
             resume_at: again.at.as_deref(),
+            reads_only: again.settings.reads_only,
         };
         super::start(
             self.recorder.clone(),
@@ -870,19 +872,28 @@ fn the_model_the_mode_and_the_effort_change_on_request() {
     .join("\n");
     let h = start("model", &scenario);
     h.until_type("ready");
-    let settings = configure(&h.sessions, &h.id, Some("sonnet"), None, None).unwrap();
+    let settings = configure(&h.sessions, &h.id, Some("sonnet"), None, None, None).unwrap();
     assert_eq!(settings.model.as_deref(), Some("claude-sonnet"));
     assert_eq!(
-        configure(&h.sessions, &h.id, Some("no-such"), None, None).unwrap_err(),
+        configure(&h.sessions, &h.id, Some("no-such"), None, None, None).unwrap_err(),
         "Model 'no-such' not found"
     );
-    let settings = configure(&h.sessions, &h.id, None, Some("acceptEdits"), Some("low")).unwrap();
+    let settings = configure(
+        &h.sessions,
+        &h.id,
+        None,
+        Some("acceptEdits"),
+        Some("low"),
+        None,
+    )
+    .unwrap();
     assert_eq!(
         settings,
         Settings {
             model: Some("claude-sonnet".into()),
             mode: Some("acceptEdits".into()),
             effort: Some("low".into()),
+            reads_only: false,
         }
     );
     let configured: Vec<Value> = h
@@ -895,6 +906,17 @@ fn the_model_the_mode_and_the_effort_change_on_request() {
     assert_eq!(configured[0]["efforts"], json!(["low", "high"]));
     assert_eq!(configured[1]["mode"], "acceptEdits");
     assert_eq!(configured[2]["effort"], "low");
+
+    // Reading only is the core's own: settled here, told once.
+    let settings = configure(&h.sessions, &h.id, None, None, None, Some(true)).unwrap();
+    assert!(settings.reads_only);
+    let told: Vec<Value> = h
+        .events()
+        .into_iter()
+        .filter(|e| e["type"] == "readsOnly")
+        .collect();
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert_eq!(told[0]["on"], true);
     h.stop();
 }
 
@@ -1907,6 +1929,7 @@ fn a_missing_agent_explains_itself() {
         afresh: false,
         compact_at: None,
         resume_at: None,
+        reads_only: false,
     };
     let error = super::start(
         Arc::new(Recorder::default()),
@@ -1948,6 +1971,7 @@ fn real_claude_holds_a_short_turn() {
         afresh: false,
         compact_at: None,
         resume_at: None,
+        reads_only: false,
     };
     let started = super::start(
         recorder.clone(),

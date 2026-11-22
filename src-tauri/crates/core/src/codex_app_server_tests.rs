@@ -28,6 +28,7 @@ fn launch_with<'a>(
         afresh: false,
         compact_at: None,
         resume_at: None,
+        reads_only: false,
     };
     adjust(&mut launch);
     AppServer::new(&launch)
@@ -2070,6 +2071,7 @@ fn the_command_runs_the_app_server_under_the_account_s_home() {
         afresh: false,
         compact_at: None,
         resume_at: None,
+        reads_only: false,
     };
     let prepared = CODEX_APP_SERVER.command(&launch).unwrap();
     assert!(prepared.files.is_empty());
@@ -3177,6 +3179,83 @@ fn a_mode_change_keeps_the_user_s_own_sandbox_settings() {
         configured_workspace(&json!({"sandbox_workspace_write": null})),
         None
     );
+}
+
+#[test]
+fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
+    let mut driver = ready();
+    let send = |driver: &mut AppServer, message: &str| -> Value {
+        let line: Value =
+            serde_json::from_str(&driver.message(message, "go", &[]).unwrap()).unwrap();
+        events(
+            driver,
+            &[
+                json!({"id": line["id"], "result": {"turn": {"id": "turn-1"}}}),
+                completed("completed"),
+            ],
+        );
+        line
+    };
+    let out = driver.control(&Control::SetReadsOnly(true)).unwrap();
+    assert!(
+        matches!(out, Sending::Local { ref events, .. } if events == &[Event::ReadsOnly { on: true }])
+    );
+    let line = send(&mut driver, M1);
+    assert_eq!(line["params"]["sandboxPolicy"], json!({"type": "readOnly"}));
+    assert!(line["params"].get("approvalPolicy").is_none());
+
+    // The sandbox Codex then reports is reading only's, not the mode's.
+    let out = events(
+        &mut driver,
+        &[notification(
+            "thread/settings/updated",
+            json!({"threadId": THREAD, "threadSettings": {"model": "gpt-a",
+                   "approvalPolicy": "on-request", "sandboxPolicy": {"type": "readOnly"}}}),
+        )],
+    );
+    assert!(out.is_empty(), "{out:?}");
+
+    // A change of a file is turned down without asking.
+    let reading = read(
+        &mut driver,
+        server_request(
+            20,
+            "item/fileChange/requestApproval",
+            json!({"threadId": THREAD, "turnId": "turn-1", "itemId": "f1"}),
+        ),
+    );
+    assert!(reading.events.is_empty());
+    let answer: Value = serde_json::from_str(&reading.writes[0]).unwrap();
+    assert_eq!(answer, json!({"id": 20, "result": {"decision": "decline"}}));
+
+    // Off again: the next turn goes back to the sandbox the thread had.
+    driver.control(&Control::SetReadsOnly(false)).unwrap();
+    let line = send(&mut driver, M2);
+    assert_eq!(
+        line["params"]["sandboxPolicy"],
+        json!({"type": "workspaceWrite", "writableRoots": [], "networkAccess": false})
+    );
+    let reading = read(
+        &mut driver,
+        server_request(
+            21,
+            "item/fileChange/requestApproval",
+            json!({"threadId": THREAD, "turnId": "turn-1", "itemId": "f2"}),
+        ),
+    );
+    assert!(reading.writes.is_empty());
+    assert_eq!(reading.events.len(), 1);
+}
+
+#[test]
+fn a_session_started_reading_only_holds_its_first_turn_to_it() {
+    let mut driver = launch_with(&HashMap::new(), |launch| launch.reads_only = true);
+    handshake(
+        &mut driver,
+        json!({"account": null, "requiresOpenaiAuth": false}),
+    );
+    let line: Value = serde_json::from_str(&driver.message(M1, "go", &[]).unwrap()).unwrap();
+    assert_eq!(line["params"]["sandboxPolicy"], json!({"type": "readOnly"}));
 }
 
 #[test]

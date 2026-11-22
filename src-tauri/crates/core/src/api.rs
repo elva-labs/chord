@@ -140,6 +140,7 @@ struct Run {
     start_only: bool,
     afresh: bool,
     compact_at: Option<u64>,
+    reads_only: bool,
     /// The agent's id of the session that started this one, if one did.
     starter: Option<String>,
     /// Whether `cwd` is a worktree made for this session.
@@ -791,7 +792,9 @@ impl Core {
     /// [`Core::spawn`]: a session that follows one directs the others, is
     /// not started where no tool server can reach it, and is given the
     /// instructions, and with `start_only` loses its agent's own subagent
-    /// tools, the same way a terminal session is.
+    /// tools, the same way a terminal session is. With `reads_only` the
+    /// harness's own tools that change files are refused from the first
+    /// turn.
     #[allow(clippy::too_many_arguments)]
     pub fn integrated_start(
         &self,
@@ -808,6 +811,7 @@ impl Core {
         start_only: bool,
         afresh: bool,
         compact_at: Option<u64>,
+        reads_only: bool,
         starter: Option<&str>,
         made_worktree: bool,
     ) -> Result<crate::integrated::Started, String> {
@@ -825,6 +829,7 @@ impl Core {
             start_only,
             afresh,
             compact_at,
+            reads_only,
             starter: starter
                 .filter(|starter| !starter.trim().is_empty())
                 .map(str::to_string),
@@ -930,6 +935,7 @@ impl Core {
             afresh: resume && afresh,
             compact_at: run.compact_at,
             resume_at: at.as_deref().filter(|_| resume),
+            reads_only: run.reads_only,
         };
         let (starting, ending) = (self.plugins.clone(), self.plugins.clone());
         let (folder, starter) = (project.to_string_lossy().to_string(), run.starter.clone());
@@ -1095,16 +1101,17 @@ impl Core {
         crate::integrated::reply(&self.integrated, id, request, answers)
     }
 
-    /// Switches the session's model, mode or effort, each that is given.
-    /// Answers with what the session now runs on.
+    /// Switches the session's model, mode or effort, or whether it reads
+    /// only, each that is given. Answers with what the session now runs on.
     pub fn integrated_configure(
         &self,
         id: &str,
         model: Option<&str>,
         mode: Option<&str>,
         effort: Option<&str>,
+        reads_only: Option<bool>,
     ) -> Result<crate::integrated::Settings, String> {
-        crate::integrated::configure(&self.integrated, id, model, mode, effort)
+        crate::integrated::configure(&self.integrated, id, model, mode, effort, reads_only)
     }
 
     /// What a window that comes to an integrated session late reads to
@@ -1496,6 +1503,7 @@ impl Core {
             model: settings.model.clone().or_else(|| run.model.clone()),
             mode: settings.mode.clone(),
             effort: settings.effort.clone().or_else(|| run.effort.clone()),
+            reads_only: settings.reads_only,
             undo: None,
             ..run.clone()
         };
@@ -2845,6 +2853,7 @@ mod tests {
             start_only: false,
             afresh: false,
             compact_at: None,
+            reads_only: false,
             starter: None,
             made_worktree: false,
             undo: None,
@@ -2897,6 +2906,7 @@ mod tests {
                 true,
                 false,
                 None,
+                false,
                 None,
                 false,
             );
