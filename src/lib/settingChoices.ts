@@ -22,6 +22,10 @@ export interface Choice {
   on?: boolean;
   /** It cannot be chosen here: its line says why. */
   off?: boolean;
+  /** It only reads: a lock stands at the end of its name. */
+  lock?: boolean;
+  /** An icon ahead of its name. */
+  icon?: string;
 }
 
 /** Claude Code's entry for its own default model. */

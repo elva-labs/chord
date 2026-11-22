@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import type { Choice } from "$lib/settingChoices";
   import Icon from "./conversation/Icon.svelte";
   import Plain from "./conversation/Plain.svelte";
@@ -17,6 +17,12 @@
    *
    * A choice that cannot be taken here is walked to like the others and
    * says why in its line, but picking it does nothing.
+   *
+   * A long list can show only its first few, the one in use among them,
+   * with a line on how many more there are; with `filter`, typing narrows
+   * the whole list to the names that hold what is typed, Backspace widens
+   * it again, and Escape clears it before it puts the menu away. Actions
+   * after the choices, under a rule, stay whatever is typed.
    *
    * It opens above what holds it, from its left edge or with `end` from
    * its right, or at a place the owner gives, where what holds it cuts off
@@ -48,6 +54,12 @@
     pointer?: boolean;
     /** The entries are actions, not choices with one in use. */
     actions?: boolean;
+    /** Typing narrows the choices by name. */
+    filter?: boolean;
+    /** The most choices shown before typing narrows them. */
+    most?: number | null;
+    /** Actions under a rule after the choices, picked through `onpick`. */
+    extra?: Choice[];
     testid: string;
     optionTestid: string;
   }
@@ -64,12 +76,43 @@
     within = null,
     pointer = false,
     actions = false,
+    filter = false,
+    most = null,
+    extra = [],
     testid,
     optionTestid,
   }: Props = $props();
 
   let menu = $state<HTMLDivElement | null>(null);
   let pointing = $state(untrack(() => pointer));
+
+  /** What is typed to narrow the choices. */
+  let query = $state("");
+  let matching = $derived.by(() => {
+    const words = query.trim().toLowerCase();
+    return words === "" ? choices : choices.filter((choice) => choice.name.toLowerCase().includes(words));
+  });
+  /** The choices on screen: the first few until something is typed, with
+      the one in use kept among them. */
+  let shown = $derived.by(() => {
+    if (query !== "" || most === null || choices.length <= most) return matching;
+    const first = choices.slice(0, most);
+    const using = choices.find((choice) => choice.on);
+    if (using === undefined || first.includes(using)) return first;
+    return [...first.slice(0, most - 1), using];
+  });
+  let left = $derived(choices.length - shown.length);
+  let said = $derived(
+    query === "" ? (left > 0 ? `${left} more` : null) : matching.length === 0 ? `Nothing matches "${query}"` : `Matching "${query}"`,
+  );
+
+  /** Narrows the choices to what is typed, with the keyboard on the first
+      left, or on the menu where none is. */
+  async function narrow(next: string) {
+    query = next;
+    await tick();
+    (items()[0] ?? menu)?.focus();
+  }
 
   function items(): HTMLButtonElement[] {
     return [...(menu?.querySelectorAll<HTMLButtonElement>("[role^='menuitem']") ?? [])];
@@ -109,6 +152,20 @@
     // keyboard is on rather than moving past it unseen.
     const unmarked = pointing && !(all[index]?.matches(":hover") ?? false);
     pointing = false;
+    if (filter && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const typed = e.key.length === 1 && (e.key !== " " || query !== "");
+      if (typed || (e.key === "Backspace" && query !== "")) {
+        e.preventDefault();
+        void narrow(typed ? query + e.key : query.slice(0, -1));
+        return;
+      }
+      if (e.key === "Escape" && query !== "") {
+        e.preventDefault();
+        e.stopPropagation();
+        void narrow("");
+        return;
+      }
+    }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (unmarked && index >= 0) return;
@@ -139,6 +196,30 @@
   }
 </script>
 
+{#snippet entry(choice: Choice, action: boolean)}
+  <button
+    role={action ? "menuitem" : "menuitemradio"}
+    aria-checked={action ? undefined : (choice.on ?? false)}
+    aria-disabled={choice.off ? "true" : undefined}
+    class:on={choice.on}
+    class:off={choice.off}
+    onclick={() => {
+      if (!choice.off) onpick(choice.value);
+    }}
+    data-testid={optionTestid}
+  >
+    <span class="name" class:marked={choice.icon !== undefined || choice.lock}
+      >{#if choice.icon !== undefined}<Icon name={choice.icon} size={13} />{/if}<Plain text={choice.name} />{#if choice.lock}<span
+          class="lock"
+          title="Reads only"
+          data-testid="{optionTestid}-lock"><Icon name="lock" size={11} /></span
+        >{/if}</span
+    >
+    {#if choice.about}<span class="about"><Plain text={choice.about} /></span>{/if}
+    {#if choice.on}<span class="tick"><Icon name="check" size={12} /></span>{/if}
+  </button>
+{/snippet}
+
 <!-- svelte-ignore a11y_interactive_supports_focus -->
 <div
   bind:this={menu}
@@ -153,28 +234,24 @@
   style:right={shift !== null ? "auto" : undefined}
   style:bottom={at === null ? undefined : `${at.bottom}px`}
   role="menu"
+  tabindex="-1"
   aria-label={label}
   {onkeydown}
   data-testid={testid}
 >
   {#if heading !== null}<p class="heading" data-testid="{testid}-heading">{heading}</p>{/if}
-  {#each choices as choice (choice.value)}
-    <button
-      role={actions ? "menuitem" : "menuitemradio"}
-      aria-checked={actions ? undefined : (choice.on ?? false)}
-      aria-disabled={choice.off ? "true" : undefined}
-      class:on={choice.on}
-      class:off={choice.off}
-      onclick={() => {
-        if (!choice.off) onpick(choice.value);
-      }}
-      data-testid={optionTestid}
-    >
-      <span class="name"><Plain text={choice.name} /></span>
-      {#if choice.about}<span class="about"><Plain text={choice.about} /></span>{/if}
-      {#if choice.on}<span class="tick"><Icon name="check" size={12} /></span>{/if}
-    </button>
+  {#each shown as choice (choice.value)}
+    {@render entry(choice, actions)}
   {/each}
+  {#if said !== null}
+    <p class="menu-note" data-testid="{testid}-said">{said}</p>
+  {/if}
+  {#if extra.length > 0}
+    <div class="rule"></div>
+    {#each extra as choice (choice.value)}
+      {@render entry(choice, true)}
+    {/each}
+  {/if}
   {#if note !== null}
     <p class="menu-note">{note}</p>
   {/if}
@@ -265,6 +342,28 @@
 
   .name {
     grid-column: 1;
+  }
+
+  .name.marked {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .lock {
+    display: flex;
+    margin-left: auto;
+    color: var(--ink-3);
+  }
+
+  .rule {
+    height: 1px;
+    margin: 4px -4px;
+    background: var(--divider, var(--rule));
+  }
+
+  .menu:focus {
+    outline: none;
   }
 
   .about {
