@@ -38,14 +38,14 @@ export type Segment =
   | { kind: "work"; parts: (ToolCall | TextPart)[]; key: string }
   | { kind: "thought"; part: TextPart };
 
-/** The last thinking a run ends its say with before the workbench's own
-    calls is drawn in sight, as its answer may be there and nowhere else. */
+/** Thinking the workbench's own calls follow is drawn in sight, as the
+    agent's answer may be there and nowhere else. */
 export function segments(parts: Part[]): Segment[] {
   const out: Segment[] = [];
-  const thought = thoughtAnswer(parts);
+  const thoughts = thoughtAnswers(parts);
   for (const part of parts) {
     if (!drawnPart(part)) continue;
-    if (part === thought) out.push({ kind: "thought", part });
+    if (part.kind === "thinking" && thoughts.has(part)) out.push({ kind: "thought", part });
     else if (part.kind === "text") out.push({ kind: "text", part });
     else if (part.kind === "plan") out.push({ kind: "plan", part });
     else if (part.kind === "question") {
@@ -72,23 +72,32 @@ export function segments(parts: Part[]): Segment[] {
     before them stays the last thing in its run. */
 const UNDRAWN = new Set(["wait", "notify", "note", "notes"]);
 
-/** The last thinking in a run that has something in it, when one of the
-    workbench's own calls comes right after it and the run ends there or
-    goes on in words: what the agent says there is often its answer, put
-    before the call, with at most a closing line after it. Thinking with
-    text right after it, or with more work after the calls, stays folded. */
-export function thoughtAnswer(parts: Part[]): TextPart | null {
+/** The thinking in a run that has something in it, is done, and has one
+    of the workbench's own calls after it, with nothing between them but
+    more of those calls and thinking with nothing in it, whatever the run
+    does next: what the agent says there is often its answer, or where it
+    stands, put before a wait or a note and nowhere else. Thinking with
+    words or other work right after it stays folded. */
+export function thoughtAnswers(parts: Part[]): Set<TextPart> {
+  const out = new Set<TextPart>();
+  let quiet = false;
   for (let at = parts.length - 1; at >= 0; at--) {
     const part = parts[at];
-    if (part.kind !== "thinking" || part.text.trim() === "") continue;
-    if (!part.done) return null;
-    let next = at + 1;
-    while (next < parts.length && !drawnPart(parts[next])) next++;
-    if (next === at + 1) return null;
-    const after = parts[next];
-    return after === undefined || after.kind === "text" ? part : null;
+    if (blank(part)) continue;
+    if (!drawnPart(part)) {
+      quiet = true;
+      continue;
+    }
+    if (quiet && part.kind === "thinking" && part.done) out.add(part);
+    quiet = false;
   }
-  return null;
+  return out;
+}
+
+/** Thinking with nothing in it: a block that carries only its signature,
+    which may be told after the thinking that came next. */
+function blank(part: Part): boolean {
+  return part.kind === "thinking" && part.text.trim() === "";
 }
 
 /** Whether the thread draws a part of a run. */
