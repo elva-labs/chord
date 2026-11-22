@@ -21,7 +21,7 @@ import { playChime } from "$lib/chime";
  */
 
 /** The agents the core knows how to drive. */
-export type AgentId = "claude-code" | "codex";
+export type HarnessId = "claude-code" | "codex";
 
 export interface DetectReport {
   id: string;
@@ -49,7 +49,7 @@ export interface AccountDirs {
 
 /** An agent and the name of one of its models. */
 export interface WorkflowModel {
-  agent: AgentId;
+  agent: HarnessId;
   model: string;
 }
 
@@ -106,7 +106,7 @@ export interface Workflow {
 }
 
 export interface SpawnOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   /** Where to run when that is not the project: a worktree under it. */
   cwd?: string;
@@ -177,7 +177,7 @@ export interface Spawned {
     the events of an id it does not know yet and plays them once it does.
     A message's id is the caller's own, chosen before it sends. */
 export interface IntegratedStartOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   /** Where to run when that is not the project: a worktree under it. */
   cwd?: string;
@@ -782,7 +782,7 @@ export interface IntegratedWentBack {
     id, the project, the folder under it the session ran in, and the
     account's configuration directory. */
 export interface IntegratedHistoryOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   cwd?: string;
   session: string;
@@ -803,7 +803,7 @@ export interface CodexModels {
     is due; without, it answers at once with what it holds. */
 export interface AccountLimitsOptions {
   project: string;
-  agent: AgentId;
+  agent: HarnessId;
   configDir?: string;
   read: boolean;
   /** A session of the account worked since its figures were read, so they
@@ -1448,7 +1448,7 @@ export interface Settings {
   pastSessions: PastSessions;
   /** The agents whose sessions run integrated, drawn by the window; the
       others run in a terminal. Missing reads as none. */
-  integrated?: AgentId[];
+  integrated?: HarnessId[];
   /** How long a project goes unused before it folds under Inactive. */
   inactiveAfter: InactiveAfter;
   /** The user's own themes, by name. A palette may name one. */
@@ -1504,7 +1504,7 @@ export interface Settings {
 
 /** The conversation a session is about to take up again. */
 export interface GoingOnOptions {
-  agent: AgentId;
+  agent: HarnessId;
   project: string;
   cwd?: string;
   session: string;
@@ -2015,20 +2015,20 @@ export interface Core {
       the agent's own. */
   transcripts(
     project: string,
-    agent: AgentId,
+    agent: HarnessId,
     configDir?: string,
   ): Promise<Transcript[]>;
   /** The same for several projects at once, one list each in the order
       given: the agent's directory is read once for all of them. */
   transcriptsMany(
     projects: string[],
-    agent: AgentId,
+    agent: HarnessId,
     configDir?: string,
   ): Promise<Transcript[][]>;
   /** What the agent calls a session now, for agents that keep that in an
       index of their own rather than in the terminal title. */
   sessionTitle(
-    agent: AgentId,
+    agent: HarnessId,
     id: string,
     configDir?: string,
   ): Promise<string | null>;

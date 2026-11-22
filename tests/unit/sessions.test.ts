@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpawnOptions, Transcript, Workflow } from "$lib/core";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { stash } from "$lib/exits";
 import { OUTCOME_ASK, OUTCOME_ASK_TERMINAL } from "$lib/instructions";
 import { resetZoom, zoom, zoomed } from "$lib/zoom.svelte";
@@ -206,7 +206,7 @@ beforeEach(() => {
   cwdAnswer = null;
   cwdAsks = 0;
   givenNames = {};
-  resetAgent();
+  resetHarnesses();
   applyDetect(
     {
       id: "claude-code",

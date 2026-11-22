@@ -1,6 +1,6 @@
-import { core, type AgentId } from "$lib/core";
+import { core, type HarnessId } from "$lib/core";
 import { accounts, dirFor } from "$lib/accounts.svelte";
-import { AGENTS } from "$lib/agent.svelte";
+import { HARNESSES } from "$lib/harness.svelte";
 import { heardLimits, limitsOf } from "$lib/limits.svelte";
 import { hostOf } from "$lib/remote.svelte";
 import { byKey, isLive, sessions, type Session } from "$lib/sessions.svelte";
@@ -43,7 +43,7 @@ export const IDLE_AFTER = 10 * 60_000;
 export interface InUse {
   host: string | null;
   project: string;
-  agent: AgentId;
+  agent: HarnessId;
   account: string | null;
 }
 
@@ -54,7 +54,7 @@ function keyOf(use: InUse): string {
 /** A session's account in use, or none for an agent with no figures, or
     an account no longer in the list, whose directories are not known. */
 function useOf(session: Session): InUse | null {
-  if (!AGENTS.includes(session.agent)) return null;
+  if (!HARNESSES.includes(session.agent)) return null;
   if (session.account !== null && accounts.list[session.account] === undefined) return null;
   return {
     host: hostOf(session.project),

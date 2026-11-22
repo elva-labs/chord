@@ -1,4 +1,4 @@
-import type { AgentId, IntegratedEventBody, IntegratedLimitWindow } from "$lib/core";
+import type { HarnessId, IntegratedEventBody, IntegratedLimitWindow } from "$lib/core";
 
 /**
  * The usage limits of each account, as the agents report them.
@@ -65,7 +65,7 @@ export function heardLimits(host: string | null, account: string | null, report:
 
 /** The last report for an agent under an account on a machine, or null
     before one. */
-export function limitsOf(host: string | null, agent: AgentId, account: string | null): LimitsReport | null {
+export function limitsOf(host: string | null, agent: HarnessId, account: string | null): LimitsReport | null {
   return known[keyOf(host, agent, account)] ?? null;
 }
 

@@ -19,7 +19,7 @@
     workflowChoices,
   } from "$lib/settingChoices";
   import { asksFirst } from "$lib/lastChosen.svelte";
-  import type { AgentId, Workflow } from "$lib/core";
+  import type { HarnessId, Workflow } from "$lib/core";
   import { clock, modelName, tokens } from "$lib/thread";
   import { modelLabel as knownModelLabel } from "$lib/models";
   import {
@@ -146,7 +146,7 @@
     /** The project's name, as the menu says it. */
     project?: string;
     /** The agent the session runs on. */
-    agentId?: AgentId;
+    agentId?: HarnessId;
     /** The name of the agent it runs on under no workflow. */
     alone?: string;
     /** The workflow the session follows, which holds its model; null for

@@ -1,4 +1,4 @@
-import type { AgentId } from "$lib/core";
+import type { HarnessId } from "$lib/core";
 import { catalogName, catalogsOf } from "$lib/modelCatalog.svelte";
 
 /**
@@ -12,25 +12,25 @@ import { catalogName, catalogsOf } from "$lib/modelCatalog.svelte";
  */
 
 export interface ModelOption {
-  agent: AgentId;
+  agent: HarnessId;
   /** What is stored and given to the agent. */
   model: string;
   /** What is shown. */
   label: string;
 }
 
-export const AGENT_LABELS: Record<AgentId, string> = {
+export const HARNESS_LABELS: Record<HarnessId, string> = {
   "claude-code": "Claude",
   codex: "Codex",
 };
 
 /** The agents in the order they are offered. */
-export const AGENT_ORDER: AgentId[] = ["claude-code", "codex"];
+export const HARNESS_ORDER: HarnessId[] = ["claude-code", "codex"];
 
 /** The name that means whatever model Codex runs by default. */
 export const CODEX_DEFAULT = "default";
 
-const MODELS: Record<AgentId, ModelOption[]> = {
+const MODELS: Record<HarnessId, ModelOption[]> = {
   "claude-code": [
     { agent: "claude-code", model: "fable", label: "Fable" },
     { agent: "claude-code", model: "opus", label: "Opus" },
@@ -41,14 +41,14 @@ const MODELS: Record<AgentId, ModelOption[]> = {
 };
 
 /** The names an agent always takes, most capable first. */
-export function modelsOf(agent: AgentId): ModelOption[] {
+export function modelsOf(agent: HarnessId): ModelOption[] {
   return MODELS[agent];
 }
 
 /** What a picker offers for an agent: the names it always takes, then the
     models it listed for any account heard, each once, in its list's order
     and by its list's names. Claude Code's are the names alone. */
-export function offeredModels(agent: AgentId): ModelOption[] {
+export function offeredModels(agent: HarnessId): ModelOption[] {
   const always = MODELS[agent];
   const listed = catalogsOf(agent)
     .filter((listed) => !always.some((option) => option.model === listed.value))
@@ -66,7 +66,7 @@ export function mostCapable(): ModelOption {
     names it, else as the agent's own list names it for the account on the
     machine `host`, null for this one, else as it is written. */
 export function modelLabel(
-  agent: AgentId,
+  agent: HarnessId,
   model: string,
   account: string | null = null,
   host: string | null = null,
@@ -77,8 +77,8 @@ export function modelLabel(
 }
 
 export function sameModel(
-  a: { agent: AgentId; model: string },
-  b: { agent: AgentId; model: string },
+  a: { agent: HarnessId; model: string },
+  b: { agent: HarnessId; model: string },
 ): boolean {
   return a.agent === b.agent && a.model === b.model;
 }
@@ -86,17 +86,17 @@ export function sameModel(
 /** The agents a model can be chosen from: the installed ones, then any a
     workflow already uses so its choice can be shown. When none is found,
     both, so a workflow can still be edited. */
-export function offeredAgents(installed: AgentId[], inUse: AgentId[]): AgentId[] {
-  const wanted = installed.length === 0 ? AGENT_ORDER : installed;
-  return AGENT_ORDER.filter((agent) => wanted.includes(agent) || inUse.includes(agent));
+export function offeredHarnesses(installed: HarnessId[], inUse: HarnessId[]): HarnessId[] {
+  const wanted = installed.length === 0 ? HARNESS_ORDER : installed;
+  return HARNESS_ORDER.filter((agent) => wanted.includes(agent) || inUse.includes(agent));
 }
 
 /** A model as one string, for a control that holds a single value. */
-export function modelKey(model: { agent: AgentId; model: string }): string {
+export function modelKey(model: { agent: HarnessId; model: string }): string {
   return `${model.agent}:${model.model}`;
 }
 
-export function modelFromKey(key: string): { agent: AgentId; model: string } | null {
+export function modelFromKey(key: string): { agent: HarnessId; model: string } | null {
   const at = key.indexOf(":");
   if (at < 0) return null;
   const agent = key.slice(0, at);

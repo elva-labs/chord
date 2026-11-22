@@ -25,8 +25,8 @@ import {
   lastPicked,
   pickAccount,
 } from "$lib/accounts.svelte";
-import { agentLabel, installed, isReady } from "$lib/agent.svelte";
-import type { AgentId } from "$lib/core";
+import { harnessLabel, installed, isReady } from "$lib/harness.svelte";
+import type { HarnessId } from "$lib/core";
 import {
   overrideOf,
   workflowGist,
@@ -90,7 +90,7 @@ export type CommandId = "new" | "newHere" | "newOther" | "open" | "remote" | "go
 export type Step =
   | { kind: "project"; path: string }
   | { kind: "account"; account: string | null }
-  | { kind: "agent"; agent: AgentId }
+  | { kind: "agent"; agent: HarnessId }
   | { kind: "workflow"; workflow: string };
 
 export type StepKind = Step["kind"];
@@ -520,7 +520,7 @@ export function chipOf(step: Step): string {
     case "account":
       return accountLabel(step.account);
     case "agent":
-      return agentLabel(step.agent);
+      return harnessLabel(step.agent);
     case "workflow":
       return step.workflow;
   }
@@ -567,7 +567,7 @@ function runSections(
       items: installed().map((agent): PaletteItem => ({
         kind: "choice",
         id: `agent:${agent}`,
-        label: agentLabel(agent),
+        label: harnessLabel(agent),
         group: ALONE,
         step: { kind: "agent", agent },
         detail: "",
@@ -640,7 +640,7 @@ function readyLine(path: string, steps: Step[]): string {
   const how = steps.find((step) => step.kind === "agent" || step.kind === "workflow");
   const account = steps.find((step) => step.kind === "account");
   return [
-    how === undefined ? agentLabel(defaultAgent(path)) : chipOf(how),
+    how === undefined ? harnessLabel(defaultAgent(path)) : chipOf(how),
     ...(account === undefined ? [] : [chipOf(account)]),
   ].join(" · ");
 }

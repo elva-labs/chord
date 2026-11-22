@@ -1,5 +1,5 @@
 import type {
-  AgentId,
+  HarnessId,
   ReviewStep,
   Settings,
   UnreadWorkflow,
@@ -8,7 +8,7 @@ import type {
   WorkflowModel,
   WorkflowStep,
 } from "$lib/core";
-import { AGENT_ORDER, modelLabel, mostCapable, sameModel } from "$lib/models";
+import { HARNESS_ORDER, modelLabel, mostCapable, sameModel } from "$lib/models";
 import { core } from "$lib/core";
 import { persist, recovering } from "$lib/persist";
 import { startsOnly } from "$lib/workflowInstructions";
@@ -668,11 +668,11 @@ function only(value: Record<string, unknown>, allowed: string[], what: string) {
 function readModel(value: unknown, what: string): WorkflowModel {
   if (!isObject(value)) throw new Error(`${what} is a model: {"agent": ..., "model": ...}.`);
   only(value, ["agent", "model"], what);
-  if (!AGENT_ORDER.includes(value.agent as AgentId)) {
-    throw new Error(`${what} names an agent that is one of ${AGENT_ORDER.join(", ")}.`);
+  if (!HARNESS_ORDER.includes(value.agent as HarnessId)) {
+    throw new Error(`${what} names an agent that is one of ${HARNESS_ORDER.join(", ")}.`);
   }
   if (typeof value.model !== "string") throw new Error(`${what} names its model as text.`);
-  return { agent: value.agent as AgentId, model: value.model.trim() };
+  return { agent: value.agent as HarnessId, model: value.model.trim() };
 }
 
 function readModels(value: unknown, what: string): WorkflowModel[] {

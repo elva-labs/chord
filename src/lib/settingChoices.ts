@@ -1,5 +1,5 @@
 import type { Conversation } from "$lib/conversation.svelte";
-import type { AgentId, Workflow } from "$lib/core";
+import type { HarnessId, Workflow } from "$lib/core";
 import { configure, linkOf } from "$lib/integrated.svelte";
 import { choose as keepChoice } from "$lib/lastChosen.svelte";
 import { modelLabel } from "$lib/models";
@@ -165,7 +165,7 @@ export function choose(
     alone. Each says in a line who directs, works and reviews, or why it
     cannot direct a conversation here. The one the session follows is
     ticked, and kept in the list though the settings have dropped it. */
-export function workflowChoices(agent: AgentId, name: string, following: Workflow | null): Choice[] {
+export function workflowChoices(agent: HarnessId, name: string, following: Workflow | null): Choice[] {
   const list = workflows.list;
   const all =
     following !== null && !list.some((known) => known.name === following.name) ? [following, ...list] : list;

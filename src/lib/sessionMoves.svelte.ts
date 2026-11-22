@@ -8,7 +8,7 @@ import { linkOf, type Link } from "$lib/integrated.svelte";
 import { agentVisible } from "$lib/layout.svelte";
 import { settings } from "$lib/settings.svelte";
 import { kindFor, sessionKinds, type SessionKind } from "$lib/sessionKind.svelte";
-import { agent } from "$lib/agent.svelte";
+import { harnesses } from "$lib/harness.svelte";
 import {
   drafting,
   isLive,
@@ -94,7 +94,7 @@ export function recordMove(key: string, to: SessionKind) {
     the setting once it and the row's agent are known, else by what was
     recorded at the last quit. */
 export function pendingMove(session: Session): SessionKind | null {
-  if (sessionKinds.known && agent.asked.includes(session.agent)) return dueTo(session);
+  if (sessionKinds.known && harnesses.asked.includes(session.agent)) return dueTo(session);
   const to = recorded.get(session.key) ?? null;
   return to !== null && to !== session.kind && !session.ownWay ? to : null;
 }

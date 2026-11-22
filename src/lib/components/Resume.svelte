@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { coversBrowser } from "$lib/browser.svelte";
-  import { agentTag, installed } from "$lib/agent.svelte";
+  import { harnessTag, installed } from "$lib/harness.svelte";
   import { lastSegment } from "$lib/paths";
   import { returnFocus } from "$lib/layout.svelte";
   import { closeResume, offered, pickResume, resume } from "$lib/resume.svelte";
@@ -29,7 +29,7 @@
   let rows = $derived(offered());
   let project = $derived(workspace.open.find((open) => open.path === resume.project));
   let heading = $derived(
-    [rows.length, resume.agent === null ? null : agentTag(resume.agent), rows.length === 1 ? "session" : "sessions", "to resume"]
+    [rows.length, resume.agent === null ? null : harnessTag(resume.agent), rows.length === 1 ? "session" : "sessions", "to resume"]
       .filter((part) => part !== null)
       .join(" "),
   );
@@ -118,7 +118,7 @@
             <span class="label" class:unnamed={!hasName(entry)}>{historyLabel(entry)}</span>
             {#if entry.cwd}<span class="where" title={entry.cwd} data-testid="session-where">{lastSegment(entry.cwd)}</span>{/if}
             {#if entry.account !== null}<span class="where" title="account: {entry.account}" data-testid="resume-account">{entry.account}</span>{/if}
-            {#if mixed}<span class="where" data-testid="resume-agent">{agentTag(entry.agent)}</span>{/if}
+            {#if mixed}<span class="where" data-testid="resume-agent">{harnessTag(entry.agent)}</span>{/if}
             <span class="state">{ago(entry.modified)}</span>
           </button>
         {:else}

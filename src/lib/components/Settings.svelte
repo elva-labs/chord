@@ -46,7 +46,7 @@
     updateSource,
   } from "$lib/plugins.svelte";
   import { lastSegment } from "$lib/paths";
-  import type { AgentId, PluginInfo, PluginSource } from "$lib/core";
+  import type { HarnessId, PluginInfo, PluginSource } from "$lib/core";
   import { hook, overrideOf, reapply, setEverywhere, setOverride } from "$lib/hook.svelte";
   import {
     OWN_LABEL,
@@ -62,7 +62,7 @@
   import { hookedProjects, workspace, projectLabel } from "$lib/workspace.svelte";
   import { PAST_SESSIONS, sessions, setPastSessions } from "$lib/sessions.svelte";
   import { canIntegrate, kindFor, setKind } from "$lib/sessionKind.svelte";
-  import { AGENTS, agentLabel, installed } from "$lib/agent.svelte";
+  import { HARNESSES, harnessLabel, installed } from "$lib/harness.svelte";
   import { INACTIVE_AFTER, projects, setInactiveAfter } from "$lib/projects.svelte";
   import {
     INTERFACE_FONTS,
@@ -306,7 +306,7 @@
   });
 
   /** What new sessions of an agent start on, as its row says it. */
-  function chosenLine(agent: AgentId): string {
+  function chosenLine(agent: HarnessId): string {
     const kept = chosenFor(agent);
     const parts = [
       kept.model === undefined ? null : modelLabel(agent, kept.model),
@@ -600,11 +600,11 @@
           <section data-testid="settings-sessions">
             <h3>Run</h3>
             <div data-testid="session-kinds">
-              {#each installed().length > 0 ? installed() : AGENTS as id (id)}
+              {#each installed().length > 0 ? installed() : HARNESSES as id (id)}
                 <div class="row" data-testid="session-kind" data-agent={id}>
-                  <span class="name">{agentLabel(id)}</span>
+                  <span class="name">{harnessLabel(id)}</span>
                   {#if canIntegrate(id)}
-                    <div class="seg" role="radiogroup" aria-label="Where {agentLabel(id)} sessions run">
+                    <div class="seg" role="radiogroup" aria-label="Where {harnessLabel(id)} sessions run">
                       <button
                         role="radio"
                         aria-checked={kindFor(id) === "integrated"}
@@ -698,15 +698,15 @@
             <h3>New sessions</h3>
             <UnreadEntries field="lastChosen" />
             <div data-testid="chosen-list">
-              {#each installed().length > 0 ? installed() : AGENTS as id (id)}
+              {#each installed().length > 0 ? installed() : HARNESSES as id (id)}
                 <div class="row" data-testid="chosen" data-agent={id}>
-                  <span class="name">Start {agentLabel(id)} on</span>
+                  <span class="name">Start {harnessLabel(id)} on</span>
                   <span class="value" data-testid="chosen-line">{chosenLine(id)}</span>
                   {#if anyChosen(id)}
                     <button
                       class="tool"
                       onclick={() => forgetChosen(id)}
-                      aria-label="Start new {agentLabel(id)} sessions on its own defaults"
+                      aria-label="Start new {harnessLabel(id)} sessions on its own defaults"
                       data-testid="chosen-forget">Use defaults</button
                     >
                   {/if}

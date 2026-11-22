@@ -1,4 +1,4 @@
-import type { AccountDirs, AgentId, Settings } from "$lib/core";
+import type { AccountDirs, HarnessId, Settings } from "$lib/core";
 import { persist } from "$lib/persist";
 
 /**
@@ -168,7 +168,7 @@ export function loadPicked() {
     for the agent's own directory. */
 export function dirFor(
   account: string | null,
-  agent: AgentId,
+  agent: HarnessId,
 ): string | undefined {
   if (account === null) return undefined;
   const dirs = accounts.list[account];

@@ -6,7 +6,7 @@ import { handleOf, launch, listenIntegrated, resetIntegrated } from "$lib/integr
 import { announce, clicked, notify, resetNotify } from "$lib/notify.svelte";
 import { byKey, create, onWaiting, reset as resetSessions, sessions, type Session } from "$lib/sessions.svelte";
 import { resetSettingsTools, settingsAsk, type Ask as SettingsAsk } from "$lib/settingsTools.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetSenders } from "$lib/senders.svelte";
 import { fakeIntegrated, type FakeIntegrated } from "../fakeIntegrated";
@@ -49,7 +49,7 @@ beforeEach(async () => {
   resetConductor();
   resetSettingsTools();
   resetWorkspace();
-  resetAgent();
+  resetHarnesses();
   resetAttention();
   resetNotify();
   resetAskNotices();

@@ -115,7 +115,7 @@ vi.mock("$lib/workspace.svelte", async (original) => {
 });
 import { workspace, reset as resetWorkspace, startSession } from "$lib/workspace.svelte";
 import { resetFolder } from "$lib/orchestratorFolder.svelte";
-import { applyDetect, resetAgent } from "$lib/agent.svelte";
+import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import {
   reset as resetSessions,
   create,
@@ -191,7 +191,7 @@ beforeEach(() => {
     "src/lib.rs",
     "src/main.rs",
   ];
-  resetAgent();
+  resetHarnesses();
   applyDetect(
     {
       id: "claude-code",
@@ -1502,7 +1502,7 @@ describe("SessionsPane", () => {
   it("offers no new session while there is no agent to run", () => {
     workspace.open.push(repo("/repo", "repo"));
     workspace.active = "/repo";
-    resetAgent();
+    resetHarnesses();
     applyDetect(
       { id: "claude-code", path: null, caps: null, fromLoginShell: true },
       true,
