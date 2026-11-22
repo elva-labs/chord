@@ -47,11 +47,20 @@ function briefingAt(words: string): { briefing: string; rest: string } | null {
 const AGENT_HEAD = /^From the workbench, not the user: from this message on, work as the agent "(.*)", as described below\.$/;
 export const AGENT_END = "End of the agent's description.";
 
-/** The note that tells a conversation to work as the agent `title`. */
+/** How each of the workbench's own notes begins. */
+const NOTE_HEAD = "From the workbench, not the user";
+
+/** The note that tells a conversation to work as the agent `title`. The
+    description, which may be a repository's text, holds none of the
+    workbench's own lines: a line that begins as one of its notes does, or
+    that ends one, is left out. */
 export function agentNote(title: string, text: string): string {
   const description = text
     .split("\n")
-    .filter((line) => line !== AGENT_END)
+    .filter((line) => {
+      const bare = line.trim();
+      return !bare.startsWith(NOTE_HEAD) && bare !== AGENT_END && bare !== GOING_ON_END;
+    })
     .join("\n")
     .trim();
   return [
