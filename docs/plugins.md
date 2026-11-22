@@ -5,6 +5,9 @@ section under the file tree with rows and actions, and a view in the
 changes pane. It comes from a git repository, runs on the machine the
 project is on with the user's own privileges, and produces data the app
 draws in its own hand. Nothing a plugin does reaches the window's DOM.
+The app bounds what a plugin's lines can do, not what its process can: a
+plugin that writes the app's own data, as anything running as the user
+can, could forge which sessions are its own.
 
 ## Where plugins come from
 

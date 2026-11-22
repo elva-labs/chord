@@ -171,12 +171,13 @@ function namedBy(row: Session, session: string): boolean {
   return row.id !== null && (row.id === session || wentOnFrom(session) === row.id);
 }
 
-/** The row of the session a send names: the one this window holds as made
-    by the plugin's start the send is under, the window's own record of it
-    restored with the row after a reload, and only while that row runs
-    under the id the send names. The core's record of which ids are a
-    plugin's is a file on disk, so it is not enough on its own: a row with
-    no plugin start of its own, or another start's, is never sent to. */
+/** The row of the session a send names: only a row this window bound to
+    the send's own start when the user said yes to it, or restored with
+    that binding after a reload, and only while that row runs under the id
+    the send names. The core's record of which ids are a plugin's is not
+    enough on its own: a row with no plugin start of its own, or another
+    start's, is never sent to. Both records are the user's data on disk,
+    which a plugin running as the user could write. */
 function rowFor(event: PluginSendEvent): Session | null {
   const key = rowOfRequest(event.source, event.plugin, event.started);
   const row = key === null ? null : byKey(key);
