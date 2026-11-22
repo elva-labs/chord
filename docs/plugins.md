@@ -536,13 +536,15 @@ takes it away, and so does the plugin stopping or the session ending.
 
 What the user does in a plugin goes to it with an id: an action, as its
 `id`, and a message from the plugin's page that came of a click or a key
-in the page, as its `id` too. A message the page sent on its own carries
-no id. For 30 seconds after it was sent, the plugin may answer that id
-once in each of three ways: open one web address, ask to start one
-session, and send one line to a session it started. A line that names no
-such id, one sent to another plugin, one over 30 seconds old, or one of a
-kind that id has already had, is dropped, and the plugin hears nothing of
-it. An id's right goes when the plugin stops, as well.
+in the page, as its `id` too. Only the first message of a click or a key
+carries one, so however many the page sends, one click is one id. A
+message the page sent on its own carries no id. For 30 seconds after it
+was sent, the plugin may answer that id once in each of three ways: open
+one web address, ask to start one session, and send one line to a
+session it started. A line that names no such id, one sent to another
+plugin, one over 30 seconds old, or one of a kind that id has already
+had, is dropped, and the plugin hears nothing of it. An id's right goes
+when the plugin stops, as well.
 
 ### Web addresses
 
@@ -577,16 +579,20 @@ for its result.
 Nothing starts on this line alone. The app asks the user, every time, on
 the same card a session's request to start one is put to them: it names
 the plugin, shows the prompt whole, and offers this one session or none,
-never an answer that stands for the next. The user picks the agent and the
-model it runs on there, the ones last chosen to begin with. On a yes the
-session starts in the project, in a worktree of its own when `worktree`
-is true, with the prompt as its first message, and comes on screen. A
-conversation shows that message as the plugin's. On a no nothing starts, and the plugin is told nothing.
+never an answer that stands for the next. A plugin has one card up or
+waiting at a time: a start it asks for meanwhile is a no, and its cards
+are taken down as no when it is turned off or removed. The user picks the
+agent and the model it runs on there, the ones last chosen to begin with.
+On a yes the session starts in the project, in a worktree of its own when
+`worktree` is true, with the prompt as its first message. It appears
+under its project, and the window stays on what the user was looking at.
+A conversation shows that message as the plugin's. On a no nothing
+starts, and the plugin is told nothing.
 
 - `project` is a project open in the app, and not the orchestrator's folder.
-- `prompt` is at most 8 KiB. One that begins with `/` or `!`, once the
-  characters that draw nothing are passed over, is a command, not words,
-  and the app asks nothing for it.
+- `prompt` is at most 8 KiB. One that begins with `/`, whatever the
+  command, or with `!`, once the characters that draw nothing are passed
+  over, is a command, not words, and the app asks nothing for it.
 - `name` is the session's name until its agent gives it one, on one line
   and cut to 60 characters. A name another session has, or one that reads
   as the user's, is passed over.
@@ -596,8 +602,10 @@ conversation shows that message as the plugin's. On a no nothing starts, and the
 
 The plugin learns its session started from the session lines: the one
 that carries its `ref`. The session is the plugin's from then on, under
-every id it runs by, until the plugin is turned off or the app quits. A
-plugin process that is started again after it died keeps it.
+every id it runs by: across a quit of the app, the plugin turned off and
+on, and its process started again after it died. It stops being the
+plugin's when the plugin is removed. A plugin holds 300 sessions at most
+this way, and a start past that lets go of the one that ran longest ago.
 
 ### Sending a line
 
@@ -612,12 +620,15 @@ plugin process that is started again after it died keeps it.
 
 `session` names a session the plugin started, by any id the session lines
 gave it. A session the user started, or another session or plugin did, is
-sent nothing, and the plugin hears nothing back. `text` is at most 4 KiB.
+sent nothing, and the plugin hears `gone`. `text` is at most 4 KiB.
 
 The app puts the text to the session as the plugin's, shown as its words,
 and brings the session on screen. A session put away to rest is resumed
-with it. An integrated session is sent the text whole; a terminal is typed
-it as one line. The plugin hears what came of it:
+with it. An integrated session is sent the text whole. A terminal is typed
+it as one line, and only while it is idle: at rest after a turn, asking
+nothing, and with nothing of the user's half written on its line. If that
+ends while the line is being typed, the line stops short of its Enter. The
+plugin hears what came of it:
 
 ```json
 {
@@ -629,12 +640,13 @@ it as one line. The plugin hears what came of it:
 ```
 
 - `delivered`: the session has the line, or was resumed with it.
-- `gone`: the session will not come back. It ended, its row was closed, or
-  the worktree it ran in is gone.
-- `refused`: the line was not put to the session. It begins with `/`, or
-  for a terminal with `!`; the terminal is asking for a permission the line
-  could answer; or the session is starting, being reopened, or could not
-  be written to. The same line may be sent again later, in answer to
+- `gone`: the session will not come back, or is not the plugin's. It
+  ended, its row was closed, the worktree it ran in is gone, or the plugin
+  did not start it.
+- `refused`: the line was not put to the session. It begins with `/` or
+  `!`; the terminal is not idle, or stopped being idle before the line's
+  Enter; or the session is starting, being reopened, or could not be
+  written to. The same line may be sent again later, in answer to
   something else the user does.
 
 ## Tools
@@ -684,10 +696,10 @@ but the frame has no origin, no storage and no way at the window or the
 machine. A bridge passes a fixed set of messages between the frame and the
 plugin, through the app: data from the plugin to the page, and from the
 page a request to open a file at lines, to put text in the agent's prompt,
-or a message for the plugin. The page reaches nothing else. A message the
-page sends while the user is clicking or typing in it reaches the plugin
-with an id, so a button on the page can open an address, start a session
-or send one a line, as an action can.
+or a message for the plugin. The page reaches nothing else. The first
+message the page sends of a click or a key in it reaches the plugin with
+an id, so a button on the page can open an address, start a session or
+send one a line, as an action can.
 
 The view declares how much room it wants. Wide is the viewer as a file
 opens it, beside the tree; full is the whole changes pane, the tree folded
