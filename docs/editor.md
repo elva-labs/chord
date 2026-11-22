@@ -5,7 +5,7 @@ window and moves the agent to the right pane, where it keeps running. The
 switch at the end of the rightmost header flips between agent mode and
 editor mode, and so does <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>E</kbd> or the
 command palette. The mode belongs to the window and is remembered across a
-restart. [Layout](layout.md#editor-mode) has the shape and what gives way
+restart. [Layout](reference/layout.md#editor-mode) has the shape and what gives way
 when the window is narrow; [focus](focus-model.md#the-editor) has the
 keyboard.
 
@@ -36,7 +36,7 @@ starts an [untitled file](#untitled-files).
 
 A plain editor: line numbers, the line the cursor is on, undo, find in the
 file, and code in colours by what each word is, and nothing that completes
-or checks. It is drawn in the terminal's [font](settings.md#font) and the
+or checks. It is drawn in the terminal's [font](reference/settings.md#font) and the
 look's colours, at a size of its own that the zoom shortcuts step while it has
 the keyboard, kept in the window's storage.
 
@@ -67,14 +67,14 @@ The colours are the terminal's: keywords in its magenta, strings in green,
 numbers and other literals in yellow, functions in blue, types in cyan,
 tags in red and comments in the faint ink. In Markdown the marks around
 the prose, such as `#`, `-`, `>`, `*` and `~~`, are faint too. They follow the appearance, the
-palette and a [theme](settings.md#colour) of your own, which colours code
+palette and a [theme](reference/settings.md#colour) of your own, which colours code
 through the terminal colours it sets. Indigo, amber and rose give the
 terminal's cyan their accent, so on them types and Markdown headings keep
 the default teal, apart from the other colours. Each kind of word has a custom
 property on the root, `--code-keyword`, `--code-string`,
 `--code-literal`, `--code-comment`, `--code-function`, `--code-type`,
 `--code-tag`, `--code-attribute`, `--code-heading`, `--code-link` and
-`--code-invalid`, so a [stylesheet of your own](settings.md#custom-styles)
+`--code-invalid`, so a [stylesheet of your own](reference/settings.md#custom-styles)
 can restate any one of them. The viewer shows a file's text plain.
 
 Find opens a bar over the editor: the text, how many matches it has,

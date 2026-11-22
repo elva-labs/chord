@@ -90,7 +90,7 @@ read off its output.
 The changes pane hears the moment a tool finishes, and hears what the agent
 did rather than inferring it from the filesystem. A session's row follows
 the harness's own word for working, waiting and asking for permission, in
-place of the reading off its output. [Sessions](sessions.md) describes both.
+place of the reading off its output. [Sessions](reference/sessions.md#what-a-row-says) describes both.
 
 The session log holds a line per event and is trimmed once it grows past
 half a megabyte; nothing in it is needed after the window has seen it.
@@ -189,7 +189,7 @@ shell command themselves by sending `!` and the command, whose output then
 comes to the agent as context, and that a command the agent wants the
 user to run, such as a login, is written as `! ` and the command in a code
 span or on a code block line of its own. A conversation offers such a
-line a run mark, as [sessions](sessions.md#sessions-in-chord) describes;
+line a run mark, as [sessions](reference/sessions.md#sessions-in-chord) describes;
 in a terminal, Claude Code's own `!` runs it.
 
 ![The agent answers where the retry delay is set and opens the file at the lines, with its note above them; the user selects three other lines, asks about them, and the agent reads the selection back before explaining.](tools-show.gif)
@@ -315,7 +315,7 @@ Two more are for the agent to hand something over rather than show it.
 prompt and not run, from the directory the agent works in: a dev server or
 a watch the user asked for, which they start with Enter and keep. The
 terminal belongs to the agent's session and goes with it; see
-[the terminal panel](layout.md#the-terminal-panel). The agent is told to
+[the terminal panel](reference/layout.md#the-terminal-panel). The agent is told to
 run its own commands itself.
 
 ![The agent types npm run dev into a new terminal; the user presses Enter and the server comes up under the panes.](tools-terminal.gif)
@@ -371,7 +371,7 @@ to keep a note whenever something settles and an item for whatever is
 owed and not done in the turn, closed by its number once done or dropped,
 in the same step as another call, to read
 the open items before saying where things stand, and the matching notes
-before asking the user about something it has no context for. [Notes](sessions.md#notes)
+before asking the user about something it has no context for. [Notes](reference/sessions.md#notes)
 says what they are for and where they are kept.
 
 Ten more read and drive a tab of the embedded browser, within the session's
@@ -384,7 +384,7 @@ script in its page. See
 Four more read and change the workbench's own settings, the appearance,
 look, palette and its background, fonts, shortcuts and workflows, save a theme of the user's own and write
 the user's own stylesheet, for when the user asks an agent for that: every
-change is put to the user first. See [settings](settings.md).
+change is put to the user first. See [settings](reference/settings.md#an-agent-changing-them).
 
 Seven more are the orchestrator's, for a session that starts and steers
 other sessions: what they do and what the user is asked is in

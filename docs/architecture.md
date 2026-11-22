@@ -69,6 +69,6 @@ layout, which sessions were the app's own, which were open, the names it
 knew sessions by, what each session presented, and which words to the user
 were taken, all in the webview's local storage, keyed by the real project path, and a copy
 of the settings to paint its first frame with.
-[Settings](settings.md) says how the file and that copy relate.
+[Settings](reference/settings.md#where-they-are-kept) says how the file and that copy relate.
 Hooks the user turns on are written into the project's own harness
 configuration, and only there.
