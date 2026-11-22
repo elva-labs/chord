@@ -521,6 +521,14 @@ const REF_MOST: usize = 256;
 /// ran, so the record stays small however many it asks for.
 const OWNED_MOST: usize = 300;
 
+/// The most agent's ids one start is kept owning: the ones its session
+/// last ran under.
+const IDS_MOST: usize = 32;
+
+/// The most the record of plugins' sessions may hold on disk, in bytes. A
+/// record over it is read as none.
+const OWNED_BYTES: u64 = 1024 * 1024;
+
 /// How long a plugin's line waits for the window to say what came of it,
 /// which a window loaded afresh meanwhile never does.
 const SENDING_MOST: Duration = Duration::from_secs(60);
@@ -690,9 +698,9 @@ struct Inner {
     /// `OPEN_WINDOW` or until the plugin goes.
     acts: Mutex<HashMap<String, Act>>,
     /// The sessions plugins asked to start, by request: on disk once a
-    /// session runs under one, until the plugin's source is removed, the
-    /// window says its start began none, or the plugin has `OWNED_MOST`
-    /// newer.
+    /// session runs under one, until the plugin's source is removed or
+    /// added afresh, the window says its start began none, or the plugin
+    /// has `OWNED_MOST` newer that began one.
     owned: Mutex<HashMap<String, Owned>>,
     /// The lines plugins sent to sessions, by request, until the window
     /// says what came of each.
@@ -1073,40 +1081,73 @@ fn write_owned(root: &Path, owned: &HashMap<String, Owned>) {
     }
 }
 
-/// Lets a plugin own one more start and no more than `OWNED_MOST`: its
-/// starts that ran longest ago go. Whether any went.
-fn make_room(owned: &mut HashMap<String, Owned>, plugin: &Key) -> bool {
-    let mut its: Vec<(u64, String)> = owned
+/// Leaves room for `keep` among a plugin's `OWNED_MOST` starts: of its
+/// others, the ones that ran longest ago go. Whether any went.
+fn make_room(owned: &mut HashMap<String, Owned>, plugin: &Key, keep: &str) -> bool {
+    let mut others: Vec<(u64, String)> = owned
         .iter()
-        .filter(|(_, owned)| &owned.plugin == plugin)
+        .filter(|(request, owned)| &owned.plugin == plugin && request.as_str() != keep)
         .map(|(request, owned)| (owned.at, request.clone()))
         .collect();
-    if its.len() < OWNED_MOST {
+    if others.len() < OWNED_MOST {
         return false;
     }
-    its.sort();
-    for (_, old) in its.iter().take(its.len() + 1 - OWNED_MOST) {
+    others.sort();
+    for (_, old) in &others[..others.len() + 1 - OWNED_MOST] {
         owned.remove(old);
     }
     true
 }
 
-/// The sessions plugins started, as kept, of the sources still installed.
-/// A record that does not read is none.
+/// Keeps the last `IDS_MOST` of a start's ids.
+fn keep_last(ids: &mut Vec<String>) {
+    let over = ids.len().saturating_sub(IDS_MOST);
+    ids.drain(..over);
+}
+
+/// The sessions plugins started, as kept, of the sources still installed:
+/// each plugin's `OWNED_MOST` that ran last, each with its last `IDS_MOST`
+/// ids. A start whose ref is over `REF_MOST` or whose project is not a
+/// full path is left out. A record that does not read, or holds more than
+/// `OWNED_BYTES`, is none.
 fn read_owned(root: &Path, stored: &Stored) -> HashMap<String, Owned> {
-    let read: HashMap<String, Owned> = std::fs::read_to_string(root.join(OWNED_FILE))
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default();
-    read.into_iter()
-        .filter(|(_, owned)| {
-            !owned.ids.is_empty()
-                && stored
-                    .sources
-                    .iter()
-                    .any(|source| source.id == owned.plugin.0)
-        })
-        .collect()
+    use std::io::Read;
+    let mut text = String::new();
+    let size = std::fs::File::open(root.join(OWNED_FILE))
+        .and_then(|file| file.take(OWNED_BYTES + 1).read_to_string(&mut text));
+    let mut read: HashMap<String, Owned> = match size {
+        Ok(size) if size as u64 <= OWNED_BYTES => serde_json::from_str(&text).unwrap_or_default(),
+        _ => HashMap::new(),
+    };
+    read.retain(|_, owned| {
+        !owned.ids.is_empty()
+            && owned
+                .reference
+                .as_ref()
+                .is_none_or(|reference| reference.len() <= REF_MOST)
+            && Path::new(&owned.project).is_absolute()
+            && stored
+                .sources
+                .iter()
+                .any(|source| source.id == owned.plugin.0)
+    });
+    let mut by_plugin: HashMap<Key, Vec<(u64, String)>> = HashMap::new();
+    for (request, owned) in &mut read {
+        keep_last(&mut owned.ids);
+        by_plugin
+            .entry(owned.plugin.clone())
+            .or_default()
+            .push((owned.at, request.clone()));
+    }
+    for mut its in by_plugin.into_values() {
+        if its.len() > OWNED_MOST {
+            its.sort();
+            for (_, old) in &its[..its.len() - OWNED_MOST] {
+                read.remove(old);
+            }
+        }
+    }
+    read
 }
 
 impl Plugins {
@@ -1298,9 +1339,11 @@ impl Plugins {
         self.inner.sent(request, outcome);
     }
 
-    /// Whether a plugin's start began a session: one that did not, the
-    /// user's no, a start the window refused or one that failed, is the
-    /// plugin's no longer. The plugin hears nothing of it.
+    /// Whether a plugin's start began a session. One that did is kept
+    /// among the plugin's `OWNED_MOST`, past which the start that ran
+    /// longest ago goes. One that did not, the user's no, a start the
+    /// window refused or one that failed, is the plugin's no longer. The
+    /// plugin hears nothing of it.
     pub fn start_settled(&self, request: &str, started: bool) {
         self.inner.start_settled(request, started);
     }
@@ -2081,6 +2124,15 @@ impl Inner {
         stored.sources.push(source.clone());
         self.save(&stored)?;
         drop(stored);
+        // A source new under this id owns nothing one before it started.
+        {
+            let mut owned = self.owned.lock().expect("plugins lock");
+            let had = owned.len();
+            owned.retain(|_, owned| owned.plugin.0 != id);
+            if owned.len() != had {
+                write_owned(&self.root, &owned);
+            }
+        }
         Ok(self.describe(&source))
     }
 
@@ -3206,22 +3258,16 @@ impl Inner {
             return;
         }
         let request = uuid::Uuid::new_v4().to_string();
-        {
-            let mut owned = self.owned.lock().expect("plugins lock");
-            if make_room(&mut owned, &key) {
-                write_owned(&self.root, &owned);
-            }
-            owned.insert(
-                request.clone(),
-                Owned {
-                    plugin: key,
-                    project: project.to_string(),
-                    reference,
-                    ids: Vec::new(),
-                    at: epoch_ms(),
-                },
-            );
-        }
+        self.owned.lock().expect("plugins lock").insert(
+            request.clone(),
+            Owned {
+                plugin: key,
+                project: project.to_string(),
+                reference,
+                ids: Vec::new(),
+                at: epoch_ms(),
+            },
+        );
         crate::events::emit(
             &self.sink,
             PLUGIN_START,
@@ -3335,12 +3381,17 @@ impl Inner {
         );
     }
 
+    /// A start that began a session takes its place among its plugin's
+    /// `OWNED_MOST`; one that began none is the plugin's no longer.
     fn start_settled(&self, request: &str, started: bool) {
-        if started {
-            return;
-        }
         let mut owned = self.owned.lock().expect("plugins lock");
-        if owned.remove(request).is_some() {
+        let changed = if started {
+            let plugin = owned.get(request).map(|entry| entry.plugin.clone());
+            plugin.is_some_and(|plugin| make_room(&mut owned, &plugin, request))
+        } else {
+            owned.remove(request).is_some()
+        };
+        if changed {
             write_owned(&self.root, &owned);
         }
     }
@@ -3808,9 +3859,9 @@ impl Inner {
         let Some(entry) = owned.get_mut(request) else {
             return;
         };
-        if !entry.ids.iter().any(|id| id == session) {
-            entry.ids.push(session.to_string());
-        }
+        entry.ids.retain(|id| id != session);
+        entry.ids.push(session.to_string());
+        keep_last(&mut entry.ids);
         entry.at = epoch_ms();
         write_owned(&self.root, &owned);
     }
@@ -6428,12 +6479,246 @@ run = ["sh", "main.sh"]
             .map(|at| (format!("r-{at}"), entry(&board, at + 10)))
             .collect();
         owned.insert("theirs".into(), entry(&other, 0));
-        assert!(make_room(&mut owned, &board));
-        assert_eq!(owned.len(), OWNED_MOST);
+        // The start that began a session stays, however long ago it was
+        // asked.
+        owned.insert("new".into(), entry(&board, 0));
+        assert!(make_room(&mut owned, &board, "new"));
+        assert_eq!(owned.len(), OWNED_MOST + 1);
+        assert!(owned.contains_key("new"));
         assert!(!owned.contains_key("r-0"), "the oldest went");
         assert!(owned.contains_key("r-1"));
         assert!(owned.contains_key("theirs"), "another plugin's stayed");
-        assert!(!make_room(&mut owned, &other));
+        assert!(!make_room(&mut owned, &board, "new"));
+        assert!(!make_room(&mut owned, &other, "theirs"));
+
+        let mut ids: Vec<String> = (0..IDS_MOST + 3).map(|n| format!("s-{n}")).collect();
+        keep_last(&mut ids);
+        assert_eq!(ids.len(), IDS_MOST);
+        assert_eq!(ids[0], "s-3");
+    }
+
+    #[test]
+    fn a_plugin_makes_room_only_for_a_start_that_began_a_session() {
+        let home = Scratch::absent("plugins-room-home");
+        let recorder = Arc::new(Recorder::default());
+        let plugins = plugins_at(&home, recorder.clone());
+        let project = "/projects/board".to_string();
+        plugins.set_projects(vec![project.clone()]);
+        let board: Key = ("source".into(), "board".into());
+        plugins
+            .inner
+            .owned
+            .lock()
+            .unwrap()
+            .extend((0..OWNED_MOST as u64).map(|at| {
+                let entry = Owned {
+                    plugin: board.clone(),
+                    project: project.clone(),
+                    reference: None,
+                    ids: vec![format!("s-{at}")],
+                    at: at + 1,
+                };
+                (format!("r-{at}"), entry)
+            }));
+        let ask = |act: &str| -> String {
+            plugins
+                .inner
+                .acts
+                .lock()
+                .unwrap()
+                .insert(act.to_string(), Act::new(board.clone()));
+            plugins.inner.start_asked(
+                "source",
+                "board",
+                &serde_json::json!({"answers": act, "project": project, "prompt": "Review it."}),
+            );
+            recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .rev()
+                .find(|(name, _)| name == PLUGIN_START)
+                .and_then(|(_, payload)| payload["request"].as_str().map(str::to_string))
+                .expect("a start was asked")
+        };
+        let owned = || plugins.inner.owned.lock().unwrap().clone();
+
+        let refused = ask("a-1");
+        assert_eq!(owned().len(), OWNED_MOST + 1);
+        assert!(owned().contains_key("r-0"), "a start asked makes no room");
+        plugins.start_settled(&refused, false);
+        assert!(!owned().contains_key(&refused));
+        assert_eq!(owned().len(), OWNED_MOST);
+        assert!(owned().contains_key("r-0"), "a start refused makes none");
+
+        let started = ask("a-2");
+        plugins.start_settled(&started, true);
+        let now = owned();
+        assert_eq!(now.len(), OWNED_MOST);
+        assert!(now.contains_key(&started));
+        assert!(
+            !now.contains_key("r-0"),
+            "a start begun takes the oldest's place"
+        );
+        assert!(now.contains_key("r-1"));
+
+        // A start keeps the ids it last ran under and no more.
+        for n in 0..IDS_MOST + 2 {
+            plugins.inner.own(&started, &format!("t-{n}"));
+        }
+        plugins.inner.own(&started, "t-2");
+        let ids = owned()[&started].ids.clone();
+        assert_eq!(ids.len(), IDS_MOST);
+        assert_eq!(ids.first().map(String::as_str), Some("t-3"));
+        assert_eq!(ids.last().map(String::as_str), Some("t-2"));
+    }
+
+    #[test]
+    fn a_plugin_owns_after_a_restart_only_what_its_record_may_hold() {
+        let home = Scratch::absent("plugins-record-home");
+        let dir = source_with(GOOD, "record");
+        let here = dunce::canonicalize(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        let key: Key = (source_id(&here), "github".into());
+        let entry = |at: u64| Owned {
+            plugin: key.clone(),
+            project: here.clone(),
+            reference: None,
+            ids: vec![format!("s-{at}")],
+            at,
+        };
+
+        // What a source under the same id started, gone without this core
+        // seeing it go, is not the new source's.
+        let plugins = plugins_at(&home, Arc::new(Recorder::default()));
+        plugins
+            .inner
+            .owned
+            .lock()
+            .unwrap()
+            .insert("before".into(), entry(1));
+        let added = plugins.add(&here, None).unwrap();
+        assert_eq!(added.id, key.0);
+        assert!(plugins.inner.owned.lock().unwrap().is_empty());
+        drop(plugins);
+
+        let root = crate::home::dir(&home).join("plugins");
+        let keep = |owned: &HashMap<String, Owned>, padding: usize| {
+            let text = serde_json::to_string(owned).unwrap();
+            std::fs::write(
+                root.join(OWNED_FILE),
+                format!("{}{text}", " ".repeat(padding)),
+            )
+            .unwrap();
+        };
+        let read = || {
+            let plugins = plugins_at(&home, Arc::new(Recorder::default()));
+            let owned = plugins.inner.owned.lock().unwrap().clone();
+            owned
+        };
+
+        let many: HashMap<String, Owned> = (0..=OWNED_MOST as u64)
+            .map(|at| (format!("r-{at}"), entry(at)))
+            .collect();
+        keep(&many, 0);
+        let owned = read();
+        assert_eq!(owned.len(), OWNED_MOST, "a plugin reads as its newest");
+        assert!(!owned.contains_key("r-0"));
+
+        keep(&many, OWNED_BYTES as usize);
+        assert!(read().is_empty(), "a record over its size reads as none");
+
+        let odd: HashMap<String, Owned> = HashMap::from([
+            ("fine".to_string(), entry(1)),
+            (
+                "long ref".to_string(),
+                Owned {
+                    reference: Some("r".repeat(REF_MOST + 1)),
+                    ..entry(2)
+                },
+            ),
+            (
+                "relative".to_string(),
+                Owned {
+                    project: "work/board".into(),
+                    ..entry(3)
+                },
+            ),
+            (
+                "not installed".to_string(),
+                Owned {
+                    plugin: ("gone".into(), "github".into()),
+                    ..entry(4)
+                },
+            ),
+            (
+                "many ids".to_string(),
+                Owned {
+                    ids: (0..IDS_MOST + 5).map(|n| format!("s-{n}")).collect(),
+                    ..entry(5)
+                },
+            ),
+        ]);
+        keep(&odd, 0);
+        let owned = read();
+        let mut kept: Vec<&str> = owned.keys().map(String::as_str).collect();
+        kept.sort_unstable();
+        assert_eq!(kept, ["fine", "many ids"]);
+        assert_eq!(owned["many ids"].ids.len(), IDS_MOST);
+        assert_eq!(owned["many ids"].ids[0], "s-5");
+    }
+
+    #[test]
+    fn a_line_on_its_way_is_forgotten_after_60_seconds() {
+        let home = Scratch::absent("plugins-sending-home");
+        let plugins = plugins_at(&home, Arc::new(Recorder::default()));
+        let board: Key = ("source".into(), "board".into());
+        plugins.inner.owned.lock().unwrap().insert(
+            "start".into(),
+            Owned {
+                plugin: board.clone(),
+                project: "/projects/board".into(),
+                reference: None,
+                ids: vec!["s-1".into()],
+                at: 1,
+            },
+        );
+        let now = Instant::now();
+        let waiting = |sent: Instant| Sending {
+            plugin: board.clone(),
+            answers: "a-0".into(),
+            session: "s-1".into(),
+            sent,
+        };
+        {
+            let mut sending = plugins.inner.sending.lock().unwrap();
+            let then = now
+                .checked_sub(SENDING_MOST)
+                .expect("the clock has run a minute");
+            sending.insert("stale".into(), waiting(then));
+            sending.insert("fresh".into(), waiting(now));
+        }
+        plugins
+            .inner
+            .acts
+            .lock()
+            .unwrap()
+            .insert("a-1".into(), Act::new(board.clone()));
+        plugins.inner.send_asked(
+            "source",
+            "board",
+            &serde_json::json!({"answers": "a-1", "session": "s-1", "text": "Go on."}),
+        );
+        let sending = plugins.inner.sending.lock().unwrap();
+        assert!(
+            !sending.contains_key("stale"),
+            "a minute on, a line waits no more"
+        );
+        assert!(sending.contains_key("fresh"));
+        assert_eq!(sending.len(), 2, "the line just sent waits");
     }
 
     #[test]
