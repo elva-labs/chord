@@ -715,6 +715,11 @@ struct Inner {
     /// of one plugin, a restart after a crash and the user's own, cannot
     /// both find nothing there and both go ahead.
     starting: Mutex<()>,
+    /// Held for the whole of a publish, from the look at what is running
+    /// to the files written and the news told, so two at once, the
+    /// greetings of two plugins above all, cannot both find the hooks'
+    /// file behind and both say so, nor leave the older look in place.
+    publishing: Mutex<()>,
     /// The projects open on this machine, as the window last said.
     projects: Mutex<Vec<String>>,
     /// The agents' ptys, by pty id, so a session that ends is named by the
@@ -1184,6 +1189,7 @@ impl Plugins {
                 marks: Mutex::new(HashMap::new()),
                 building: Mutex::new(HashMap::new()),
                 starting: Mutex::new(()),
+                publishing: Mutex::new(()),
                 projects: Mutex::new(Vec::new()),
                 ptys: Mutex::new(HashMap::new()),
                 told: Mutex::new(VecDeque::new()),
@@ -2870,6 +2876,7 @@ impl Inner {
     /// sees one list or the other and never half of one. Says too whether
     /// an enabled plugin listens for commands, for the hooks.
     fn publish(&self) {
+        let _publishing = self.publishing.lock().expect("plugins lock");
         let hears = self
             .running
             .lock()
@@ -7101,6 +7108,25 @@ run = ["sh", "main.sh"]
         assert!(crate::hook::hears_commands(&home));
         // Told once, when the first comes to listen.
         assert_eq!(hears(), vec![serde_json::json!(true)]);
+        // Told once however many look at once, as plugins greeting and
+        // going on threads of their own do: here with the file behind.
+        std::fs::remove_file(crate::hook::hears_commands_path(&home)).unwrap();
+        let together = Arc::new(std::sync::Barrier::new(8));
+        let looks: Vec<_> = (0..8)
+            .map(|_| {
+                let inner = Arc::clone(&plugins.inner);
+                let together = Arc::clone(&together);
+                std::thread::spawn(move || {
+                    together.wait();
+                    inner.publish();
+                })
+            })
+            .collect();
+        for look in looks {
+            look.join().unwrap();
+        }
+        assert!(crate::hook::hears_commands(&home));
+        assert_eq!(hears(), vec![serde_json::json!(true); 2]);
 
         let address = "https://github.com/o/r/pull/7\n";
         let long = format!("{}{address}", "é".repeat(COMMAND_OUTPUT));
@@ -7201,7 +7227,11 @@ run = ["sh", "main.sh"]
         assert!(!crate::hook::hears_commands(&home));
         assert_eq!(
             hears(),
-            vec![serde_json::json!(true), serde_json::json!(false)]
+            vec![
+                serde_json::json!(true),
+                serde_json::json!(true),
+                serde_json::json!(false)
+            ]
         );
         let told = commands("github");
         assert_eq!(told.len(), 3, "{told:?}");
