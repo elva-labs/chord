@@ -987,13 +987,16 @@ the first message the list starts with No agent and ends with New agent,
 which opens the settings on a new agent's form. After it, the heading says
 the agent works from the next message, and only the agents are offered,
 since what the conversation was told stays in it. Picking an agent sets
-its model where that is on the session's harness, its effort, lowered to
-the nearest the model takes, and whether the session reads only. Its
-description goes ahead of the next message once, behind a fold that reads
-As and the agent's title, and the run that answers is headed by the title.
-While the session reads only, the mode chip says Reads only with a lock
-ahead of the mode, which still decides what reading only leaves to it, and
-picking a mode there ends it. An agent and a workflow are not both
+its model where that is on the session's harness, its effort where it names
+no model or one on that harness, lowered to the nearest the model takes, and
+whether the session reads only. The effort chip's title then says the agent
+set it. Its description goes ahead of the next message once, behind a fold
+that reads As, the agent's title and what it set, and the run that answers
+is headed by the title. While the session reads only, the mode chip says
+Reads only with a lock ahead of the mode, which still decides what reading
+only leaves to it, and picking a mode there ends it. The agent each session
+works as is kept for the 500 sessions last given one; a session past that
+works as none, and reads only no more, once the app starts again. An agent and a workflow are not both
 chosen: either one takes the other off the plus. The chip waits while the
 session is not ready.
 
