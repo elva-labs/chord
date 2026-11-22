@@ -228,9 +228,19 @@ pub struct InstalledAgent {
 const MOST_INSTALLED: usize = 64;
 const LARGEST_FILE: u64 = 256 * 1024;
 
-/// The tools that change files. A Claude Code agent whose tools leave all
-/// of them out reads only.
-const CHANGING_TOOLS: &[&str] = &["Edit", "Write", "MultiEdit", "NotebookEdit"];
+/// The tools that only read. A Claude Code agent reads only when it names
+/// its tools and each is one of these; any other tool, Bash and a server's
+/// tools among them, may change files.
+const READING_TOOLS: &[&str] = &[
+    "Read",
+    "Grep",
+    "Glob",
+    "LS",
+    "NotebookRead",
+    "WebFetch",
+    "WebSearch",
+    "TodoWrite",
+];
 
 /// The agents installed for each harness, in the order a list shows them:
 /// Claude Code's own under `claude_dir`, the project's, then Codex's roles
@@ -334,12 +344,12 @@ fn claude_agent(path: PathBuf, source: Source) -> Option<InstalledAgent> {
                 Field::List(list) => list.clone(),
             });
     let reads_only = tools.is_some_and(|tools| {
-        !tools.iter().any(|tool| {
-            tool == "*"
-                || CHANGING_TOOLS
+        !tools.is_empty()
+            && tools.iter().all(|tool| {
+                READING_TOOLS
                     .iter()
-                    .any(|changing| tool == changing || tool.starts_with(&format!("{changing}(")))
-        })
+                    .any(|reading| tool == reading || tool.starts_with(&format!("{reading}(")))
+            })
     });
     Some(InstalledAgent {
         source,
@@ -797,6 +807,25 @@ mod tests {
             serde_json::to_value(&agents[2]).unwrap()["source"],
             json!("project")
         );
+    }
+
+    #[test]
+    fn an_agent_reads_only_when_each_tool_it_names_only_reads() {
+        let home = crate::scratch::Scratch::new("agents-tools-home");
+        let claude = home.join(".claude");
+        let reads = |tools: &str| {
+            let file = format!("---\nname: one\ndescription: Does it.\n{tools}---\nBody.\n");
+            write(&claude.join("agents").join("one.md"), &file);
+            installed(&home, &home.join("project"), &claude, &home.join("none"))[0].reads_only
+        };
+        assert!(reads("tools: Read, Grep, Glob, WebFetch, WebSearch\n"));
+        assert!(reads("tools:\n  - Read(src/**)\n  - LS\n"));
+        assert!(!reads("tools: Read, Bash\n"));
+        assert!(!reads("tools: Read, mcp__github__create_issue\n"));
+        assert!(!reads("tools: Read, Task\n"));
+        assert!(!reads("tools: Read, Edit\n"));
+        assert!(!reads("tools: \"\"\n"));
+        assert!(!reads(""));
     }
 
     #[test]

@@ -391,7 +391,9 @@ reads the Markdown files in the `agents` folder of the configuration
 directory of the project's [account](#accounts), and From this project
 those in the project's `.claude/agents`: a file's frontmatter gives the
 name, the description and the model, and its body how it works; one whose
-`tools` leave out every tool that changes files reads only. Of files that
+`tools` name only tools that read, Read, Grep, Glob, LS, NotebookRead,
+WebFetch, WebSearch and TodoWrite, reads only, and any other tool, Bash or
+a server's among them, changes files. Of files that
 give the same name, ignoring case, the first by file name is listed. Each
 place lists 64 agents at most and skips a file over 256 KB, and a file in
 the project that links out of the project is not read. From Codex
