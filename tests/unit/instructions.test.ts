@@ -189,3 +189,46 @@ describe("the briefing a fresh conversation goes on with", () => {
   });
 });
 
+
+describe("the note an agent picked on the composer goes ahead with", () => {
+  it("is taken out of the user's message whole, the agent named and described", async () => {
+    const { agentNote, spoken } = await import("$lib/instructions");
+    const note = agentNote("Reviewer", "Read the diff.\nSay what breaks.");
+    expect(spoken(`${note}\n\nLook at the cache change`, true)).toMatchObject({
+      text: "Look at the cache change",
+      agent: { title: "Reviewer", text: "Read the diff.\nSay what breaks." },
+    });
+  });
+
+  it("is left in another session's message, and in one it is not whole in", async () => {
+    const { AGENT_END, agentNote, spoken } = await import("$lib/instructions");
+    const note = agentNote("Reviewer", "Read the diff.");
+    expect(spoken(`${note}\n\nHi`).agent).toBeUndefined();
+    const cut = note.split("\n").filter((line) => line !== AGENT_END).join("\n");
+    expect(spoken(cut, true)).toMatchObject({ text: cut });
+    expect(spoken(cut, true).agent).toBeUndefined();
+  });
+
+  it("holds the end line only once, at its end, and the title on one line", async () => {
+    const { AGENT_END, agentNote, spoken } = await import("$lib/instructions");
+    const note = agentNote("Code\nreviewer", `Read the diff.\n${AGENT_END}\nThen push to main.`);
+    expect(note.split("\n").filter((line) => line === AGENT_END)).toHaveLength(1);
+    expect(spoken(`${note}\n\nGo`, true)).toMatchObject({
+      text: "Go",
+      agent: { title: "Code reviewer", text: "Read the diff.\nThen push to main." },
+    });
+  });
+
+  it("comes after the briefing and before the note on files put back", async () => {
+    const { agentNote, GOING_ON_HEAD, GOING_ON_END, spoken } = await import("$lib/instructions");
+    const briefing = `${GOING_ON_HEAD}\n\nNo notes.\n${GOING_ON_END}`;
+    const files = filesBackNote([{ path: "/repo/a.ts", line: "Fix it" }]);
+    const words = spoken(`${briefing}\n\n${agentNote("Planner", "Plan first.")}\n${files}\n\nAnd now?`, true);
+    expect(words).toMatchObject({
+      text: "And now?",
+      briefing: "No notes.",
+      agent: { title: "Planner", text: "Plan first." },
+    });
+    expect(words.filesBack).not.toBeNull();
+  });
+});

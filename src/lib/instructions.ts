@@ -41,6 +41,42 @@ function briefingAt(words: string): { briefing: string; rest: string } | null {
   };
 }
 
+/** The note an agent picked on the composer goes ahead of the user's next
+    message with: its first line names the agent, its description follows,
+    and the end line closes it, which the description never holds. */
+const AGENT_HEAD = /^From the workbench, not the user: from this message on, work as the agent "(.*)", as described below\.$/;
+export const AGENT_END = "End of the agent's description.";
+
+/** The note that tells a conversation to work as the agent `title`. */
+export function agentNote(title: string, text: string): string {
+  const description = text
+    .split("\n")
+    .filter((line) => line !== AGENT_END)
+    .join("\n")
+    .trim();
+  return [
+    `From the workbench, not the user: from this message on, work as the agent "${oneLine(title)}", as described below.`,
+    description,
+    AGENT_END,
+  ].join("\n");
+}
+
+const oneLine = (title: string) => title.replace(/\s+/g, " ").trim();
+
+/** The agent note at the start of `words`, the agent it names with its
+    description, and the words after it; null where it is not there whole. */
+function agentAt(words: string): { agent: { title: string; text: string }; rest: string } | null {
+  const lines = words.split("\n");
+  const head = AGENT_HEAD.exec(lines[0]);
+  if (head === null) return null;
+  const end = lines.indexOf(AGENT_END);
+  if (end === -1) return null;
+  return {
+    agent: { title: head[1], text: lines.slice(1, end).join("\n").trim() },
+    rest: lines.slice(end + 1).join("\n").replace(/^\n+/, ""),
+  };
+}
+
 /** The first line of the note a session that started others is given ahead
     of the user's words, on what those sessions did since it last looked.
     The note is the workbench's, a line each, and a blank line ends it. */
@@ -109,9 +145,10 @@ function noteAt(words: string, head: string, shaped: (line: string) => boolean) 
 
 /** A message's own words, the workbench's sentence after them when it has
     one, and, for a message of the user's own, the workbench's notes ahead
-    of them, without their first lines: on files put back, then on the
-    sessions it started, each where it has one. A note is taken out only
-    whole; anything else is the words as they are. */
+    of them, without their first lines: the agent picked for it, then on
+    files put back, then on the sessions it started, each where it has one.
+    A note is taken out only whole; anything else is the words as they
+    are. */
 export function spoken(
   text: string,
   user = false,
@@ -121,6 +158,7 @@ export function spoken(
   reports: string | null;
   filesBack: string | null;
   briefing?: string;
+  agent?: { title: string; text: string };
 } {
   let words = text;
   let reports: string | null = null;
@@ -129,8 +167,14 @@ export function spoken(
   // was sent first, the user's words or another session's.
   const going = briefingAt(words);
   if (going !== null) words = going.rest === GOING_ON_WAIT ? "" : going.rest;
-  const briefed = going === null ? {} : { briefing: going.briefing };
+  const briefed: { briefing?: string; agent?: { title: string; text: string } } =
+    going === null ? {} : { briefing: going.briefing };
   if (user) {
+    const agent = agentAt(words);
+    if (agent !== null) {
+      briefed.agent = agent.agent;
+      words = agent.rest;
+    }
     const files = noteAt(words, FILES_BACK_HEAD, (line) => FILES_BACK_AS.test(line) || ABSOLUTE.test(line));
     if (files !== null) {
       filesBack = files.lines;

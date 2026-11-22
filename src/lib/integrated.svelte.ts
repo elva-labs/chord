@@ -2,6 +2,17 @@ import { tick } from "svelte";
 import { withoutArrowControls } from "$lib/strayKeys";
 import { dirFor } from "$lib/accounts.svelte";
 import { filesBackNote, spoken } from "$lib/instructions";
+import {
+  agentAhead,
+  agentAheadBack,
+  agentIdentified,
+  agentOfRow,
+  agentReadsOnly,
+  forgetAgentRow,
+  keepLastAgent,
+  pickAgent,
+} from "$lib/sessionAgents.svelte";
+import type { Agent } from "$lib/agents.svelte";
 import { unsent, type Sent } from "$lib/mention";
 import { mentionedIn, mentionsOf } from "$lib/mentioned.svelte";
 import { reservedName, shown } from "$lib/unseen";
@@ -384,6 +395,7 @@ function deliver(key: string, link: Link, body: IntegratedEventBody) {
   if (backRun !== undefined) link.commandsBack.delete(backRun.id);
   const granting = body.type === "answered" && body.choice === "allowSession" ? grantOf(link, body.request) : null;
   link.conversation.apply(body);
+  if (body.type === "readsOnly") agentReadsOnly(key, byKey(key)?.id ?? null, body.on);
   if (granting !== null) link.granted = [...link.granted, granting];
   if (back !== undefined) restore(key, back);
   if (backRun !== undefined) restoreCommand(key, backRun);
@@ -513,6 +525,7 @@ function identify(session: Session, id: string) {
   keepToken(session);
   adopt(session.project, id);
   identified(session.key, id);
+  agentIdentified(session.key, id);
   // A conversation that went on from another goes by the row's name.
   keepName(session);
 }
@@ -661,6 +674,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     mode,
     effort,
     configDir: dirFor(starting.account, starting.agent),
+    readsOnly: agentOfRow(key, starting.id)?.readsOnly === true ? true : undefined,
     ...told,
     ...originOf(starting),
   });
@@ -706,8 +720,8 @@ function startFailed(key: string, link: Link, error: unknown) {
   } else failed(key, message(error));
 }
 
-/** A change of the settings a run is on. */
-type Change = { model?: string; mode?: string; effort?: string };
+/** A change of the settings a run is on, and of whether it reads only. */
+type Change = { model?: string; mode?: string; effort?: string; readsOnly?: boolean };
 
 /** What a run is started on, to tell whether the run behind a row is the
     one the row says: the agent, and the workflow's instructions and
@@ -1255,7 +1269,10 @@ export function send(
   // A run that went on from notes is briefed ahead of its first message,
   // whoever sends it, the workbench's own wake among them.
   const briefing = briefingFor(key);
-  const text = [briefing, told, note?.text ?? null, words].filter((part) => part !== null).join("\n\n");
+  // The agent picked on the composer is told ahead of the user's own next
+  // message, once.
+  const agent = from === null ? agentAhead(key) : null;
+  const text = [briefing, agent, told, note?.text ?? null, words].filter((part) => part !== null).join("\n\n");
   const id = crypto.randomUUID();
   mentionedIn(id, mentions);
   link.conversation.sending(id, text, images);
@@ -1300,6 +1317,7 @@ export function send(
       link.conversation.sendFailed(id, message(error));
       settleNotes(key, link);
       if (briefing !== null) briefingBack(key, briefing);
+      if (agent !== null) agentAheadBack(key, agent);
     });
   return id;
 }
@@ -2159,10 +2177,29 @@ export async function configure(key: string, change: Change, chosen = true) {
   }
 }
 
+/** The row's session works as `agent` from its next message, or as none:
+    on the agent's model where that is on the session's harness, at its
+    effort where the session offers it, and reading only or not as the
+    agent does. Leaving an agent for none leaves the model and the effort
+    as they are. The pick is the composer's last. */
+export function workAs(key: string, agent: Agent | null) {
+  const link = links.get(key);
+  const session = byKey(key);
+  if (link === undefined || session === null) return;
+  pickAgent(key, session.id, agent);
+  keepLastAgent("composer", agent?.key ?? null);
+  const change: Change = { readsOnly: agent?.readsOnly ?? false };
+  if (agent?.model != null && agent.model.harness === session.agent) change.model = agent.model.model;
+  const efforts = link.conversation.efforts;
+  if (agent?.effort != null && (efforts.length === 0 || efforts.includes(agent.effort))) change.effort = agent.effort;
+  void configure(key, change, false);
+}
+
 /** The row is closed: its agent is stopped, and its last words let go. */
 function stop(session: Session) {
   const link = links.get(session.key);
   links.delete(session.key);
+  forgetAgentRow(session.key);
   settleNotes(session.key, undefined);
   if (link?.handle === null || link === undefined) return;
   const handle = link.handle;
