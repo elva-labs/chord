@@ -6,9 +6,10 @@
 //! these holds, checked where the files are, after `..` and symlinks
 //! resolve:
 //!
-//! - the path is relative, in plain `/`-separated names, with no empty
-//!   name, no `\`, no `:` and no NUL, so it names no drive, no other scheme
-//!   and no stream of a file;
+//! - the image's path, and the document's, are relative, in plain
+//!   `/`-separated names, with no empty name, no `\`, no `:` and no NUL,
+//!   so on no system do they name a root, a drive, a share, another scheme
+//!   or a stream of a file;
 //! - the document and the image both resolve to regular files inside the
 //!   project;
 //! - no name in the path starts with a dot, nor does any folder or file it
@@ -35,9 +36,18 @@ fn hidden(name: &str) -> bool {
     name.starts_with('.') && name != "." && name != ".."
 }
 
+/// Whether a path starts from a root, a drive or a share on some system,
+/// as `/a`, `\a`, `\\server\share\a`, `\\?\C:\a`, `C:\a` and `C:a` do,
+/// rather than from the folder it is read in.
+fn rooted(path: &str) -> bool {
+    let start = path.as_bytes();
+    path.starts_with(['/', '\\'])
+        || (start.len() >= 2 && start[0].is_ascii_alphabetic() && start[1] == b':')
+}
+
 /// The names of a relative path, or why it is refused.
 fn names(path: &str) -> Result<Vec<&str>, String> {
-    if path.is_empty() || path.starts_with('/') {
+    if path.is_empty() || rooted(path) {
         return Err("is not a path inside the project".into());
     }
     if path.contains(['\\', ':', '\0']) {
@@ -86,8 +96,8 @@ pub fn resolve(
     let project = project(root, home)?;
     let at: Vec<&str> = document.split('/').collect();
     if document.is_empty()
-        || document.starts_with('/')
-        || document.contains('\0')
+        || rooted(document)
+        || document.contains(['\\', ':', '\0'])
         || at.iter().any(|name| matches!(*name, "" | "." | ".."))
     {
         return Err("is not drawn: the document is not in the project".into());
@@ -254,14 +264,30 @@ mod tests {
             assert!(why.contains("outside the project"), "{file}: {why}");
         }
         let absolute = dir.join("secret.png").to_string_lossy().to_string();
-        assert!(read(&root, "README.md", &absolute, elsewhere())
-            .unwrap_err()
-            .contains("not a path inside"));
+        // Each is refused by its text alone, so the same way on every system.
+        for file in [
+            absolute.as_str(),
+            "/etc/hosts",
+            "C:/Windows/a.png",
+            "C:\\Windows\\a.png",
+            "C:a.png",
+            "c:docs/icon.png",
+            "\\a.png",
+            "\\\\server\\share\\a.png",
+            "//server/share/a.png",
+            "\\\\?\\C:\\a.png",
+            "//?/C:/a.png",
+            "\\\\.\\C:\\a.png",
+        ] {
+            let why = read(&root, "README.md", file, elsewhere()).unwrap_err();
+            assert!(why.contains("not a path inside"), "{file}: {why}");
+        }
         for file in [
             "file:///etc/hosts",
             "https://example.com/a.png",
-            "C:/Windows/a.png",
             "..\\secret.png",
+            "docs\\..\\..\\secret.png",
+            "docs\\icon.png",
             "docs/icon.png:stream",
             "docs/icon.png\0",
             "docs//icon.png",
@@ -279,6 +305,7 @@ mod tests {
     fn draws_nothing_for_a_document_outside_the_project_or_with_no_path() {
         let (dir, root) = project();
         std::fs::write(dir.join("loose.md"), "![](project/docs/icon.png)").unwrap();
+        let absolute = root.join("README.md").to_string_lossy().to_string();
         for document in [
             "../loose.md",
             "",
@@ -286,6 +313,16 @@ mod tests {
             "docs",
             "gone.md",
             "./README.md",
+            absolute.as_str(),
+            "C:/README.md",
+            "C:README.md",
+            "\\README.md",
+            "\\\\server\\share\\README.md",
+            "//server/share/README.md",
+            "\\\\?\\C:\\README.md",
+            "..\\loose.md",
+            "docs\\..\\README.md",
+            "README.md:stream",
         ] {
             let why = read(&root, document, "docs/icon.png", elsewhere()).unwrap_err();
             assert!(why.contains("not in the project"), "{document}: {why}");
