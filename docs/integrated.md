@@ -254,7 +254,8 @@ workbench's own start and send among them, is put to the user whatever
 the mode or the allow rules say, and the ask says the session reads only
 and that allowing it lets the session change files. Codex runs each turn
 in its read-only sandbox, and its asks to change files are turned down
-without asking the user. Reading only can be turned on and off while the session
+without asking the user. Its other asks, a command to run outside the
+sandbox or a server's tool, reach the user saying the same. Reading only can be turned on and off while the session
 runs, and the window hears which.
 
 ## What a new session starts on

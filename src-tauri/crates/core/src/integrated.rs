@@ -325,7 +325,7 @@ pub enum Event {
     /// made it ask, when there is one; `choices` the answers it takes, each
     /// with what it remembers. `truncated` says a string in `input` was
     /// cut short; the answer carries the whole input back regardless.
-    /// `reads_only` says it asks because the session reads only, and that
+    /// `reads_only` says it asks while the session reads only, so that
     /// allowing it lets the session change files.
     PermissionAsked {
         request: String,

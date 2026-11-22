@@ -2523,7 +2523,8 @@ impl AppServer {
                 )
             }
             // Reading only turns down every change of a file, whatever the
-            // mode would ask.
+            // mode would ask. Anything else asked while it is on reaches
+            // the user saying that the session reads only.
             "item/fileChange/requestApproval" if self.reads_only => {
                 out.writes.push(turned_down(id, method));
                 return;
@@ -2647,7 +2648,7 @@ impl AppServer {
                     truncated: false,
                     description: text(&params["message"]),
                     path: None,
-                    reads_only: false,
+                    reads_only: self.reads_only,
                     choices: asked.offers(),
                 });
                 self.asked.insert(key, asked);
@@ -2689,7 +2690,7 @@ impl AppServer {
             truncated: false,
             description,
             path,
-            reads_only: false,
+            reads_only: self.reads_only,
             choices: asked.offers(),
         });
         self.asked.insert(key, asked);

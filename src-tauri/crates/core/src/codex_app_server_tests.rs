@@ -3301,6 +3301,38 @@ fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
     let answer: Value = serde_json::from_str(&reading.writes[0]).unwrap();
     assert_eq!(answer, json!({"id": 20, "result": {"decision": "decline"}}));
 
+    // A command to run outside the sandbox, or a server's tool, is put to
+    // the user, saying the session reads only.
+    for (at, method, params) in [
+        (
+            22,
+            "item/commandExecution/requestApproval",
+            json!({"threadId": THREAD, "turnId": "turn-1", "itemId": "c1",
+                   "command": "touch x", "reason": "needs to write"}),
+        ),
+        (
+            23,
+            "mcpServer/elicitation/request",
+            json!({"threadId": THREAD, "serverName": "github", "message": "Run it?",
+                   "_meta": {"codex_approval_kind": "mcp_tool_call",
+                             "tool_name": "create_issue", "tool_params": {}}}),
+        ),
+    ] {
+        let reading = read(&mut driver, server_request(at, method, params));
+        assert!(reading.writes.is_empty(), "{method}: {:?}", reading.writes);
+        assert!(
+            matches!(
+                reading.events.as_slice(),
+                [Event::PermissionAsked {
+                    reads_only: true,
+                    ..
+                }]
+            ),
+            "{method}: {:?}",
+            reading.events
+        );
+    }
+
     // Off again: the next turn goes back to the sandbox the thread had.
     driver.control(&Control::SetReadsOnly(false)).unwrap();
     let line = send(&mut driver, M2);
@@ -3317,7 +3349,17 @@ fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
         ),
     );
     assert!(reading.writes.is_empty());
-    assert_eq!(reading.events.len(), 1);
+    assert!(
+        matches!(
+            reading.events.as_slice(),
+            [Event::PermissionAsked {
+                reads_only: false,
+                ..
+            }]
+        ),
+        "{:?}",
+        reading.events
+    );
 }
 
 #[test]
