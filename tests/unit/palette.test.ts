@@ -82,6 +82,7 @@ beforeEach(() => {
   resetWorkflows();
   agent.availability = "ready";
   agent.installed = ["claude-code"];
+  agent.integrable = [];
   attention.focused = true;
   workspace.open.push(repo(A), repo(B), repo(C));
 });
@@ -648,6 +649,10 @@ function start() {
   if (outcome.type === "close") outcome.then();
 }
 
+/** Lets the reads of profiles under way be heard, and a start they held
+    go on. */
+const heard = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe("how a new session runs", () => {
   const quick = () => ({
     ...defaultWorkflow(),
@@ -729,7 +734,7 @@ describe("how a new session runs", () => {
     expect(sessions.all[0].workflow?.name).toBe("Build and review");
   });
 
-  it("starts under another workflow picked, and alone on an agent picked", () => {
+  it("starts under another workflow picked, and alone on an agent picked", async () => {
     agent.installed = ["claude-code", "codex"];
     adoptWorkflows({ list: [defaultWorkflow(), quick()], default: "Build and review", overrides: {} });
     beginNew(A);
@@ -739,8 +744,8 @@ describe("how a new session runs", () => {
     expect(sessions.all[0].workflow?.name).toBe("Quick fix");
     beginNew(A);
     choose("Change");
-    outcome = choose("Codex");
-    if (outcome.type === "close") outcome.then();
+    expect(choose("Codex")).toEqual({ type: "stay" });
+    await heard();
     expect(sessions.all[1]).toMatchObject({ agent: "codex", workflow: null });
     beginNew(A);
     choose("Change");
@@ -930,7 +935,7 @@ describe("a new session", () => {
     expect(accounts.picked).toEqual({});
   });
 
-  it("finds every choice the defaults stand for in what is typed on their line", () => {
+  it("finds every choice the defaults stand for in what is typed on their line", async () => {
     agent.installed = ["claude-code", "codex"];
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     accounts.overrides = { [A]: "Work" };
@@ -950,19 +955,19 @@ describe("a new session", () => {
     ]);
     // Enter starts the one found, with the other defaults as they were.
     setQuery("cod");
-    const outcome = choose("Codex");
-    if (outcome.type === "close") outcome.then();
+    expect(choose("Codex")).toEqual({ type: "stay" });
+    await heard();
     expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", account: "Work" });
   });
 
-  it("starts the default agent under an account found on the defaults' line, and keeps the pick", () => {
+  it("starts the default agent under an account found on the defaults' line, and keeps the pick", async () => {
     agent.installed = ["claude-code", "codex"];
     sessions.preferred[A] = "codex";
     accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
     beginNew(A);
     setQuery("wor");
-    const outcome = choose("Work");
-    if (outcome.type === "close") outcome.then();
+    expect(choose("Work")).toEqual({ type: "stay" });
+    await heard();
     expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", account: "Work" });
     expect(accounts.picked).toEqual({ [A]: "Work" });
   });
@@ -1164,6 +1169,7 @@ describe("a Codex session's profile", () => {
     beginNew(A);
     start();
     expect(sessions.all[0]).toMatchObject({ agent: "codex", profile: "fast" });
+    await heard();
 
     listed.profiles = [];
     await readProfiles(A, null);
@@ -1171,6 +1177,84 @@ describe("a Codex session's profile", () => {
     beginNew(A);
     start();
     expect(sessions.all[1]).toMatchObject({ agent: "codex", profile: null });
+  });
+
+  it("waits for the account's list before starting from the defaults' line", async () => {
+    agent.installed = ["codex"];
+    listed.profiles = [fast];
+    pickProfile(A, "fast");
+    beginNew(A);
+    expect(stepItems("")[0]).toMatchObject({ kind: "ready", detail: "Codex" });
+    expect(choose("New session")).toEqual({ type: "stay" });
+    expect(sessions.all).toEqual([]);
+    await heard();
+    expect(palette.open).toBe(false);
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", profile: "fast" });
+  });
+
+  it("starts nothing held once the palette has moved on", async () => {
+    agent.installed = ["codex"];
+    listed.profiles = [fast];
+    beginNew(A);
+    expect(choose("New session")).toEqual({ type: "stay" });
+    closePalette();
+    await heard();
+    expect(sessions.all).toEqual([]);
+    resetProfiles();
+    beginNew(B);
+    expect(choose("New session")).toEqual({ type: "stay" });
+    beginNew(C);
+    await heard();
+    expect(sessions.all).toEqual([]);
+    expect(palette).toMatchObject({ open: true, mode: "new" });
+  });
+
+  it("asks under a second account once its list is heard", async () => {
+    agent.installed = ["claude-code", "codex"];
+    accounts.list = { Work: { claude: "~/.claude-work", codex: "~/.codex-work" } };
+    listed.profiles = [];
+    beginNew(A);
+    await heard();
+    listed.profiles = [fast];
+    choose("Change");
+    expect(nextStep(palette.steps)).toBe("account");
+    choose("Work");
+    expect(nextStep(palette.steps)).toBe("agent");
+    expect(choose("Codex")).toEqual({ type: "stay" });
+    await heard();
+    expect(sessions.all).toEqual([]);
+    expect(nextStep(palette.steps)).toBe("profile");
+    const outcome = choose("fast");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ agent: "codex", account: "Work", profile: "fast" });
+  });
+
+  it("starts under the account found on the defaults' line with that account's profile, not the default's", async () => {
+    agent.installed = ["codex"];
+    accounts.list = { Work: { claude: "~/.claude-work", codex: "~/.codex-work" } };
+    listed.profiles = [fast];
+    pickProfile(A, "fast");
+    beginNew(A);
+    await heard();
+    expect(stepItems("")[0]).toMatchObject({ kind: "ready", detail: "Codex · fast · Default" });
+    listed.profiles = [local];
+    setQuery("wor");
+    expect(choose("Work")).toEqual({ type: "stay" });
+    await heard();
+    expect(sessions.all[0]).toMatchObject({ agent: "codex", account: "Work", profile: null });
+  });
+
+  it("starts the other way under the one picked last, once the account's list is heard", async () => {
+    agent.installed = ["codex"];
+    agent.integrable = ["codex"];
+    listed.profiles = [fast];
+    pickProfile(A, "fast");
+    workspace.active = A;
+    openCommands();
+    const outcome = choose("New session in Chord in one");
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") await outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "codex", kind: "integrated", profile: "fast" });
   });
 
   it("keeps no profile picked as the project's pick, and takes a name only from the list", async () => {

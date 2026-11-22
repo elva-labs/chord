@@ -10,8 +10,8 @@ import { hostOf } from "$lib/remote.svelte";
  * The core reads the files on the project's machine. The window keeps the
  * list last heard for each account on each machine while it is open, and
  * reads it again as a new session is asked for, so a file added since is
- * offered. A session started before its account's list is heard starts
- * under none, as does one on a core that lists none.
+ * offered. A new Codex session waits for its account's list to be heard
+ * before it starts, and one on a core that lists none starts under none.
  *
  * The profile last picked for a new session in each project, or no profile,
  * is the window's own memory, kept between runs on this machine. A new
@@ -24,6 +24,9 @@ const profiles = $state<{
   /** The last pick in each project: a name, or null for no profile. */
   picked: Record<string, string | null>;
 }>({ byKey: {}, picked: {} });
+
+/** The reads under way, by list, so a list asked for twice is read once. */
+const reading = new Map<string, Promise<void>>();
 
 const PICKED_KEY = "chord.pickedProfiles";
 
@@ -46,6 +49,11 @@ export function profilesOf(project: string, account: string | null): CodexProfil
   return profiles.byKey[keyOf(project, account)] ?? [];
 }
 
+/** Whether the account's list on the project's machine has been heard. */
+export function profilesKnown(project: string, account: string | null): boolean {
+  return profiles.byKey[keyOf(project, account)] !== undefined;
+}
+
 /** The profile of that name the account has on the project's machine. */
 export function profileOf(project: string, account: string | null, name: string): CodexProfile | null {
   return profilesOf(project, account).find((profile) => profile.name === name) ?? null;
@@ -60,15 +68,23 @@ function readable(profile: unknown): profile is CodexProfile {
 
 /** Reads the profiles the account has on the project's machine. A list
     that cannot be read is none. */
-export async function readProfiles(project: string, account: string | null) {
+export function readProfiles(project: string, account: string | null): Promise<void> {
   const key = keyOf(project, account);
-  try {
-    const listed: unknown = await core().codexProfiles(project, dirFor(account, "codex"));
-    profiles.byKey[key] = Array.isArray(listed) ? listed.filter(readable) : [];
-  } catch {
-    // A core from before profiles, or a home it could not read.
-    profiles.byKey[key] = [];
-  }
+  const under = reading.get(key);
+  if (under !== undefined) return under;
+  const read = (async () => {
+    try {
+      const listed: unknown = await core().codexProfiles(project, dirFor(account, "codex"));
+      profiles.byKey[key] = Array.isArray(listed) ? listed.filter(readable) : [];
+    } catch {
+      // A core from before profiles, or a home it could not read.
+      profiles.byKey[key] = [];
+    } finally {
+      reading.delete(key);
+    }
+  })();
+  reading.set(key, read);
+  return read;
 }
 
 /** The profile a new Codex session in the project starts under unless
@@ -77,6 +93,13 @@ export async function readProfiles(project: string, account: string | null) {
 export function profileToStart(project: string, account: string | null): string | null {
   const last = profiles.picked[project] ?? null;
   return last !== null && profileOf(project, account, last) !== null ? last : null;
+}
+
+/** The profile a new Codex session in the project starts under, once the
+    account's list has been heard. */
+export async function profileToStartHeard(project: string, account: string | null): Promise<string | null> {
+  if (!profilesKnown(project, account)) await readProfiles(project, account);
+  return profileToStart(project, account);
 }
 
 /** Whether a profile, or no profile, was picked in the project before. */
@@ -115,6 +138,7 @@ export function loadPickedProfiles() {
 
 /** Test seam. */
 export function resetProfiles() {
+  reading.clear();
   profiles.byKey = {};
   profiles.picked = {};
 }

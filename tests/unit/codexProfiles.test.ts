@@ -5,8 +5,10 @@ import {
   pickedBefore,
   pickProfile,
   profileOf,
+  profilesKnown,
   profilesOf,
   profileToStart,
+  profileToStartHeard,
   readProfiles,
   resetProfiles,
 } from "$lib/codexProfiles.svelte";
@@ -56,6 +58,25 @@ describe("the Codex profiles an account has", () => {
     expect(profilesOf(A, "Work")).toEqual([]);
   });
 
+  it("are read once while a read is under way, and known once heard", async () => {
+    let answer = (_: unknown) => {};
+    listed.answer = () => new Promise((resolve) => (answer = resolve));
+    expect(profilesKnown(A, null)).toBe(false);
+    const first = readProfiles(A, null);
+    const second = readProfiles(A, null);
+    expect(listed.asked).toHaveLength(1);
+    expect(profilesKnown(A, null)).toBe(false);
+    const heard = profileToStartHeard(A, null);
+    answer([fast]);
+    await Promise.all([first, second]);
+    expect(profilesKnown(A, null)).toBe(true);
+    expect(await heard).toBeNull();
+    expect(listed.asked).toHaveLength(1);
+    listed.answer = () => Promise.resolve([]);
+    await readProfiles(A, null);
+    expect(listed.asked).toHaveLength(2);
+  });
+
   it("are none where the core cannot list them, an older one included", async () => {
     listed.answer = () => Promise.resolve([fast]);
     await readProfiles(A, null);
@@ -87,6 +108,16 @@ describe("the profile a new session starts under", () => {
     await readProfiles(A, null);
     expect(profileToStart(A, null)).toBeNull();
     expect(pickedBefore(A)).toBe(true);
+  });
+
+  it("is read first where the account's list has not been heard", async () => {
+    pickProfile(A, "fast");
+    listed.answer = () => Promise.resolve([fast]);
+    expect(await profileToStartHeard(A, null)).toBe("fast");
+    expect(await profileToStartHeard(A, null)).toBe("fast");
+    expect(listed.asked).toHaveLength(1);
+    expect(await profileToStartHeard(A, "Work")).toBe("fast");
+    expect(listed.asked).toHaveLength(2);
   });
 
   it("is kept between runs, no profile included, and a pick that does not read is dropped", () => {

@@ -29,8 +29,10 @@ import { agentLabel, installed, isReady } from "$lib/agent.svelte";
 import {
   pickedBefore,
   pickProfile,
+  profilesKnown,
   profilesOf,
   profileToStart,
+  profileToStartHeard,
   readProfiles,
 } from "$lib/codexProfiles.svelte";
 import { catalogName } from "$lib/modelCatalog.svelte";
@@ -863,15 +865,56 @@ function startOn(steps: Step[], picked: boolean) {
   );
 }
 
-/** Takes an answer, and starts the session when it was the last one asked.
-    The project's answer leads to the defaults' line instead. */
+/** The picks held until their account's Codex profiles are heard, by
+    count, so a later pick lets an earlier one go. */
+let holds = 0;
+
+/** Holds a pick that would start a Codex session before its account's
+    profiles are heard, and makes it again, by `again`, once they are, where
+    the palette still stands as it did. Null where nothing waits: the
+    session asks no profile, or its account's list is known. */
+function onceProfilesHeard(steps: Step[], again: () => Outcome): Outcome | null {
+  const project = projectOfSteps(steps);
+  if (project === null || !isOpen(project) || !installed().includes("codex")) return null;
+  if (steps.some((step) => step.kind === "profile" || step.kind === "workflow")) return null;
+  if (agentOfSteps(steps, project) !== "codex") return null;
+  const account = accountOfSteps(steps, project);
+  if (profilesKnown(project, account)) return null;
+  const hold = ++holds;
+  const { opened, mode, steps: at, ready, query } = palette;
+  const still = () =>
+    hold === holds &&
+    palette.open &&
+    palette.opened === opened &&
+    palette.mode === mode &&
+    palette.steps === at &&
+    palette.ready === ready &&
+    palette.query === query;
+  void readProfiles(project, account).then(() => {
+    if (!still()) return;
+    const outcome = again();
+    if (outcome.type !== "close") return;
+    closePalette();
+    void tick().then(outcome.then);
+  });
+  return { type: "stay" };
+}
+
+/** Takes an answer, and starts the session when it was the last one asked,
+    once a Codex session's profiles are heard. The project's answer leads
+    to the defaults' line instead. */
 function answer(steps: Step[]): Outcome {
   const project = projectOfSteps(steps);
   if (project !== null && isOpen(project) && installed().includes("codex"))
     void readProfiles(project, accountOfSteps(steps, project));
+  return goOn(steps);
+}
+
+/** Moves on from an answer: to the next question, or to the session. */
+function goOn(steps: Step[]): Outcome {
   const ready = steps.length === 1 && steps[0].kind === "project";
   if (!ready && nextStep(steps) === null)
-    return { type: "close", then: () => startOn(steps, true) };
+    return onceProfilesHeard(steps, () => goOn(steps)) ?? { type: "close", then: () => startOn(steps, true) };
   palette.mode = "new";
   palette.steps = steps;
   palette.ready = ready;
@@ -985,19 +1028,28 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       // changed.
       const path = projectOfSteps(palette.steps);
       if (path === null) return { type: "stay" };
+      // Another account drops the default account's profile, so the
+      // session starts under the profile it would under that account.
       const kin = (step: Step) =>
         item.step.kind === "account" || item.step.kind === "profile"
           ? step.kind === item.step.kind
           : step.kind === "agent" || step.kind === "workflow";
-      const steps = defaultsFor(path).map((step) => (kin(step) ? item.step : step));
-      return {
-        type: "close",
-        then: () => startOn(steps, item.step.kind === "account" || item.step.kind === "profile"),
-      };
+      const steps = defaultsFor(path)
+        .filter((step) => !(item.step.kind === "account" && step.kind === "profile"))
+        .map((step) => (kin(step) ? item.step : step));
+      return (
+        onceProfilesHeard(steps, () => pickItem(item, alone)) ?? {
+          type: "close",
+          then: () => startOn(steps, item.step.kind === "account" || item.step.kind === "profile"),
+        }
+      );
     }
     case "ready": {
       const steps = item.steps;
-      return { type: "close", then: () => startOn(steps, false) };
+      const path = projectOfSteps(steps);
+      const again = (): Outcome =>
+        path === null ? { type: "stay" } : { type: "close", then: () => startOn(defaultsFor(path), false) };
+      return onceProfilesHeard(steps, again) ?? { type: "close", then: () => startOn(steps, false) };
     }
     case "change":
       palette.ready = false;
@@ -1017,7 +1069,14 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
           const agent = defaultAgent(here);
           const kind = otherWay(here);
           if (kind === null) return { type: "stay" };
-          return { type: "close", then: () => startSession(here, agent, accountToStart(here), null, kind) };
+          const account = accountToStart(here);
+          return {
+            type: "close",
+            then: async () => {
+              const profile = agent === "codex" ? await profileToStartHeard(here, account) : null;
+              startSession(here, agent, account, null, kind, profile);
+            },
+          };
         }
         case "open":
           return { type: "close", then: () => void pick() };

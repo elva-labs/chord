@@ -104,6 +104,7 @@
   import { compact } from "$lib/compact.svelte";
   import { shown } from "$lib/unseen";
   import { openGoTo, openNew } from "$lib/palette.svelte";
+  import { profileToStartHeard } from "$lib/codexProfiles.svelte";
   import { openSettings } from "$lib/settings.svelte";
   import { chordFor, describe } from "$lib/keys.svelte";
   import { tick, untrack } from "svelte";
@@ -377,8 +378,10 @@
               id: "project-menu-other",
               label: other === "integrated" ? "New session in Chord" : "New session in a terminal",
               disabled: !isReady(),
-              run: () => {
-                startSession(path, agent, accountToStart(path), null, other);
+              run: async () => {
+                const account = accountToStart(path);
+                const profile = agent === "codex" ? await profileToStartHeard(path, account) : null;
+                startSession(path, agent, account, null, other, profile);
                 void reveal(path);
               },
             },
