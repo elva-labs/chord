@@ -1,8 +1,8 @@
 //! The user's preferences for the workbench, kept in one file per machine.
 //!
 //! The appearance, the look, the palette, the two fonts, the chords the app
-//! claims, the answer on agent hooks, the workflows, the user's own agents
-//! and the user's own themes are the user's, not a window's, so
+//! claims, the answer on agent hooks, the workflows, the user's own agents,
+//! the teams and the user's own themes are the user's, not a window's, so
 //! they live here under the app's home and every window on the machine
 //! reads the same ones. A change is written whole and moved into place, and
 //! announced as an event carrying the settings as they now are. The file is
@@ -335,6 +335,11 @@ pub struct Settings {
     /// from before has none.
     #[serde(default)]
     pub agents: Vec<crate::agents::Agent>,
+    /// The teams a lead may be started with, in the order the user keeps
+    /// them. None for a file that has no `teams`, which is written without
+    /// one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub teams: Option<Vec<crate::team::Team>>,
     /// How long a past session stays listed under its project.
     pub past_sessions: String,
     /// The harnesses whose sessions run integrated, drawn by the window; the
@@ -402,6 +407,7 @@ impl Default for Settings {
             accounts: Accounts::default(),
             workflows: Workflows::default(),
             agents: Vec::new(),
+            teams: None,
             past_sessions: "forever".into(),
             integrated: Vec::new(),
             inactive_after: "week".into(),
@@ -536,6 +542,27 @@ fn agents_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> Vec<crate::ag
         });
     }
     agents
+}
+
+/// The teams that read, each on its own; the rest are unread.
+fn teams_lenient(value: &Value, unread: &mut Vec<UnreadEntry>) -> Vec<crate::team::Team> {
+    let Some(list) = value.as_array() else {
+        let reason = "teams is a list of teams".into();
+        unused(unread, "teams", "", "", reason, value);
+        return Vec::new();
+    };
+    let (teams, aside) = crate::team::read_lenient(list);
+    for entry in aside {
+        unread.push(UnreadEntry {
+            field: "teams".into(),
+            section: String::new(),
+            name: entry.name,
+            reason: entry.reason,
+            entry: entry.entry,
+            at: Some(entry.at),
+        });
+    }
+    teams
 }
 
 /// The chords that read, each entry on its own; the rest are unread.
@@ -717,6 +744,7 @@ const TABLES: &[&str] = &[
     "cards",
     "workflows",
     "agents",
+    "teams",
 ];
 
 /// Whether the settings hold again the entry an unread one stands for. A
@@ -738,6 +766,14 @@ fn holds(settings: &Settings, entry: &UnreadEntry) -> bool {
                     .agents
                     .iter()
                     .any(|agent| agent.title.eq_ignore_ascii_case(name))
+        }
+        ("teams", "") if entry.at.is_some() => {
+            !name.is_empty()
+                && settings
+                    .teams
+                    .iter()
+                    .flatten()
+                    .any(|team| team.name.eq_ignore_ascii_case(name))
         }
         _ => true,
     }
@@ -1287,6 +1323,11 @@ fn set_field(settings: &mut Settings, field: &str, value: &Value) -> Result<(), 
             settings.agents = crate::agents::read(value)?;
             mend(&before, settings, "agents");
         }
+        "teams" => {
+            let before = settings.clone();
+            settings.teams = Some(crate::team::read(value)?);
+            mend(&before, settings, "teams");
+        }
         "pastSessions" => settings.past_sessions = one_of(field, value, PAST_SESSIONS)?,
         "integrated" => settings.integrated = integrated(value)?,
         "inactiveAfter" => settings.inactive_after = one_of(field, value, INACTIVE_AFTER)?,
@@ -1333,10 +1374,10 @@ fn settle_palette(settings: &mut Settings) {
 
 /// The settings a file's text holds. Each value that does not read is left
 /// at its default and set aside with the rule it breaks, as is each key,
-/// hook, account, theme entry or agent that does not read, each choice of
-/// account that names one, and each field that is not a setting; each
-/// workflow that does not read is left out and kept by the workflows. None when the text
-/// is not a JSON object at all.
+/// hook, account, theme entry, agent or team that does not read, each
+/// choice of account that names one, and each field that is not a setting;
+/// each workflow that does not read is left out and kept by the workflows.
+/// None when the text is not a JSON object at all.
 pub fn parse(text: &str) -> Option<Settings> {
     let fields: Map<String, Value> = serde_json::from_str(text).ok()?;
     let mut settings = Settings::default();
@@ -1356,6 +1397,8 @@ pub fn parse(text: &str) -> Option<Settings> {
             settings.cards = cards_lenient(value, &mut unread);
         } else if field == "agents" {
             settings.agents = agents_lenient(value, &mut unread);
+        } else if field == "teams" {
+            settings.teams = Some(teams_lenient(value, &mut unread));
         } else if field == "workflows" {
             if value.is_object() && value.get("list").is_none_or(Value::is_array) {
                 settings.workflows = workflow::read_lenient(value);
@@ -3234,6 +3277,154 @@ mod tests {
         assert_eq!(unread.unread_entries[0].field, "lastChosen");
         let written: Value = serde_json::from_str(&render(&unread)).unwrap();
         assert_eq!(written["lastChosen"], "opus");
+    }
+
+    /// A settings file as a version before teams wrote it: the shipped
+    /// workflows, one of the user's own on Codex with its own limit, one
+    /// that does not read, a default and the projects' choices.
+    fn before_teams() -> Value {
+        json!({
+            "look": "terminal",
+            "chime": true,
+            "workflows": {
+                "list": [
+                    {
+                        "name": "Build and review",
+                        "orchestrator": { "agent": "claude-code", "model": "fable" },
+                        "steps": [
+                            { "kind": "work", "name": "Work", "models": [{ "agent": "claude-code", "model": "sonnet" }], "parallel": 1 },
+                            { "kind": "review", "name": "Review", "models": [{ "agent": "claude-code", "model": "opus" }], "reviewerApproves": true, "orchestratorAgrees": true, "backTo": "Work", "limit": 3 }
+                        ]
+                    },
+                    {
+                        "name": "Careful",
+                        "orchestrator": { "agent": "codex", "model": "gpt-5.5" },
+                        "steps": [
+                            { "kind": "work", "name": "Build", "models": [{ "agent": "codex", "model": "gpt-5.5" }], "parallel": 2 },
+                            { "kind": "review", "name": "Look", "models": [{ "agent": "claude-code", "model": "opus" }], "reviewerApproves": true, "orchestratorAgrees": false, "backTo": "Build", "limit": 5 }
+                        ],
+                        "startOnly": false
+                    },
+                    { "name": "Odd", "steps": "none" },
+                    {
+                        "name": "Direct",
+                        "orchestrator": { "agent": "claude-code", "model": "fable" },
+                        "steps": [{ "kind": "work", "name": "Work", "models": [], "parallel": 8 }]
+                    }
+                ],
+                "default": "Careful",
+                "overrides": { "/Users/someone/site": "Direct", "/Users/someone/notes": null }
+            }
+        })
+    }
+
+    fn team_names(settings: &Settings) -> Vec<&str> {
+        settings
+            .teams
+            .iter()
+            .flatten()
+            .map(|team| team.name.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_file_with_no_teams_is_read_and_written_without_them() {
+        let file = before_teams();
+        let read = parse(&file.to_string()).unwrap();
+        assert_eq!(read.teams, None);
+        let written: Value = serde_json::from_str(&render(&read)).unwrap();
+        assert!(written.get("teams").is_none(), "{written}");
+        assert_eq!(written["workflows"], file["workflows"]);
+        assert_eq!(written["look"], json!("terminal"));
+        assert_eq!(parse(&render(&read)).unwrap(), read);
+        assert_eq!(Settings::default().teams, None);
+        let fresh: Value = serde_json::from_str(&render(&Settings::default())).unwrap();
+        assert!(fresh.get("teams").is_none(), "{fresh}");
+    }
+
+    #[test]
+    fn a_file_with_teams_keeps_them_as_written() {
+        let mut file = before_teams();
+        file["teams"] = json!([]);
+        let read = parse(&file.to_string()).unwrap();
+        assert_eq!(read.teams, Some(Vec::new()));
+        let written: Value = serde_json::from_str(&render(&read)).unwrap();
+        assert_eq!(written["teams"], json!([]));
+        assert_eq!(written["workflows"], file["workflows"]);
+    }
+
+    #[test]
+    fn a_change_to_the_settings_writes_no_teams_the_file_did_not_have() {
+        let home = home("teams-written");
+        std::fs::create_dir_all(settings_path(&home).parent().unwrap()).unwrap();
+        let file = before_teams();
+        std::fs::write(settings_path(&home), file.to_string()).unwrap();
+        let store = Store::new(&home, Arc::new(Recorder::default()));
+        store.set(&json!({ "chime": false })).unwrap();
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(settings_path(&home)).unwrap()).unwrap();
+        assert_eq!(written["workflows"], file["workflows"]);
+        assert!(written.get("teams").is_none(), "{written}");
+        assert_eq!(written["chime"], json!(false));
+    }
+
+    #[test]
+    fn teams_are_set_by_a_change_whole_and_kept_as_written() {
+        let quick = json!({
+            "name": "Quick fix",
+            "members": [{ "agent": "Developer", "count": 2 }, { "agent": "Reviewer" }],
+            "gates": [{ "who": "Reviewer", "when": "change", "touches": ["src/**"], "rounds": 4 }],
+        });
+        let next = apply(&Settings::default(), &json!({ "teams": [quick.clone()] })).unwrap();
+        assert_eq!(team_names(&next), ["Quick fix"]);
+        let written: Value = serde_json::from_str(&render(&next)).unwrap();
+        assert_eq!(written["teams"], json!([quick]));
+        assert_eq!(parse(&render(&next)).unwrap(), next);
+        // A change that will not do is refused whole.
+        let mut wrong = quick.clone();
+        wrong["gates"][0]["who"] = json!("Tester");
+        assert!(apply(&next, &json!({ "teams": [wrong] })).is_err());
+        assert!(apply(&next, &json!({ "teams": {} })).is_err());
+        // A field this version does not know survives a round trip.
+        let mut later = quick.clone();
+        later["goal"] = json!("small fixes");
+        later["gates"][0]["letter"] = json!("A");
+        let read = parse(&json!({ "teams": [later.clone()] }).to_string()).unwrap();
+        assert!(read.unread_entries.is_empty());
+        let written: Value = serde_json::from_str(&render(&read)).unwrap();
+        assert_eq!(written["teams"], json!([later]));
+    }
+
+    #[test]
+    fn a_team_that_does_not_read_is_kept_where_it_stood_until_mended() {
+        let good = serde_json::to_value(&crate::team::shipped()[1]).unwrap();
+        let broken = json!({ "name": "Night", "members": [{ "agent": "Tester" }], "gates": [{ "who": "Nobody", "when": "change" }] });
+        let file = json!({ "teams": [broken.clone(), good.clone()] });
+        let read = parse(&file.to_string()).unwrap();
+        assert_eq!(team_names(&read), ["Quick fix"]);
+        assert_eq!(read.unread_entries.len(), 1);
+        assert_eq!(read.unread_entries[0].name, "Night");
+        assert!(read.unread_entries[0]
+            .reason
+            .contains("not one of its agents"));
+        let written: Value = serde_json::from_str(&render(&read)).unwrap();
+        assert_eq!(written["teams"], file["teams"]);
+        // A save of the teams that read keeps the other where it stood.
+        let saved = apply(&read, &json!({ "teams": [good.clone()] })).unwrap();
+        let written: Value = serde_json::from_str(&render(&saved)).unwrap();
+        assert_eq!(written["teams"], file["teams"]);
+        // A team of its name mends it.
+        let mut mended = broken.clone();
+        mended["gates"][0]["who"] = json!("Tester");
+        let next = apply(&saved, &json!({ "teams": [mended.clone(), good.clone()] })).unwrap();
+        assert!(next.unread_entries.is_empty());
+        let written: Value = serde_json::from_str(&render(&next)).unwrap();
+        assert_eq!(written["teams"], json!([mended, good]));
+        // A whole field of another shape is kept as written.
+        let whole = parse(r#"{ "teams": { "Quick fix": {} } }"#).unwrap();
+        assert_eq!(whole.teams, Some(Vec::new()));
+        let written: Value = serde_json::from_str(&render(&whole)).unwrap();
+        assert_eq!(written["teams"], json!({ "Quick fix": {} }));
     }
 
     #[test]
