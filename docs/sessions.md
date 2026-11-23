@@ -56,7 +56,7 @@ A Claude Code session in Chord shows its subagents under its row while they run,
 
 ## Names
 
-A row reads `New session` until something names it: the harness's title, a name you give it through the harness's rename command, or the first words of your first message, passing over a line that is only a link or a path. A session drawn as a conversation is then named by its agent, once, in a few words about what it is for; a name you or a starting session gave stays. See [names](reference/sessions.md#names).
+A row reads `New session` until something names it: the harness's title, a name you give it through the harness's rename command, or the first words of your first message, passing over a line that is only a link or a path. A session drawn as a conversation is then named by its agent in its first turn, once, in a few words about what it is for, the first words holding until that name arrives, across a restart too; a name you or a starting session gave stays. See [names](reference/sessions.md#names).
 
 ## Accounts
 

@@ -587,25 +587,35 @@ A slash command is never a name. A row named from its first message passes
 over a message that is a command, a slash and a word with nothing or a
 space after it, and takes the first message that is not one; until then
 it keeps its plain name. A past session's title passes over commands and
-what they printed the same way. Nor is a line that is only a web address or
-a path: the first words are the message's first line with words, and the
-address or path only when no line has any.
+what they printed the same way. Nor is a line that is only web addresses or
+paths: the first words are the message's first line with words, and the
+address or path only when no line has any. An address in angle brackets, a
+Markdown link or image alone on the line, one starting `www.`, several
+addresses on one line, and a path in quotes or with spaces, plain or
+escaped as Finder pastes it, all count as only a place; a line with any
+other word does not.
 
 Neither harness titles a session drawn as a conversation by itself, so the
 agent names it. It is told, in a conversation only, to call the workbench's
-`name` tool once, alongside the first other call it makes, with a few
-words like a commit subject. The tool joins the words onto one line, takes
-off quotes and a full stop, and refuses a name with no letters or digits or
-longer than 60 characters. The row takes the name in place of the first
-words of the first message, which stand only until it arrives, and takes
-it once: a later call changes nothing. A name the user gave, the name a
-start gave a session another started, a name kept from before and a title
-the harness set all stay, and a name that reads as another live session's,
-the user's, the workbench's or an agent's is not taken, the first words
-staying. The first words are known as the agent's to replace only while
-the window runs, so after a restart they stay the name. Both Claude Code
-and Codex make the call; a session in a terminal is not told to and is
-named as before.
+`name` tool once per conversation, in its first turn: alongside the first
+other call it makes, or on its own before it answers when that turn makes
+no other call. Only the conversation's own agent calls it, never a
+subagent. Claude Code has the tool at hand from the start rather than
+behind its tool search. The name is a few words like a commit subject. The
+tool joins the words onto one line, takes off quotes, backticks or
+asterisks that wrap the whole name and a trailing full stop, and refuses a
+name with no letters or digits or longer than 60 characters, or a call
+from a session that is not a conversation. Its reply says the workbench
+names the row with it unless the row already has a name. The row takes the
+name in place of the first words of the first message, which stand only
+until it arrives, and takes it once: a later call changes nothing. A name
+the user gave, the name a start gave a session another started, a name
+kept from before and a title the harness set all stay, and a name that
+reads as another live session's, the user's, the workbench's or an agent's
+is not taken, the first words staying. The first words stay the agent's to
+replace across a restart and across closing the conversation and resuming
+it, until the agent's name arrives. Both Claude Code and Codex make the
+call; a session in a terminal is not told to and is named as before.
 
 ## Following the session
 
