@@ -7,6 +7,7 @@
   import { agentEffort, compact, configure, follow, goOnIfCold, interrupt, lead, linkFor, run, send, workAs } from "$lib/integrated.svelte";
   import { agentByKey, agents, allAgents, loadInstalled } from "$lib/agents.svelte";
   import { loadProjectTeams, teams, teamsFor, teamSummary } from "$lib/teams.svelte";
+  import { switches } from "$lib/switches.svelte";
   import { agentOfRow } from "$lib/sessionAgents.svelte";
   import { openNewAgent } from "$lib/settings.svelte";
   import { bangLine } from "$lib/bang";
@@ -1255,7 +1256,7 @@
   const settleFocus = (row: HTMLElement) =>
     setTimeout(() => (focusIn = row.contains(document.activeElement)), 0);
 
-  let showAgent = $derived(away.agent || kept.agent);
+  let showAgent = $derived(switches.agents && (away.agent || kept.agent));
   let showEffort = $derived(away.effort || kept.effort);
   let showMode = $derived(away.mode || kept.mode);
   let showWorkflow = $derived(away.workflow || kept.workflow);
@@ -1265,7 +1266,7 @@
       are not shown. */
   let more = $derived.by(() => {
     const list: { value: Setting; name: string; about: string }[] = [];
-    if (workflow === null && !showAgent)
+    if (workflow === null && !showAgent && switches.agents)
       list.push({ value: "agent", name: "Agent", about: "Who the session works as" });
     if (modes.length > 0 && mode !== null && !showMode)
       list.push({ value: "mode", name: "Mode", about: "What the session may do without asking" });

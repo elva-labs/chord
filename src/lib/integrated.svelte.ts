@@ -99,6 +99,7 @@ import {
 import { orchestratorPrompt, startsOnly } from "$lib/workflowInstructions";
 import { workflowNamed } from "$lib/workflows.svelte";
 import type { HarnessId } from "$lib/core";
+import { switches } from "$lib/switches.svelte";
 
 /**
  * The integrated sessions behind their rows.
@@ -670,9 +671,11 @@ function joiningOf(key: string, starting: Session): { joining?: Joining } {
 
 /** What a start tells the core of the run it is in: the team it leads on
     the run's first start, which the core holds for the run from there by
-    the lead's token, else the run it joins as another's agent. Never both. */
+    the lead's token, else the run it joins as another's agent. Never both,
+    and no team while agents are switched off. */
 function runOfStart(key: string, link: Link, starting: Session): { team?: string; joining?: Joining } {
   if (starting.team === null) return joiningOf(key, starting);
+  if (!switches.agents) return {};
   return starting.resumedFrom === null && link.conversation.untouched ? { team: starting.team } : {};
 }
 
@@ -686,7 +689,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
   starting.modeNamed = mode ?? null;
   // A session started as an agent starts at the agent's effort, which is
   // lowered as a carried one is where its model does not take it.
-  const startsAt = agentStartsAt(key);
+  const startsAt = switches.agents ? agentStartsAt(key) : null;
   const carried =
     carriedFor(starting) ?? (startsAt === null ? null : { model: null, effort: startsAt, mode: null });
   const effort = startEffort(starting, link, carried);
@@ -1326,8 +1329,8 @@ export function send(
   // whoever sends it, the workbench's own wake among them.
   const briefing = briefingFor(key);
   // The agent picked on the composer is told ahead of the user's own next
-  // message, once.
-  const agent = from === null ? agentAhead(key) : null;
+  // message, once, and waits while agents are switched off.
+  const agent = from === null && switches.agents ? agentAhead(key) : null;
   const text = [briefing, agent, told, note?.text ?? null, words].filter((part) => part !== null).join("\n\n");
   const id = crypto.randomUUID();
   mentionedIn(id, mentions);

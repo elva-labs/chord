@@ -138,6 +138,7 @@ import { projectLabel, workspace } from "$lib/workspace.svelte";
 import { startsIn } from "$lib/orchestratorFolder.svelte";
 import { kindFor } from "$lib/sessionKind.svelte";
 import { startAsk } from "$lib/startAsk.svelte";
+import { switches } from "$lib/switches.svelte";
 import { fitMode, modeName, narrowerOf } from "$lib/modeFit";
 
 /** How many sessions one caller may have running at a time. */
@@ -2749,6 +2750,8 @@ async function startSession(request: Placed): Promise<Answered> {
     return refused(`No project at ${project} is open in the workbench.`);
   const wanted = wantedAccount(request);
   if ("refusal" in wanted) return refused(wanted.refusal);
+  if (!switches.agents && roleTitle(request) !== null)
+    return refused("Agents are switched off in the settings. Leave the agent out.");
   // An agent the window has read is found at once, so the start goes on
   // without a pause; only another title waits on the installed ones.
   const role = roleTitle(request) === null ? null : (roleNamed(request, project) ?? (await roleFor(request, project)));
@@ -4618,10 +4621,11 @@ function roleTitle(request: ConductRequest): string | null {
   return title === null || title === "claude-code" || title === "codex" ? null : title;
 }
 
-/** The agent a start names, among those the window has read. */
+/** The agent a start names, among those the window has read; none while
+    agents are switched off. */
 function roleNamed(request: ConductRequest, project: string): Agent | null {
   const title = roleTitle(request);
-  return title === null ? null : (agentByTitle(title, project) ?? null);
+  return title === null || !switches.agents ? null : (agentByTitle(title, project) ?? null);
 }
 
 /** The agent a start names to work as, reading the project's installed
