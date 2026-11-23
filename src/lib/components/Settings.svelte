@@ -16,16 +16,19 @@
     PRESET_LABELS,
     PRESETS,
     applyPreset,
-    chordFromEvent,
     describe,
+    firstStepFromEvent,
     keys,
     resetBinding,
     sameChord,
+    secondStepFromEvent,
     setBinding,
     type ActionKey,
+    type Chord,
     type PresetName,
   } from "$lib/keys.svelte";
-  import { closeAlso } from "$lib/keymap";
+  import { SEQUENCE_TIMEOUT, closeAlso } from "$lib/keymap";
+  import { isMac } from "$lib/platform";
   import { returnFocus } from "$lib/layout.svelte";
   import { closeSettings, settings } from "$lib/settings.svelte";
   import {
@@ -120,6 +123,10 @@
   let dialog: HTMLElement;
   /** The action whose shortcut is being recorded, if any. */
   let recording = $state<ActionKey | null>(null);
+  /** The action and first step just recorded, while a second key may
+      still follow to make a sequence of them. */
+  let following = $state<{ action: ActionKey; first: Chord } | null>(null);
+  let followTimer: ReturnType<typeof setTimeout> | null = null;
   let problem = $state<{ action: ActionKey; text: string } | null>(null);
 
   let tabs: HTMLElement;
@@ -344,9 +351,23 @@
   }
 
   function record(action: ActionKey) {
+    stopFollowing();
     recording = action;
     problem = null;
   }
+
+  function stopFollowing() {
+    if (followTimer !== null) clearTimeout(followTimer);
+    followTimer = null;
+    following = null;
+  }
+
+  function bind(action: ActionKey, chord: Chord) {
+    const text = setBinding(action, chord);
+    problem = text === null ? null : { action, text };
+  }
+
+  $effect(() => stopFollowing);
 
   function onKeydown(e: KeyboardEvent) {
     if (recording !== null) {
@@ -357,11 +378,31 @@
         recording = null;
         return;
       }
-      const chord = chordFromEvent(e);
-      if (chord === null) return;
-      const text = setBinding(recording, chord);
-      problem = text === null ? null : { action: recording, text };
+      const first = firstStepFromEvent(e);
+      if (first === null) return;
+      // The chord is bound as it is, and for as long as a sequence waits a
+      // second key makes a sequence of it instead.
+      const action = recording;
       recording = null;
+      bind(action, first);
+      following = { action, first };
+      followTimer = setTimeout(stopFollowing, SEQUENCE_TIMEOUT);
+      return;
+    }
+    if (following !== null) {
+      // Escape keeps the chord already bound and the settings open.
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        stopFollowing();
+        return;
+      }
+      if (e.repeat) return;
+      const second = secondStepFromEvent(e, following.first);
+      if (second === undefined) return;
+      const { action, first } = following;
+      stopFollowing();
+      if (second !== null) bind(action, { ...first, then: second });
       return;
     }
     if (e.key === "Escape") {
@@ -1044,8 +1085,12 @@
         {:else}
           <UnreadEntries field="keys" />
           <p class="note">
-            Every shortcut uses {describe({ key: "", shift: false, alt: false }).replace(/\+$/, "")}; the keys
-            without it belong to the agent.
+            {#if isMac()}
+              Every shortcut uses ⌘, or ⌃ when a second key follows it; the keys without them belong to the agent.
+            {:else}
+              Every shortcut uses Ctrl; the keys without it belong to the agent.
+            {/if}
+            A second key pressed right after the first makes a shortcut of two steps.
           </p>
           <div class="row">
             <span class="name">Preset</span>
@@ -1084,12 +1129,16 @@
                 {/if}
                 <button
                   class="chord"
-                  class:recording={recording === action.key}
+                  class:recording={recording === action.key || following?.action === action.key}
                   onclick={() => record(action.key)}
                   aria-label="Change the shortcut for {action.label}"
                   data-testid="chord-{action.key}"
                 >
-                  {recording === action.key ? "Press keys…" : describe(keys.bindings[action.key])}
+                  {recording === action.key
+                    ? "Press keys…"
+                    : following?.action === action.key
+                      ? `${describe(following.first)}, then…`
+                      : describe(keys.bindings[action.key])}
                 </button>
               </div>
               {#if problem?.action === action.key}

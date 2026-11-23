@@ -82,13 +82,17 @@
   import { handle as handleDrag } from "$lib/drops.svelte";
   import { stash } from "$lib/exits";
   import {
+    actionFor,
     closeAlso,
     closeLabel,
     closeTarget,
     resolveAction,
     type Action,
     type CloseState,
+    type Field,
   } from "$lib/keymap";
+  import { endSequence, pendingStep, sequenceKey } from "$lib/sequence";
+  import { sendNow } from "$lib/integrated.svelte";
   import { leaveAsked, watchRunning } from "$lib/leaving.svelte";
   import { keys } from "$lib/keys.svelte";
   import { say } from "$lib/flash.svelte";
@@ -478,10 +482,11 @@
   // Save is editor mode's: outside it a browser tab's page keeps it, and on
   // macOS it reaches the File menu as it would from anywhere else. Close is
   // taken back always, the chord with Shift off macOS included: it closes
-  // the tab, as in any browser.
+  // the tab, as in any browser. A sequence is the page's alone: a browser
+  // tab's page keeps its first step.
   $effect(() => {
     const chords = Object.entries(keys.bindings)
-      .filter(([action]) => editing || action !== "file.save")
+      .filter(([action, chord]) => (editing || action !== "file.save") && chord.then === undefined)
       .map(([, chord]) => chord);
     const also = closeAlso();
     void core().browserKeys(also === null ? chords : [...chords, also]);
@@ -510,10 +515,14 @@
       .catch(() => {});
   });
 
-  // The File menu's items show and answer the chords of their actions.
+  // The File menu's items show and answer the chords of their actions. A
+  // menu has no sequences, so an item bound to one shows no chord.
   $effect(() => {
+    const table = Object.fromEntries(
+      Object.entries(keys.bindings).filter(([, chord]) => chord.then === undefined),
+    );
     void core()
-      .menuKeys({ ...keys.bindings })
+      .menuKeys(table)
       .catch(() => {});
   });
 
@@ -848,6 +857,48 @@
     first.focus();
   }
 
+  /** What the element a key goes to does with text, and whether it has
+      text selected. A terminal's own field is not one. */
+  function fieldOf(target: EventTarget | null): { field: Field; selection: boolean } {
+    const element = target instanceof Element ? target : null;
+    const selected = () => !(window.getSelection()?.isCollapsed ?? true);
+    if (element === null || element.closest(".xterm") !== null) return { field: null, selection: false };
+    if (element.closest(".cm-editor") !== null) return { field: "code", selection: selected() };
+    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+      return { field: "text", selection: element.selectionStart !== element.selectionEnd };
+    }
+    if (element instanceof HTMLElement && element.isContentEditable) return { field: "text", selection: selected() };
+    return { field: null, selection: false };
+  }
+
+  /** Sequences, before the key reaches anything else: a key that begins,
+      completes or cancels one goes no further. A dialog or the palette
+      keeps its keys, the recorder in the settings among them. */
+  function onSequenceKey(e: KeyboardEvent) {
+    if (e.isComposing) return;
+    if (dialogUp() || palette.open) {
+      endSequence();
+      return;
+    }
+    if (e.repeat && pendingStep() !== null) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    const result = sequenceKey(e, {
+      focus: layout.focus,
+      reviewing,
+      editing,
+      inEditor: editing && editorHasKeyboard(),
+      integrated: activeSession()?.kind === "integrated",
+      ...fieldOf(e.target),
+    });
+    if (result === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (result !== "held") perform(actionFor(result));
+  }
+
   function onKeydown(e: KeyboardEvent) {
     const action = resolveAction(e, {
       focus: layout.focus,
@@ -1016,6 +1067,13 @@
         if (palette.open && palette.mode !== "goto") closePalette();
         else openCommands();
         break;
+      case "sendNow": {
+        // The button's own: what waits goes now, in the order sent, and
+        // with nothing to send it does nothing.
+        const session = activeSession();
+        if (session?.kind === "integrated") void sendNow(session.key);
+        break;
+      }
       default:
         action satisfies never;
     }
@@ -1074,7 +1132,7 @@
   });
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:keydown|capture={onSequenceKey} on:keydown={onKeydown} />
 
 <div
   class="frame"

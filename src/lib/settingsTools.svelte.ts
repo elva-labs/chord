@@ -296,7 +296,7 @@ export function describeSettings(): string {
     `interfaceFont: ${theme.sans} (one of ${names(INTERFACE_FONTS)})`,
     `keyPreset: ${keys.preset} (one of ${Object.keys(PRESETS).join(", ")}; custom once a shortcut differs from both)`,
     "",
-    "keys, by action: the shortcut, then what the action does. The platform modifier, Cmd on macOS and Ctrl elsewhere, is part of every shortcut and is not written. c and r without shift stay with the agent.",
+    "keys, by action: the shortcut, then what the action does. The platform modifier, Cmd on macOS and Ctrl elsewhere, is part of every shortcut and is not written. c and r without shift stay with the agent. A shortcut of two steps is written with a space between them, its first step naming its modifier, such as ctrl+x s. The second step holds the modifier only when it is written on it too, and on macOS a first step may hold Ctrl in place of Cmd.",
     ...ACTIONS.map(
       ({ key, label }) => `  ${key}: ${chordText(keys.bindings[key])}  (${label})`,
     ),
@@ -519,7 +519,7 @@ export function plan(args: Record<string, unknown>): {
         const chord = typeof text === "string" ? parseChord(text) : null;
         if (chord === null) {
           throw new Error(
-            `${JSON.stringify(text)} is not a shortcut for ${action}. A shortcut is its key, with shift and alt before it when wanted: k, shift+k, alt+shift+down.`,
+            `${JSON.stringify(text)} is not a shortcut for ${action}. A shortcut is its key, with shift and alt before it when wanted: k, shift+k, alt+shift+down; or two such steps with a space between: ctrl+x s.`,
           );
         }
         table[action as ActionKey] = chord;
