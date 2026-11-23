@@ -14,11 +14,13 @@ export const setup = $state({
 
 let reading: Promise<void> | null = null;
 
-export function checkSetup(): Promise<void> {
-  if (reading) return reading;
+/** Reads the machine. Fresh reads the login shell again first, as Check
+    again does; a fresh read asked for while another runs follows it. */
+export function checkSetup(fresh = false): Promise<void> {
+  if (reading) return fresh ? reading.then(() => checkSetup(true)) : reading;
   setup.busy = true;
   reading = core()
-    .setupChecks()
+    .setupChecks(fresh)
     .then((found) => {
       setup.found = found;
       setup.error = null;

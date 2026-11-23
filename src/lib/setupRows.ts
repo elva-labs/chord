@@ -5,6 +5,11 @@
  * on. A missing agent is quiet while another is found, and asks to be
  * installed when none is. A found agent that is not signed in asks to be
  * run once. git missing asks to be installed but never holds the app back.
+ *
+ * Only an agent known to be missing holds the app back. When the login
+ * shell could not be read, or the checks could not be made, a program that
+ * was not found may be there all the same: the window says so and lets the
+ * user go on.
  */
 import type { Setup, SetupCheck } from "$lib/core";
 
@@ -37,9 +42,20 @@ export function agentFound(setup: Setup): boolean {
   return setup.checks.some((check) => check.agent && check.path !== null);
 }
 
-/** The footer's demand when no agent is found. */
+/** The footer's demand when no agent is found after a good read. */
 export function blocked(setup: Setup): string | null {
-  return agentFound(setup) ? null : BLOCKED;
+  return agentFound(setup) || !setup.fromLoginShell ? null : BLOCKED;
+}
+
+/** The line said when no agent was found but the read could not be trusted
+    to tell, or null when it could. */
+export function unsure(setup: Setup | null, error: string | null): string | null {
+  if (setup !== null && agentFound(setup)) return null;
+  if (error !== null) return "Chord could not check this machine, so an agent may be here all the same.";
+  if (setup !== null && !setup.fromLoginShell) {
+    return "Chord could not read your shell's setup, so an agent may be here all the same.";
+  }
+  return null;
 }
 
 export function row(check: SetupCheck, setup: Setup): SetupRow {

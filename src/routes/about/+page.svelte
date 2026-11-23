@@ -19,7 +19,12 @@
   let info = $state<AboutInfo | null>(null);
   let elapsed = $state(reduced() ? Infinity : 0);
   const frame = $derived(Number.isFinite(elapsed) ? blade(Math.max(0, elapsed - BEAT)) : DONE);
-  const copied = $derived(info ? `Chord ${info.version}, ${info.os} ${info.arch}` : "");
+  /** As an issue wants it: `Chord 1.0.0 (130ca02e), macOS 27.2, arm64`. */
+  const copied = $derived(
+    info
+      ? `Chord ${info.version}${info.commit ? ` (${info.commit})` : ""}, ${info.os}${info.osVersion ? ` ${info.osVersion}` : ""}, ${info.arch}`
+      : "",
+  );
 
   onMount(() => {
     core()

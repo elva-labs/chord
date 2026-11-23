@@ -51,7 +51,7 @@
   import { lastSegment } from "$lib/paths";
   import { core, type HarnessId, type PluginInfo, type PluginSource } from "$lib/core";
   import { checkSetup, setup } from "$lib/setup.svelte";
-  import { blocked } from "$lib/setupRows";
+  import { blocked, unsure } from "$lib/setupRows";
   import { hook, overrideOf, reapply, setEverywhere, setOverride } from "$lib/hook.svelte";
   import {
     OWN_LABEL,
@@ -191,8 +191,11 @@
     if (tab === "setup") void checkSetup();
   });
 
-  /** What stands between the machine and a session, once read. */
-  const setupDemand = $derived(setup.found ? blocked(setup.found) : null);
+  /** What stands between the machine and a session, once read, or that
+      the read could not tell. */
+  const setupDemand = $derived(
+    unsure(setup.found, setup.error) ?? (setup.found ? blocked(setup.found) : null),
+  );
 
   /** The plugin sources, read when the dialog opens. */
   onMount(() => {
@@ -861,7 +864,7 @@
           <section data-testid="settings-setup">
             <div class="sources-tools">
               <button class="tool" onclick={() => void core().welcomeShow()} data-testid="setup-welcome">Show welcome</button>
-              <button class="tool" onclick={() => void checkSetup()} disabled={setup.busy} data-testid="setup-check"
+              <button class="tool" onclick={() => void checkSetup(true)} disabled={setup.busy} data-testid="setup-check"
                 >{setup.busy ? "Checking" : "Check again"}</button
               >
             </div>

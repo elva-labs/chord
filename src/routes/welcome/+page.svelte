@@ -5,10 +5,11 @@
    * one piece after another. The core reads the machine while the mark
    * plays, so the list mostly arrives with its answers.
    *
-   * Continue shows once an agent is found, and goes on to the main window.
-   * Opened at a later launch that found no agent, the welcome says Chord
-   * needs one and shows the checks at once, without the mark's arrival;
-   * so does any opening while the system asks for reduced motion.
+   * Continue shows once an agent is found, or when the checks could not
+   * tell, and goes on to the main window. Opened at a later launch that
+   * found no agent, the welcome says Chord needs one, for as long as the
+   * checks say so, and shows them at once, without the mark's arrival; so
+   * does any opening while the system asks for reduced motion.
    */
   import { onMount } from "svelte";
   import { BEAT, DONE, DURATION, arrived, blade, moved, risen, welcomeEnds } from "$lib/blade";
@@ -18,7 +19,7 @@
   import { reduced } from "$lib/motion";
   import { isMac } from "$lib/platform";
   import { checkSetup, setup } from "$lib/setup.svelte";
-  import { agentFound, blocked } from "$lib/setupRows";
+  import { agentFound, blocked, unsure } from "$lib/setupRows";
 
   const again = new URLSearchParams(location.search).has("again");
   const mac = isMac();
@@ -46,7 +47,10 @@
   const piece = (index: number) => risen(arrived(after, index));
 
   const found = $derived(setup.found !== null && agentFound(setup.found));
-  const demand = $derived(setup.found ? blocked(setup.found) : null);
+  const doubt = $derived(unsure(setup.found, setup.error));
+  const demand = $derived(setup.found && doubt === null ? blocked(setup.found) : null);
+  /** Before the first answer the opening decides; after it, the checks. */
+  const missing = $derived(setup.found === null && setup.error === null ? again : demand !== null);
 
   onMount(() => {
     void checkSetup();
@@ -76,7 +80,7 @@
     <div class="scroll">
       <div class="inner">
         <div class="slot"></div>
-        <h1 style={piece(0)}>{again ? "Chord needs an agent" : "Welcome to Chord"}</h1>
+        <h1 style={piece(0)}>{missing ? "Chord needs an agent" : "Welcome to Chord"}</h1>
         <p class="lede" style={piece(1)}>Here is what Chord found on this machine.</p>
         <SetupChecks arrived={[arrived(after, 2), arrived(after, 3)]} />
         <div class="mark" style={mark}><BladeMark {frame} /></div>
@@ -86,6 +90,8 @@
       <div class="foot" style={piece(4)}>
         {#if demand}
           <p class="must" role="status">{demand}</p>
+        {:else if doubt}
+          <p class="must" role="status" data-testid="welcome-unsure">{doubt}</p>
         {:else if found}
           <p>Kept in Settings, under Setup.</p>
         {:else}
@@ -95,9 +101,9 @@
           <button
             type="button"
             class="btn"
-            class:pri={!found}
+            class:pri={!found && !doubt}
             disabled={setup.busy}
-            onclick={() => void checkSetup()}
+            onclick={() => void checkSetup(true)}
           >
             {#if setup.busy}
               <svg class="spin" viewBox="0 0 16 16" aria-hidden="true">
@@ -109,8 +115,10 @@
               Check again
             {/if}
           </button>
-          {#if found}
-            <button type="button" class="btn pri" onclick={() => void core().welcomeContinue()}>Continue</button>
+          {#if found || doubt}
+            <button type="button" class="btn pri" onclick={() => void core().welcomeContinue(!reduced())}
+              >Continue</button
+            >
           {/if}
         </div>
       </div>

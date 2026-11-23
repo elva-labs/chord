@@ -51,6 +51,31 @@ test.describe("the welcome", () => {
     expect(await commands(page)).toEqual(["welcome_continue"]);
   });
 
+  test("lets the user go on when the checks could not tell", async ({ page }) => {
+    await holding(page, { ...machine("git"), fromLoginShell: false });
+    await installFakeCore(page);
+    await page.goto("/welcome?again");
+    await expect(page.getByTestId("welcome-unsure")).toHaveText(
+      "Chord could not read your shell's setup, so an agent may be here all the same.",
+    );
+    await expect(page.getByRole("heading", { name: "Welcome to Chord" })).toBeVisible();
+    await expect(page.getByText("Install Claude Code or Codex, then check again.")).toHaveCount(0);
+    await page.getByRole("button", { name: "Continue" }).click();
+    expect(await commands(page)).toEqual(["welcome_continue"]);
+  });
+
+  test("lets the user go on when the checks fail", async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __setupFails: boolean }).__setupFails = true;
+    });
+    await installFakeCore(page);
+    await page.goto("/welcome");
+    await expect(page.getByTestId("welcome-unsure")).toHaveText(
+      "Chord could not check this machine, so an agent may be here all the same.",
+    );
+    await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
+  });
+
   test("with no agent, demands one and holds Continue back until a check finds one", async ({ page }) => {
     await holding(page, machine("git"));
     await installFakeCore(page);
@@ -65,8 +90,12 @@ test.describe("the welcome", () => {
     }, machine("codex", "git"));
     await page.getByRole("button", { name: "Check again" }).click();
     await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome to Chord" })).toBeVisible();
     await expect(page.locator('[data-check="claude-code"]')).not.toContainText("install claude");
-    expect(await page.evaluate(() => (window as unknown as { __setupReads: number }).__setupReads)).toBe(2);
+    expect(await page.evaluate(() => (window as unknown as { __setupFresh: boolean[] }).__setupFresh)).toEqual([
+      false,
+      true,
+    ]);
   });
 
   test("opens a quiet row's steps on Install and copies its command", async ({ page }) => {
@@ -104,7 +133,7 @@ test("About shows the version, copies it with the system, and closes on Escape",
   await expect(page.getByTestId("about-version")).toHaveText("1.0.0-test");
   await page.getByRole("button", { name: "Copy the version" }).click();
   expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([
-    "Chord 1.0.0-test, macOS arm64",
+    "Chord 1.0.0-test (abcd1234), macOS 27.2, arm64",
   ]);
 
   await page.getByRole("link", { name: /github.com\/elva-labs\/chord/ }).click();
@@ -135,6 +164,10 @@ test("Check setup in the palette opens the Setup tab, which reads the machine ag
   expect(await reads()).toBe(1);
   await tab.getByTestId("setup-check").click();
   await expect.poll(reads).toBe(2);
+  expect(await page.evaluate(() => (window as unknown as { __setupFresh: boolean[] }).__setupFresh)).toEqual([
+    false,
+    true,
+  ]);
 
   await tab.getByTestId("setup-welcome").click();
   expect(await commands(page)).toEqual(["welcome_show"]);

@@ -32,6 +32,7 @@
     resumeWithout,
     resumeWithoutProfile,
     profileGone,
+    agentMissing,
     dismissKept,
     statusMessage,
     titled,
@@ -52,6 +53,7 @@
   import { pick, projectLabel, workspace } from "$lib/workspace.svelte";
   import { startsIn } from "$lib/orchestratorFolder.svelte";
   import { openNew } from "$lib/palette.svelte";
+  import { openSetup } from "$lib/settings.svelte";
   import { sizeOf } from "$lib/zoom.svelte";
 
   let current = $derived(activeSession());
@@ -304,6 +306,9 @@
           <button class="without" onclick={() => resumeWithoutProfile(current!.key)} data-testid="resume-without-profile"
             >Resume without the profile</button
           >
+        {/if}
+        {#if agentMissing(current)}
+          <button class="without" onclick={openSetup} data-testid="open-setup">Open Setup</button>
         {/if}
         {#if current.status !== "starting" && startsIn(current.project)}
           {@render starters()}

@@ -740,10 +740,19 @@ export async function installFakeCore(
           fromLoginShell: true,
         }),
         // What the machine holds: what a test put in `__setup`, or both
-        // agents and git found. Each read is counted in `__setupReads`.
-        setupChecks: async () => {
-          const w = window as unknown as { __setup?: unknown; __setupReads?: number };
+        // agents and git found. Each read is counted in `__setupReads` and
+        // whether it was fresh kept in `__setupFresh`; `__setupFails` makes
+        // the read fail.
+        setupChecks: async (fresh?: boolean) => {
+          const w = window as unknown as {
+            __setup?: unknown;
+            __setupReads?: number;
+            __setupFresh?: boolean[];
+            __setupFails?: boolean;
+          };
           w.__setupReads = (w.__setupReads ?? 0) + 1;
+          (w.__setupFresh ??= []).push(fresh ?? false);
+          if (w.__setupFails) throw new Error("the checks could not be made");
           const found = (id: string, name: string, binary: string, agent: boolean, version: string) => ({
             id,
             name,
@@ -766,9 +775,9 @@ export async function installFakeCore(
           );
         },
         // The window commands, in `__windowCommands` for a test to read.
-        welcomeContinue: async () => {
+        welcomeContinue: async (motion?: boolean) => {
           const w = window as unknown as { __windowCommands?: string[] };
-          (w.__windowCommands ??= []).push("welcome_continue");
+          (w.__windowCommands ??= []).push(motion ? "welcome_continue faded" : "welcome_continue");
         },
         welcomeShow: async () => {
           const w = window as unknown as { __windowCommands?: string[] };
@@ -778,7 +787,13 @@ export async function installFakeCore(
           const w = window as unknown as { __windowCommands?: string[] };
           (w.__windowCommands ??= []).push("about_open");
         },
-        aboutInfo: async () => ({ version: "1.0.0-test", os: "macOS", arch: "arm64" }),
+        aboutInfo: async () => ({
+          version: "1.0.0-test",
+          os: "macOS",
+          arch: "arm64",
+          commit: "abcd1234",
+          osVersion: "27.2",
+        }),
         pickProject: async () => null,
         // What the file picker hands back: what a test put in `__picked`,
         // once, or nothing, as when the user cancels.

@@ -2143,6 +2143,16 @@ export function profileGone(session: Session): boolean {
   );
 }
 
+/** The words the core refuses a start with when the agent's program is not
+    on the login shell's PATH. */
+const AGENT_MISSING = "was not found on your PATH";
+
+/** Whether a row failed to start for want of its agent, which the Setup tab
+    can help with. */
+export function agentMissing(session: Session): boolean {
+  return session.status === "failed" && (session.error ?? "").includes(AGENT_MISSING);
+}
+
 /** Resumes a session whose Codex profile is gone, under its account's own
     configuration, in place of the row that asked. */
 export function resumeWithoutProfile(key: string): Session | null {

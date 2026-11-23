@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Setup, SetupCheck } from "$lib/core";
-import { BLOCKED, agentFound, blocked, groups } from "$lib/setupRows";
+import { BLOCKED, agentFound, blocked, groups, unsure } from "$lib/setupRows";
 
 const check = (id: string, binary: string, agent: boolean, over: Partial<SetupCheck> = {}): SetupCheck => ({
   id,
@@ -66,5 +66,23 @@ describe("setup rows", () => {
     expect(agents.map((row) => row.id)).toEqual(["claude-code"]);
     expect(tools[0]).toMatchObject({ icon: "need", binary: null, command: null, guide: "https://git-scm.com", open: true });
     expect(blocked(setup)).toBeNull();
+  });
+
+  it("holds the app back only for an agent known to be missing", () => {
+    const none = machine(check("claude-code", "claude", true, missing), check("codex", "codex", true, missing));
+    expect(unsure(none, null)).toBeNull();
+
+    const unread = { ...none, fromLoginShell: false };
+    expect(blocked(unread)).toBeNull();
+    expect(unsure(unread, null)).toMatch(/could not read your shell's setup/);
+
+    expect(unsure(null, "the checks could not be made")).toMatch(/could not check this machine/);
+    expect(unsure(none, "the checks could not be made")).toMatch(/could not check this machine/);
+    expect(unsure(machine(check("claude-code", "claude", true)), "the checks could not be made")).toBeNull();
+  });
+
+  it("says nothing about sign-in when it cannot be told", () => {
+    const { agents } = groups(machine(check("codex", "codex", true, { signedIn: null })));
+    expect(agents[0]).toMatchObject({ icon: "ok", extra: null, command: null, open: false });
   });
 });

@@ -65,6 +65,10 @@ export interface AboutInfo {
   os: string;
   /** The processor, as `arm64` or `x86_64`. */
   arch: string;
+  /** The commit the app was built from, short, when the build knew it. */
+  commit: string | null;
+  /** The system's version, as `27.2`, when it can be read. */
+  osVersion: string | null;
 }
 
 /** What the app found on the machine, in the order it is shown. */
@@ -1909,10 +1913,12 @@ export interface StoredSettings {
 export interface Core {
   detect(agent: string): Promise<DetectReport>;
   /** Looks for the agents and git on the login shell's PATH. Nothing is
-      sent anywhere and no agent is asked anything. */
-  setupChecks(): Promise<Setup>;
-  /** The welcome is gone through: the main window takes its place. */
-  welcomeContinue(): Promise<void>;
+      sent anywhere and no agent is asked anything. Fresh reads the login
+      shell again first, so a program installed since launch is found. */
+  setupChecks(fresh?: boolean): Promise<Setup>;
+  /** The welcome is gone through: the main window takes its place, with a
+      cross-fade when motion is true. */
+  welcomeContinue(motion?: boolean): Promise<void>;
   /** Opens the welcome over the main window. */
   welcomeShow(): Promise<void>;
   /** Opens About. */
@@ -2579,8 +2585,8 @@ export function toBytes(payload: unknown): Uint8Array {
 
 const tauriCore: Core = {
   detect: (agent) => invoke<DetectReport>("agent_detect", { id: agent }),
-  setupChecks: () => invoke<Setup>("setup_checks"),
-  welcomeContinue: () => invoke("welcome_continue"),
+  setupChecks: (fresh) => invoke<Setup>("setup_checks", { fresh: fresh ?? false }),
+  welcomeContinue: (motion) => invoke("welcome_continue", { motion: motion ?? false }),
   welcomeShow: () => invoke("welcome_show"),
   aboutOpen: () => invoke("about_open"),
   aboutInfo: () => invoke<AboutInfo>("about_info"),
@@ -3063,7 +3069,7 @@ const detachedCore: Core = {
   async welcomeShow() {},
   async aboutOpen() {},
   async aboutInfo() {
-    return { version: "", os: "", arch: "" };
+    return { version: "", os: "", arch: "", commit: null, osVersion: null };
   },
   async pickProject() {
     return null;
