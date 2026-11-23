@@ -98,12 +98,20 @@ const READS_ONLY_HOOK: &str = "chord_reads_only";
 const READS_ONLY_ASK: &str = "This session reads only. Allowing this lets it change files.";
 
 /// The tools the reads-only hook leaves to the mode besides those that
-/// only read: a command is the mode's to allow, as the agent is told to
-/// change nothing, a subagent's own tool calls pass the same hook, the
-/// question and the plan go to the user anyway, and a tool search only
-/// loads tools.
+/// only read: a command, and the tools that watch, read or stop one running
+/// in the background, are the mode's to allow, as the agent is told to
+/// change nothing; a subagent's own tool calls pass the same hook; the
+/// question and the plan go to the user anyway; and a tool search only
+/// loads tools. A tool is here under each name a harness has given it.
 const LEFT_TO_MODE: &[&str] = &[
     "Bash",
+    "PowerShell",
+    "Monitor",
+    "TaskOutput",
+    "TaskStop",
+    "BashOutput",
+    "KillShell",
+    "KillBash",
     "Agent",
     "Task",
     "AskUserQuestion",
@@ -283,6 +291,7 @@ impl Protocol for ClaudeStream {
             launch.effort,
         );
         stream.reads_only = launch.reads_only;
+        stream.attached = launch.tool_server.is_some();
         Box::new(stream)
     }
 
@@ -527,6 +536,9 @@ struct Stream {
     effort: Option<String>,
     /// Whether the tools that change files are refused.
     reads_only: bool,
+    /// Whether the session was started with the workbench's tool server,
+    /// so that a tool named for it is the workbench's.
+    attached: bool,
     /// The usage limit the agent said refused the running turn's last
     /// request: the window used up and when it starts over.
     refused: Option<(Option<LimitKind>, Option<u64>)>,
@@ -1036,6 +1048,7 @@ impl Stream {
             asked_mode: mode.map(str::to_string),
             effort: effort.map(str::to_string),
             reads_only: false,
+            attached: false,
             refused: None,
             models: Vec::new(),
             introduced: None,
@@ -2081,8 +2094,9 @@ impl Stream {
 
     /// The answer to the reads-only hook for one tool use. While the
     /// session reads only, a tool that edits files is refused; one that
-    /// only reads, a command, and the workbench's own tools that change
-    /// nothing are left to the mode; and any other is put to the user
+    /// only reads, a command, and the workbench's own tools that change no
+    /// file and reach nothing outside it, where its server is attached, are
+    /// left to the mode; and any other is put to the user
     /// whatever the mode or the allow rules say. Off, every tool is left to
     /// the mode.
     fn hooked(&self, id: &str, input: &Value) -> Value {
@@ -2099,7 +2113,7 @@ impl Stream {
         let decision = if !self.reads_only
             || crate::agents::READING_TOOLS.contains(&tool)
             || LEFT_TO_MODE.contains(&tool)
-            || crate::show::reading_tool(tool)
+            || (self.attached && crate::show::contained_tool(tool))
         {
             json!({})
         } else if crate::agents::CHANGING_TOOLS.contains(&tool) {
@@ -4013,12 +4027,19 @@ mod tests {
     }
 
     #[test]
-    fn reading_only_leaves_a_command_and_the_workbench_s_reading_tools_to_the_mode() {
+    fn reading_only_leaves_a_command_and_the_workbench_s_contained_tools_to_the_mode() {
         let mut stream = stream();
+        stream.attached = true;
         stream.control(&Control::SetReadsOnly(true)).unwrap();
         for tool in [
             "Bash",
+            "Monitor",
+            "TaskOutput",
+            "TaskStop",
+            "BashOutput",
+            "KillShell",
             "mcp__chord__notes",
+            "mcp__chord__note",
             "mcp__chord__sessions",
             "mcp__chord__wait",
             "mcp__chord__read",
@@ -4032,8 +4053,11 @@ mod tests {
         }
         for tool in [
             "mcp__chord__start",
-            "mcp__chord__note",
+            "mcp__chord__send",
             "mcp__chord__terminal",
+            "mcp__chord__browser_snapshot",
+            "mcp__chord__browser_console",
+            "mcp__chord__browser_screenshot",
             "mcp__github__create_issue",
             "mcp__other__notes",
         ] {
@@ -4043,6 +4067,20 @@ mod tests {
                 "{tool}"
             );
         }
+    }
+
+    #[test]
+    fn reading_only_asks_a_tool_named_for_the_workbench_where_its_server_is_not_attached() {
+        let mut stream = stream();
+        stream.control(&Control::SetReadsOnly(true)).unwrap();
+        for tool in ["mcp__chord__notes", "mcp__chord__read"] {
+            assert_eq!(
+                hook(&mut stream, tool)["hookSpecificOutput"]["permissionDecision"],
+                "ask",
+                "{tool}"
+            );
+        }
+        assert_eq!(hook(&mut stream, "Bash"), json!({}));
     }
 
     #[test]

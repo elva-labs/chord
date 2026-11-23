@@ -2437,13 +2437,17 @@ mod tests {
             .iter()
             .filter_map(|tool| tool["name"].as_str())
             .collect();
-        for tool in show::READING_TOOLS {
+        for tool in show::CONTAINED_TOOLS {
             assert!(names.contains(tool), "{tool}");
-            assert!(show::reading_tool(&format!("mcp__chord__{tool}")), "{tool}");
+            assert!(
+                show::contained_tool(&format!("mcp__chord__{tool}")),
+                "{tool}"
+            );
         }
-        assert!(!show::reading_tool("notes"));
-        assert!(!show::reading_tool("mcp__chord__note"));
-        assert!(!show::reading_tool("mcp__other__notes"));
+        assert!(!show::contained_tool("notes"));
+        assert!(!show::contained_tool("mcp__chord__start"));
+        assert!(!show::contained_tool("mcp__chord__browser_snapshot"));
+        assert!(!show::contained_tool("mcp__other__notes"));
     }
 
     #[test]

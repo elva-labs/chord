@@ -3373,7 +3373,7 @@ fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
 }
 
 #[test]
-fn reading_only_leaves_the_workbench_s_reading_tools_unlabelled() {
+fn reading_only_leaves_the_workbench_s_contained_tools_unlabelled() {
     let vars = HashMap::new();
     let server = PathBuf::from("/opt/workbench/chord-remote");
     let mut driver = launch_with(&vars, |launch| {
@@ -3384,29 +3384,50 @@ fn reading_only_leaves_the_workbench_s_reading_tools_unlabelled() {
         json!({"account": null, "requiresOpenaiAuth": false}),
     );
     driver.control(&Control::SetReadsOnly(true)).unwrap();
-    for (at, tool, labelled) in [
-        (30, "sessions", false),
-        (31, "notes", false),
-        (32, "start", true),
+    for (at, server, tool, labelled) in [
+        (30, "chord", "sessions", false),
+        (31, "chord", "notes", false),
+        (32, "chord", "note", false),
+        (33, "chord", "start", true),
+        (34, "chord", "browser_snapshot", true),
+        (35, "other", "notes", true),
     ] {
-        let reading = read(
-            &mut driver,
-            server_request(
-                at,
-                "mcpServer/elicitation/request",
-                json!({"threadId": THREAD, "serverName": "chord", "message": "Run it?",
-                       "_meta": {"codex_approval_kind": "mcp_tool_call",
-                                 "tool_name": tool, "tool_params": {}}}),
-            ),
+        assert_eq!(
+            elicited(&mut driver, at, server, tool),
+            labelled,
+            "{server} {tool}"
         );
-        assert!(
-            matches!(
-                reading.events.as_slice(),
-                [Event::PermissionAsked { reads_only, .. }] if *reads_only == labelled
-            ),
-            "{tool}: {:?}",
-            reading.events
-        );
+    }
+}
+
+#[test]
+fn reading_only_labels_a_server_named_chord_that_the_workbench_did_not_attach() {
+    let mut driver = launch_with(&HashMap::new(), |_| {});
+    handshake(
+        &mut driver,
+        json!({"account": null, "requiresOpenaiAuth": false}),
+    );
+    driver.control(&Control::SetReadsOnly(true)).unwrap();
+    for (at, tool) in [(30, "notes"), (31, "sessions")] {
+        assert!(elicited(&mut driver, at, "chord", tool), "{tool}");
+    }
+}
+
+/// Whether the ask a server's tool call raises says the session reads only.
+fn elicited(driver: &mut AppServer, at: i64, server: &str, tool: &str) -> bool {
+    let reading = read(
+        driver,
+        server_request(
+            at,
+            "mcpServer/elicitation/request",
+            json!({"threadId": THREAD, "serverName": server, "message": "Run it?",
+                   "_meta": {"codex_approval_kind": "mcp_tool_call",
+                             "tool_name": tool, "tool_params": {}}}),
+        ),
+    );
+    match reading.events.as_slice() {
+        [Event::PermissionAsked { reads_only, .. }] => *reads_only,
+        other => panic!("{server} {tool}: {other:?}"),
     }
 }
 
