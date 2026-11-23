@@ -465,6 +465,31 @@ impl Core {
         Ok(stored.settings.teams_in_use())
     }
 
+    /// Every problem with a team being edited, the one that matters most
+    /// first, beside the teams in use other than the one named `editing`,
+    /// with a quiet hint for each path a gate holds for that matches no
+    /// file in any of `folders`. See [`crate::team::check_draft`].
+    pub fn team_check(
+        &self,
+        draft: &serde_json::Value,
+        editing: Option<&str>,
+        folders: &[PathBuf],
+    ) -> Result<Vec<crate::team::Problem>, String> {
+        let editing = editing.map(str::trim).filter(|name| !name.is_empty());
+        let others: Vec<crate::team::Team> = self
+            .teams_in_use()?
+            .into_iter()
+            .filter(|team| editing.is_none_or(|name| !team.name.eq_ignore_ascii_case(name)))
+            .collect();
+        let files = || {
+            folders
+                .iter()
+                .filter_map(|folder| crate::git::list_files(folder).ok())
+                .collect()
+        };
+        Ok(crate::team::check_draft(draft, &others, files))
+    }
+
     /// The user's own stylesheet, or none and why it is not handed over.
     pub fn styles_get(&self) -> Result<crate::styles::Styles, String> {
         Ok(self.settings()?.styles())
@@ -859,7 +884,11 @@ impl Core {
     ///
     /// With `team`, one of the teams in use by name, the session is the
     /// lead of a team's run that begins before its first turn, so the
-    /// run's holds are on from then. With `joining`, the session is
+    /// run's holds are on from then. Given no `instructions`, it is told
+    /// the team's members and gates in their place, and unless the team
+    /// says otherwise it reads only and delegates only. A later start of
+    /// the lead needs no `team`: its run holds on, and it is told the team
+    /// the run began with. With `joining`, the session is
     /// recorded in the run the session that asked for it is in, as one of
     /// the team's agents; one the team does not have is not started.
     #[allow(clippy::too_many_arguments)]
@@ -928,9 +957,10 @@ impl Core {
     /// started for as long as it runs.
     fn start_run(
         &self,
-        run: Run,
+        mut run: Run,
         at: Option<String>,
     ) -> Result<crate::integrated::Started, String> {
+        self.tell_lead(&mut run)?;
         let agent = run.agent.as_str();
         let project = run.project.as_path();
         let cwd = run.cwd.as_deref();
@@ -1089,6 +1119,55 @@ impl Core {
         )
     }
 
+    /// Tells a lead given no instructions the members and gates of its
+    /// team, and has it read and delegate only unless the team says
+    /// otherwise. A lead started with a team is told the team as it is in
+    /// use; one started again with none, while its run goes on, is told
+    /// the team its run began with, on every start, a resume or a fresh
+    /// conversation alike.
+    fn tell_lead(&self, run: &mut Run) -> Result<(), String> {
+        if run.instructions.is_some() || run.joining.is_some() {
+            return Ok(());
+        }
+        let team = match &run.team {
+            Some(name) => self.team_named(name)?,
+            None => match self.led_team(run) {
+                Some(team) => team,
+                None => return Ok(()),
+            },
+        };
+        run.instructions = Some(crate::team::lead_instructions(&team));
+        run.start_only = team.start_only;
+        run.reads_only = run.reads_only || team.start_only;
+        Ok(())
+    }
+
+    /// The team of the run a start's token leads, while that run goes on.
+    fn led_team(&self, run: &Run) -> Option<crate::team::Team> {
+        let home = self.home.as_deref()?;
+        let token = run
+            .token
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())?;
+        let runs = crate::run::Runs::existing(home).ok()??;
+        Some(runs.run(token).ok()??.team)
+    }
+
+    /// One of the teams in use, by name.
+    fn team_named(&self, name: &str) -> Result<crate::team::Team, String> {
+        let stored = self.settings()?.load();
+        if stored.unreadable {
+            return Err(format!(
+                "The settings cannot be read, so the team {name} is not known."
+            ));
+        }
+        stored
+            .settings
+            .team_named(name)
+            .ok_or_else(|| format!("There is no team named {name}."))
+    }
+
     /// Begins the team's run of a lead started with one, and records a
     /// session started for one in a run as its member, in `folder`, before
     /// the session's first turn. Answers with what the member is recorded
@@ -1113,16 +1192,7 @@ impl Core {
             .filter(|token| !token.is_empty());
         if let Some(name) = &run.team {
             let lead = token.ok_or("A lead started with a team needs its token.")?;
-            let stored = self.settings()?.load();
-            if stored.unreadable {
-                return Err(format!(
-                    "The settings cannot be read, so the team {name} is not known."
-                ));
-            }
-            let team = stored
-                .settings
-                .team_named(name)
-                .ok_or_else(|| format!("There is no team named {name}."))?;
+            let team = self.team_named(name)?;
             crate::run::begin(home, lead, &team, folder)?;
             self.run_changed(lead);
         }
@@ -3282,6 +3352,29 @@ mod tests {
             .is_none());
         let state = crate::run::state(&home, "lead").unwrap().unwrap();
         assert_eq!(state.run.team.name, crate::team::QUICK_FIX);
+        // The lead is told its team, and reads and delegates only.
+        let mut lead = run("lead", Some("quick fix"), None);
+        core.tell_lead(&mut lead).unwrap();
+        assert!(lead
+            .instructions
+            .as_deref()
+            .is_some_and(|told| told.starts_with("You lead the Chord team \"Quick fix\".")));
+        assert!(lead.start_only && lead.reads_only);
+        // A later start of the lead carries no team: its run holds on, and
+        // it is told the team the run began with.
+        let mut later = run("lead", None, None);
+        assert!(core.engage(&later, folder.path(), None).unwrap().is_none());
+        let state = crate::run::state(&home, "lead").unwrap().unwrap();
+        assert_eq!(state.run.team.name, crate::team::QUICK_FIX);
+        core.tell_lead(&mut later).unwrap();
+        assert!(later
+            .instructions
+            .as_deref()
+            .is_some_and(|told| told.starts_with("You lead the Chord team \"Quick fix\".")));
+        assert!(later.start_only && later.reads_only);
+        let mut stranger = run("stranger", None, None);
+        core.tell_lead(&mut stranger).unwrap();
+        assert!(stranger.instructions.is_none() && !stranger.reads_only);
         let joining = crate::run::Joining {
             by: "lead".into(),
             agent: "Developer".into(),

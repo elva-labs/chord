@@ -696,6 +696,14 @@ export async function installFakeCore(
         const raw = localStorage.getItem(settingsFile);
         return raw === null ? null : { ...settingsDefaults, ...JSON.parse(raw) };
       };
+      // The teams in use: the file's own, else those a test gives. The
+      // integrated fake reads a team's startOnly through `__teamOf`.
+      const teamsInUse = (): { name: string; startOnly?: boolean }[] => {
+        const own = readSettings()?.teams as { name: string }[] | undefined;
+        return own ?? (window as unknown as { __teamsInUse?: { name: string }[] }).__teamsInUse ?? [];
+      };
+      (window as unknown as Record<string, unknown>).__teamOf = (name: string) =>
+        teamsInUse().find((team) => team.name === name);
       const settingsChanged = (next: unknown) => {
         const w = window as unknown as {
           __settingsChanged?: (settings: unknown) => void;
@@ -1351,21 +1359,93 @@ export async function installFakeCore(
           const w = window as unknown as { __notesForgotten?: { project: string; tokens: string[] }[] };
           (w.__notesForgotten ??= []).push({ project, tokens });
         },
-        // Teams and their runs: the teams a test gives, else the file's
-        // own, and the runs a test gives by session token. A run's end is
-        // kept for the test to read, and `__runChanged` tells the window
-        // a run moved, as the core would.
-        teamsInUse: async () => {
-          const given = (window as unknown as { __teamsInUse?: unknown[] }).__teamsInUse;
-          return given ?? (readSettings()?.teams as unknown[] | undefined) ?? [];
+        // Teams and their runs: the file's own teams, else those a test
+        // gives as the file's workflows would, and the runs a test gives by
+        // session token. A run's end is kept for the test to read, and
+        // `__runChanged` tells the window a run moved, as the core would.
+        // Teams made from workflows are the core's to make and to test; the
+        // fake gives only the teams a test hands it.
+        teamsInUse: async () => teamsInUse(),
+        // A draft's problems in the core's order, for the cases the specs
+        // try: its name, a name taken, no room, no agents, a gate without
+        // its agent, a path outside the project, then a quiet hint for a path no file in
+        // `__projectFiles` matches. The core's own tests hold the rest.
+        teamCheck: async (
+          _project: string,
+          draft: {
+            name: string;
+            members: { agent: string }[];
+            gates: { who: string; touches?: string[] }[];
+          },
+          editing: string | null,
+          folders: string[],
+        ) => {
+          const problems: { text: string; quiet: boolean }[] = [];
+          const refused = (text: string) => problems.push({ text, quiet: false });
+          const name = draft.name.trim();
+          if (name === "") refused("A team needs a name.");
+          else if ([...name].length > 40) refused("A team's name is 40 characters at most.");
+          else if (/["\u0000-\u001f\u007f]/.test(name))
+            refused("A team's name has no quotation marks and nothing unprintable.");
+          const others = teamsInUse().filter(
+            (team) => editing === null || team.name.toLowerCase() !== editing.trim().toLowerCase(),
+          );
+          if (name !== "" && others.some((team) => team.name.toLowerCase() === name.toLowerCase()))
+            refused(`There is already a team called ${name}.`);
+          if (others.length >= 16) refused("The settings hold 16 teams at most.");
+          const called = name === "" ? "the team" : name;
+          if (draft.members.length === 0)
+            refused(`${called[0].toUpperCase()}${called.slice(1)} needs at least one agent.`);
+          for (const gate of draft.gates)
+            if (!draft.members.some((member) => member.agent.toLowerCase() === gate.who.toLowerCase()))
+              refused(`A gate of ${called} waits for "${gate.who}", which is not one of its agents.`);
+          const fits = (glob: string) =>
+            glob.trim() !== "" &&
+            !/[`\u0000-\u001f]/.test(glob) &&
+            glob.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+          for (const gate of draft.gates)
+            for (const bad of (gate.touches ?? []).filter((glob) => !fits(glob)))
+              refused(
+                `The gate of ${gate.who} in ${called} holds for paths in the project, such as infra/**, not "${bad}".`,
+              );
+          if (folders.length > 0) {
+            const files = (window as unknown as { __projectFiles?: string[] }).__projectFiles ?? [
+              "src/main.ts",
+              "infra/main.tf",
+            ];
+            const matches = (glob: string, path: string) =>
+              new RegExp(
+                `^${glob
+                  .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+                  .replace(/\*\*/g, "\u0000")
+                  .replace(/\*/g, "[^/]*")
+                  .replace(/\u0000/g, ".*")}$`,
+              ).test(path);
+            const hinted = new Set<string>();
+            for (const glob of draft.gates.flatMap((gate) => (gate.touches ?? []).filter(fits)))
+              if (!hinted.has(glob) && !files.some((path) => matches(glob, path))) {
+                hinted.add(glob);
+                problems.push({ text: `No file in the open projects matches ${glob} yet.`, quiet: true });
+              }
+          }
+          return problems;
         },
-        runState: async (_project: string, token: string) =>
-          (window as unknown as { __runs?: Record<string, unknown> }).__runs?.[token] ?? null,
+        // A run is read whole each time; `__runReads` counts the reads by
+        // token, for a spec to see how often the window asks.
+        runState: async (_project: string, token: string) => {
+          const w = window as unknown as { __runs?: Record<string, unknown>; __runReads?: Record<string, number> };
+          (w.__runReads ??= {})[token] = (w.__runReads[token] ?? 0) + 1;
+          const run = w.__runs?.[token] as Record<string, unknown> | undefined;
+          return run === undefined ? null : { reasonMost: 500, ...run };
+        },
+        // A run's end fails while a test sets `__runEndFails` to why.
         runEnd: async (project: string, token: string) => {
           const w = window as unknown as {
             __runs?: Record<string, unknown>;
             __runsEnded?: { project: string; token: string }[];
+            __runEndFails?: string;
           };
+          if (w.__runEndFails !== undefined) throw new Error(w.__runEndFails);
           (w.__runsEnded ??= []).push({ project, token });
           const led = w.__runs?.[token] !== undefined;
           if (led) delete w.__runs![token];
@@ -1378,8 +1458,20 @@ export async function installFakeCore(
           };
           if (w.__runs?.[token] === undefined) throw new Error("That session is in no run.");
           if (reason.trim() === "") throw new Error("A waiver says why.");
+          if ([...reason.trim()].length > 500) throw new Error("A waiver's reason is 500 characters at most.");
           (w.__waivers ??= []).push({ token, gate, reason: reason.trim() });
-          return { gate, reason: reason.trim(), at: Math.floor(Date.now() / 1000) };
+          const waiver = { gate, reason: reason.trim(), at: Math.floor(Date.now() / 1000) };
+          // The run stands as the core would have it: the gate waived, and
+          // the line counting it, with the next that holds and why.
+          type Held = { gate: { id: number }; standing: string; reason: string | null; waiver: unknown };
+          const run = w.__runs![token] as { gates: Held[]; line: string };
+          const held = run.gates.find((one) => one.gate.id === gate);
+          if (held !== undefined) Object.assign(held, { standing: "waived", reason: null, waiver });
+          const needed = run.gates.filter((one) => one.standing !== "notNeeded");
+          const open = needed.filter((one) => one.standing === "waiting" || one.standing === "outOfDate");
+          const count = `Gates ${needed.length - open.length} of ${needed.length}`;
+          run.line = open.length === 0 ? count : `${count} · ${open[0].reason}`;
+          return waiver;
         },
         onRunChanged: async (handler: (changed: { lead: string }) => void) => {
           (window as unknown as Record<string, unknown>).__runChanged = handler;
@@ -1995,7 +2087,7 @@ export async function installFakeCore(
                 Object.values(value).some((share) => typeof share !== "number" || share < 0 || share > 0.25)
               )
                 throw new Error("cards is a table of shares by palette or theme, each from 0 to 0.25");
-            } else if (!["keys", "hooks", "accounts", "workflows", "agents", "themes"].includes(field)) {
+            } else if (!["keys", "hooks", "accounts", "workflows", "agents", "teams", "themes"].includes(field)) {
               throw new Error(`there is no setting called ${field}`);
             }
           }

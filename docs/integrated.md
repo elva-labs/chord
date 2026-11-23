@@ -454,6 +454,12 @@ remembers them for the rest of the turn when allowed, or of the session,
 and offers no cancel. Codex takes no message with a denial, and its offers
 say so.
 
+In a team's run, a Codex request to run a command that pushes or opens or
+merges a pull request is turned down without asking while a gate holds the
+hand-over, and the conversation says which gate holds it. A command Codex
+runs without asking, whatever the reason, is not seen (see
+[teams](teams.md#what-a-run-holds)).
+
 A question the harness asks the user is a request of its own, answered with
 a reply rather than a permission: each question with its options, whether
 more than one may be picked, whether the user may answer in words of their

@@ -250,12 +250,6 @@ test.describe("workflows", () => {
     await expect.poll(() => answerTo(page, "w-2")).not.toBeNull();
     expect((await answerTo(page, "w-2"))!.error).toBeNull();
 
-    // The editor shows it.
-    await page.keyboard.press(`${MOD}+,`);
-    await page.getByTestId("settings-tab-workflows").click();
-    await expect(
-      page.locator('[data-testid="workflow-chip"][data-workflow="Quick fix"]'),
-    ).toBeVisible();
   });
 
   test("one that will not do is refused without troubling the user", async ({ page }) => {

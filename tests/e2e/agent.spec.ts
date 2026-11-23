@@ -294,6 +294,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
         onPluginView: async () => () => {},
         onPluginViewData: async () => () => {},
         pluginViewMessage: async () => {},
+        onRunChanged: async () => () => {},
         onSessionEnded: async (handler: (ended: unknown) => void) => {
           fake.enders.push(handler);
           return () => {};

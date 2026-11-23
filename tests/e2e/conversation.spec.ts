@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { BUILD_AND_REVIEW, PROJECT, WITH_WORKFLOW, installFakeCore, sessionRowOf, startNew, startIntegrated, startTerminal } from "./fake";
+import { BUILD_AND_REVIEW, PROJECT, SETTINGS_FILE, WITH_WORKFLOW, installFakeCore, sessionRowOf, startNew, startIntegrated, startTerminal } from "./fake";
 
 // An integrated session as the user meets it: the conversation the agent
 // pane draws in place of a terminal, driven by the fake core's scripted
@@ -1196,12 +1196,17 @@ test.describe("a Codex orchestrator, integrated", () => {
     await expect(page.getByTestId("resume-session")).toHaveText("Resume");
     await expect(page.getByTestId("run-words")).toHaveText("Build and review");
 
-    // The workflow gives the orchestrator its own subagents from now on.
-    await page.keyboard.press("ControlOrMeta+,");
-    await page.getByTestId("settings-tab-workflows").click();
-    await page.getByTestId("workflow-start-only").uncheck();
-    await page.keyboard.press("Escape");
-    await expect(page.getByTestId("settings")).toHaveCount(0);
+    // The workflow gives the orchestrator its own subagents from now on,
+    // changed in the file behind the window's back.
+    await page.evaluate(
+      ({ key, flow }) => {
+        const next = JSON.parse(localStorage.getItem(key) ?? "{}");
+        next.workflows = { ...next.workflows, list: [{ ...flow, startOnly: false }] };
+        localStorage.setItem(key, JSON.stringify(next));
+        (window as unknown as { __settingsChanged: (settings: unknown) => void }).__settingsChanged(next);
+      },
+      { key: SETTINGS_FILE, flow: CODEX_FLOW },
+    );
 
     await page.getByTestId("resume-session").click();
     const kept = page.getByTestId("session-kept");

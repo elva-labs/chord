@@ -52,6 +52,18 @@ test.describe("the tabs", () => {
     ).not.toHaveAttribute("aria-current", "page");
   });
 
+  test("keep one dialog size for every tab, so nothing moves when the tab changes", async ({ page }) => {
+    await page.keyboard.press(`${MOD}+,`);
+    const dialog = page.getByTestId("settings");
+    const first = await dialog.boundingBox();
+    const tabs = await page.getByTestId("settings-tab-appearance").boundingBox();
+    for (const tab of ["agents", "keys", "notifications"]) {
+      await page.getByTestId(`settings-tab-${tab}`).click();
+      expect(await dialog.boundingBox(), tab).toEqual(first);
+      expect(await page.getByTestId("settings-tab-appearance").boundingBox(), tab).toEqual(tabs);
+    }
+  });
+
   test("keep the tab from one opening to the next", async ({ page }) => {
     await page.keyboard.press(`${MOD}+,`);
     await page.getByTestId("settings-tab-plugins").click();

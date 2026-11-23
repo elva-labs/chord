@@ -42,6 +42,7 @@
   import Dock from "./Dock.svelte";
   import FindBar from "./FindBar.svelte";
   import LimitNotice from "./LimitNotice.svelte";
+  import GateLine from "./GateLine.svelte";
   import Icon from "./Icon.svelte";
   import Thread from "./Thread.svelte";
   import Plain from "./Plain.svelte";
@@ -444,6 +445,7 @@
         </div>
       {:else}
         <LimitNotice sessionKey={session.key} {conversation} />
+        <GateLine sessionKey={session.key} {conversation} {active} />
         <Dock bind:this={dock} sessionKey={session.key} agent={name} {active} onAnswered={answered} />
         <Composer
           sessionKey={session.key}

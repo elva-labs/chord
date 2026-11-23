@@ -126,6 +126,7 @@
   import { heedAsks, openAsks } from "$lib/askNotices.svelte";
   import { PANE_MOTION, reduced } from "$lib/motion";
   import { startup } from "$lib/reopen.svelte";
+  import { hearRuns } from "$lib/runs.svelte";
   import {
     activeShell,
     closeAsking as closeShell,
@@ -312,6 +313,7 @@
     core()
       .onPluginViewData((event) => pluginViewData(event))
       .then((unlisten) => offs.push(unlisten));
+    hearRuns().then((unlisten) => offs.push(unlisten));
     core()
       .onFileDrag(handleDrag)
       .then((unlisten) => offs.push(unlisten));

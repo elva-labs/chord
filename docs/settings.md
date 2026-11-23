@@ -48,11 +48,15 @@ See [sessions](reference/settings.md#sessions).
 
 ## Agents
 
-An agent is a role: a title, a description whose first line is what lists show, and the model, effort and whether it reads only. The Agents tab lists the agents Chord ships, which you can change and reset, then your own, which you make, change and remove there, and under them the agents you installed for Claude Code or Codex, read from where those keep them and never written. See [agents](reference/settings.md#agents).
+An agent is a role: a title, a description whose first line is what lists show, and the model, effort and whether it reads only. The Agents tab lists your teams first, then the agents Chord ships, which you can change and reset, then your own, which you make, change and remove there, and under them the agents you installed for Claude Code or Codex, read from where those keep them and never written. See [agents](reference/settings.md#agents).
 
 ## Workflows
 
-A workflow names the model a session starts on, and the models it may hand work and review to. The roles are fixed: the orchestrator you talk to, workers that do a piece of work, and reviewers that check it. Each project can follow a workflow of its own. See [workflows](reference/settings.md#workflows) and [orchestrator](orchestrator.md).
+A workflow names the model a session starts on, and the models it may hand work and review to. The roles are fixed: the orchestrator you talk to, workers that do a piece of work, and reviewers that check it. Each project can follow a workflow of its own. Workflows are kept in the settings file, with no tab of their own: the window offers teams in their place, and a workflow in the file still starts sessions from the palette. See [workflows](reference/settings.md#workflows) and [orchestrator](orchestrator.md).
+
+## Teams
+
+A team names the agents a lead may call and the gates their work passes: which agent approves the plan before building, or the change before handing over, and on which paths. You make and change them on the Agents tab, and start a session as a team's lead from the composer. Chord ships Ship with checks and Quick fix, and a settings file from before teams gets a team for each of its workflows, except those equal to one Chord ships, and its workflows stay as they were. See [teams](teams.md) and [teams in the settings file](reference/settings.md#teams).
 
 ## Accounts
 

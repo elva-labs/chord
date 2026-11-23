@@ -297,7 +297,6 @@ test("walks the settings, every section and its controls, and never leaves them"
   expect(await walk(page, "ArrowDown", 1)).toEqual(["settings-tab-sessions"]);
   for (const [tab, first] of [
     ["sessions", "session-kind-terminal"],
-    ["workflows", "workflow-chip"],
     ["accounts", "account-add-open"],
     ["plugins", "plugin"],
     ["keys", "preset-default"],
@@ -306,8 +305,6 @@ test("walks the settings, every section and its controls, and never leaves them"
     await page.getByTestId(`settings-tab-${tab}`).focus();
     await page.keyboard.press("Enter");
     expect(await walk(page, "Tab", 1), tab).toEqual([first]);
-    // The workflows are one stop, and New workflow one after them.
-    if (tab === "workflows") expect(await walk(page, "Tab", 1)).toEqual(["workflow-new"]);
   }
   expect(await walk(page, "Tab", 2)).toEqual(["chime", "settings-close"]);
   // Enter on a button presses it.
@@ -315,38 +312,29 @@ test("walks the settings, every section and its controls, and never leaves them"
   await expect(page.getByTestId("settings")).toHaveCount(0);
 });
 
-test("rings a check box outside its box, checked or not, in both looks and themes", async ({ page }) => {
+test("rings a switch outside its box, on or off, in both looks and themes", async ({ page }) => {
   await open(page);
   await page.keyboard.press(`${MOD}+,`);
   await expect(page.getByTestId("settings")).toBeVisible();
-  const box = page.getByTestId("workflow-start-only");
+  const box = page.getByTestId("compact");
   for (const look of ["modern", "terminal"])
     for (const theme of ["light", "dark"]) {
       await page.getByTestId("settings-tab-appearance").click();
       await page.getByTestId(`look-${look}`).click();
       await page.getByTestId(`theme-${theme}`).click();
-      await page.getByTestId("settings-tab-workflows").click();
-      for (const checked of [true, false]) {
+      for (const checked of [false, true]) {
         await expect(box).toBeChecked({ checked });
         await box.focus();
         await page.keyboard.press("Shift+Tab");
         await page.keyboard.press("Tab");
         await expect(box).toBeFocused();
-        await expect.poll(() => ringed(page), { message: `the ring on the box, ${look} ${theme}` }).toBe(true);
+        await expect.poll(() => ringed(page), { message: `the ring on the switch, ${look} ${theme}` }).toBe(true);
         const sides = await ringOutside(page, box);
         for (const [side, seen] of Object.entries(sides))
-          expect(seen, `the ring's ${side}, ${look} ${theme}, checked ${checked}`).toBeGreaterThan(10);
+          expect(seen, `the ring's ${side}, ${look} ${theme}, on ${checked}`).toBeGreaterThan(10);
         await box.focus();
         await page.keyboard.press("Space");
       }
-      // A step's check box, in the step's own part.
-      const any = page.getByTestId("step-model-any");
-      await any.focus();
-      await page.keyboard.press("Shift+Tab");
-      await page.keyboard.press("Tab");
-      await expect(any).toBeFocused();
-      for (const [side, seen] of Object.entries(await ringOutside(page, any)))
-        expect(seen, `the step box's ring's ${side}, ${look} ${theme}`).toBeGreaterThan(10);
     }
 });
 

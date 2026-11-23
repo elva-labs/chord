@@ -62,11 +62,9 @@ import { resetUserStyles, userStyles } from "$lib/userStyles.svelte";
 import { compact, resetCompact } from "$lib/compact.svelte";
 import { heardCatalog, resetCatalogs } from "$lib/modelCatalog.svelte";
 import {
-  addWorkflow,
   adoptWorkflows,
   changed,
   defaultWorkflow,
-  setOverride,
   workflows,
   workflowsSettings,
 } from "$lib/workflows.svelte";
@@ -655,7 +653,7 @@ describe("workflows", () => {
     expect(text).toContain("workflow argument");
     expect(text).toContain("claude-code takes the models fable, opus, sonnet, haiku");
     expect(text).toContain("codex takes default, its own default. deleteWorkflow");
-    expect(text).toContain("Which workflow a project follows is the user's to choose.");
+    expect(text).toContain("Which workflow a project follows is kept in the settings file as it is");
   });
 
   it("name the models Codex listed, as the pickers offer them", async () => {
@@ -919,10 +917,14 @@ describe("workflows", () => {
     expect(settingsAsk.undo).toBeNull();
   });
 
-  it("are made over the user's own edits while the question is open, and undone without them", async () => {
+  it("are made over what the file took while the question is open, and undone without it", async () => {
+    const added = (name: string) => {
+      const held = workflowsSettings();
+      adoptWorkflows({ ...held, list: [...held.list, { ...defaultWorkflow(), name }] });
+    };
     const done = handle(request("settings_change", { workflow: quick }));
     await settle();
-    expect(addWorkflow()).toBe("New workflow");
+    added("New workflow");
     allowChange();
     await done;
     expect(workflows.list.map((workflow) => workflow.name)).toEqual([
@@ -930,7 +932,7 @@ describe("workflows", () => {
       "New workflow",
       "Quick fix",
     ]);
-    expect(addWorkflow()).toBe("New workflow 2");
+    added("New workflow 2");
     undoChange();
     expect(workflows.list.map((workflow) => workflow.name)).toEqual([
       "Build and review",
@@ -983,8 +985,8 @@ describe("workflows", () => {
     const done = handle(request("settings_change", { deleteWorkflow: "Build and review" }));
     await settle();
     expect(settingsAsk.asking?.changes.map((change) => change.field)).toEqual(["workflow.Build and review"]);
-    // Meanwhile the user points a project at the workflow being deleted.
-    setOverride("/repo/app", "Build and review");
+    // Meanwhile the file points a project at the workflow being deleted.
+    adoptWorkflows({ ...workflowsSettings(), overrides: { "/repo/app": "Build and review" } });
     allowChange();
     await settle();
     expect(workflows.list).toHaveLength(2);
@@ -999,7 +1001,7 @@ describe("workflows", () => {
     expect(answers[0].content).toMatch(/Workflow for app is now as for new sessions/);
   });
 
-  it("say so when undoing them is refused, and the window keeps what is stored", async () => {
+  it("keep what is stored when undoing them is refused", async () => {
     const done = handle(request("settings_change", { workflow: quick }));
     await settle();
     allowChange();
@@ -1008,7 +1010,6 @@ describe("workflows", () => {
     undoChange();
     await settle();
     expect(workflows.list.map((workflow) => workflow.name)).toEqual(["Build and review", "Quick fix"]);
-    expect(workflows.refused).toBe("the settings file could not be written");
   });
 
   it("deleted come back where they stood, with the projects that chose them, on undo", async () => {
