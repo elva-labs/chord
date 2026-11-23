@@ -5,6 +5,7 @@ import { filesBackNote, spoken } from "$lib/instructions";
 import {
   agentAhead,
   agentAheadBack,
+  agentWaits,
   agentIdentified,
   agentOfRow,
   agentReadsOnly,
@@ -99,7 +100,7 @@ import {
 import { orchestratorPrompt, startsOnly } from "$lib/workflowInstructions";
 import { workflowNamed } from "$lib/workflows.svelte";
 import type { HarnessId } from "$lib/core";
-import { switches } from "$lib/switches.svelte";
+import { onAgentsSwitched, switches } from "$lib/switches.svelte";
 
 /**
  * The integrated sessions behind their rows.
@@ -212,6 +213,9 @@ export class Link {
   /** A change of model, mode or effort to make on the run starting again
       once it is up. */
   after: Change | null = null;
+  /** What the agent picked on the composer set the run to, and the model
+      and effort the run was on before any pick. */
+  picked: { change: Change; before: { model: string | null; effort: string | null } } | null = null;
   /** The changes asked of the run behind the row and not answered yet. */
   unanswered = new Set<Change>();
   /** The user chose the mode the session runs in. */
@@ -682,6 +686,12 @@ function runOfStart(key: string, link: Link, starting: Session): { team?: string
 /** Asks the core to start the agent behind a row, as the row is now and
     told what it is told, and takes the run up once it is. */
 async function begin(key: string, link: Link, starting: Session, told: Told) {
+  if (starting.team !== null && !switches.agents && starting.resumedFrom === null && link.conversation.untouched)
+    link.conversation.apply({
+      type: "notice",
+      level: "info",
+      message: `Started without the team ${starting.team}: agents and teams are switched off.`,
+    });
   link.ranOn = { agent: starting.agent, told: toldText(told.instructions, told.startOnly), team: starting.team };
   link.granted = [];
   settleAutoResume(key);
@@ -707,7 +717,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     mode,
     effort,
     configDir: dirFor(starting.account, starting.agent),
-    readsOnly: agentOfRow(key, starting.id)?.readsOnly === true ? true : undefined,
+    readsOnly: switches.agents && agentOfRow(key, starting.id)?.readsOnly === true ? true : undefined,
     profile: starting.profile ?? undefined,
     ...told,
     ...originOf(starting),
@@ -1329,7 +1339,12 @@ export function send(
   // whoever sends it, the workbench's own wake among them.
   const briefing = briefingFor(key);
   // The agent picked on the composer is told ahead of the user's own next
-  // message, once, and waits while agents are switched off.
+  // message, once. While agents are switched off the message goes plain
+  // and the pick is let go: the conversation has begun without it.
+  if (from === null && !switches.agents && agentWaits(key)) {
+    pickAgent(key, session.id, null);
+    link.picked = null;
+  }
   const agent = from === null && switches.agents ? agentAhead(key) : null;
   const text = [briefing, agent, told, note?.text ?? null, words].filter((part) => part !== null).join("\n\n");
   const id = crypto.randomUUID();
@@ -1627,11 +1642,13 @@ function atRest(key: string): { session: Session; link: Link } | null {
  * fresh conversation from its notes, under the same row, whatever its
  * size and however long it rested, so the whole of it is never read
  * again. Only at rest, and only where the core wrote the briefing; false,
- * with the run left as it is, otherwise.
+ * with the run left as it is, otherwise. While notes are switched off the
+ * run at rest goes on as it is, on the whole of its conversation.
  */
 export async function goOnAfterLimit(key: string, resetAt: number): Promise<boolean> {
   const found = atRest(key);
   if (found === null || found.link.restarting) return false;
+  if (!switches.notes) return true;
   const { session, link } = found;
   const id = session.id;
   const handle = link.handle;
@@ -2254,7 +2271,8 @@ export function agentEffort(conversation: Conversation, agent: Agent, harness: H
     on the agent's model where that is on the session's harness, at its
     effort where the session offers it, and reading only or not as the
     agent does. Leaving an agent for none leaves the model and the effort
-    as they are. The pick is the composer's last. */
+    as they are. The pick is the composer's last. What a pick set is taken
+    back while agents are switched off, and set again once they are on. */
 export function workAs(key: string, agent: Agent | null) {
   const link = links.get(key);
   const session = byKey(key);
@@ -2267,8 +2285,30 @@ export function workAs(key: string, agent: Agent | null) {
   if (agent?.model != null && agent.model.harness === session.agent) change.model = agent.model.model;
   const effort = agent === null ? null : agentEffort(link.conversation, agent, session.agent);
   if (effort !== null) change.effort = effort;
+  const { model: modelBefore, effort: effortBefore } = link.conversation.settings;
+  link.picked =
+    agent === null ? null : { change, before: link.picked?.before ?? { model: modelBefore, effort: effortBefore } };
   void configure(key, change, false);
 }
+
+/** Agents are switched off or on: a pick still to be told sets nothing
+    while they are off, the run back on the model and effort it had before
+    and reading only no longer, and sets the run again once they are on. A
+    session already told of its agent is left as it is. */
+onAgentsSwitched((on) => {
+  for (const [key, link] of links) {
+    const picked = link.picked;
+    if (picked === null || !agentWaits(key)) continue;
+    if (on) {
+      void configure(key, picked.change, false);
+      continue;
+    }
+    const back: Change = { readsOnly: false };
+    if (picked.change.model !== undefined && picked.before.model !== null) back.model = picked.before.model;
+    if (picked.change.effort !== undefined && picked.before.effort !== null) back.effort = picked.before.effort;
+    void configure(key, back, false);
+  }
+});
 
 /** The row is closed: its agent is stopped, and its last words let go. */
 function stop(session: Session) {

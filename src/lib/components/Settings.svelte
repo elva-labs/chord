@@ -804,7 +804,7 @@
             <div class="row" data-testid="notes-on-row">
               <span class="name"
                 ><span id="notes-label">Keep notes</span
-                ><small id="notes-hint">A long conversation goes on, fresh, from its notes.</small></span
+                ><small id="notes-hint">Sessions keep notes, and a long conversation goes on from them.</small></span
               >
               <Switch
                 on={switches.notes}

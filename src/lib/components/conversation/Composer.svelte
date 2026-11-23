@@ -1165,7 +1165,10 @@
   let workingAgent = $derived(working === null ? undefined : agentByKey(working.key, projectPath));
   /** The agent whose effort the session runs at, while it still does. */
   let effortSetBy = $derived(
-    workingAgent !== undefined && effort !== null && agentEffort(conversation, workingAgent, harness) === effort
+    switches.agents &&
+      workingAgent !== undefined &&
+      effort !== null &&
+      agentEffort(conversation, workingAgent, harness) === effort
       ? workingAgent.title
       : null,
   );
@@ -1758,7 +1761,7 @@
           aria-haspopup="menu"
           aria-expanded={menu === "mode"}
           title={readsOnly
-            ? `${leading !== null ? `Set by ${leading}. ` : working?.readsOnly ? `Set by ${working.title}. ` : ""}Reads only: file edits are refused and the agent is told to change nothing. A command it runs is left to ${modeLabel}.`
+            ? `${leading !== null ? `Set by ${leading}. ` : switches.agents && working?.readsOnly ? `Set by ${working.title}. ` : ""}Reads only: file edits are refused and the agent is told to change nothing. A command it runs is left to ${modeLabel}.`
             : "What the session may do without asking"}
           data-testid="mode-chip"
           data-reads-only={readsOnly ? "" : undefined}

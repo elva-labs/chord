@@ -33,6 +33,7 @@ import {
 import { resetGoingOn, wentOn } from "$lib/goingOn.svelte";
 import { GO_ON, MARGIN, choose as chooseResume, look, resetAutoResume, resumesWords } from "$lib/autoResume.svelte";
 import { stateWord } from "$lib/orchestrator.svelte";
+import { setAgentsOn, switches } from "$lib/switches.svelte";
 import {
   agentNamed,
   byKey,
@@ -565,6 +566,30 @@ describe("a session the usage limit cut short", () => {
       "Did not go on by itself: the conversation could not be started again from its notes.",
     );
     expect(conversationOf(key).afterLimit).toBeNull();
+  });
+
+  it("goes on whole, the run left as it is, while notes are switched off", async () => {
+    const asked = core();
+    switches.notes = false;
+    try {
+      const { key, handle, session } = await chosen();
+      refused(key, handle);
+      await settled();
+      await look();
+      await settled();
+      // No briefing is asked for and the run is not started again.
+      expect(asked).toHaveLength(0);
+      expect(handleOf(key)).toBe(handle);
+      expect(fake.calls.filter((call) => call.method === "stop")).toHaveLength(0);
+      const sent = fake.calls.filter((call) => call.method === "send").at(-1) as { id: string; text: string };
+      expect(sent.id).toBe(handle);
+      expect(sent.text).toBe(GO_ON);
+      expect(conversationOf(key).wentOn).toBe(false);
+      expect(notes(conversationOf(key)).filter((note) => note.startsWith("Did not go on"))).toEqual([]);
+      expect(resumesWords(session)).toBeNull();
+    } finally {
+      switches.notes = true;
+    }
   });
 });
 
@@ -2829,6 +2854,57 @@ describe("the agent a session works as", () => {
     expect(sent[0].text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
     expect(sent[0].text.endsWith("Look at the cache change")).toBe(true);
     expect(sent.slice(1).every((call) => !call.text.includes("work as the agent"))).toBe(true);
+  });
+
+  it("takes back what a pick set while agents are switched off, and sets it again once they are on", async () => {
+    const { session } = await started();
+    const before = conversationOf(session.key).settings;
+    workAs(session.key, reviewer);
+    await settled();
+    try {
+      setAgentsOn(false);
+      await settled();
+      const back = fake.calls.filter((call) => call.method === "configure").at(-1) as { settings: Record<string, unknown> };
+      expect(back.settings.readsOnly).toBe(false);
+      if (before.model !== null) expect(back.settings.model).toBe(before.model);
+      if (before.effort !== null) expect(back.settings.effort).toBe(before.effort);
+      expect(conversationOf(session.key).readsOnly).toBe(false);
+      setAgentsOn(true);
+      await settled();
+      expect(fake.calls.filter((call) => call.method === "configure").at(-1)).toMatchObject({
+        settings: { model: "sonnet", effort: "high", readsOnly: true },
+      });
+      expect(conversationOf(session.key).readsOnly).toBe(true);
+      send(session.key, "Look at the cache change");
+      await settled();
+      const sent = fake.calls.filter((call) => call.method === "send") as { text: string }[];
+      expect(sent[0].text).toMatch(/work as the agent "Reviewer"/);
+    } finally {
+      setAgentsOn(true);
+    }
+  });
+
+  it("lets a pick go with a message sent while agents are switched off", async () => {
+    const { session } = await started();
+    workAs(session.key, reviewer);
+    await settled();
+    try {
+      setAgentsOn(false);
+      await settled();
+      send(session.key, "Look at the cache change");
+      await settled();
+      const asked = fake.calls.filter((call) => call.method === "configure").length;
+      setAgentsOn(true);
+      await settled();
+      send(session.key, "And the tests");
+      await settled();
+      const sent = fake.calls.filter((call) => call.method === "send") as { text: string }[];
+      expect(sent.every((call) => !call.text.includes("work as the agent"))).toBe(true);
+      expect(fake.calls.filter((call) => call.method === "configure")).toHaveLength(asked);
+      expect(conversationOf(session.key).readsOnly).toBe(false);
+    } finally {
+      setAgentsOn(true);
+    }
   });
 
   it("lowers the agent's effort to the nearest its model takes", async () => {
