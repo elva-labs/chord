@@ -30,6 +30,7 @@ fn launch_with<'a>(
         resume_at: None,
         reads_only: false,
         profile: &[],
+        home: None,
     };
     adjust(&mut launch);
     AppServer::new(&launch)
@@ -2146,6 +2147,7 @@ fn the_command_runs_the_app_server_under_the_account_s_home() {
         resume_at: None,
         reads_only: false,
         profile: &profile,
+        home: None,
     };
     let prepared = CODEX_APP_SERVER.command(&launch).unwrap();
     assert!(prepared.files.is_empty());
@@ -4100,4 +4102,46 @@ fn a_command_codex_timed_out_or_refused_says_so() {
         if error == "no such thread"),
         "{out:?}"
     );
+}
+
+#[test]
+fn a_push_asked_for_in_a_held_run_is_declined_and_the_user_told_why() {
+    let (home, _folder) = crate::run::tests::started(
+        "codex-push",
+        crate::team::QUICK_FIX,
+        &[("rev", "Reviewer", true)],
+    );
+    let ask = |id: i64, command: &str| {
+        server_request(
+            id,
+            "item/commandExecution/requestApproval",
+            json!({"threadId": THREAD, "turnId": "turn-1", "itemId": format!("call_{id}"),
+                   "command": command, "cwd": "/work/demo"}),
+        )
+    };
+    let mut driver = ready();
+    driver.run = Some((home.to_path_buf(), "lead".into()));
+    turn(&mut driver, M1);
+    let reading = read(&mut driver, ask(0, "/bin/zsh -lc 'git push origin main'"));
+    let line: Value = serde_json::from_str(&reading.writes[0]).unwrap();
+    assert_eq!(line, json!({"id": 0, "result": {"decision": "decline"}}));
+    assert!(
+        matches!(&reading.events[..], [Event::Notice { level: NoticeLevel::Warning, message }]
+        if message.starts_with("Handing over is held: ")),
+        "{:?}",
+        reading.events
+    );
+    let asked = read(&mut driver, ask(1, "git status"));
+    assert!(asked.writes.is_empty());
+    assert!(matches!(&asked.events[0], Event::PermissionAsked { .. }));
+
+    crate::run::waive(&home, "lead", 1, "Checked it myself.").unwrap();
+    let asked = read(&mut driver, ask(2, "gh pr create --fill"));
+    assert!(asked.writes.is_empty(), "a waived gate holds nothing");
+    assert!(matches!(&asked.events[0], Event::PermissionAsked { .. }));
+
+    let mut outside = ready();
+    turn(&mut outside, M1);
+    let asked = read(&mut outside, ask(0, "git push"));
+    assert!(asked.writes.is_empty(), "a session in no run pushes");
 }

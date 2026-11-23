@@ -42,6 +42,42 @@ pub const SHIPPED_TITLES: &[&str] = &[
     "Docs writer",
 ];
 
+/// The shipped agents that only read, as they ship. The window holds the
+/// same, with the rest of each shipped agent.
+pub const SHIPPED_READS_ONLY: &[&str] = &[
+    "Researcher",
+    "Reviewer",
+    "Security reviewer",
+    "Cloud architect",
+];
+
+/// Whether the agent the start tool names by `title` only reads: one of
+/// the user's own, then a shipped one as the user changed it, then a
+/// shipped one as it ships. None for an agent installed for a harness or
+/// a title nothing has, which the caller counts as changing files.
+pub fn reads_only(own: &[Agent], title: &str) -> Option<bool> {
+    let title = title.trim();
+    let same = |text: &str| text.trim().eq_ignore_ascii_case(title);
+    if let Some(agent) = own
+        .iter()
+        .find(|agent| agent.shipped.is_none() && same(&agent.title))
+    {
+        return Some(agent.reads_only);
+    }
+    if let Some(agent) = own.iter().find(|agent| {
+        agent
+            .shipped
+            .as_deref()
+            .is_some_and(|shipped| same(shipped) || same(&agent.title))
+    }) {
+        return Some(agent.reads_only);
+    }
+    SHIPPED_TITLES
+        .iter()
+        .find(|shipped| same(shipped))
+        .map(|shipped| SHIPPED_READS_ONLY.contains(shipped))
+}
+
 /// A model on one harness. A field this version does not know is kept as
 /// written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -685,6 +721,57 @@ mod tests {
 
     fn one(fields: Value) -> Result<Vec<Agent>, String> {
         read(&json!([fields]))
+    }
+
+    #[test]
+    fn an_agent_reads_only_as_the_user_has_it_or_as_it_ships() {
+        let own = read(&json!([
+            { "title": "Linter", "description": "Lints.", "readsOnly": true },
+            { "shipped": "Developer", "title": "Builder", "description": "Mine.", "readsOnly": true },
+            { "shipped": "Reviewer", "title": "Reviewer", "description": "Mine." },
+        ]))
+        .unwrap();
+        assert_eq!(reads_only(&own, "linter"), Some(true));
+        assert_eq!(reads_only(&own, "Builder"), Some(true));
+        assert_eq!(
+            reads_only(&own, "Developer"),
+            Some(true),
+            "by the title it ships under"
+        );
+        assert_eq!(
+            reads_only(&own, "Reviewer"),
+            Some(false),
+            "as the user changed it"
+        );
+        assert_eq!(reads_only(&own, "Security reviewer"), Some(true));
+        assert_eq!(reads_only(&own, "Tester"), Some(false));
+        assert_eq!(reads_only(&own, "explorer"), None);
+        assert!(SHIPPED_READS_ONLY
+            .iter()
+            .all(|title| SHIPPED_TITLES.contains(title)));
+    }
+
+    #[test]
+    fn the_shipped_agents_that_only_read_are_the_same_in_the_app() {
+        let app = include_str!("../../../../src/lib/agents.svelte.ts");
+        let shipped = app.split_once("export const SHIPPED").unwrap().1;
+        let shipped = shipped.split_once("\n];").unwrap().0;
+        let agents: Vec<(&str, bool)> = shipped
+            .split("title: \"")
+            .skip(1)
+            .map(|agent| {
+                let title = agent.split_once('"').unwrap().0;
+                (title, agent.contains("readsOnly: true"))
+            })
+            .collect();
+        let titles: Vec<&str> = agents.iter().map(|(title, _)| *title).collect();
+        assert_eq!(titles, SHIPPED_TITLES);
+        let reads_only: Vec<&str> = agents
+            .iter()
+            .filter(|(_, reads_only)| *reads_only)
+            .map(|(title, _)| *title)
+            .collect();
+        assert_eq!(reads_only, SHIPPED_READS_ONLY);
     }
 
     #[test]

@@ -623,6 +623,162 @@ fn run(dir: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// The commit the folder's branch is on, none before its first commit.
+pub fn head(dir: &Path) -> Option<String> {
+    run(dir, &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
+        .ok()
+        .filter(|hash| !hash.is_empty())
+}
+
+/// The newest commit both commits come from, as the folder's repository
+/// knows them; none when either is not in it or they share no history.
+pub fn merge_base(dir: &Path, one: &str, other: &str) -> Option<String> {
+    run(dir, &["merge-base", "--end-of-options", one, other])
+        .ok()
+        .filter(|hash| !hash.is_empty())
+}
+
+/// The hash of the tree the checkout the folder is in holds now: its
+/// committed files with every change on top, staged or not, and the files
+/// git does not track yet, leaving out what it ignores. The same files give
+/// the same hash on any branch and after any rebase. It is made in a copy
+/// of the checkout's index, so the index, the branch and the stashes are
+/// left as they were and a file the index knows unchanged is not read
+/// again. In the copy, a file marked unchanged is read anyway, and so is
+/// one marked to be skipped when it is there; one a sparse checkout left
+/// out stays as committed. The objects it writes are git's to clear away.
+/// A file monitor or an untracked cache the folder is set up with is not
+/// asked.
+pub fn tree_hash(dir: &Path) -> Result<String, String> {
+    let git_dir = run(dir, &["rev-parse", "--absolute-git-dir"])?;
+    let top = PathBuf::from(run(dir, &["rev-parse", "--show-toplevel"])?);
+    let index = Path::new(&git_dir).join(format!("chord-index-{}", uuid::Uuid::new_v4()));
+    let in_index = |args: &[&str]| -> Result<String, String> {
+        let output = command(&top)
+            .env("GIT_INDEX_FILE", &index)
+            .args([
+                "-c",
+                "core.fsmonitor=false",
+                "-c",
+                "core.untrackedCache=false",
+            ])
+            .args(args)
+            .output()
+            .map_err(|e| format!("could not run git: {e}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(stderr
+                .lines()
+                .last()
+                .unwrap_or("git failed")
+                .trim()
+                .to_string());
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    };
+    let made = (|| {
+        if std::fs::copy(Path::new(&git_dir).join("index"), &index).is_err() && head(dir).is_some()
+        {
+            in_index(&["read-tree", "HEAD"])?;
+        }
+        let listed = in_index(&["ls-files", "-v", "-z"])?;
+        let (mut unchanged, mut skipped) = (Vec::new(), Vec::new());
+        for entry in listed.split('\0') {
+            let Some((tag, path)) = entry.split_at_checked(2) else {
+                continue;
+            };
+            if tag.starts_with(|c: char| c.is_ascii_lowercase()) {
+                unchanged.push(path);
+            }
+            if tag.eq_ignore_ascii_case("s ") && top.join(path).exists() {
+                skipped.push(path);
+            }
+        }
+        for (flag, paths) in [
+            ("--no-assume-unchanged", unchanged),
+            ("--no-skip-worktree", skipped),
+        ] {
+            if !paths.is_empty() {
+                in_index(&[&["update-index", flag, "--"], paths.as_slice()].concat())?;
+            }
+        }
+        in_index(&["add", "--all"])?;
+        in_index(&["write-tree"])
+    })();
+    let _ = std::fs::remove_file(&index);
+    let _ = std::fs::remove_file(index.with_extension("lock"));
+    made
+}
+
+/// The tree of the commit the folder's branch is on, none before its first
+/// commit.
+pub fn head_tree(dir: &Path) -> Option<String> {
+    run(dir, &["rev-parse", "--verify", "--quiet", "HEAD^{tree}"])
+        .ok()
+        .filter(|hash| !hash.is_empty())
+}
+
+/// Where the folder is in its repository, from the top, ending in `/`;
+/// empty at the top.
+pub fn prefix(dir: &Path) -> Result<String, String> {
+    run(dir, &["rev-parse", "--show-prefix"])
+}
+
+/// The paths that differ between a commit and a tree, measured from the
+/// folder `from` names in the repository, as [`prefix`] gives it: a path
+/// outside it begins with `../`, and a renamed file is named by both its
+/// names. With no commit, every path of the tree.
+pub fn changed_paths(
+    dir: &Path,
+    from: &str,
+    since: Option<&str>,
+    tree: &str,
+) -> Result<Vec<String>, String> {
+    let listed = match since {
+        Some(commit) => run(
+            dir,
+            &[
+                "diff",
+                "--name-only",
+                "--no-renames",
+                "-z",
+                "--end-of-options",
+                commit,
+                tree,
+            ],
+        )?,
+        None => run(
+            dir,
+            &[
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "--full-tree",
+                "-z",
+                "--end-of-options",
+                tree,
+            ],
+        )?,
+    };
+    let from: Vec<&str> = from.split('/').filter(|part| !part.is_empty()).collect();
+    Ok(listed
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .map(|path| {
+            let parts: Vec<&str> = path.split('/').collect();
+            let shared = from
+                .iter()
+                .zip(&parts)
+                .take_while(|(a, b)| a == b)
+                .count()
+                .min(parts.len() - 1);
+            let mut measured = "../".repeat(from.len() - shared);
+            measured.push_str(&parts[shared..].join("/"));
+            measured
+        })
+        .collect())
+}
+
 /// Adds a worktree of the project under `.claude/worktrees`, on a new
 /// branch of the same name, and says where it is, absolute. The name is a
 /// plain identifier, and a worktree that is already there is left alone.
@@ -1455,5 +1611,121 @@ mod tests {
         let found = grep(&dir, "common", None).unwrap();
         assert_eq!(found.hits.len(), GREP_CAP);
         assert!(found.truncated);
+    }
+
+    #[test]
+    fn the_tree_hash_follows_the_files_and_leaves_the_index_alone() {
+        let dir = repo("tree-hash");
+        write(&dir, "a.txt", "one\n");
+        commit(&dir);
+        let clean = tree_hash(&dir).unwrap();
+        let committed = run(&dir, &["rev-parse", "HEAD^{tree}"]).unwrap();
+        assert_eq!(clean, committed);
+
+        write(&dir, "b.txt", "new\n");
+        let untracked = tree_hash(&dir).unwrap();
+        assert_ne!(untracked, clean);
+        assert_eq!(tree_hash(&dir).unwrap(), untracked);
+        // The folder's own index holds nothing of it.
+        assert_eq!(run(&dir, &["diff", "--cached", "--name-only"]).unwrap(), "");
+        let git_dir = dir.join(".git");
+        let left: Vec<_> = std::fs::read_dir(&git_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("chord-index")
+            })
+            .collect();
+        assert!(left.is_empty());
+
+        // Ignored files are not part of it.
+        write(&dir, ".gitignore", "out/\n");
+        let ignoring = tree_hash(&dir).unwrap();
+        write(&dir, "out/built.txt", "x\n");
+        assert_eq!(tree_hash(&dir).unwrap(), ignoring);
+
+        // A commit of the same files keeps the hash.
+        commit(&dir);
+        assert_eq!(tree_hash(&dir).unwrap(), ignoring);
+    }
+
+    #[test]
+    fn a_file_the_index_says_is_unchanged_still_changes_the_tree_hash() {
+        let dir = repo("tree-marked");
+        write(&dir, "a.txt", "one\n");
+        write(&dir, "b.txt", "one\n");
+        commit(&dir);
+        let clean = tree_hash(&dir).unwrap();
+        run(&dir, &["update-index", "--assume-unchanged", "a.txt"]).unwrap();
+        run(&dir, &["update-index", "--skip-worktree", "b.txt"]).unwrap();
+        write(&dir, "a.txt", "two\n");
+        let edited = tree_hash(&dir).unwrap();
+        assert_ne!(edited, clean);
+        write(&dir, "b.txt", "two\n");
+        assert_ne!(tree_hash(&dir).unwrap(), edited);
+        // One a sparse checkout left out stays as committed.
+        std::fs::remove_file(dir.join("b.txt")).unwrap();
+        assert_eq!(tree_hash(&dir).unwrap(), edited);
+    }
+
+    #[test]
+    fn a_folder_before_its_first_commit_has_a_tree_and_every_path_changed() {
+        let dir = repo("tree-first");
+        assert_eq!(head(&dir), None);
+        write(&dir, "src/a.rs", "fn a() {}\n");
+        let tree = tree_hash(&dir).unwrap();
+        assert_eq!(
+            changed_paths(&dir, "", None, &tree).unwrap(),
+            vec!["src/a.rs"]
+        );
+    }
+
+    #[test]
+    fn the_changed_paths_are_those_since_a_commit_renames_by_both_names() {
+        let dir = repo("changed-paths");
+        write(&dir, "keep.txt", "same\n");
+        write(&dir, "old name.txt", "moved\n");
+        commit(&dir);
+        let since = head(&dir).unwrap();
+        std::fs::rename(dir.join("old name.txt"), dir.join("new name.txt")).unwrap();
+        write(&dir, "infra/main.tf", "x\n");
+        let tree = tree_hash(&dir).unwrap();
+        let mut paths = changed_paths(&dir, "", Some(&since), &tree).unwrap();
+        paths.sort();
+        assert_eq!(paths, vec!["infra/main.tf", "new name.txt", "old name.txt"]);
+    }
+
+    #[test]
+    fn the_changed_paths_are_measured_from_the_folder_named() {
+        let dir = repo("changed-from");
+        write(&dir, "apps/web/keep.txt", "same\n");
+        commit(&dir);
+        let since = head(&dir).unwrap();
+        write(&dir, "apps/web/infra/main.tf", "x\n");
+        write(&dir, "apps/api/a.rs", "x\n");
+        let web = dir.join("apps/web");
+        assert_eq!(prefix(&web).unwrap(), "apps/web/");
+        let tree = tree_hash(&web).unwrap();
+        assert_eq!(tree, tree_hash(&dir).unwrap());
+        let mut paths = changed_paths(&web, "apps/web/", Some(&since), &tree).unwrap();
+        paths.sort();
+        assert_eq!(paths, vec!["../api/a.rs", "infra/main.tf"]);
+        let mut every = changed_paths(&web, "apps/web/", None, &tree).unwrap();
+        every.sort();
+        assert_eq!(every, vec!["../api/a.rs", "infra/main.tf", "keep.txt"]);
+    }
+
+    #[test]
+    fn the_head_tree_is_the_tree_hash_once_everything_is_committed() {
+        let dir = repo("head-tree");
+        assert_eq!(head_tree(&dir), None);
+        write(&dir, "a.txt", "one\n");
+        commit(&dir);
+        assert_eq!(head_tree(&dir), Some(tree_hash(&dir).unwrap()));
+        write(&dir, "a.txt", "two\n");
+        assert_ne!(head_tree(&dir), Some(tree_hash(&dir).unwrap()));
     }
 }

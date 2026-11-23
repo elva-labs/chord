@@ -972,6 +972,7 @@ impl Core {
             resume_at: at.as_deref().filter(|_| resume),
             reads_only: run.reads_only,
             profile: &profile,
+            home: self.home.as_deref(),
         };
         let (starting, ending) = (self.plugins.clone(), self.plugins.clone());
         let (folder, starter) = (project.to_string_lossy().to_string(), run.starter.clone());

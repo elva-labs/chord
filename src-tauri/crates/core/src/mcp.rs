@@ -267,6 +267,13 @@ pub const RUN_UNASKED: &[&str] = &[
     "settings_change",
     "theme_save",
     "styles_write",
+    // Write and read the team's run the caller is in: its plan, its gates
+    // and the verdicts on them, in the workbench's store, listed only to
+    // the run's lead and members.
+    "plan",
+    "gate_add",
+    "verdict",
+    "gates",
 ];
 
 /// The tools left off [`RUN_UNASKED`] on purpose, so they ask as the
@@ -422,10 +429,12 @@ fn plugin_tools(home: &Path) -> Vec<PublishedTool> {
 }
 
 /// Every tool the agent may call: the app's own first, the conductor's
-/// next, the plugins' after.
-fn all_tools(home: &Path) -> Vec<Value> {
+/// next, those of the team's run the session is in, and the plugins'
+/// after.
+fn all_tools(home: &Path, session: Option<&str>) -> Vec<Value> {
     let mut listed = tools();
     listed.extend(conductor_tools());
+    listed.extend(run_tools_for(home, session));
     for tool in plugin_tools(home) {
         listed.push(json!({
             "name": tool.name,
@@ -1137,7 +1146,7 @@ pub fn handle_with(
             "instructions": instructions(),
         })),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({ "tools": all_tools(home) })),
+        "tools/list" => Ok(json!({ "tools": all_tools(home, session) })),
         "tools/call" => {
             let cancelled = Arc::new(AtomicBool::new(false));
             let _registered = InFlight::new(&id, &cancelled);
@@ -1180,6 +1189,14 @@ fn call(
         "notify" => notify_call(home, cwd, session, &arguments),
         "note" => note_call(home, session, &arguments),
         "notes" => notes_call(home, session, &arguments),
+        "plan" => plan_call(home, session, &arguments),
+        "gate_add" => gate_add_call(home, session, &arguments),
+        "verdict" => verdict_call(home, session, &arguments),
+        "gates" => gates_call(home, session),
+        "start" | "send" => match start_held_in_run(home, session, &arguments)? {
+            Some(held) => Err(held),
+            None => conduct_call(home, cwd, session, name, &arguments, waits, cancelled),
+        },
         _ if CONDUCT_TOOLS.contains(&name) => {
             conduct_call(home, cwd, session, name, &arguments, waits, cancelled)
         }
@@ -1985,6 +2002,343 @@ pub fn describe_selection(selection: Option<&crate::selection::Selection>, cwd: 
     )
 }
 
+/// The tools of the team's run a session is in, by name.
+pub const RUN_TOOLS: &[&str] = &["plan", "gate_add", "verdict", "gates"];
+
+/// Every tool of a team's run, as its lead or members see them.
+pub fn run_tools() -> Vec<Value> {
+    vec![plan_tool(), gate_add_tool(), verdict_tool(), gates_tool()]
+}
+
+/// The tools of the team's run the session is in: the lead writes the plan
+/// and adds gates, a member whose agent approves a gate gives verdicts,
+/// and each reads the gates. None for a session in no run, or a store
+/// that cannot be read.
+fn run_tools_for(home: &Path, session: Option<&str>) -> Vec<Value> {
+    let Some(token) = session else {
+        return Vec::new();
+    };
+    let Ok(Some(state)) = crate::run::state_of(home, token) else {
+        return Vec::new();
+    };
+    let mut listed = Vec::new();
+    if state.run.lead == token {
+        listed.extend([plan_tool(), gate_add_tool()]);
+    } else {
+        let member = crate::run::Runs::existing(home)
+            .ok()
+            .flatten()
+            .and_then(|runs| runs.member(token).ok().flatten());
+        let approves = member.is_some_and(|member| {
+            state
+                .gates
+                .iter()
+                .any(|gate| gate.gate.who.eq_ignore_ascii_case(&member.agent))
+        });
+        if approves {
+            listed.push(verdict_tool());
+        }
+    }
+    listed.push(gates_tool());
+    listed
+}
+
+pub fn plan_tool() -> Value {
+    json!({
+        "name": "plan",
+        "description": format!("Writes the plan of the team's run you lead, in place of the one before: what you will build and the paths it touches. The agents whose gates are on the plan approve it before building; while one of those gates waits, a session that changes files does not start. The paths are your own list, and nothing checks them against the work: a gate on some paths is needed when the plan names one of them, or a folder they are in, or when the change touches one. A path left out of the plan puts its gate off until the change touches it, and then the gate holds the hand-over. A new plan puts the approvals of the one before out of date. At most {} characters and {} paths.", crate::run::PLAN_MOST, crate::run::PATHS_MOST),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": { "type": "string", "description": "The plan, in Markdown." },
+                "paths": { "type": "array", "items": { "type": "string" }, "description": "The paths the plan touches, relative to the run's folder. A folder counts for every path in it." }
+            },
+            "required": ["text"]
+        }
+    })
+}
+
+pub fn gate_add_tool() -> Value {
+    json!({
+        "name": "gate_add",
+        "description": "Adds a gate to the team's run you lead: one of the team's agents approves the plan before building, or the change before handing over, when the work touches the paths given or always. A gate is never taken away; only the user waives one.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "who": { "type": "string", "description": "The agent that approves, as the team names it." },
+                "when": { "type": "string", "enum": ["plan", "change"], "description": "plan: before building. change: before handing over." },
+                "touches": { "type": "array", "items": { "type": "string" }, "description": "Globs of paths, such as infra/**: the gate is needed only when the plan or the change touches one." }
+            },
+            "required": ["who", "when"]
+        }
+    })
+}
+
+pub fn verdict_tool() -> Value {
+    json!({
+        "name": "verdict",
+        "description": format!("Gives your verdict on the plan or the change of the team's run you were started in, on each gate your agent approves. Name what you read, as the gates tool shows it: the plan's version, or the change's tree and, when the change is in more than one folder, the folder. A verdict on a plan or a tree that no longer stands is refused; read it again and give the verdict on what stands. Approve it, or ask for changes and say what must change in the findings. A change made after you approve puts the approval out of date, and the lead asks again. After as many asks as the gate's rounds the gate waits for the user. Findings are at most {} characters.", crate::run::FINDINGS_MOST),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "on": { "type": "string", "enum": ["plan", "change"], "description": "What the verdict is on." },
+                "plan": { "type": "integer", "description": "On the plan: the version you read." },
+                "tree": { "type": "string", "description": "On the change: the tree you read." },
+                "folder": { "type": "string", "description": "On the change: the folder whose tree you read, when the change is in more than one." },
+                "approved": { "type": "boolean", "description": "true to approve, false to ask for changes." },
+                "findings": { "type": "string", "description": "What you found; what must change, when you ask for changes." }
+            },
+            "required": ["on", "approved"]
+        }
+    })
+}
+
+pub fn gates_tool() -> Value {
+    json!({
+        "name": "gates",
+        "description": "Reads the team's run you are in: the plan, its version and hash, the tree of the change in each folder the work is in, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A tree is the folder's files as they are, committed or not, but only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
+        "inputSchema": { "type": "object", "properties": {} }
+    })
+}
+
+/// The user's own agents, as the settings keep them; none when there are
+/// no settings yet, and an error when the settings are there but cannot be
+/// read, so what an agent may do is never guessed from the shipped ones.
+fn own_agents(home: &Path) -> Result<Vec<crate::agents::Agent>, String> {
+    let path = crate::settings::settings_path(home);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("The settings cannot be read: {e}")),
+    };
+    crate::settings::parse(&text)
+        .map(|settings| settings.agents)
+        .ok_or_else(|| "The settings cannot be read.".to_string())
+}
+
+/// Why a start or a send the caller asks for is refused: the caller is in
+/// a team's run where a gate on the plan waits, and the session would
+/// change files. A session named by its id only reads when it is a member
+/// of the run that only reads; a new one when its agent only reads. None
+/// when nothing holds it.
+fn start_held_in_run(
+    home: &Path,
+    session: Option<&str>,
+    arguments: &Value,
+) -> Result<Option<String>, String> {
+    let Some(caller) = session else {
+        return Ok(None);
+    };
+    let unread = |e: String| format!("The team's run this session is in cannot be read: {e}");
+    let Some(held) = crate::run::start_held(home, caller, false).map_err(unread)? else {
+        return Ok(None);
+    };
+    let reads_only = match arguments.get("session").and_then(Value::as_str) {
+        Some(resumed) => crate::run::member_by_session(home, caller, resumed)
+            .map_err(unread)?
+            .is_some_and(|member| member.reads_only),
+        None => match arguments.get("agent").and_then(Value::as_str) {
+            Some(agent) => crate::agents::reads_only(&own_agents(home)?, agent) == Some(true),
+            None => false,
+        },
+    };
+    Ok((!reads_only).then(|| {
+        format!("{held} Until the plan is approved, only a session that only reads is started or sent work, such as the reviewers the plan's gates wait on.")
+    }))
+}
+
+fn when_of(arguments: &Value, key: &str) -> Result<crate::team::When, String> {
+    match arguments.get(key).and_then(Value::as_str) {
+        Some("plan") => Ok(crate::team::When::Plan),
+        Some("change") => Ok(crate::team::When::Change),
+        _ => Err(format!("{key} is plan or change.")),
+    }
+}
+
+fn strings_of(arguments: &Value, key: &str) -> Result<Option<Vec<String>>, String> {
+    match arguments.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| format!("{key} takes a list of paths."))
+            })
+            .collect::<Result<_, _>>()
+            .map(Some),
+        Some(_) => Err(format!("{key} takes a list of paths.")),
+    }
+}
+
+fn plan_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
+    let lead = session.ok_or(crate::run::ONLY_THE_LEAD)?;
+    let text = arguments.get("text").and_then(Value::as_str).unwrap_or("");
+    let paths = strings_of(arguments, "paths")?.unwrap_or_default();
+    let plan = crate::run::plan(home, lead, text, &paths)?;
+    Ok(said(format!(
+        "Kept as version {} of the plan.\n\n{}",
+        plan.version,
+        gates_of(home, lead)?
+    )))
+}
+
+fn gate_add_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
+    let lead = session.ok_or(crate::run::ONLY_THE_LEAD)?;
+    let who = arguments.get("who").and_then(Value::as_str).unwrap_or("");
+    let when = when_of(arguments, "when")?;
+    let gate = crate::run::gate_add(home, lead, who, when, strings_of(arguments, "touches")?)?;
+    Ok(said(format!(
+        "Added gate #{}: {} approves {}.\n\n{}",
+        gate.id,
+        gate.who,
+        when.words(),
+        gates_of(home, lead)?
+    )))
+}
+
+fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
+    let token = session.ok_or(crate::run::NOT_A_MEMBER)?;
+    let on = when_of(arguments, "on")?;
+    let tree = arguments.get("tree").and_then(Value::as_str);
+    let folder = arguments
+        .get("folder")
+        .and_then(Value::as_str)
+        .map(Path::new);
+    let read = match on {
+        crate::team::When::Plan => crate::run::Read::Plan {
+            version: arguments
+                .get("plan")
+                .and_then(Value::as_i64)
+                .ok_or("plan is the version of the plan you read.")?,
+        },
+        crate::team::When::Change => crate::run::Read::Change {
+            folder,
+            tree: tree.ok_or("tree is the tree of the change you read.")?,
+        },
+    };
+    let approved = arguments
+        .get("approved")
+        .and_then(Value::as_bool)
+        .ok_or("approved is true to approve, false to ask for changes.")?;
+    let findings = arguments
+        .get("findings")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let version = match crate::run::Runs::existing(home)?
+        .map(|runs| runs.member(token))
+        .transpose()?
+        .flatten()
+    {
+        Some(member) => crate::run::agent_version(&own_agents(home)?, &member.agent),
+        None => None,
+    };
+    let gates = crate::run::verdict(home, token, read, approved, findings, version.as_deref())?;
+    let stands: Vec<String> = gates.iter().map(gate_line).collect();
+    Ok(said(format!("Kept.\n{}", stands.join("\n"))))
+}
+
+fn gates_call(home: &Path, session: Option<&str>) -> Result<Value, String> {
+    let none = "This session is in no team's run.";
+    let Some(token) = session else {
+        return Ok(said(none));
+    };
+    match crate::run::state_of(home, token)? {
+        Some(state) => Ok(said(run_text(&state))),
+        None => Ok(said(none)),
+    }
+}
+
+/// The run's gates as its lead reads them after a change to it.
+fn gates_of(home: &Path, lead: &str) -> Result<String, String> {
+    Ok(crate::run::state(home, lead)?
+        .map(|state| gates_text(&state))
+        .unwrap_or_default())
+}
+
+/// One gate as it stands, on one line.
+fn gate_line(gate: &crate::run::GateState) -> String {
+    let on = match &gate.gate.touches {
+        Some(globs) => format!(" when the work touches {}", globs.join(", ")),
+        None => String::new(),
+    };
+    format!(
+        "#{} {}, {}{on} · {} · {}",
+        gate.gate.id,
+        gate.gate.who,
+        gate.gate.when.words(),
+        gate.standing.words(),
+        gate.reason
+    )
+}
+
+/// The run's gates, each on its line with the last verdict's findings
+/// and, on the change in more than one folder, how it stands in each
+/// under it, after the line the window shows and what a verdict names:
+/// the plan's version and hash, and the tree of the change in each folder.
+fn gates_text(state: &crate::run::State) -> String {
+    let mut lines = vec![state.line()];
+    if let Some(plan) = &state.plan {
+        lines.push(format!(
+            "The plan is at version {}, hash {}.",
+            plan.version, plan.hash
+        ));
+    }
+    for place in &state.places {
+        lines.push(match &place.tree {
+            Ok(tree) => format!("The change in {} has tree {tree}.", place.folder.display()),
+            Err(e) => format!(
+                "The change in {} cannot be read: {e}",
+                place.folder.display()
+            ),
+        });
+    }
+    for folder in &state.gone {
+        lines.push(format!(
+            "{} no longer exists, so it is left out of the change.",
+            folder.display()
+        ));
+    }
+    if let Some(held) = state.uncommitted_held() {
+        lines.push(held);
+    }
+    for gate in &state.gates {
+        lines.push(gate_line(gate));
+        if gate.folders.len() > 1 {
+            for place in &gate.folders {
+                lines.push(format!(
+                    "    {} · {} · {}",
+                    place.folder.display(),
+                    place.standing.words(),
+                    place.reason
+                ));
+            }
+        }
+        if let Some(verdict) = gate.verdict.as_ref().filter(|v| !v.findings.is_empty()) {
+            for line in verdict.findings.lines() {
+                lines.push(format!("    > {line}"));
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+/// The run as the gates tool reads it: the gates, then the plan's text and
+/// the paths it names.
+fn run_text(state: &crate::run::State) -> String {
+    let mut text = gates_text(state);
+    if let Some(plan) = &state.plan {
+        text.push_str(&format!(
+            "\n\nThe plan, version {}:\n\n{}",
+            plan.version, plan.text
+        ));
+        if !plan.paths.is_empty() {
+            text.push_str(&format!("\n\nIt touches: {}", plan.paths.join(", ")));
+        }
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2003,8 +2357,9 @@ mod tests {
     /// nor the entry's TOML can split or quote it.
     #[test]
     fn every_tool_of_the_server_runs_unasked_or_asks_on_purpose() {
-        let own: Vec<String> = all_tools(&home("lists"))
+        let own: Vec<String> = all_tools(&home("lists"), None)
             .into_iter()
+            .chain(run_tools())
             .map(|tool| tool["name"].as_str().unwrap().to_string())
             .collect();
         for name in RUN_UNASKED.iter().chain(ASK_AS_POLICY_SAYS) {
@@ -3916,5 +4271,290 @@ mod tests {
         )
         .unwrap();
         assert_eq!(method["error"]["code"], -32601);
+    }
+
+    /// A home with a Ship with checks run led by `lead`, begun in a
+    /// repository of its own, with a reviewer and a developer in it.
+    fn in_a_run(name: &str) -> (Scratch, Scratch) {
+        let home = home(name);
+        let folder = Scratch::new(&format!("mcp-{name}-folder"));
+        std::fs::write(folder.join("README.md"), "A folder.\n").unwrap();
+        for args in [
+            &["init", "-q", "-b", "main"][..],
+            &["add", "-A"],
+            &[
+                "-c",
+                "user.email=test@example.com",
+                "-c",
+                "user.name=Test",
+                "commit",
+                "-qm",
+                "first",
+            ],
+        ] {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&folder)
+                .output()
+                .expect("git should be installed");
+        }
+        let team = crate::team::shipped()
+            .into_iter()
+            .find(|team| team.name == crate::team::SHIP_WITH_CHECKS)
+            .unwrap();
+        crate::run::begin(&home, "lead", &team, &folder).unwrap();
+        crate::run::join(
+            &home,
+            "lead",
+            "sec",
+            "Security reviewer",
+            &folder,
+            Some("sec-12345678"),
+            true,
+            "",
+        )
+        .unwrap();
+        crate::run::join(
+            &home,
+            "lead",
+            "dev",
+            "Developer",
+            &folder,
+            Some("dev-12345678"),
+            false,
+            "",
+        )
+        .unwrap();
+        (home, folder)
+    }
+
+    fn listed_names(home: &Path, session: Option<&str>) -> Vec<String> {
+        let listed = handle(
+            home,
+            Path::new("/p"),
+            session,
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+        )
+        .unwrap();
+        listed["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn called(home: &Path, session: &str, tool: &str, arguments: Value) -> Value {
+        let line = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": tool, "arguments": arguments }
+        });
+        handle(home, Path::new("/p"), Some(session), &line.to_string()).unwrap()["result"].clone()
+    }
+
+    fn text_of(result: &Value) -> &str {
+        result["content"][0]["text"].as_str().unwrap()
+    }
+
+    #[test]
+    fn a_runs_tools_are_listed_to_its_lead_and_members_only() {
+        let (home, _folder) = in_a_run("run-list");
+        let run_tools_of = |session| {
+            listed_names(&home, session)
+                .into_iter()
+                .filter(|name| RUN_TOOLS.contains(&name.as_str()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(run_tools_of(Some("lead")), ["plan", "gate_add", "gates"]);
+        assert_eq!(run_tools_of(Some("sec")), ["verdict", "gates"]);
+        assert_eq!(
+            run_tools_of(Some("dev")),
+            ["gates"],
+            "no gate of the Developer's"
+        );
+        assert!(run_tools_of(Some("other")).is_empty());
+        assert_eq!(listed_names(&home, Some("other")).len(), 29);
+    }
+
+    #[test]
+    fn a_start_that_would_change_files_is_refused_until_the_plan_is_approved() {
+        let (home, _folder) = in_a_run("run-start");
+        let held = |session: Option<&str>, arguments: Value| {
+            start_held_in_run(&home, session, &arguments).unwrap()
+        };
+        let refused = held(Some("lead"), json!({ "agent": "Developer" })).unwrap();
+        assert!(refused.starts_with("Building is held: "), "{refused}");
+        assert!(
+            held(Some("dev"), json!({ "agent": "Developer" })).is_some(),
+            "a member is held too"
+        );
+        assert!(
+            held(Some("lead"), json!({})).is_some(),
+            "no agent changes files"
+        );
+        assert!(held(Some("lead"), json!({ "agent": "Installed one" })).is_some());
+        assert!(held(Some("lead"), json!({ "session": "dev-1234" })).is_some());
+        assert!(held(Some("lead"), json!({ "session": "nobody-12345" })).is_some());
+        assert_eq!(
+            held(Some("lead"), json!({ "agent": "Security reviewer" })),
+            None
+        );
+        assert_eq!(held(Some("lead"), json!({ "session": "sec-1234" })), None);
+        assert_eq!(held(Some("other"), json!({ "agent": "Developer" })), None);
+        assert_eq!(held(None, json!({ "agent": "Developer" })), None);
+
+        let result = called(
+            &home,
+            "lead",
+            "start",
+            json!({ "agent": "Developer", "prompt": "Build it" }),
+        );
+        assert_eq!(result["isError"], true);
+        assert!(text_of(&result).starts_with("Building is held: "));
+        let asked = std::fs::read_to_string(crate::show::requests_path(&home)).unwrap_or_default();
+        assert!(!asked.contains("Build it"), "the window is never asked");
+
+        let sent = called(
+            &home,
+            "lead",
+            "send",
+            json!({ "session": "dev-1234", "text": "Build it now" }),
+        );
+        assert_eq!(
+            sent["isError"], true,
+            "a member that changes files is not sent work"
+        );
+        assert!(text_of(&sent).starts_with("Building is held: "));
+        let asked = std::fs::read_to_string(crate::show::requests_path(&home)).unwrap_or_default();
+        assert!(!asked.contains("Build it now"), "the window is never asked");
+    }
+
+    #[test]
+    fn an_agent_the_user_made_to_change_files_is_held_though_it_ships_reading() {
+        let (home, _folder) = in_a_run("run-own");
+        let path = crate::settings::settings_path(&home);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let settings = json!({ "agents": [
+            { "shipped": "Security reviewer", "title": "Security reviewer", "description": "Mine.", "readsOnly": false }
+        ] });
+        std::fs::write(&path, settings.to_string()).unwrap();
+        assert_eq!(own_agents(&home).unwrap().len(), 1, "the settings are read");
+        assert!(start_held_in_run(
+            &home,
+            Some("lead"),
+            &json!({ "agent": "Security reviewer" })
+        )
+        .unwrap()
+        .is_some());
+    }
+
+    #[test]
+    fn unreadable_settings_hold_a_start_in_a_run_and_nothing_outside_one() {
+        let (home, _folder) = in_a_run("run-unread");
+        let path = crate::settings::settings_path(&home);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{ not json").unwrap();
+        assert!(own_agents(&home).is_err());
+        assert!(start_held_in_run(
+            &home,
+            Some("lead"),
+            &json!({ "agent": "Security reviewer" })
+        )
+        .is_err());
+        assert_eq!(
+            start_held_in_run(
+                &home,
+                Some("stranger"),
+                &json!({ "agent": "Security reviewer" })
+            ),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn the_lead_plans_and_a_reviewer_approves_through_the_tools() {
+        let (home, _folder) = in_a_run("run-tools");
+        let result = called(
+            &home,
+            "lead",
+            "plan",
+            json!({ "text": "Add a page.", "paths": ["src/page.rs"] }),
+        );
+        assert_eq!(result["isError"], Value::Null, "{result}");
+        let text = text_of(&result);
+        assert!(text.starts_with("Kept as version 1 of the plan."), "{text}");
+        assert!(
+            text.contains(
+                "Cloud architect, before building when the work touches infra/** · Not needed"
+            ),
+            "{text}"
+        );
+
+        let refused = called(&home, "dev", "plan", json!({ "text": "Mine." }));
+        assert_eq!(refused["isError"], true);
+        assert_eq!(text_of(&refused), crate::run::ONLY_THE_LEAD);
+
+        let asked = called(
+            &home,
+            "sec",
+            "verdict",
+            json!({ "on": "plan", "plan": 1, "approved": false }),
+        );
+        assert_eq!(asked["isError"], true, "asking for changes says what");
+        let unnamed = called(
+            &home,
+            "sec",
+            "verdict",
+            json!({ "on": "plan", "approved": true }),
+        );
+        assert_eq!(unnamed["isError"], true, "a verdict names what was read");
+        let gates_read = called(&home, "sec", "gates", json!({}));
+        let read = text_of(&gates_read);
+        assert!(
+            read.contains("The plan, version 1:\n\nAdd a page."),
+            "{read}"
+        );
+        assert!(read.contains("It touches: src/page.rs"), "{read}");
+        assert!(read.contains("The plan is at version 1, hash "), "{read}");
+        assert!(read.contains(" has tree "), "{read}");
+        let approved = called(
+            &home,
+            "sec",
+            "verdict",
+            json!({ "on": "plan", "plan": 1, "approved": true, "findings": "Fine." }),
+        );
+        assert!(
+            text_of(&approved).contains("Security reviewer, before building · Approved"),
+            "{approved}"
+        );
+        assert_eq!(
+            start_held_in_run(&home, Some("lead"), &json!({ "agent": "Developer" })).unwrap(),
+            None
+        );
+
+        let gates = called(&home, "dev", "gates", json!({}));
+        assert!(text_of(&gates).contains("    > Fine."), "{gates}");
+        let none = called(&home, "other", "gates", json!({}));
+        assert_eq!(text_of(&none), "This session is in no team's run.");
+
+        let added = called(
+            &home,
+            "lead",
+            "gate_add",
+            json!({ "who": "Tester", "when": "change" }),
+        );
+        assert!(
+            text_of(&added).contains("Tester approves before handing over"),
+            "{added}"
+        );
+        let wrong = called(
+            &home,
+            "lead",
+            "gate_add",
+            json!({ "who": "Tester", "when": "later" }),
+        );
+        assert_eq!(text_of(&wrong), "when is plan or change.");
     }
 }
