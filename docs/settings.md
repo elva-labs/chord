@@ -58,6 +58,10 @@ A workflow names the model a session starts on, and the models it may hand work 
 
 A team names the agents a lead may call and the gates their work passes: which agent approves the plan before building, or the change before handing over, and on which paths. You make and change them on the Agents tab, and start a session as a team's lead from the composer. Chord ships Ship with checks and Quick fix, and a settings file from before teams gets a team for each of its workflows, except those equal to one Chord ships, and its workflows stay as they were. See [teams](teams.md) and [teams in the settings file](reference/settings.md#teams).
 
+## Setup
+
+What Chord found on the machine: Claude Code and Codex, one of which it needs, and git, each looked for on the login shell's PATH with its version, and whether each agent is signed in. What is missing shows how to install it. The same checks open in the welcome at the first launch, and at a later one that finds no agent; Show welcome opens it again, and About opens from the app menu, or the menu button on Windows and Linux. Nothing the checks do spends usage or reaches the network. See [setup](reference/settings.md#setup).
+
 ## Accounts
 
 An account is a separate login: a Claude Code configuration directory and a Codex home, such as `~/.claude-work` and `~/.codex-work`. Naming an account logs nothing in. Run the harness once in a terminal with `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set to the directory, and it asks for a login and keeps it there. Each project then runs under the account chosen for it. See [accounts](reference/settings.md#accounts).

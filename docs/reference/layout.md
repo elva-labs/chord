@@ -513,8 +513,8 @@ platform has them, after [the corner](#the-corner): in the modern look flush
 in the window's corner, as tall as the header band, and in the terminal look
 inside the rightmost box. The pane headers are drag regions there too, and
 the platform keeps the resize borders. A menu button at the start of the
-sessions pane's header, open or folded, pops the native menu with Settings
-and Quit in it, since a menu bar would sit in the row the app took.
+sessions pane's header, open or folded, pops the native menu with Settings,
+About and Quit in it, since a menu bar would sit in the row the app took.
 
 ## On window resize
 
