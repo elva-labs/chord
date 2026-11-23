@@ -57,6 +57,9 @@ pub const FINDINGS_MOST: usize = 8_000;
 pub const BRIEF_MOST: usize = 8_000;
 pub const REASON_MOST: usize = 500;
 
+/// The tables that keep a run, by its lead, the run's own last.
+const RUN_TABLES: [&str; 6] = ["members", "gates", "plans", "verdicts", "waivers", "runs"];
+
 /// How long a write waits for another session's write to finish.
 const BUSY: Duration = Duration::from_secs(5);
 
@@ -644,7 +647,7 @@ impl Runs {
     fn prune(&self) -> Result<(), String> {
         let before = now() - KEPT_ENDED.as_secs() as i64;
         let old = "(SELECT lead FROM ended WHERE at < ?1)";
-        for table in ["members", "gates", "plans", "verdicts", "waivers", "runs"] {
+        for table in RUN_TABLES {
             self.conn
                 .execute(
                     &format!("DELETE FROM {table} WHERE lead IN {old}"),
@@ -655,6 +658,19 @@ impl Runs {
         self.conn
             .execute("DELETE FROM ended WHERE at < ?1", params![before])
             .map_err(failed)?;
+        Ok(())
+    }
+
+    /// Deletes a lead's run with everything kept of it.
+    fn remove(&self, lead: &str) -> Result<(), String> {
+        for table in RUN_TABLES.iter().chain(&["ended"]) {
+            self.conn
+                .execute(
+                    &format!("DELETE FROM {table} WHERE lead = ?1"),
+                    params![lead],
+                )
+                .map_err(failed)?;
+        }
         Ok(())
     }
 
@@ -900,9 +916,13 @@ fn plan_from(row: &rusqlite::Row<'_>) -> rusqlite::Result<Plan> {
 }
 
 /// Begins the run of a lead started with a team, in its folder, with the
-/// team's gates. A lead whose run began already keeps it as it is, so a
-/// lead started again goes on with its record, an ended run's too, which
-/// holds again from then on.
+/// team's gates. A lead started again with the team its run has goes on
+/// with that run's record, an ended run's too, which holds again from then
+/// on without the waivers the user gave it before it ended: a waiver is
+/// bound to no plan or change, so it could stand for work it never saw. A
+/// lead started with any other team, or the same team since changed, ends
+/// the run it had: its record is removed, its members are in no run, and a
+/// run begins with the team as it is now.
 pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run, String> {
     let lead = lead.trim();
     if lead.is_empty() {
@@ -912,11 +932,21 @@ pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run,
     let runs = Runs::open(home)?;
     runs.at_once(|runs| {
         runs.prune()?;
-        runs.conn
+        let ended = runs
+            .conn
             .execute("DELETE FROM ended WHERE lead = ?1", params![lead])
-            .map_err(failed)?;
+            .map_err(failed)?
+            > 0;
         if let Some(run) = runs.run(lead)? {
-            return Ok(run);
+            if run.team == *team {
+                if ended {
+                    runs.conn
+                        .execute("DELETE FROM waivers WHERE lead = ?1", params![lead])
+                        .map_err(failed)?;
+                }
+                return Ok(run);
+            }
+            runs.remove(lead)?;
         }
         let run = Run {
             lead: lead.to_string(),
@@ -967,7 +997,9 @@ pub fn end(home: &Path, lead: &str) -> Result<bool, String> {
 /// folder it works in, with the brief it was given and, once known, its
 /// harness's id. The change in a folder other than the lead's counts from
 /// the newest commit it shares with the run's. A member recorded already
-/// keeps its agent, brief and folder and takes the id.
+/// keeps its agent, brief and folder and takes the id. A brief is a record
+/// and never holds a start back: one longer than [`BRIEF_MOST`] is kept
+/// cut to that.
 #[allow(clippy::too_many_arguments)]
 pub fn join(
     home: &Path,
@@ -979,19 +1011,39 @@ pub fn join(
     reads_only: bool,
     brief: &str,
 ) -> Result<Member, String> {
-    too_long("brief", brief, BRIEF_MOST)?;
     let runs = Runs::open(home)?;
     runs.at_once(|runs| {
-        let run = runs
-            .run(lead)?
-            .ok_or_else(|| "That lead has no run.".to_string())?;
+        runs.record(lead, token, agent, folder, session, reads_only, brief)?
+            .ok_or_else(|| "That lead has no run.".to_string())
+    })
+}
+
+impl Runs {
+    /// [`join`] within a write the caller holds. None when the lead has
+    /// no run, or its run has ended.
+    #[allow(clippy::too_many_arguments)]
+    fn record(
+        &self,
+        lead: &str,
+        token: &str,
+        agent: &str,
+        folder: &Path,
+        session: Option<&str>,
+        reads_only: bool,
+        brief: &str,
+    ) -> Result<Option<Member>, String> {
+        let runs = self;
+        let Some(run) = runs.run(lead)? else {
+            return Ok(None);
+        };
         let Some(member) = run.team.member(agent.trim()) else {
             return Err(format!(
-                "{} is not one of {}'s agents.",
+                "{} is not one of {}'s agents, as its run names them from when it began.",
                 agent.trim(),
                 run.team.name
             ));
         };
+        let brief: String = brief.chars().take(BRIEF_MOST).collect();
         let session = session.map(str::trim).filter(|id| !id.is_empty());
         let base = if same(folder, &run.folder) {
             run.base.clone()
@@ -1019,8 +1071,9 @@ pub fn join(
             )
             .map_err(failed)?;
         runs.member(token)?
+            .map(Some)
             .ok_or_else(|| "The member could not be recorded.".to_string())
-    })
+    }
 }
 
 /// What a session started for another says of it: the token of the
@@ -1037,7 +1090,8 @@ pub struct Joining {
 /// Records a session as a member of the run the session that asked for it
 /// is in, as its lead or a member, so a member's own start is in its
 /// lead's run as well. None, and nothing kept, when that session is in no
-/// run.
+/// run. The run is found and the member recorded in one write, so a run
+/// that ends as the start lands leaves the session in no run.
 pub fn join_from(
     home: &Path,
     joining: &Joining,
@@ -1053,25 +1107,24 @@ pub fn join_from(
     let Some(runs) = Runs::existing(home)? else {
         return Ok(None);
     };
-    let Some(lead) = runs.lead_of(by)? else {
-        return Ok(None);
-    };
-    drop(runs);
     let token = token.trim();
-    if token.is_empty() {
-        return Err("A session in a team's run needs its token.".into());
-    }
-    join(
-        home,
-        &lead,
-        token,
-        &joining.agent,
-        folder,
-        session,
-        reads_only,
-        &joining.brief,
-    )
-    .map(Some)
+    runs.at_once(|runs| {
+        let Some(lead) = runs.lead_of(by)? else {
+            return Ok(None);
+        };
+        if token.is_empty() {
+            return Err("A session in a team's run needs its token.".into());
+        }
+        runs.record(
+            &lead,
+            token,
+            &joining.agent,
+            folder,
+            session,
+            reads_only,
+            &joining.brief,
+        )
+    })
 }
 
 /// Why a start the caller asks for is refused for leaving its run: a
@@ -1112,7 +1165,7 @@ pub fn start_outside(
         match agent.map(str::trim).filter(|agent| !agent.is_empty()) {
             Some(agent) if run.team.member(agent).is_some() => None,
             Some(agent) => Some(format!(
-            "{agent} is not one of {}'s agents; this session is in its run, which starts only {}.",
+            "{agent} is not one of {}'s agents as the run names them from when it began; this session is in that run, which starts only {}.",
             run.team.name,
             agents()
         )),

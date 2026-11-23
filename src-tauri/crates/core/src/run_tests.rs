@@ -127,20 +127,34 @@ fn a_run_begins_with_its_teams_gates_and_its_folders_commit() {
 }
 
 #[test]
-fn a_lead_begun_again_keeps_its_run() {
+fn a_lead_begun_again_with_its_runs_team_keeps_the_run_and_with_another_begins_anew() {
     let (home, dir) = started("again", QUICK_FIX, &[("dev", "Developer", false)]);
     plan(home.path(), "lead", "Fix it.", &[]).unwrap();
-    let again = begin(home.path(), "lead", &team(SHIP_WITH_CHECKS), &dir).unwrap();
+    waive(home.path(), "lead", 1, "Checked it myself.").unwrap();
+    let again = begin(home.path(), "lead", &team(QUICK_FIX), &dir).unwrap();
     assert_eq!(again.team.name, QUICK_FIX);
-    let state = state(home.path(), "lead").unwrap().unwrap();
-    assert_eq!(state.plan.unwrap().version, 1);
+    let kept = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(kept.plan.unwrap().version, 1);
+    let runs = Runs::open(home.path()).unwrap();
+    assert_eq!(runs.members("lead").unwrap().len(), 1);
     assert_eq!(
-        Runs::open(home.path())
-            .unwrap()
-            .members("lead")
-            .unwrap()
-            .len(),
-        1
+        runs.waivers("lead").unwrap().len(),
+        1,
+        "a run going on keeps its waivers"
+    );
+
+    let anew = begin(home.path(), "lead", &team(SHIP_WITH_CHECKS), &dir).unwrap();
+    assert_eq!(anew.team.name, SHIP_WITH_CHECKS);
+    let fresh = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(fresh.run.team.name, SHIP_WITH_CHECKS);
+    assert_eq!(fresh.gates.len(), 4);
+    assert_eq!(fresh.plan, None);
+    assert!(runs.waivers("lead").unwrap().is_empty());
+    assert!(runs.members("lead").unwrap().is_empty());
+    assert_eq!(
+        runs.lead_of("dev").unwrap(),
+        None,
+        "the old run's member is in no run"
     );
 }
 
@@ -156,7 +170,10 @@ fn reading_a_run_that_is_not_there_makes_nothing() {
 fn only_a_teams_agents_join_its_run_and_a_member_takes_its_id_later() {
     let (home, dir) = started("join", QUICK_FIX, &[]);
     let refused = join(home.path(), "lead", "t", "Tester", &dir, None, false, "").unwrap_err();
-    assert_eq!(refused, "Tester is not one of Quick fix's agents.");
+    assert_eq!(
+        refused,
+        "Tester is not one of Quick fix's agents, as its run names them from when it began."
+    );
     let member = join(
         home.path(),
         "lead",
@@ -1198,6 +1215,7 @@ fn an_ended_run_holds_nothing_and_its_lead_started_again_with_the_team_reopens_i
     let (home, dir) = started("end", QUICK_FIX, &[("dev", "Developer", false)]);
     plan(home.path(), "lead", "Fix it.", &[]).unwrap();
     assert!(command_held(home.path(), "lead", "git push").is_some());
+    waive(home.path(), "lead", 1, "Checked it myself.").unwrap();
     // A member's end ends nothing.
     assert!(!end(home.path(), "dev").unwrap());
     assert!(end(home.path(), "lead").unwrap());
@@ -1212,7 +1230,45 @@ fn an_ended_run_holds_nothing_and_its_lead_started_again_with_the_team_reopens_i
     let runs = Runs::open(home.path()).unwrap();
     assert_eq!(runs.members("lead").unwrap().len(), 1);
     assert!(runs.latest_plan("lead").unwrap().is_some());
+    assert!(
+        runs.waivers("lead").unwrap().is_empty(),
+        "a reopened run holds again without the waivers it had"
+    );
     assert!(command_held(home.path(), "lead", "git push").is_some());
+}
+
+#[test]
+fn a_start_as_its_leads_run_ends_joins_no_run() {
+    let (home, dir) = started("join-ended", QUICK_FIX, &[]);
+    assert!(end(home.path(), "lead").unwrap());
+    let joining = Joining {
+        by: "lead".into(),
+        agent: "Developer".into(),
+        brief: String::new(),
+    };
+    let none = join_from(home.path(), &joining, "dev", &dir, None, false).unwrap();
+    assert_eq!(none, None);
+    let runs = Runs::open(home.path()).unwrap();
+    assert!(
+        runs.member("dev").unwrap().is_none(),
+        "nothing is kept of it"
+    );
+}
+
+#[test]
+fn a_brief_longer_than_the_most_is_kept_cut_on_a_character() {
+    let (home, dir) = started("long-brief", QUICK_FIX, &[]);
+    let long = "\u{e9}".repeat(BRIEF_MOST + 10);
+    let joining = Joining {
+        by: "lead".into(),
+        agent: "Developer".into(),
+        brief: long.clone(),
+    };
+    let member = join_from(home.path(), &joining, "dev", &dir, None, false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(member.brief.chars().count(), BRIEF_MOST);
+    assert!(long.starts_with(&member.brief));
 }
 
 #[test]

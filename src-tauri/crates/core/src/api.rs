@@ -3276,6 +3276,22 @@ mod tests {
             (member.lead.as_str(), member.session.as_deref()),
             ("lead", Some("id"))
         );
+        // A start prompt longer than a brief keeps is kept cut, and starts.
+        let long = crate::run::Joining {
+            agent: "Reviewer".into(),
+            brief: "x".repeat(crate::run::BRIEF_MOST * 2),
+            ..joining.clone()
+        };
+        core.engage(&run("rev", None, Some(long)), folder.path(), None)
+            .unwrap()
+            .unwrap();
+        let member = crate::run::Runs::existing(&home)
+            .unwrap()
+            .unwrap()
+            .member("rev")
+            .unwrap()
+            .unwrap();
+        assert_eq!(member.brief.len(), crate::run::BRIEF_MOST);
         // An agent the team does not have is not started in its run.
         let other = crate::run::Joining {
             agent: "Tester".into(),
