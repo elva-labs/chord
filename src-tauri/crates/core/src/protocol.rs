@@ -385,6 +385,15 @@ struct RunParams {
 }
 
 #[derive(Deserialize)]
+struct TeamCheckParams {
+    draft: Value,
+    #[serde(default)]
+    editing: Option<String>,
+    #[serde(default)]
+    folders: Vec<PathBuf>,
+}
+
+#[derive(Deserialize)]
 struct RunWaiveParams {
     token: String,
     gate: i64,
@@ -1047,6 +1056,10 @@ pub fn dispatch(
             value(core.run_end(&p.token)?)
         }
         "teams_in_use" => value(core.teams_in_use()?),
+        "team_check" => {
+            let p: TeamCheckParams = parse(params)?;
+            value(core.team_check(&p.draft, p.editing.as_deref(), &p.folders)?)
+        }
         "run_state" => {
             let p: RunParams = parse(params)?;
             value(core.run_state(&p.token)?)
@@ -1679,6 +1692,13 @@ mod tests {
             .filter_map(|team| team["name"].as_str())
             .collect();
         assert!(names.contains(&crate::team::QUICK_FIX), "{names:?}");
+        let draft = json!({ "name": "Quick fix", "members": [] });
+        let problems = dispatch(&core, "team_check", json!({ "draft": draft }), no_output).unwrap();
+        assert_eq!(problems.as_array().unwrap().len(), 2, "{problems}");
+        let editing = json!({ "draft": draft, "editing": "quick fix" });
+        let problems = dispatch(&core, "team_check", editing, no_output).unwrap();
+        assert_eq!(problems[0]["text"], "Quick fix needs at least one agent.");
+        assert_eq!(problems[0]["quiet"], false);
     }
 
     #[test]

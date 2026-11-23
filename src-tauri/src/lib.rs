@@ -1445,6 +1445,33 @@ async fn teams_in_use(
     .await
 }
 
+/// Every problem with a team being edited, as the core where the project
+/// is finds them, beside its other teams, with a hint for each path that
+/// matches no file in `folders`.
+#[tauri::command]
+async fn team_check(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    draft: Value,
+    editing: Option<String>,
+    folders: Vec<String>,
+) -> Result<Value, String> {
+    let sent = json!({ "draft": draft, "editing": editing, "folders": folders });
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "team_check",
+        move |_| sent,
+        move |core, _| {
+            let folders: Vec<PathBuf> = folders.iter().map(PathBuf::from).collect();
+            core.team_check(&draft, editing.as_deref(), &folders)
+        },
+    )
+    .await
+}
+
 /// The run a session of a project is in, as its lead or a member, where
 /// it is.
 #[tauri::command]
@@ -2592,6 +2619,7 @@ pub fn run() {
             run_end,
             run_state,
             teams_in_use,
+            team_check,
             run_waive,
             notes_forget,
             usage_log,

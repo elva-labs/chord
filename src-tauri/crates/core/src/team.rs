@@ -222,91 +222,196 @@ fn check_model(owner: &str, model: &Model) -> Result<(), String> {
 /// Whether a glob will do: a path pattern relative to the project, short,
 /// on one line, whose parts are each a name or a pattern. A glob that
 /// starts with `/` or `./`, ends with `/`, or has an empty, `.` or `..`
-/// part would match no path git names, so it is refused.
+/// part would match no path git names, so it is refused, and so is one
+/// with a backtick, which the lead is told each glob between.
 fn fits_glob(glob: &str) -> bool {
     !glob.trim().is_empty()
         && glob.len() <= LONGEST_GLOB
-        && !glob.chars().any(|c| c.is_control())
+        && !glob.chars().any(|c| c.is_control() || c == '`')
         && glob
             .split('/')
             .all(|part| !part.is_empty() && part != "." && part != "..")
 }
 
-/// Whether one team keeps the rules: a name, members each named once with
-/// models that exist, and gates each naming one of its members, with
-/// paths that will do.
-pub fn check_team(team: &Team) -> Result<(), String> {
-    let name = team.name.trim();
-    if !fits_name(name) {
-        return Err(format!(
-            "a team needs a name of a few words, {LONGEST_NAME} characters at most"
-        ));
+/// Why a team's name will not do, if it will not: it is told to the lead
+/// between quotes, so it has none of its own.
+fn name_problem(name: &str) -> Option<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        Some("a team needs a name".into())
+    } else if name.chars().count() > LONGEST_NAME {
+        Some(format!(
+            "a team's name is {LONGEST_NAME} characters at most"
+        ))
+    } else if name.chars().any(|c| c.is_control() || c == '"') {
+        Some("a team's name has no quotation marks and nothing unprintable".into())
+    } else {
+        None
     }
+}
+
+/// Every rule a team breaks besides its name, in order: its agents, how
+/// many gates it has, each agent, then each gate.
+fn rest_problems(team: &Team) -> Vec<String> {
+    let mut problems = Vec::new();
+    let name = match team.name.trim() {
+        "" => "the team",
+        name => name,
+    };
     if team.members.is_empty() {
-        return Err(format!("{name} needs at least one agent"));
+        problems.push(format!("{name} needs at least one agent"));
     }
     if team.members.len() > MOST_MEMBERS {
-        return Err(format!("{name} has {MOST_MEMBERS} agents at most"));
+        problems.push(format!("{name} has {MOST_MEMBERS} agents at most"));
     }
     if team.gates.len() > MOST_GATES {
-        return Err(format!("{name} has {MOST_GATES} gates at most"));
+        problems.push(format!("{name} has {MOST_GATES} gates at most"));
     }
     for (index, member) in team.members.iter().enumerate() {
         let agent = member.agent.trim();
         if !fits_name(agent) {
-            return Err(format!(
+            problems.push(format!(
                 "an agent of {name} is named by its title, {LONGEST_NAME} characters at most"
             ));
+            continue;
         }
         if team.members[..index]
             .iter()
             .any(|earlier| earlier.agent.trim().eq_ignore_ascii_case(agent))
         {
-            return Err(format!("{name} has {agent} twice"));
+            problems.push(format!("{name} has {agent} twice"));
         }
         let owner = format!("{agent} in {name}");
         if member.models.len() > MOST_MODELS {
-            return Err(format!("{owner} lists {MOST_MODELS} models at most"));
+            problems.push(format!("{owner} lists {MOST_MODELS} models at most"));
         }
         for (at, model) in member.models.iter().enumerate() {
-            check_model(&owner, model)?;
-            if member.models[..at]
+            if let Err(problem) = check_model(&owner, model) {
+                problems.push(problem);
+            } else if member.models[..at]
                 .iter()
                 .any(|earlier| (&earlier.harness, &earlier.model) == (&model.harness, &model.model))
             {
-                return Err(format!("{owner} lists {} twice", model.model));
+                problems.push(format!("{owner} lists {} twice", model.model));
             }
         }
     }
     for (index, gate) in team.gates.iter().enumerate() {
         let who = gate.who.trim();
         if team.member(who).is_none() {
-            return Err(format!(
+            problems.push(format!(
                 "a gate of {name} waits for {who:?}, which is not one of its agents"
             ));
         }
         if team.gates[..index].iter().any(|earlier| {
             earlier.who.trim().eq_ignore_ascii_case(who) && earlier.when == gate.when
         }) {
-            return Err(format!(
+            problems.push(format!(
                 "{name} has {who} approve {} twice",
                 gate.when.words()
             ));
         }
         if let Some(globs) = &gate.touches {
             if globs.is_empty() || globs.len() > MOST_GLOBS {
-                return Err(format!(
+                problems.push(format!(
                     "the gate of {who} in {name} names between 1 and {MOST_GLOBS} paths it holds for"
                 ));
             }
-            if let Some(bad) = globs.iter().find(|glob| !fits_glob(glob)) {
-                return Err(format!(
+            for bad in globs.iter().filter(|glob| !fits_glob(glob)) {
+                problems.push(format!(
                     "the gate of {who} in {name} holds for paths in the project, such as infra/**, not {bad:?}"
                 ));
             }
         }
     }
-    Ok(())
+    problems
+}
+
+/// Whether one team keeps the rules: a name, members each named once with
+/// models that exist, and gates each naming one of its members, with
+/// paths that will do. Refused, it gives the first rule it breaks.
+pub fn check_team(team: &Team) -> Result<(), String> {
+    match name_problem(&team.name)
+        .into_iter()
+        .chain(rest_problems(team))
+        .next()
+    {
+        Some(problem) => Err(problem),
+        None => Ok(()),
+    }
+}
+
+/// A problem with a team being edited, as a sentence.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Problem {
+    pub text: String,
+    /// A hint that does not keep the team from being saved.
+    pub quiet: bool,
+}
+
+/// Every problem with a team being edited, beside the other teams in use,
+/// the one that matters most first: its name, its name taken by another
+/// team, no room for one more team, the rest of the rules it breaks, and
+/// last a quiet hint for each path a gate holds for that matches no file
+/// in `files`, the files of each project it is checked against, which are
+/// listed only when a gate has a path that will do. A draft that is not a
+/// team at all has only that problem.
+pub fn check_draft(
+    draft: &Value,
+    others: &[Team],
+    files: impl FnOnce() -> Vec<Vec<String>>,
+) -> Vec<Problem> {
+    let refused = |text: String| Problem {
+        text: format!("{}.", crate::run::capitalised(&text)),
+        quiet: false,
+    };
+    let team: Team = match serde_json::from_value(draft.clone()) {
+        Ok(team) => team,
+        Err(_) => return vec![refused(ONE_SHAPE.into())],
+    };
+    let name = team.name.trim();
+    let mut problems: Vec<Problem> = name_problem(name).into_iter().map(refused).collect();
+    if !name.is_empty()
+        && others
+            .iter()
+            .any(|other| other.name.trim().eq_ignore_ascii_case(name))
+    {
+        problems.push(refused(format!("there is already a team called {name}")));
+    }
+    if others.len() >= MOST_TEAMS {
+        problems.push(refused(format!(
+            "the settings hold {MOST_TEAMS} teams at most"
+        )));
+    }
+    problems.extend(rest_problems(&team).into_iter().map(refused));
+    let globs: Vec<&String> = team
+        .gates
+        .iter()
+        .filter_map(|gate| gate.touches.as_deref())
+        .flatten()
+        .filter(|glob| fits_glob(glob))
+        .collect();
+    let files = if globs.is_empty() {
+        Vec::new()
+    } else {
+        files()
+    };
+    if !files.is_empty() {
+        let mut hinted: Vec<&str> = Vec::new();
+        for glob in globs {
+            let one = std::slice::from_ref(glob);
+            if hinted.contains(&glob.as_str()) || files.iter().any(|paths| touches(one, paths)) {
+                continue;
+            }
+            hinted.push(glob);
+            problems.push(Problem {
+                text: format!("No file in the open projects matches {glob} yet."),
+                quiet: true,
+            });
+        }
+    }
+    problems
 }
 
 /// A team in the settings file that does not read or keep the rules, with
@@ -594,6 +699,88 @@ fn part_matches(glob: &str, part: &str) -> bool {
     glob[g..].iter().all(|&c| c == '*')
 }
 
+/// A model as the start tool is given it: the harness, and the model
+/// unless it is Codex's own default, which takes none.
+fn model_words(model: &Model) -> String {
+    if model.harness == "codex" && model.model == workflow::CODEX_DEFAULT {
+        return "codex with no model".into();
+    }
+    format!("{} with the model {}", model.harness, model.model)
+}
+
+/// A name between quotes, with any quotation mark or backslash of its own
+/// escaped, so it reads as one name.
+fn quoted(name: &str) -> String {
+    format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn member_line(member: &Member) -> String {
+    let agent = quoted(&member.agent);
+    let models: Vec<String> = member.models.iter().map(model_words).collect();
+    match models.split_first() {
+        None => format!("{agent}, on the model its agent names."),
+        Some((first, [])) => format!("{agent}, on {first}."),
+        Some((first, rest)) => format!(
+            "{agent}, on {first}; when you have a reason to, on {} instead.",
+            rest.join(" or ")
+        ),
+    }
+}
+
+fn gate_line(gate: &Gate) -> String {
+    let what = match gate.when {
+        When::Plan => "the plan, before anything is built",
+        When::Change => "the change, before it is handed over",
+    };
+    let who = quoted(&gate.who);
+    match gate.touches.as_deref() {
+        Some(globs) if !globs.is_empty() => {
+            let globs: Vec<String> = globs.iter().map(|glob| format!("`{glob}`")).collect();
+            format!(
+                "{who} approves {what}, when it touches {}.",
+                globs.join(" or ")
+            )
+        }
+        _ => format!("{who} approves {what}."),
+    }
+}
+
+/// What the lead of a team's run is told when it starts: which team it
+/// leads, how it hands out work, its members and its gates, numbered.
+pub fn lead_instructions(team: &Team) -> String {
+    let delegate = if team.start_only {
+        "You direct this work and do not do it yourself: do not edit files. Hand every piece to a session you start with the workbench's start tool, never to your own subagents."
+    } else {
+        "Hand each piece of work to a session you start with the workbench's start tool, so the user can see it; your own subagents are for help along the way."
+    };
+    let mut lines = vec![
+        format!("{delegate} Name one of the team's agents in each start with agent, and its harness and model as listed below. A session that is not one of the team's agents is refused."),
+        format!("Run at most {AT_ONCE} sessions of one agent at once."),
+    ];
+    lines.extend(team.members.iter().map(member_line));
+    if team.gates.is_empty() {
+        lines.push("The team has no gates. When the work is done, report to the user.".into());
+    } else {
+        let plan = team.gates.iter().any(|gate| gate.when == When::Plan);
+        if plan {
+            lines.push("Before building, write the plan with the plan tool: what you will build and every path it touches.".into());
+        }
+        lines.extend(team.gates.iter().map(gate_line));
+        lines.push("For a gate, start a session of the gate's agent to read what it approves and give its verdict with the verdict tool. The gates tool says how each gate stands and what its last verdict found. You may add a gate with gate_add.".into());
+        lines.push(format!("A gate that asked for changes {ROUNDS} times waits for the user, who alone may let it pass. When every gate stands approved, or waits for the user, report to the user."));
+    }
+    let numbered: Vec<String> = lines
+        .iter()
+        .enumerate()
+        .map(|(index, line)| format!("{}. {line}", index + 1))
+        .collect();
+    format!(
+        "You lead the Chord team {}. Work this way:\n{}",
+        quoted(team.name.trim()),
+        numbered.join("\n")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -617,6 +804,41 @@ mod tests {
                 assert!(crate::agents::SHIPPED_TITLES.contains(&member.agent.as_str()));
             }
         }
+    }
+
+    #[test]
+    fn the_lead_is_told_its_team_members_and_gates() {
+        let mut ship = shipped().remove(0);
+        ship.members[1].models = vec![
+            Model {
+                harness: "claude-code".into(),
+                model: "opus".into(),
+                later: Map::new(),
+            },
+            Model {
+                harness: "codex".into(),
+                model: workflow::CODEX_DEFAULT.into(),
+                later: Map::new(),
+            },
+        ];
+        let told = lead_instructions(&ship);
+        assert!(told.starts_with(
+            "You lead the Chord team \"Ship with checks\". Work this way:\n1. You direct this work"
+        ));
+        assert!(told.contains("\"Developer\", on claude-code with the model opus; when you have a reason to, on codex with no model instead."));
+        assert!(told.contains("\"Tester\", on the model its agent names."));
+        assert!(told.contains("write the plan with the plan tool"));
+        assert!(told.contains("\"Cloud architect\" approves the plan, before anything is built, when it touches `infra/**`."));
+        assert!(told.contains("start a session of the gate's agent to read"));
+        assert!(told.contains("Run at most 3 sessions"));
+
+        let mut quick = shipped().remove(1);
+        quick.start_only = false;
+        let told = lead_instructions(&quick);
+        assert!(!told.contains("do not edit files"));
+        assert!(!told.contains("plan tool"), "no gate is on the plan");
+        quick.gates.clear();
+        assert!(lead_instructions(&quick).contains("The team has no gates."));
     }
 
     #[test]
@@ -924,5 +1146,96 @@ mod tests {
         let teams = from_workflows(&workflow::read(&changed).unwrap());
         let names: Vec<&str> = teams.iter().map(|team| team.name.as_str()).collect();
         assert_eq!(names, ["Build and review", SHIP_WITH_CHECKS, QUICK_FIX]);
+    }
+
+    #[test]
+    fn a_draft_is_given_every_problem_it_has_the_one_that_matters_most_first() {
+        let others = shipped();
+        let draft = json!({
+            "name": "quick fix",
+            "members": [],
+            "gates": [{ "who": "Reviewer", "when": "change", "touches": ["nothing/**", "src/**", "nothing/**"] }]
+        });
+        let files = vec![
+            vec!["src/main.rs".to_string()],
+            vec!["docs/a.md".to_string()],
+        ];
+        let problems = check_draft(&draft, &others, || files.clone());
+        let texts: Vec<&str> = problems.iter().map(|p| p.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            [
+                "There is already a team called quick fix.",
+                "Quick fix needs at least one agent.",
+                "A gate of quick fix waits for \"Reviewer\", which is not one of its agents.",
+                "No file in the open projects matches nothing/** yet.",
+            ]
+        );
+        let quiet: Vec<bool> = problems.iter().map(|p| p.quiet).collect();
+        assert_eq!(quiet, [false, false, false, true]);
+        // With no project to check against, no path is hinted at.
+        assert!(check_draft(&draft, &others, Vec::new)
+            .iter()
+            .all(|p| !p.quiet));
+        // With no path that will do, no project's files are listed.
+        let unlisted = |draft: Value| {
+            check_draft(&draft, &others, || panic!("the files were listed"));
+        };
+        unlisted(
+            json!({ "name": "Plain", "members": [{ "agent": "Reviewer" }],
+            "gates": [{ "who": "Reviewer", "when": "change" }] }),
+        );
+        unlisted(json!({ "name": "Odd", "members": [{ "agent": "Reviewer" }],
+            "gates": [{ "who": "Reviewer", "when": "change", "touches": ["../up"] }] }));
+
+        let named = |name: &str| {
+            check_draft(
+                &json!({ "name": name, "members": [{ "agent": "Developer" }] }),
+                &others,
+                Vec::new,
+            )
+        };
+        assert_eq!(named(" ")[0].text, "A team needs a name.");
+        assert_eq!(
+            named(&"x".repeat(41))[0].text,
+            "A team's name is 40 characters at most."
+        );
+        assert!(named("Quote \" team")[0]
+            .text
+            .contains("no quotation marks"));
+        assert!(named("Tab\tteam")[0].text.contains("nothing unprintable"));
+        assert!(named("Fine").is_empty());
+        // A new team past the most there may be is refused.
+        let full: Vec<Team> = (0..MOST_TEAMS)
+            .map(|at| team(&format!("Team {at}"), &[DEVELOPER], vec![]))
+            .collect();
+        let more = check_draft(
+            &json!({ "name": "One more", "members": [{ "agent": "Developer" }] }),
+            &full,
+            Vec::new,
+        );
+        assert_eq!(more[0].text, "The settings hold 16 teams at most.");
+        // What is not a team at all says only that.
+        assert_eq!(check_draft(&json!(3), &others, Vec::new).len(), 1);
+        // A team's name with a quotation mark is refused in the file too.
+        assert!(with(|v| v[0]["name"] = json!("Say \"hi\"")).is_err());
+        assert!(with(|v| v[1]["gates"][0]["touches"] = json!(["a`b"])).is_err());
+    }
+
+    #[test]
+    fn names_and_paths_told_to_the_lead_cannot_run_into_the_line() {
+        let mut quick = shipped().remove(1);
+        quick.members[1].agent = "The \"best\" reviewer".into();
+        quick.gates[0].who = quick.members[1].agent.clone();
+        quick.gates[0].touches = Some(vec!["a or b/**".into(), "src/**".into()]);
+        let told = lead_instructions(&quick);
+        assert!(
+            told.contains("\"The \\\"best\\\" reviewer\", on the model its agent names."),
+            "{told}"
+        );
+        assert!(
+            told.contains("when it touches `a or b/**` or `src/**`."),
+            "{told}"
+        );
     }
 }

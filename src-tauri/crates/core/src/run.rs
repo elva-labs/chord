@@ -524,7 +524,7 @@ impl State {
     }
 }
 
-fn capitalised(text: &str) -> String {
+pub(crate) fn capitalised(text: &str) -> String {
     let mut chars = text.chars();
     match chars.next() {
         Some(first) => first.to_uppercase().chain(chars).collect(),
@@ -1373,6 +1373,8 @@ pub struct View {
     pub handing_over_held: Option<String>,
     pub uncommitted_held: Option<String>,
     pub waits_for_the_user: bool,
+    /// How long the user's reason for a waiver may be, in characters.
+    pub reason_most: usize,
 }
 
 impl From<State> for View {
@@ -1383,6 +1385,7 @@ impl From<State> for View {
             handing_over_held: state.handing_over_held(),
             uncommitted_held: state.uncommitted_held(),
             waits_for_the_user: state.waits_for_the_user(),
+            reason_most: REASON_MOST,
             state,
         }
     }
