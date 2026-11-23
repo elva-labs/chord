@@ -90,7 +90,7 @@
   }
 
   .sent :global(blockquote) {
-    margin: 0.3lh 0;
+    margin: 0;
     padding: 0 0 0 10px;
     border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
     color: var(--ink-2);
@@ -107,7 +107,9 @@
   }
 
   /* A list is two columns: the marker each item was typed with, and the
-     item. */
+     item. The markers start where a paragraph's words do and end one
+     space before the item, numbers set to the right so their dots line
+     up. */
   .sent :global(ul),
   .sent :global(ol) {
     display: grid;
@@ -122,9 +124,18 @@
   }
 
   .sent :global(.marker) {
-    padding-left: 0.4em;
     white-space: pre;
+    text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  .sent :global(.marker.bullet) {
+    text-align: left;
+  }
+
+  .sent :global(.item > ul),
+  .sent :global(.item > ol) {
+    padding-left: 0.4em;
   }
 
   .sent :global(.marker.bullet)::before {
@@ -145,7 +156,7 @@
   }
 
   .sent :global(pre) {
-    margin: 0.3lh 0;
+    margin: 0;
     padding: 7px 10px;
     border-radius: var(--radius-sm);
     background: var(--sent-fill);

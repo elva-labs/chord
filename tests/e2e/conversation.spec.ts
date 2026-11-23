@@ -1695,7 +1695,10 @@ test.describe("the user's own Markdown", () => {
     expect(parseFloat(await sent.locator("blockquote").evaluate((node) => getComputedStyle(node).borderLeftWidth))).toBeGreaterThan(0);
     const answer = await inside(sent.locator("p", { hasText: "My answer under it:" }));
     expect(answer.y).toBeGreaterThanOrEqual(quote.y + quote.height);
-    // The list's items stand in from the words.
+    // With no blank line typed between them, the answer is the very next line.
+    expect(answer.y - (quote.y + quote.height)).toBeLessThan(1);
+    // The list's markers start where the words do, and its items stand in from them.
+    expect(Math.abs((await sent.locator("li .marker").first().boundingBox())!.x - answer.x)).toBeLessThan(1);
     await expect(sent.locator("li")).toHaveText(["keep one scan", "share it"]);
     expect((await sent.locator("li .item").first().boundingBox())!.x).toBeGreaterThan(answer.x + 4);
     await expect(sent.locator("p code")).toHaveText("npm test");
@@ -1704,7 +1707,9 @@ test.describe("the user's own Markdown", () => {
     await expect(link).toHaveAttribute("tabindex", "-1");
     // The long line of code scrolls in its box rather than widen the bubble.
     const pre = sent.locator("pre");
-    await inside(pre);
+    const fence = await inside(pre);
+    const above = (await sent.locator("p", { hasText: "then read" }).boundingBox())!;
+    expect(fence.y - (above.y + above.height)).toBeLessThan(1);
     expect(await pre.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
     await expect(pre.getByTestId("unseen-character")).toHaveText("⟨U+202E⟩");
     expect(await sent.evaluate((node) => getComputedStyle(node).direction)).toBe("ltr");
