@@ -505,7 +505,7 @@ fn switched_off(home: &Path, name: &str, arguments: &Value) -> Option<&'static s
         arguments
             .get("agent")
             .and_then(Value::as_str)
-            .is_some_and(|agent| !agent.trim().is_empty())
+            .is_some_and(|agent| !matches!(agent.trim(), "" | "claude-code" | "codex"))
     };
     match name {
         "note" | "notes" if !settings.notes_on => {
@@ -3242,6 +3242,10 @@ mod tests {
             None
         );
         assert_eq!(switched_off(&home, "start", &json!({ "agent": " " })), None);
+        assert_eq!(
+            switched_off(&home, "start", &json!({ "agent": "codex" })),
+            None
+        );
         let refused = handle(&home, Path::new("/p"), None, r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"notes","arguments":{}}}"#).unwrap();
         assert_eq!(refused["result"]["isError"], true);
         switch(&home, true, true);

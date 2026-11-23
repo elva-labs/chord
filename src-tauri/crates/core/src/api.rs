@@ -81,6 +81,11 @@ const TAKEN_INTO: &str = "Codex took this message into a turn that was running, 
 const TEAM_AND_JOINING: &str =
     "A session is started either as the lead of a team's run or into the run it is started from, never both.";
 
+/// Why a start that leads a team's run is refused while agents are
+/// switched off in the settings.
+const AGENTS_OFF: &str =
+    "Agents and teams are switched off in the settings, so no team's run begins until they are on again.";
+
 /// Why a session that follows a workflow is not started: it would have no
 /// start tool to hand its work out with.
 pub const NO_TOOLS: &str = "This session follows a workflow, which hands out its work with the workbench's tools, and this machine has no tool server to give it them. Pick an agent to start one alone instead.";
@@ -1158,8 +1163,12 @@ impl Core {
         Ok(())
     }
 
-    /// The team of the run a start's token leads, while that run goes on.
+    /// The team of the run a start's token leads, while that run goes on
+    /// and agents are switched on.
     fn led_team(&self, run: &Run) -> Option<crate::team::Team> {
+        if !self.switched_on(|settings| settings.agents_on) {
+            return None;
+        }
         let home = self.home.as_deref()?;
         let token = run
             .token
@@ -1187,8 +1196,9 @@ impl Core {
     /// Begins the team's run of a lead started with one, and records a
     /// session started for one in a run as its member, in `folder`, before
     /// the session's first turn. Answers with what the member is recorded
-    /// by, for its harness's id once that is known. Neither while agents
-    /// are switched off: the session starts as a plain one.
+    /// by, for its harness's id once that is known. A lead is refused
+    /// while agents are switched off; a member is still recorded, so the
+    /// run holds it once they are on again.
     fn engage(
         &self,
         run: &Run,
@@ -1201,8 +1211,8 @@ impl Core {
         if run.team.is_some() && run.joining.is_some() {
             return Err(TEAM_AND_JOINING.into());
         }
-        if !self.switched_on(|settings| settings.agents_on) {
-            return Ok(None);
+        if run.team.is_some() && !self.switched_on(|settings| settings.agents_on) {
+            return Err(AGENTS_OFF.into());
         }
         let home = self.home.as_deref().ok_or("no home directory")?;
         let token = run
@@ -3468,6 +3478,21 @@ mod tests {
         );
         assert_eq!(both.err().as_deref(), Some(TEAM_AND_JOINING));
         assert_eq!(crate::run::state(&home, "both").unwrap(), None);
+        // Agents switched off, no run begins.
+        let settings = crate::settings::settings_path(&home);
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(&settings, r#"{ "agentsOn": false }"#).unwrap();
+        let off = core.engage(&run("off", Some("quick fix"), None), folder.path(), None);
+        assert_eq!(off.err().as_deref(), Some(AGENTS_OFF));
+        assert_eq!(crate::run::state(&home, "off").unwrap(), None);
+        // A lead resumed meanwhile is a plain session, and leads again once
+        // agents are on.
+        let mut resumed = run("lead", None, None);
+        core.tell_lead(&mut resumed).unwrap();
+        assert_eq!(resumed.instructions, None);
+        std::fs::write(&settings, r#"{ "agentsOn": true }"#).unwrap();
+        core.tell_lead(&mut resumed).unwrap();
+        assert!(resumed.instructions.is_some());
     }
 
     #[test]
