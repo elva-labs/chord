@@ -4245,3 +4245,76 @@ fn a_lead_whose_run_holds_the_hand_over_goes_on_once_in_a_turn_of_its_own() {
         .iter()
         .all(|line| !line.contains("turn/start")));
 }
+
+/// What the window is told of a user's message that reaches Codex after a
+/// held end and before the continuation's turn begins. The core holds a
+/// message while it thinks a turn runs, so only a message sent at once gets
+/// here: there is no turn to steer it into, and a message the driver is
+/// handed then starts a turn of its own.
+#[test]
+fn a_message_between_a_held_end_and_its_continuation_is_told_as_it_comes() {
+    let (home, _folder) = crate::run::tests::started(
+        "codex-gap",
+        crate::team::QUICK_FIX,
+        &[("rev", "Reviewer", true)],
+    );
+    let mut driver = ready();
+    driver.run = Some((home.to_path_buf(), "lead".into()));
+    turn(&mut driver, M1);
+    let reading = read(&mut driver, completed("completed"));
+    let going = written(&reading.writes)
+        .into_iter()
+        .find(|line| line["method"] == "turn/start")
+        .expect("the lead goes on");
+    assert_eq!(
+        driver.steer("m-2", "wait", &[]),
+        Err("no turn runs to send the message into".into())
+    );
+
+    // The user's turn begins first: it is taken as the continuation, so the
+    // window is told of no turn and the message is never named.
+    let line: Value = serde_json::from_str(&driver.message("m-2", "wait", &[]).unwrap()).unwrap();
+    let users = events(
+        &mut driver,
+        &[
+            json!({"id": line["id"], "result": {"turn": {"id": "turn-3", "status": "inProgress", "items": []}}}),
+            notification(
+                "turn/started",
+                json!({"threadId": THREAD, "turn": {"id": "turn-3", "status": "inProgress", "items": []}}),
+            ),
+        ],
+    );
+    assert!(users.is_empty(), "{users:?}");
+    // The continuation's turn then begins as one of its own, a second start
+    // with no end told between.
+    let continuation = events(
+        &mut driver,
+        &[
+            json!({"id": going["id"], "result": {"turn": {"id": "turn-2", "status": "inProgress", "items": []}}}),
+            notification(
+                "turn/started",
+                json!({"threadId": THREAD, "turn": {"id": "turn-2", "status": "inProgress", "items": []}}),
+            ),
+        ],
+    );
+    assert!(
+        matches!(&continuation[..], [Event::TurnStarted { messages }] if messages.is_empty()),
+        "{continuation:?}"
+    );
+    let done = |turn: &str| {
+        notification(
+            "turn/completed",
+            json!({"threadId": THREAD, "turn": {"id": turn, "status": "completed", "items": [],
+                   "durationMs": 10, "error": null}}),
+        )
+    };
+    for turn in ["turn-3", "turn-2"] {
+        let reading = read(&mut driver, done(turn));
+        assert!(
+            matches!(&reading.events[..], [Event::TurnEnded { .. }]),
+            "{turn}: {:?}",
+            reading.events
+        );
+        assert!(reading.writes.is_empty(), "{turn}: {:?}", reading.writes);
+    }
+}
