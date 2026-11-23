@@ -60,7 +60,7 @@ A team names the agents a lead may call and the gates their work passes: which a
 
 ## Setup
 
-What Chord found on the machine: Claude Code and Codex, one of which it needs, and git, each looked for on the login shell's PATH with its version, and whether each agent is signed in. What is missing shows how to install it. The same checks open in the welcome at the first launch, and at a later one that finds no agent; Show welcome opens it again, and About opens from the app menu, or the menu button on Windows and Linux. Nothing the checks do spends usage or reaches the network. See [setup](reference/settings.md#setup).
+What Chord found on the machine: Claude Code and Codex, one of which it needs, and git, each looked for on the login shell's PATH with its version, and whether each agent is signed in. What is missing shows how to install it, and Check again reads the shell afresh, so a program installed meanwhile is found. A session that cannot start for want of its agent links here. The same checks open in the welcome at the first launch, and at a later one that finds no agent; Show welcome opens it again, and About opens from the app menu, or the menu button on Windows and Linux. Nothing the checks do spends usage or reaches the network. See [setup](reference/settings.md#setup).
 
 ## Accounts
 
