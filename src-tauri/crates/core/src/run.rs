@@ -94,6 +94,9 @@ fn make_own(path: &Path) -> std::io::Result<()> {
     }
 }
 
+/// How long an ended run is kept before it is deleted.
+pub const KEPT_ENDED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
 /// The version of the store's tables this build keeps.
 const SCHEMA: i64 = 1;
 
@@ -547,6 +550,10 @@ impl Runs {
                 reason TEXT NOT NULL,
                 at INTEGER NOT NULL,
                 PRIMARY KEY (lead, gate)
+            );
+            CREATE TABLE IF NOT EXISTS ended (
+                lead TEXT PRIMARY KEY,
+                at INTEGER NOT NULL
             );",
         )
         .map_err(failed)?;
@@ -566,6 +573,25 @@ impl Runs {
         Self::open(home).map(Some)
     }
 
+    /// Deletes the runs that ended more than [`KEPT_ENDED`] ago, with
+    /// everything kept of them.
+    fn prune(&self) -> Result<(), String> {
+        let before = now() - KEPT_ENDED.as_secs() as i64;
+        let old = "(SELECT lead FROM ended WHERE at < ?1)";
+        for table in ["members", "gates", "plans", "verdicts", "waivers", "runs"] {
+            self.conn
+                .execute(
+                    &format!("DELETE FROM {table} WHERE lead IN {old}"),
+                    params![before],
+                )
+                .map_err(failed)?;
+        }
+        self.conn
+            .execute("DELETE FROM ended WHERE at < ?1", params![before])
+            .map_err(failed)?;
+        Ok(())
+    }
+
     /// Runs `change` as one write, so another session's tool server sees
     /// all of it or none.
     fn at_once<T>(&self, change: impl FnOnce(&Self) -> Result<T, String>) -> Result<T, String> {
@@ -579,11 +605,14 @@ impl Runs {
         Ok(made)
     }
 
+    /// The run a lead leads, while it has not ended: an ended run holds
+    /// nothing and takes nothing.
     pub fn run(&self, lead: &str) -> Result<Option<Run>, String> {
         let row = self
             .conn
             .query_row(
-                "SELECT team, folder, base, at FROM runs WHERE lead = ?1",
+                "SELECT team, folder, base, at FROM runs
+                 WHERE lead = ?1 AND lead NOT IN (SELECT lead FROM ended)",
                 params![lead],
                 |row| {
                     Ok((
@@ -636,12 +665,16 @@ impl Runs {
         rows.collect::<Result<_, _>>().map_err(failed)
     }
 
-    /// The lead of the run a session is in, as its lead or a member.
+    /// The lead of the run a session is in, as its lead or a member, while
+    /// the run has not ended.
     pub fn lead_of(&self, token: &str) -> Result<Option<String>, String> {
         if self.run(token)?.is_some() {
             return Ok(Some(token.to_string()));
         }
-        Ok(self.member(token)?.map(|member| member.lead))
+        let Some(member) = self.member(token)? else {
+            return Ok(None);
+        };
+        Ok(self.run(&member.lead)?.map(|_| member.lead))
     }
 
     pub fn gates(&self, lead: &str) -> Result<Vec<RunGate>, String> {
@@ -802,7 +835,8 @@ fn plan_from(row: &rusqlite::Row<'_>) -> rusqlite::Result<Plan> {
 
 /// Begins the run of a lead started with a team, in its folder, with the
 /// team's gates. A lead whose run began already keeps it as it is, so a
-/// lead started again goes on with its record.
+/// lead started again goes on with its record, an ended run's too, which
+/// holds again from then on.
 pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run, String> {
     let lead = lead.trim();
     if lead.is_empty() {
@@ -811,6 +845,10 @@ pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run,
     team::check_team(team)?;
     let runs = Runs::open(home)?;
     runs.at_once(|runs| {
+        runs.prune()?;
+        runs.conn
+            .execute("DELETE FROM ended WHERE lead = ?1", params![lead])
+            .map_err(failed)?;
         if let Some(run) = runs.run(lead)? {
             return Ok(run);
         }
@@ -832,6 +870,30 @@ pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run,
             runs.insert_gate(lead, index as i64 + 1, gate, false)?;
         }
         Ok(run)
+    })
+}
+
+/// Ends the run a lead leads: its gates hold nothing from then on, its
+/// members are in no run, and it is deleted once [`KEPT_ENDED`] has passed.
+/// True when a run ended; false for a session that leads none, a member's
+/// included, whose end ends nothing. The lead's session is gone once its
+/// row is closed for good, and the user may end a run before that.
+pub fn end(home: &Path, lead: &str) -> Result<bool, String> {
+    let Some(runs) = Runs::existing(home)? else {
+        return Ok(false);
+    };
+    runs.at_once(|runs| {
+        runs.prune()?;
+        if runs.run(lead)?.is_none() {
+            return Ok(false);
+        }
+        runs.conn
+            .execute(
+                "INSERT INTO ended (lead, at) VALUES (?1, ?2) ON CONFLICT (lead) DO NOTHING",
+                params![lead, now()],
+            )
+            .map_err(failed)?;
+        Ok(true)
     })
 }
 
@@ -980,19 +1042,21 @@ pub fn start_outside(
             .collect::<Vec<_>>()
             .join(", ")
     };
-    Ok(match agent.map(str::trim).filter(|agent| !agent.is_empty()) {
-        Some(agent) if run.team.member(agent).is_some() => None,
-        Some(agent) => Some(format!(
+    Ok(
+        match agent.map(str::trim).filter(|agent| !agent.is_empty()) {
+            Some(agent) if run.team.member(agent).is_some() => None,
+            Some(agent) => Some(format!(
             "{agent} is not one of {}'s agents; this session is in its run, which starts only {}.",
             run.team.name,
             agents()
         )),
-        None => Some(format!(
-            "This session is in {}'s run, which starts only its agents: name one of {}.",
-            run.team.name,
-            agents()
-        )),
-    })
+            None => Some(format!(
+                "This session is in {}'s run, which starts only its agents: name one of {}.",
+                run.team.name,
+                agents()
+            )),
+        },
+    )
 }
 
 /// The paths a plan names, each as written in the folder, without a

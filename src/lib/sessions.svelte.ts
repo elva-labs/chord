@@ -2834,6 +2834,13 @@ export function close(key: string, keepShells = false) {
   // closed for one that takes its place hands its start on.
   const plugin = forgetPluginStart(key);
   if (plugin !== null && !keepShells) void letGoOf(plugin.project, plugin.request);
+  // A lead's row closed for good ends its team's run, so its holds lift;
+  // a row closed for one that takes its place keeps it. A failure leaves
+  // the run as it was, for the user to end.
+  if (!keepShells && session.kind === "integrated" && session.token !== "")
+    void Promise.resolve()
+      .then(() => core().runEnd(session.project, session.token))
+      .catch(() => {});
 
   // The browser tabs opened for the session go with the row.
   void closeOwner({ kind: "session", key });

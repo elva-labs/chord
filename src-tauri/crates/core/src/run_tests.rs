@@ -1085,7 +1085,10 @@ fn a_session_started_for_one_in_a_run_joins_its_leads_run() {
     )
     .unwrap()
     .unwrap();
-    assert_eq!((developer.lead.as_str(), developer.agent.as_str()), ("lead", "Developer"));
+    assert_eq!(
+        (developer.lead.as_str(), developer.agent.as_str()),
+        ("lead", "Developer")
+    );
     assert_eq!(developer.brief, "build it");
     // A member's own start is in the lead's run too.
     let reviewer = join_from(
@@ -1113,12 +1116,29 @@ fn a_session_started_for_one_in_a_run_joins_its_leads_run() {
     .unwrap()
     .unwrap();
     assert_eq!(again.session.as_deref(), Some("xyz"));
-    assert_eq!((again.agent.as_str(), again.reads_only), ("Developer", false));
+    assert_eq!(
+        (again.agent.as_str(), again.reads_only),
+        ("Developer", false)
+    );
     // An agent the team does not have is refused.
-    let refused = join_from(home.path(), &joining("lead", "Designer"), "t", &dir, None, false);
+    let refused = join_from(
+        home.path(),
+        &joining("lead", "Designer"),
+        "t",
+        &dir,
+        None,
+        false,
+    );
     assert!(refused.unwrap_err().contains("not one of"));
     // A session in no run starts nothing in one.
-    let outside = join_from(home.path(), &joining("other", "Developer"), "o", &dir, None, false);
+    let outside = join_from(
+        home.path(),
+        &joining("other", "Developer"),
+        "o",
+        &dir,
+        None,
+        false,
+    );
     assert_eq!(outside.unwrap(), None);
 }
 
@@ -1132,5 +1152,59 @@ fn a_start_outside_any_run_makes_no_store() {
     };
     let none = join_from(home.path(), &joining, "dev", home.path(), None, false).unwrap();
     assert_eq!(none, None);
+    assert!(!folder(home.path()).join(FILE).exists());
+}
+
+#[test]
+fn an_ended_run_holds_nothing_and_its_lead_started_again_with_the_team_reopens_it() {
+    let (home, dir) = started("end", QUICK_FIX, &[("dev", "Developer", false)]);
+    plan(home.path(), "lead", "Fix it.", &[]).unwrap();
+    assert!(command_held(home.path(), "lead", "git push").is_some());
+    // A member's end ends nothing.
+    assert!(!end(home.path(), "dev").unwrap());
+    assert!(end(home.path(), "lead").unwrap());
+    assert!(!end(home.path(), "lead").unwrap());
+    assert_eq!(state(home.path(), "lead").unwrap(), None);
+    assert_eq!(
+        Runs::open(home.path()).unwrap().lead_of("dev").unwrap(),
+        None
+    );
+    assert!(command_held(home.path(), "lead", "git push").is_none());
+    begin(home.path(), "lead", &team(QUICK_FIX), &dir).unwrap();
+    let runs = Runs::open(home.path()).unwrap();
+    assert_eq!(runs.members("lead").unwrap().len(), 1);
+    assert!(runs.latest_plan("lead").unwrap().is_some());
+    assert!(command_held(home.path(), "lead", "git push").is_some());
+}
+
+#[test]
+fn a_run_ended_long_ago_is_deleted_and_a_recent_one_kept() {
+    let (home, dir) = started("prune", QUICK_FIX, &[("dev", "Developer", false)]);
+    begin(home.path(), "recent", &team(QUICK_FIX), &dir).unwrap();
+    assert!(end(home.path(), "lead").unwrap());
+    assert!(end(home.path(), "recent").unwrap());
+    let long_ago = now() - KEPT_ENDED.as_secs() as i64 - 1;
+    let runs = Runs::open(home.path()).unwrap();
+    runs.conn
+        .execute(
+            "UPDATE ended SET at = ?1 WHERE lead = 'lead'",
+            params![long_ago],
+        )
+        .unwrap();
+    // Any begin or end prunes.
+    assert!(!end(home.path(), "nobody").unwrap());
+    let count = |sql: &str| -> i64 { runs.conn.query_row(sql, [], |row| row.get(0)).unwrap() };
+    assert_eq!(count("SELECT COUNT(*) FROM runs WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM members WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM gates WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM ended WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM runs WHERE lead = 'recent'"), 1);
+    assert_eq!(count("SELECT COUNT(*) FROM ended WHERE lead = 'recent'"), 1);
+}
+
+#[test]
+fn ending_with_no_store_makes_none() {
+    let home = Scratch::new("run-home-end-none");
+    assert!(!end(home.path(), "lead").unwrap());
     assert!(!folder(home.path()).join(FILE).exists());
 }

@@ -3471,7 +3471,10 @@ mod tests {
         let read = store.load().settings;
         let in_use = named(read.teams_in_use());
         assert_eq!(in_use[0], "Careful");
-        assert!(shipped.iter().all(|name| in_use.contains(name)), "{in_use:?}");
+        assert!(
+            shipped.iter().all(|name| in_use.contains(name)),
+            "{in_use:?}"
+        );
         assert_eq!(
             read.team_named("  careful ").map(|team| team.name),
             Some("Careful".to_string())

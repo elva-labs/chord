@@ -1966,6 +1966,10 @@ export interface Core {
   notesBriefing(project: string, token: string): Promise<string | null>;
   /** Lets go of the notes of these sessions of a project. */
   notesForget(project: string, tokens: string[]): Promise<void>;
+  /** Ends the team's run the session with this token leads, where its
+      project is: its gates hold nothing from then on. True when it led
+      one; a session that leads none ends nothing. */
+  runEnd(project: string, token: string): Promise<boolean>;
   /** Adds an entry to a session's usage log, where its project is. With
       `transcript`, for a turn of a Claude Code session in a terminal, the
       core reads the turn's tokens and the context from the conversation's
@@ -2558,6 +2562,7 @@ const tauriCore: Core = {
   notesKept: (project, token, page) => invoke<NotesKept>("notes_kept", { project, token, page }),
   notesBriefing: (project, token) => invoke<string | null>("notes_briefing", { project, token }),
   notesForget: (project, tokens) => invoke<void>("notes_forget", { project, tokens }),
+  runEnd: (project, token) => invoke<boolean>("run_end", { project, token }),
   usageLog: (project, token, entry, transcript) =>
     invoke<void>("usage_log", { project, token, entry, transcript: transcript ?? null }),
   goingOn: (options) => invoke<GoingOn>("going_on", { ...options }),
@@ -2970,6 +2975,9 @@ const detachedCore: Core = {
     return null;
   },
   async notesForget() {},
+  async runEnd() {
+    return false;
+  },
   async usageLog() {},
   async goingOn() {
     return { context: null, idle: null, goesOn: false, briefing: null };

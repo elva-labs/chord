@@ -4457,13 +4457,25 @@ mod tests {
             start_outside_run(&home, session, name, &arguments).unwrap()
         };
         let unnamed = outside(Some("lead"), "start", json!({})).unwrap();
-        assert!(unnamed.contains("name one of Researcher, Developer"), "{unnamed}");
+        assert!(
+            unnamed.contains("name one of Researcher, Developer"),
+            "{unnamed}"
+        );
         let other = outside(Some("dev"), "start", json!({ "agent": "Designer" })).unwrap();
         assert!(other.starts_with("Designer is not one of"), "{other}");
         assert!(outside(Some("lead"), "start", json!({ "session": "nobody-12345" })).is_some());
-        assert_eq!(outside(Some("dev"), "start", json!({ "agent": "tester" })), None);
-        assert_eq!(outside(Some("lead"), "start", json!({ "session": "sec-1234" })), None);
-        assert_eq!(outside(Some("lead"), "send", json!({ "session": "x" })), None);
+        assert_eq!(
+            outside(Some("dev"), "start", json!({ "agent": "tester" })),
+            None
+        );
+        assert_eq!(
+            outside(Some("lead"), "start", json!({ "session": "sec-1234" })),
+            None
+        );
+        assert_eq!(
+            outside(Some("lead"), "send", json!({ "session": "x" })),
+            None
+        );
         assert_eq!(outside(Some("other"), "start", json!({})), None);
         assert_eq!(outside(None, "start", json!({})), None);
     }

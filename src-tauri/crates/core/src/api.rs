@@ -1110,8 +1110,7 @@ impl Core {
             return Ok(None);
         };
         let token = token.unwrap_or_default();
-        let joined =
-            crate::run::join_from(home, joining, token, folder, session, run.reads_only)?;
+        let joined = crate::run::join_from(home, joining, token, folder, session, run.reads_only)?;
         Ok(joined.map(|_| Joined {
             home: home.to_path_buf(),
             joining: joining.clone(),
@@ -1662,6 +1661,9 @@ impl Core {
             effort: settings.effort.clone().or_else(|| run.effort.clone()),
             reads_only: settings.reads_only,
             undo: None,
+            // A run begins on the lead's start only, so a run the user
+            // ended stays ended when its lead is started again here.
+            team: None,
             ..run.clone()
         };
         self.start_run(next, at)
@@ -2045,6 +2047,13 @@ impl Core {
     /// given, or none when nothing is kept.
     pub fn notes_briefing(&self, token: &str) -> Result<Option<String>, String> {
         Ok(crate::notes::briefing(self.notes_home()?, token))
+    }
+
+    /// Ends the run the session with this token leads, true when it led
+    /// one. See [`crate::run::end`].
+    pub fn run_end(&self, token: &str) -> Result<bool, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        crate::run::end(home, token)
     }
 
     /// Lets go of the notes of these sessions.
@@ -3186,8 +3195,13 @@ mod tests {
         };
         // A team that is not in use starts nothing.
         let unknown = core.engage(&run("lead", Some("Nobody"), None), folder.path(), None);
-        assert_eq!(unknown.err().as_deref(), Some("There is no team named Nobody."));
-        assert!(core.engage(&run("", Some("quick fix"), None), folder.path(), None).is_err());
+        assert_eq!(
+            unknown.err().as_deref(),
+            Some("There is no team named Nobody.")
+        );
+        assert!(core
+            .engage(&run("", Some("quick fix"), None), folder.path(), None)
+            .is_err());
         // With no settings file, the shipped teams are in use.
         assert!(core
             .engage(&run("lead", Some("quick fix"), None), folder.path(), None)
@@ -3201,7 +3215,11 @@ mod tests {
             brief: "build it".into(),
         };
         let joined = core
-            .engage(&run("dev", None, Some(joining.clone())), folder.path(), Some("id"))
+            .engage(
+                &run("dev", None, Some(joining.clone())),
+                folder.path(),
+                Some("id"),
+            )
             .unwrap()
             .unwrap();
         assert_eq!(joined.token, "dev");
@@ -3211,7 +3229,10 @@ mod tests {
             .member("dev")
             .unwrap()
             .unwrap();
-        assert_eq!((member.lead.as_str(), member.session.as_deref()), ("lead", Some("id")));
+        assert_eq!(
+            (member.lead.as_str(), member.session.as_deref()),
+            ("lead", Some("id"))
+        );
         // An agent the team does not have is not started in its run.
         let other = crate::run::Joining {
             agent: "Tester".into(),

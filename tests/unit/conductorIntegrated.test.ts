@@ -1123,3 +1123,25 @@ describe("a start that is refused", () => {
     expect(Object.keys(conductor.startedBy)).toEqual([]);
   });
 });
+
+describe("a team's run", () => {
+  it("ends when its lead's row is closed for good, and not when a row takes its place", async () => {
+    const ended: [string, string][] = [];
+    const core = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    core.runEnd = async (project: string, token: string) => {
+      ended.push([project, token]);
+      return true;
+    };
+    setKind("claude-code", "integrated");
+    const lead = () => {
+      const row = create(A, null, "claude-code", null);
+      expect(byKey(row.key)!.token).not.toBe("");
+      return byKey(row.key)!;
+    };
+    const kept = lead();
+    close(kept.key, true);
+    const gone = lead();
+    close(gone.key);
+    await vi.waitFor(() => expect(ended).toEqual([[A, gone.token]]));
+  });
+});

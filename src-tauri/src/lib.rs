@@ -1406,6 +1406,26 @@ async fn notes_briefing(
     .await
 }
 
+/// Ends the run a session of a project leads, where it is.
+#[tauri::command]
+async fn run_end(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    token: String,
+) -> Result<Value, String> {
+    let sent = token.clone();
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "run_end",
+        move |_| json!({ "token": sent }),
+        move |core, _| core.run_end(&token),
+    )
+    .await
+}
+
 /// Lets go of the notes of sessions of a project, where it is.
 #[tauri::command]
 async fn notes_forget(
@@ -2506,6 +2526,7 @@ pub fn run() {
             read_document_image,
             notes_kept,
             notes_briefing,
+            run_end,
             notes_forget,
             usage_log,
             going_on,

@@ -380,6 +380,11 @@ struct NotesParams {
 }
 
 #[derive(Deserialize)]
+struct RunParams {
+    token: String,
+}
+
+#[derive(Deserialize)]
 struct NotesForgetParams {
     tokens: Vec<String>,
 }
@@ -1030,6 +1035,10 @@ pub fn dispatch(
             core.notes_forget(&p.tokens)?;
             Ok(Value::Null)
         }
+        "run_end" => {
+            let p: RunParams = parse(params)?;
+            value(core.run_end(&p.token)?)
+        }
         "usage_log" => {
             let p: UsageLogParams = parse(params)?;
             let transcript = p.transcript.as_ref().map(|of| crate::api::UsageTranscript {
@@ -1622,12 +1631,25 @@ mod tests {
         assert_eq!(start.team.as_deref(), Some("Quick fix"));
         let joining = start.joining.unwrap();
         assert_eq!(
-            (joining.by.as_str(), joining.agent.as_str(), joining.brief.as_str()),
+            (
+                joining.by.as_str(),
+                joining.agent.as_str(),
+                joining.brief.as_str()
+            ),
             ("lead", "Developer", "build it")
         );
         let start: IntegratedStartParams =
             parse(json!({ "agent": "claude-code", "project": "/p" })).unwrap();
         assert_eq!((start.team, start.joining), (None, None));
+    }
+
+    #[test]
+    fn ending_a_run_is_a_method_that_ends_nothing_for_a_session_in_none() {
+        let core = core();
+        let ended = dispatch(&core, "run_end", json!({ "token": "lead" }), no_output).unwrap();
+        assert_eq!(ended, json!(false));
+        let missing = dispatch(&core, "run_end", json!({}), no_output).unwrap_err();
+        assert!(missing.contains("bad parameters"), "{missing}");
     }
 
     #[test]
