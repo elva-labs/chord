@@ -25,9 +25,14 @@ import { accountOf, dirFor } from "$lib/accounts.svelte";
 export interface CatalogModel {
   value: string;
   name: string | null;
+  /** The model an alias stands for, where the agent says. */
+  resolved?: string;
 }
 
-const catalogs = $state<{ byKey: Record<string, CatalogModel[]> }>({ byKey: {} });
+const catalogs = $state<{ byKey: Record<string, CatalogModel[]>; resolved: Record<string, Record<string, string>> }>({
+  byKey: {},
+  resolved: {},
+});
 /** The accounts whose list is being read, or was read, by this window. */
 const asking = new Set<string>();
 
@@ -45,8 +50,24 @@ export function heardCatalog(
   account: string | null,
   models: readonly CatalogModel[],
 ) {
+  const resolved = Object.fromEntries(
+    models.flatMap((model) => (model.resolved ? [[model.value, model.resolved]] : [])),
+  );
+  if (Object.keys(resolved).length > 0) catalogs.resolved[keyOf(agent, host, account)] = resolved;
   if (!harnessProfile(agent).catalogNames || models.length === 0) return;
   catalogs.byKey[keyOf(agent, host, account)] = models.map(({ value, name }) => ({ value, name }));
+}
+
+/** The model an alias the agent offered the account on the machine stands
+    for, as `claude-fable-5-2` is what `fable` is, or null where the agent
+    has not said. */
+export function resolvedModel(
+  agent: HarnessId,
+  model: string,
+  account: string | null = null,
+  host: string | null = null,
+): string | null {
+  return catalogs.resolved[keyOf(agent, host, account)]?.[model] ?? null;
 }
 
 /** The models the agent on the machine last listed for the account, or
@@ -111,5 +132,6 @@ export async function askCodexCatalog(project: string, host: string | null) {
 /** Test seam. */
 export function resetCatalogs() {
   catalogs.byKey = {};
+  catalogs.resolved = {};
   asking.clear();
 }

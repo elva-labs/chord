@@ -13,7 +13,7 @@ import { SvelteSet } from "svelte/reactivity";
 import { accountToStart, dirFor, loadPicked, names } from "$lib/accounts.svelte";
 import { loadPickedProfiles } from "$lib/codexProfiles.svelte";
 import { CODEX_DEFAULT } from "$lib/models";
-import { catalogName } from "$lib/modelCatalog.svelte";
+import { catalogName, resolvedModel } from "$lib/modelCatalog.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
 import {
   readWorkflow,
@@ -1229,8 +1229,17 @@ export function sessionModelName(session: {
   project: string;
 }): string | null {
   const model = session.runsOn ?? session.model;
-  if (model === null) return null;
-  return catalogName(session.agent, model, session.account, hostOf(session.project)) ?? modelLabel(model);
+  return model === null ? null : fullModelName(session.agent, model, session.account, session.project);
+}
+
+/** A model's full display name: the agent's own name for it where its
+    models go by them, else, for an alias the agent said what it stands for,
+    that model as `modelLabel` reads it (`fable` as Fable 5.2), else the
+    alias as `modelLabel` reads it (Fable). */
+export function fullModelName(agent: HarnessId, model: string, account: string | null, project: string): string {
+  const host = hostOf(project);
+  const resolved = resolvedModel(agent, model, account, host);
+  return catalogName(agent, model, account, host) ?? modelLabel(resolved ?? model);
 }
 
 /** What a session's row says of its model: the model's name, then the
@@ -1386,14 +1395,20 @@ function promptWords(session: Session): string | null {
   return session.prompt === null ? null : firstWords(spoken(session.prompt).text);
 }
 
-/** The first line of a message, cut to fit a row. Null for nothing. */
+/** The most characters a name taken from a message keeps. A row and the
+    agent pane's header each cut a name to the room they have; this bounds
+    what is stored. */
+export const NAME_LENGTH = 200;
+
+/** The first line of a message, cut to the length a name keeps. Null for
+    nothing. */
 export function firstWords(text: string | null): string | null {
   const line = text
     ?.split("\n")
     .find((candidate) => candidate.trim() !== "")
     ?.trim();
   if (line === undefined) return null;
-  return shown(line.length > 60 ? `${line.slice(0, 59)}…` : line);
+  return shown(line.length > NAME_LENGTH ? `${line.slice(0, NAME_LENGTH - 1)}…` : line);
 }
 
 /** What a row is known by: its title, the name it was given, or for a

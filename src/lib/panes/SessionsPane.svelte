@@ -1653,7 +1653,7 @@
       tabindex="-1"
       onclick={() => choose(session.key)}
       oncontextmenu={(e) => openSessionMenu(session.key, e)}
-      title={rowModelLine(session) ?? undefined}
+      title={rowName(session) ?? "New session"}
       data-testid="session-row"
     >
       <span
