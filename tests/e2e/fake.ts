@@ -1351,6 +1351,40 @@ export async function installFakeCore(
           const w = window as unknown as { __notesForgotten?: { project: string; tokens: string[] }[] };
           (w.__notesForgotten ??= []).push({ project, tokens });
         },
+        // Teams and their runs: the teams a test gives, else the file's
+        // own, and the runs a test gives by session token. A run's end is
+        // kept for the test to read, and `__runChanged` tells the window
+        // a run moved, as the core would.
+        teamsInUse: async () => {
+          const given = (window as unknown as { __teamsInUse?: unknown[] }).__teamsInUse;
+          return given ?? (readSettings()?.teams as unknown[] | undefined) ?? [];
+        },
+        runState: async (_project: string, token: string) =>
+          (window as unknown as { __runs?: Record<string, unknown> }).__runs?.[token] ?? null,
+        runEnd: async (project: string, token: string) => {
+          const w = window as unknown as {
+            __runs?: Record<string, unknown>;
+            __runsEnded?: { project: string; token: string }[];
+          };
+          (w.__runsEnded ??= []).push({ project, token });
+          const led = w.__runs?.[token] !== undefined;
+          if (led) delete w.__runs![token];
+          return led;
+        },
+        runWaive: async (_project: string, token: string, gate: number, reason: string) => {
+          const w = window as unknown as {
+            __runs?: Record<string, unknown>;
+            __waivers?: { token: string; gate: number; reason: string }[];
+          };
+          if (w.__runs?.[token] === undefined) throw new Error("That session is in no run.");
+          if (reason.trim() === "") throw new Error("A waiver says why.");
+          (w.__waivers ??= []).push({ token, gate, reason: reason.trim() });
+          return { gate, reason: reason.trim(), at: Math.floor(Date.now() / 1000) };
+        },
+        onRunChanged: async (handler: (changed: { lead: string }) => void) => {
+          (window as unknown as Record<string, unknown>).__runChanged = handler;
+          return () => {};
+        },
         // One pixel of PNG for any image asked for; a PDF as itself; a
         // path with "missing" in it is not there.
         readMedia: async (path: string) => {
