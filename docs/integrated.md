@@ -989,9 +989,11 @@ run is left as it is and the conversation says so. The fresh conversation
 is sent one line, as the workbench's own, asking it to go on, and the
 line where the run began says it went on by itself. The line is not sent
 where the user turned the choice off or wrote to the conversation while
-it started: it is theirs to go on with. That turn is the one
-try: where the limit refuses it too, the conversation says so and waits
-for the user.
+it started: it is theirs to go on with. A limit that ends that turn
+later is waited for like any other, so the conversation goes on at every
+reset. Where the limit refuses the turn at once, because the window waited
+for was in fact still shut, the conversation says so and waits for the
+user.
 
 ### Reading the limits with no session
 
