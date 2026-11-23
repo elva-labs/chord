@@ -95,11 +95,12 @@ where
 }
 
 /// What the app found on the machine: the agents, git, and how to install
-/// each that is missing.
+/// each that is missing. `fresh` reads the login shell again first.
 #[tauri::command]
-async fn setup_checks(core: State<'_, Arc<Core>>) -> Result<Value, String> {
+async fn setup_checks(core: State<'_, Arc<Core>>, fresh: Option<bool>) -> Result<Value, String> {
     let core = Arc::clone(&core);
-    blocking(move || core.setup_checks().and_then(value)).await
+    let fresh = fresh.unwrap_or(false);
+    blocking(move || core.setup_checks(fresh).and_then(value)).await
 }
 
 #[tauri::command]

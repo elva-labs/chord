@@ -10,16 +10,21 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{account, adapter, env};
 
-/// How long a program has to say its version. A program that takes longer
-/// is reported found with no version.
-const VERSION_DEADLINE: Duration = Duration::from_secs(5);
+/// How long a program has to answer: to say its version, or whether the
+/// developer tools or a keychain item are there. A program that takes
+/// longer is stopped and its answer counts as none.
+const DEADLINE: Duration = Duration::from_secs(5);
+
+/// How long output that is still on its way is waited for once a program
+/// has exited, however little of the deadline is left.
+const LAST_OUTPUT: Duration = Duration::from_millis(250);
 
 /// One thing the app looks for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -38,7 +43,8 @@ pub struct Check {
     /// The version it reports, as dotted numbers.
     pub version: Option<String>,
     /// For a found agent, whether credentials of a sign-in are there. None
-    /// for git, and for an agent that was not found.
+    /// for git, for an agent that was not found, and for one whose
+    /// credentials are kept where they cannot be looked for.
     pub signed_in: Option<bool>,
     /// How to install it on this platform.
     pub install: Install,
@@ -100,9 +106,14 @@ const WANTED: [Wanted; 3] = [
     },
 ];
 
-/// Runs every check against the login shell's environment.
-pub fn check(home: &Path) -> Setup {
-    let environment = env::environment();
+/// Runs every check against the login shell's environment, read afresh
+/// when `fresh` is set so a program installed since the last read is found.
+pub fn check(home: &Path, fresh: bool) -> Setup {
+    let environment = if fresh {
+        env::refresh()
+    } else {
+        env::environment()
+    };
     check_with(
         home,
         &environment.vars,
@@ -173,7 +184,7 @@ fn one(
         .and_then(|path| version_of(path, home, vars));
     let signed_in = match (&path, wanted.id) {
         (Some(_), "claude-code") => Some(claude_signed_in(home, vars, keychain)),
-        (Some(_), "codex") => Some(codex_signed_in(home, vars)),
+        (Some(_), "codex") => codex_signed_in(home, vars),
         _ => None,
     };
     Check {
@@ -201,19 +212,11 @@ fn find(binary: &str, vars: &HashMap<String, String>) -> Option<PathBuf> {
 
 #[cfg(target_os = "macos")]
 fn developer_tools() -> bool {
-    std::process::Command::new("/usr/bin/xcode-select")
-        .arg("-p")
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .map(|output| {
-            Path::new(String::from_utf8_lossy(&output.stdout).trim())
-                .join("usr/bin/git")
-                .is_file()
-        })
-        .unwrap_or(false)
+    let mut command = Command::new("/usr/bin/xcode-select");
+    command.arg("-p").stdout(Stdio::piped());
+    run_until(&mut command, DEADLINE)
+        .filter(|(status, _)| status.success())
+        .is_some_and(|(_, text)| Path::new(text.trim()).join("usr/bin/git").is_file())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -226,36 +229,55 @@ fn developer_tools() -> bool {
 fn version_of(program: &Path, home: &Path, vars: &HashMap<String, String>) -> Option<String> {
     let mut command = adapter::process(program, vars);
     adapter::prepare_process(&mut command, home, vars);
-    command
-        .arg("--version")
+    command.arg("--version").stdout(Stdio::piped());
+    let (status, text) = run_until(&mut command, DEADLINE)?;
+    status.success().then(|| version_in(&text)).flatten()
+}
+
+/// Runs `command` with no input and its errors dropped, and returns how it
+/// exited and what it wrote to a piped stdout. A program still running at
+/// `deadline` is killed and gives None, as does one that cannot start. The
+/// output is read on a thread of its own, so a full pipe cannot hold the
+/// program up, and a pipe held open past the program's exit is waited for
+/// only as long as the deadline allows.
+fn run_until(command: &mut Command, deadline: Duration) -> Option<(ExitStatus, String)> {
+    let mut child = command
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    let mut child = command.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
-    let (sender, receiver) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let mut text = String::new();
-        let _ = stdout.read_to_string(&mut text);
-        let _ = sender.send(text);
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let output = child.stdout.take().map(|mut stdout| {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = stdout.read_to_string(&mut text);
+            let _ = sender.send(text);
+        });
+        receiver
     });
-    let deadline = Instant::now() + VERSION_DEADLINE;
-    loop {
+    let until = Instant::now() + deadline;
+    let status = loop {
         match child.try_wait() {
-            Ok(Some(status)) if status.success() => break,
-            Ok(Some(_)) | Err(_) => return None,
-            Ok(None) if Instant::now() >= deadline => {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
+            _ => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return None;
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
         }
-    }
-    let text = receiver
-        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-        .ok()?;
-    version_in(&text)
+    };
+    let text = match output {
+        Some(receiver) => receiver
+            .recv_timeout(
+                until
+                    .saturating_duration_since(Instant::now())
+                    .max(LAST_OUTPUT),
+            )
+            .ok()?,
+        None => String::new(),
+    };
+    Some((status, text))
 }
 
 /// The first dotted number in a version line: `2.1.3` from `2.1.3 (Claude
@@ -305,11 +327,21 @@ fn claude_signed_in(
     {
         return true;
     }
-    let records_account = std::fs::read_to_string(account::claude_json(home, None, vars))
+    records_account(&account::claude_json(home, None, vars)) || keychain()
+}
+
+/// Whether Claude Code's state file records an account. The file is read as
+/// it is parsed and the account is passed over, never held.
+fn records_account(path: &Path) -> bool {
+    #[derive(Deserialize)]
+    struct State {
+        #[serde(rename = "oauthAccount")]
+        oauth_account: Option<serde::de::IgnoredAny>,
+    }
+    std::fs::File::open(path)
         .ok()
-        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-        .is_some_and(|state| state.get("oauthAccount").is_some_and(|a| !a.is_null()));
-    records_account || keychain()
+        .and_then(|file| serde_json::from_reader::<_, State>(std::io::BufReader::new(file)).ok())
+        .is_some_and(|state| state.oauth_account.is_some())
 }
 
 /// Whether the keychain holds Claude Code's credentials. Only the item's
@@ -317,13 +349,11 @@ fn claude_signed_in(
 /// user for leave.
 #[cfg(target_os = "macos")]
 fn keychain_holds_claude() -> bool {
-    std::process::Command::new("/usr/bin/security")
+    let mut command = Command::new("/usr/bin/security");
+    command
         .args(["find-generic-password", "-s", "Claude Code-credentials"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+        .stdout(Stdio::null());
+    run_until(&mut command, DEADLINE).is_some_and(|(status, _)| status.success())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -331,11 +361,32 @@ fn keychain_holds_claude() -> bool {
     false
 }
 
-/// Whether Codex has credentials: the file its sign-in writes.
-fn codex_signed_in(home: &Path, vars: &HashMap<String, String>) -> bool {
-    account::codex_home(home, None, vars)
-        .join("auth.json")
-        .is_file()
+/// Whether Codex has credentials: the file its sign-in writes. Codex can be
+/// set to keep them in the system's keyring instead, which is not looked
+/// into, so with any store but the file it cannot be told and is None.
+fn codex_signed_in(home: &Path, vars: &HashMap<String, String>) -> Option<bool> {
+    let codex_home = account::codex_home(home, None, vars);
+    if codex_home.join("auth.json").is_file() {
+        return Some(true);
+    }
+    let store = std::fs::read_to_string(codex_home.join("config.toml"))
+        .ok()
+        .and_then(|text| text.parse::<toml_edit::DocumentMut>().ok())
+        .and_then(|config| {
+            config
+                .get("cli_auth_credentials_store")
+                .and_then(|item| item.as_str())
+                .map(str::to_string)
+        });
+    match store.as_deref() {
+        None | Some("file") => Some(false),
+        Some(_) => None,
+    }
+}
+
+/// The system's version, `27.2` on macOS, as About copies it for an issue.
+pub fn system_version() -> Option<String> {
+    sysinfo::System::os_version().ok()
 }
 
 fn install(id: &str) -> Install {
@@ -381,11 +432,11 @@ fn welcome_path(home: &Path) -> PathBuf {
 /// Whether the welcome is due at this launch. The first launch on a
 /// machine notes it as due, so it is shown again until it is gone through;
 /// a launch that finds settings but no note is one from a version without
-/// a welcome, and notes it as seen.
+/// a welcome, and notes it as seen. A note that cannot be read is due.
 pub fn welcome_due(home: &Path) -> bool {
     let path = welcome_path(home);
     if let Ok(text) = std::fs::read_to_string(&path) {
-        return serde_json::from_str::<Welcome>(&text).is_ok_and(|welcome| !welcome.seen);
+        return serde_json::from_str::<Welcome>(&text).map_or(true, |welcome| !welcome.seen);
     }
     let first = !crate::settings::settings_path(home).exists();
     write_welcome(home, !first);
@@ -555,6 +606,41 @@ mod tests {
         assert_eq!(signed(&vars(&bin), &no_keychain), Some(true));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn codex_on_another_credential_store_is_not_told() {
+        let home = Scratch::new("setup-codex-store");
+        let bin = Scratch::new("setup-codex-store-bin");
+        program(&bin, "codex", "echo 0.63.0");
+        let signed =
+            || by_id(&check_with(&home, &vars(&bin), true, &no_keychain), "codex").signed_in;
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        std::fs::write(
+            home.join(".codex/config.toml"),
+            "cli_auth_credentials_store = \"file\"\n",
+        )
+        .unwrap();
+        assert_eq!(signed(), Some(false));
+        std::fs::write(
+            home.join(".codex/config.toml"),
+            "cli_auth_credentials_store = \"keyring\"\n",
+        )
+        .unwrap();
+        assert_eq!(signed(), None);
+        std::fs::write(home.join(".codex/auth.json"), "{}").unwrap();
+        assert_eq!(signed(), Some(true));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_program_past_the_deadline_is_stopped() {
+        let started = Instant::now();
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "sleep 5"]).stdout(Stdio::piped());
+        assert!(run_until(&mut command, Duration::from_millis(100)).is_none());
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
     #[test]
     fn every_check_says_where_to_install_it() {
         for wanted in &WANTED {
@@ -581,6 +667,17 @@ mod tests {
         std::fs::write(&settings, "{}").unwrap();
         assert!(!welcome_due(&home));
         std::fs::remove_file(&settings).unwrap();
+        assert!(!welcome_due(&home));
+    }
+
+    #[test]
+    fn a_note_that_cannot_be_read_is_due() {
+        let home = Scratch::new("setup-welcome-corrupt");
+        let path = welcome_path(&home);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{not json").unwrap();
+        assert!(welcome_due(&home));
+        welcome_seen(&home);
         assert!(!welcome_due(&home));
     }
 }
