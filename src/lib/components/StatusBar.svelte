@@ -323,7 +323,7 @@
     {/snippet}
     {#if figures.length > 0}
       <button
-        class="hit acct"
+        class="acct"
         class:open={open === "allowance"}
         tabindex="0"
         onpointerdown={keep}
@@ -542,6 +542,31 @@
     flex: 0 1 auto;
     min-width: 0;
     color: var(--ink-2);
+  }
+
+  /* The readout opened as a button has no fill or border of its own: it sits
+     on the bar's ground like the text around it. Its padding is its hover,
+     bled into the gaps around it, so the text stays where plain text would. */
+  button.acct {
+    height: 20px;
+    padding: 0 5px;
+    margin: 0 -5px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  button.acct:hover,
+  button.acct.open {
+    background: var(--hover);
+    color: var(--ink);
+  }
+
+  button.acct:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
 
   .who {
