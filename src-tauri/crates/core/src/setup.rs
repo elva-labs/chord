@@ -111,6 +111,19 @@ pub fn check(home: &Path) -> Setup {
     )
 }
 
+/// Whether an agent is on the login shell's PATH. Nothing is run, so it
+/// answers at once.
+pub fn agent_on_path() -> bool {
+    agent_on_path_in(&env::environment().vars)
+}
+
+fn agent_on_path_in(vars: &HashMap<String, String>) -> bool {
+    WANTED
+        .iter()
+        .filter(|wanted| wanted.agent)
+        .any(|wanted| find(wanted.binary, vars).is_some())
+}
+
 /// Runs every check against `vars`. `keychain` says whether the system's
 /// keychain holds Claude Code's credentials. The checks run side by side,
 /// since each waits on a program of its own.
@@ -280,10 +293,10 @@ fn claude_signed_in(
     vars: &HashMap<String, String>,
     keychain: &(dyn Fn() -> bool + Sync),
 ) -> bool {
-    if CLAUDE_SIGNED_IN_VARS
-        .iter()
-        .any(|name| vars.get(*name).is_some_and(|value| !value.trim().is_empty()))
-    {
+    if CLAUDE_SIGNED_IN_VARS.iter().any(|name| {
+        vars.get(*name)
+            .is_some_and(|value| !value.trim().is_empty())
+    }) {
         return true;
     }
     if account::claude_dir(home, None, vars)
@@ -421,7 +434,10 @@ mod tests {
 
     #[test]
     fn reads_the_version_out_of_each_programs_line() {
-        assert_eq!(version_in("2.1.3 (Claude Code)\n").as_deref(), Some("2.1.3"));
+        assert_eq!(
+            version_in("2.1.3 (Claude Code)\n").as_deref(),
+            Some("2.1.3")
+        );
         assert_eq!(version_in("codex-cli 0.63.0").as_deref(), Some("0.63.0"));
         assert_eq!(
             version_in("git version 2.50.1 (Apple Git-155)").as_deref(),
@@ -447,7 +463,10 @@ mod tests {
         let ids: Vec<&str> = setup.checks.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(ids, ["claude-code", "codex", "git"]);
         let claude = by_id(&setup, "claude-code");
-        assert_eq!(claude.path.as_deref(), Some(&*bin.join("claude").to_string_lossy()));
+        assert_eq!(
+            claude.path.as_deref(),
+            Some(&*bin.join("claude").to_string_lossy())
+        );
         assert_eq!(claude.version.as_deref(), Some("2.1.3"));
         assert_eq!(by_id(&setup, "codex").version.as_deref(), Some("0.63.0"));
         let git = by_id(&setup, "git");
@@ -466,6 +485,16 @@ mod tests {
         assert!(!setup.agent_found());
         assert_eq!(by_id(&setup, "git").version.as_deref(), Some("2.50.1"));
         assert_eq!(by_id(&setup, "claude-code").signed_in, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_agent_on_the_path_is_seen_without_running_it() {
+        let bin = Scratch::new("setup-on-path-bin");
+        program(&bin, "git", "echo 'git version 2.50.1'");
+        assert!(!agent_on_path_in(&vars(&bin)));
+        program(&bin, "codex", "exit 1");
+        assert!(agent_on_path_in(&vars(&bin)));
     }
 
     #[cfg(unix)]
