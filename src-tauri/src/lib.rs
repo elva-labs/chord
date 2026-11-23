@@ -1426,6 +1426,25 @@ async fn run_end(
     .await
 }
 
+/// The teams a lead of a project may be started with, as a start finds
+/// them where the project is.
+#[tauri::command]
+async fn teams_in_use(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+) -> Result<Value, String> {
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "teams_in_use",
+        move |_| json!({}),
+        move |core, _| core.teams_in_use(),
+    )
+    .await
+}
+
 /// The run a session of a project is in, as its lead or a member, where
 /// it is.
 #[tauri::command]
@@ -2572,6 +2591,7 @@ pub fn run() {
             notes_briefing,
             run_end,
             run_state,
+            teams_in_use,
             run_waive,
             notes_forget,
             usage_log,

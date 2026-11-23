@@ -454,6 +454,17 @@ impl Core {
         Ok(store.load())
     }
 
+    /// The teams a lead may be started with on this machine, as a start
+    /// with a team finds them: the file's own, or those its workflows give.
+    /// See [`crate::settings::Settings::teams_in_use`].
+    pub fn teams_in_use(&self) -> Result<Vec<crate::team::Team>, String> {
+        let stored = self.settings()?.load();
+        if stored.unreadable {
+            return Err("The settings cannot be read, so no team is known.".into());
+        }
+        Ok(stored.settings.teams_in_use())
+    }
+
     /// The user's own stylesheet, or none and why it is not handed over.
     pub fn styles_get(&self) -> Result<crate::styles::Styles, String> {
         Ok(self.settings()?.styles())
@@ -3244,6 +3255,17 @@ mod tests {
             joining,
             undo: None,
         };
+        // The window reads the teams a start finds.
+        let names: Vec<String> = core
+            .teams_in_use()
+            .unwrap()
+            .into_iter()
+            .map(|team| team.name)
+            .collect();
+        assert!(
+            names.iter().any(|name| name == crate::team::QUICK_FIX),
+            "{names:?}"
+        );
         // A team that is not in use starts nothing.
         let unknown = core.engage(&run("lead", Some("Nobody"), None), folder.path(), None);
         assert_eq!(

@@ -1046,6 +1046,7 @@ pub fn dispatch(
             let p: RunParams = parse(params)?;
             value(core.run_end(&p.token)?)
         }
+        "teams_in_use" => value(core.teams_in_use()?),
         "run_state" => {
             let p: RunParams = parse(params)?;
             value(core.run_state(&p.token)?)
@@ -1665,6 +1666,19 @@ mod tests {
         assert_eq!(ended, json!(false));
         let missing = dispatch(&core, "run_end", json!({}), no_output).unwrap_err();
         assert!(missing.contains("bad parameters"), "{missing}");
+    }
+
+    #[test]
+    fn the_teams_in_use_are_a_method() {
+        let core = core();
+        let teams = dispatch(&core, "teams_in_use", json!({}), no_output).unwrap();
+        let names: Vec<&str> = teams
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|team| team["name"].as_str())
+            .collect();
+        assert!(names.contains(&crate::team::QUICK_FIX), "{names:?}");
     }
 
     #[test]

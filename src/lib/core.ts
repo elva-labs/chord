@@ -2126,6 +2126,10 @@ export interface Core {
       project is: its gates hold nothing from then on. True when it led
       one; a session that leads none ends nothing. */
   runEnd(project: string, token: string): Promise<boolean>;
+  /** The teams a lead of a project may be started with, as a start finds
+      them where the project is: the settings file's own, or for a file
+      with none, those its workflows give. */
+  teamsInUse(project: string): Promise<Team[]>;
   /** The team's run the session with this token is in, as its lead or a
       member, read where its project is; null when it is in none. */
   runState(project: string, token: string): Promise<RunState | null>;
@@ -2730,6 +2734,7 @@ const tauriCore: Core = {
   notesBriefing: (project, token) => invoke<string | null>("notes_briefing", { project, token }),
   notesForget: (project, tokens) => invoke<void>("notes_forget", { project, tokens }),
   runEnd: (project, token) => invoke<boolean>("run_end", { project, token }),
+  teamsInUse: (project) => invoke<Team[]>("teams_in_use", { project }),
   runState: (project, token) => invoke<RunState | null>("run_state", { project, token }),
   runWaive: (project, token, gate, reason) =>
     invoke<RunWaiver>("run_waive", { project, token, gate, reason }),
@@ -3150,6 +3155,9 @@ const detachedCore: Core = {
   async notesForget() {},
   async runEnd() {
     return false;
+  },
+  async teamsInUse() {
+    return [];
   },
   async runState() {
     return null;
