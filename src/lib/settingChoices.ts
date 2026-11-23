@@ -29,7 +29,8 @@ export interface Choice {
   icon?: string;
   /** A rule is drawn above it, setting it apart from the choices before. */
   rule?: boolean;
-  /** It starts a part of the list with this heading, under a rule. */
+  /** The part of the list it is in, which starts with this heading under a
+      rule, after the choices that have none. */
   section?: string;
 }
 

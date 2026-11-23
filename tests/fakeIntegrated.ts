@@ -1399,6 +1399,13 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
     },
   };
 
+  /** Whether the team of that name starts only, as the page's fake core
+      gives its teams; a team it does not know starts only. */
+  function startsOnly(name: string): boolean {
+    const teamOf = (globalThis as { __teamOf?: (name: string) => { startOnly?: boolean } | undefined }).__teamOf;
+    return teamOf?.(name)?.startOnly ?? true;
+  }
+
   /** Makes a session as a start asks, its ready event held for
       `announce`. */
   function open(startOptions: IntegratedStartOptions): IntegratedStarted {
@@ -1415,7 +1422,9 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
       codex,
       sessionId,
       settings,
-      readsOnly: startOptions.readsOnly ?? false,
+      // A team's lead reads only when the team starts only, as the core
+      // sets it: on unless the team says otherwise.
+      readsOnly: startOptions.readsOnly ?? (startOptions.team !== undefined && startsOnly(startOptions.team)),
       efforts: [],
       ready: null,
       heldReady: null,

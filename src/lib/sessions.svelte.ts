@@ -147,6 +147,10 @@ export interface Session {
       settings does not reach a session while it runs; a resumed one takes
       the workflow's version of the day. */
   workflow: Workflow | null;
+  /** The team a new conversation leads, by name: its run begins before
+      the first turn, and the session is told the team in place of other
+      instructions. Null for none. */
+  team: string | null;
   /** Whether the workflow it follows was deleted since, so it follows the
       copy it kept. */
   workflowGone: boolean;
@@ -318,10 +322,13 @@ export interface KeptWorkflow {
 }
 
 /** A session's token as it is kept, and its project, so it goes once the
-    session is gone from the project's history. */
+    session is gone from the project's history, with the team its run leads
+    when it leads one: the core holds a run by its lead's token, so the team
+    goes with the token. */
 export interface KeptToken {
   token: string;
   project: string;
+  team?: string;
 }
 
 /** A past session, whose it is, and the account it ran under: the name
@@ -742,9 +749,9 @@ export function loadRemembered() {
         const tokens: Record<string, KeptToken> = {};
         for (const [id, kept] of Object.entries(stored)) {
           if (typeof kept !== "object" || kept === null) continue;
-          const { token, project } = kept as Record<string, unknown>;
+          const { token, project, team } = kept as Record<string, unknown>;
           if (typeof token === "string" && token !== "" && typeof project === "string")
-            tokens[id] = { token, project };
+            tokens[id] = typeof team === "string" ? { token, project, team } : { token, project };
         }
         sessions.tokens = tokens;
       }
@@ -1034,7 +1041,13 @@ export function keepToken(session: Session) {
     saveTokens();
     return;
   }
-  if (sessions.tokens[id]?.token === session.token) return;
+  const before = sessions.tokens[id];
+  if (before?.token === session.token) {
+    if ((before.team ?? null) === session.team) return;
+    sessions.tokens[id] = tokenKept(session);
+    saveTokens();
+    return;
+  }
   // A run taken up after a reload that was named by its id goes on so
   // until it stops; an id is never kept as a token, nor the one the row
   // was resumed from.
@@ -1043,8 +1056,22 @@ export function keepToken(session: Session) {
   // what is kept under the id is that run's, and goes to the token its
   // next start gives it.
   if (sessions.all.some((row) => row.key !== session.key && row.token === id)) return;
-  sessions.tokens[id] = { token: session.token, project: session.project };
+  sessions.tokens[id] = tokenKept(session);
   saveTokens();
+}
+
+/** A row's token as it is kept, with the team its run leads. */
+function tokenKept(session: Session): KeptToken {
+  const { token, project, team } = session;
+  return team === null ? { token, project } : { token, project, team };
+}
+
+/** The team the run named by a token leads, as kept for the session
+    resumed by this id: none when the token is not the one kept for it. */
+function keptTeam(resumedFrom: string | null, token: string): string | null {
+  if (resumedFrom === null) return null;
+  const kept = sessions.tokens[resumedFrom];
+  return kept?.token === token ? (kept.team ?? null) : null;
 }
 
 function saveTokens() {
@@ -2074,9 +2101,10 @@ function row(
 ): Session {
   ordinals[project] = (ordinals[project] ?? 0) + 1;
   const kept = resumedFrom === null ? null : keptName(resumedFrom);
+  const token = running ?? tokenFor(resumedFrom, project);
   return {
     key: `s${++counter}`,
-    token: running ?? tokenFor(resumedFrom, project),
+    token,
     project,
     agent,
     kind,
@@ -2101,6 +2129,9 @@ function row(
       workflow === null ? null : (structuredClone($state.snapshot(workflow)) as Workflow),
     workflowGone: false,
     workflowLost: null,
+    // A run goes on leading the team it began with, which the core holds
+    // by its token.
+    team: keptTeam(resumedFrom, token),
     keptFromStart: null,
     worktree: null,
     working: false,

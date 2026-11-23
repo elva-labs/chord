@@ -23,6 +23,7 @@
   import ChoiceMenu from "$lib/components/ChoiceMenu.svelte";
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
   import { type Agent, allAgents, initials } from "$lib/agents.svelte";
+  import { sessions } from "$lib/sessions.svelte";
   import { workspace } from "$lib/workspace.svelte";
   import { isRemote } from "$lib/remote.svelte";
   import {
@@ -88,6 +89,14 @@
       where it stood, for Undo. */
   let dropped = $state<{ at: number; agent: string; gates: { at: number; gate: TeamGate }[] } | null>(null);
 
+  /** How many sessions in the window lead the team: each has a run that
+      lasts until its session is closed for good, asleep or not. */
+  const leading = $derived(
+    editing === null
+      ? 0
+      : sessions.all.filter((session) => session.team?.trim().toLowerCase() === editing.trim().toLowerCase())
+          .length,
+  );
 
   /** The menu open, and for which gate; "new" is Add a gate. */
   type Menu =
@@ -373,6 +382,13 @@
       data-testid="team-name"
     />
   </label>
+
+  {#if leading > 0}
+    <p class="note" data-testid="team-in-use">
+      {leading === 1 ? "A session leads" : `${leading} sessions lead`} this team. Runs in progress keep the team as
+      it was.
+    </p>
+  {/if}
 
   <div class="f">
     <span class="lab" id="team-agents">Agents</span>

@@ -4,8 +4,9 @@
   import type { Attached } from "$lib/integrated.svelte";
   import type { Conversation } from "$lib/conversation.svelte";
   import { register, unregister } from "$lib/drops.svelte";
-  import { agentEffort, compact, configure, follow, goOnIfCold, interrupt, linkFor, run, send, workAs } from "$lib/integrated.svelte";
+  import { agentEffort, compact, configure, follow, goOnIfCold, interrupt, lead, linkFor, run, send, workAs } from "$lib/integrated.svelte";
   import { agentByKey, agents, allAgents, loadInstalled } from "$lib/agents.svelte";
+  import { loadProjectTeams, teams, teamsFor, teamSummary } from "$lib/teams.svelte";
   import { agentOfRow } from "$lib/sessionAgents.svelte";
   import { openNewAgent } from "$lib/settings.svelte";
   import { bangLine } from "$lib/bang";
@@ -1167,8 +1168,12 @@
       ? workingAgent.title
       : null,
   );
+  /** The team the session leads, by name, or null for none. */
+  let leading = $derived(row?.team ?? null);
   /** New agent's value, which no agent's key is. */
   const NEW_AGENT = "new";
+  /** What a team's value starts with, which no agent's key does. */
+  const TEAM = "team:";
   let agentChoices = $derived.by(() => {
     if (menu !== "agent") return [];
     const listed = allAgents(projectPath).map((role) => ({
@@ -1176,15 +1181,27 @@
       name: role.title,
       about: null,
       lock: role.readsOnly,
-      on: role.key === working?.key,
+      on: leading === null && role.key === working?.key,
     }));
-    return fresh ? [{ value: "", name: "No agent", about: null, on: working === null }, ...listed] : listed;
+    if (!fresh) return listed;
+    // A team is led from the first message, so it is offered only before.
+    const led = teamsFor(projectPath).map((team) => ({
+      value: TEAM + team.name,
+      name: team.name,
+      about: teamSummary(team),
+      icon: "team",
+      on: team.name === leading,
+      section: "Teams",
+    }));
+    return [{ value: "", name: "No agent", about: null, on: working === null && leading === null }, ...listed, ...led];
   });
 
-  // The agents installed for the project are read once its list opens.
+  // The agents installed for the project, and the teams it has in use, are
+  // read once its list opens.
   $effect(() => {
-    if (menu === "agent" && projectPath !== null && untrack(() => agents.installed[projectPath!]) === undefined)
-      void loadInstalled(projectPath);
+    if (menu !== "agent" || projectPath === null) return;
+    if (untrack(() => agents.installed[projectPath!]) === undefined) void loadInstalled(projectPath);
+    if (fresh && untrack(() => teams.byProject[projectPath!]) === undefined) void loadProjectTeams(projectPath);
   });
 
   function pickRole(value: string) {
@@ -1193,7 +1210,13 @@
       openNewAgent();
       return;
     }
-    workAs(sessionKey, value === "" ? null : (allAgents(projectPath).find((role) => role.key === value) ?? null));
+    if (value.startsWith(TEAM)) {
+      if (working !== null) workAs(sessionKey, null);
+      lead(sessionKey, value.slice(TEAM.length));
+    } else {
+      if (leading !== null) lead(sessionKey, null);
+      workAs(sessionKey, value === "" ? null : (allAgents(projectPath).find((role) => role.key === value) ?? null));
+    }
     field?.focus();
   }
 
@@ -1206,7 +1229,7 @@
       effort, so a model's effort always shows. An agent and a workflow are
       not both chosen: either one leaves the other off the plus. */
   let away = $derived({
-    agent: working !== null && workflow === null,
+    agent: (working !== null || leading !== null) && workflow === null,
     mode: mode !== null && (readsOnly || !asksFirst(harness, mode)),
     effort: effort !== null,
     workflow: choosable && workflow !== null,
@@ -1621,13 +1644,20 @@
           class="chip"
           tabindex="0"
           onclick={(e) => openMenu("agent", e)}
-          disabled={!ready}
+          disabled={!ready || (leading !== null && !fresh)}
           aria-haspopup="menu"
           aria-expanded={menu === "agent"}
-          aria-label="Agent: {working?.title ?? 'none'}"
-          title={workingAgent?.firstLine ?? "Who the session works as"}
+          aria-label={leading === null ? `Agent: ${working?.title ?? "none"}` : `Team: ${leading}`}
+          title={leading === null
+            ? (workingAgent?.firstLine ?? "Who the session works as")
+            : fresh
+              ? "The team this session leads"
+              : "Team, kept for the run"}
           data-testid="agent-chip"
-          ><Icon name="agent" size={13} /><Plain text={working?.title ?? "No agent"} /><Icon name="down" size={12} /></button
+          data-team={leading ?? undefined}
+          ><Icon name={leading === null ? "agent" : "team"} size={13} /><Plain
+            text={leading ?? working?.title ?? "No agent"}
+          />{#if leading === null || fresh}<Icon name="down" size={12} />{/if}</button
         >
         {#if menu === "agent"}
           <ChoiceMenu
@@ -1727,7 +1757,7 @@
           aria-haspopup="menu"
           aria-expanded={menu === "mode"}
           title={readsOnly
-            ? `${working?.readsOnly ? `Set by ${working.title}. ` : ""}Reads only: file edits are refused and the agent is told to change nothing. A command it runs is left to ${modeLabel}.`
+            ? `${leading !== null ? `Set by ${leading}. ` : working?.readsOnly ? `Set by ${working.title}. ` : ""}Reads only: file edits are refused and the agent is told to change nothing. A command it runs is left to ${modeLabel}.`
             : "What the session may do without asking"}
           data-testid="mode-chip"
           data-reads-only={readsOnly ? "" : undefined}

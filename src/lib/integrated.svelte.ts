@@ -666,10 +666,18 @@ function joiningOf(key: string, starting: Session): { joining?: Joining } {
   return { joining: { by, agent: agent.title, ...(starting.prompt ? { brief: starting.prompt } : {}) } };
 }
 
+/** What a start tells the core of the run it is in: the team it leads on
+    the run's first start, which the core holds for the run from there by
+    the lead's token, else the run it joins as another's agent. Never both. */
+function runOfStart(key: string, link: Link, starting: Session): { team?: string; joining?: Joining } {
+  if (starting.team === null) return joiningOf(key, starting);
+  return starting.resumedFrom === null && link.conversation.untouched ? { team: starting.team } : {};
+}
+
 /** Asks the core to start the agent behind a row, as the row is now and
     told what it is told, and takes the run up once it is. */
 async function begin(key: string, link: Link, starting: Session, told: Told) {
-  link.ranOn = { agent: starting.agent, told: toldText(told.instructions, told.startOnly) };
+  link.ranOn = { agent: starting.agent, told: toldText(told.instructions, told.startOnly), team: starting.team };
   link.granted = [];
   settleAutoResume(key);
   const mode = startMode(starting, link);
@@ -698,7 +706,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     profile: starting.profile ?? undefined,
     ...told,
     ...originOf(starting),
-    ...joiningOf(key, starting),
+    ...runOfStart(key, link, starting),
   });
   link.busy = false;
   const row = byKey(key);
@@ -746,11 +754,12 @@ function startFailed(key: string, link: Link, error: unknown) {
 type Change = { model?: string; mode?: string; effort?: string; readsOnly?: boolean };
 
 /** What a run is started on, to tell whether the run behind a row is the
-    one the row says: the agent, and the workflow's instructions and
-    whether they take the agent's own subagents away. */
+    one the row says: the agent, the workflow's instructions and whether
+    they take the agent's own subagents away, and the team it leads. */
 interface Run {
   agent: HarnessId;
   told: string | null;
+  team: string | null;
 }
 
 function runOf(session: Session): Run {
@@ -758,6 +767,7 @@ function runOf(session: Session): Run {
   return {
     agent: session.agent,
     told: workflow === null ? null : toldText(orchestratorPrompt(workflow), startsOnly(workflow)),
+    team: session.team,
   };
 }
 
@@ -766,7 +776,7 @@ function toldText(instructions: string | undefined, startOnly: boolean | undefin
 }
 
 function sameRun(a: Run | null, b: Run): boolean {
-  return a !== null && a.agent === b.agent && a.told === b.told;
+  return a !== null && a.agent === b.agent && a.told === b.told && a.team === b.team;
 }
 
 /**
@@ -800,6 +810,23 @@ export function follow(key: string, name: string | null) {
   const link = linkFor(key);
   link.startedOn ??= session.agent;
   if (!putUnder(key, workflow, link.startedOn)) return;
+  if (workflow !== null) session.team = null;
+  settleRun(key);
+}
+
+/**
+ * Makes a new conversation nothing has been said in the lead of a team, by
+ * its name, or of none: it leaves any workflow and runs alone on the agent
+ * it was started on, and the run behind it starts again as the team's
+ * lead, as `follow` starts it again under a workflow.
+ */
+export function lead(key: string, name: string | null) {
+  const session = byKey(key);
+  if (session === null || !unspoken(session) || session.team === name) return;
+  const link = linkFor(key);
+  link.startedOn ??= session.agent;
+  if (session.workflow !== null && !putUnder(key, null, link.startedOn)) return;
+  session.team = name;
   settleRun(key);
 }
 
@@ -854,6 +881,10 @@ async function restart(key: string, session: Session, link: Link) {
   link.after = Object.keys(later).length === 0 ? null : later;
   leaveRun(session);
   try {
+    // The core holds a team's run by its lead's token until it ends, and
+    // tells a start under that token it leads the team: a run that led a
+    // team and starts again leading none ends the team's run first.
+    if (link.ranOn?.team != null && session.team === null) await core().runEnd(session.project, session.token);
     await begin(key, link, session, toldFor(session));
   } catch (error) {
     startFailed(key, link, error);

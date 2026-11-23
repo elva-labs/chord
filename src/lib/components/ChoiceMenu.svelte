@@ -28,7 +28,10 @@
    * its right, or at a place the owner gives, where what holds it cuts off
    * what overflows it. Opened from the right edge it moves as far as it
    * takes to stay inside the box the owner names, as when what holds it
-   * has wrapped to the left of a narrow row.
+   * has wrapped to the left of a narrow row. It is never taller than the
+   * room between what holds it and the window's edge it opens toward; a
+   * list longer than that scrolls inside it, with the choice the keyboard
+   * is on kept in view.
    */
   interface Props {
     label: string;
@@ -96,13 +99,17 @@
     return words === "" ? choices : choices.filter((choice) => choice.name.toLowerCase().includes(words));
   });
   /** The choices on screen: the first few until something is typed, with
-      the one in use kept among them. */
+      the one in use kept among them. The parts of the list under their own
+      headings always show whole, after them. */
   let shown = $derived.by(() => {
-    if (query !== "" || most === null || choices.length <= most) return matching;
-    const first = choices.slice(0, most);
-    const using = choices.find((choice) => choice.on);
-    if (using === undefined || first.includes(using)) return first;
-    return [...first.slice(0, most - 1), using];
+    const split = choices.findIndex((choice) => choice.section !== undefined);
+    const head = split === -1 ? choices : choices.slice(0, split);
+    const parts = split === -1 ? [] : choices.slice(split);
+    if (query !== "" || most === null || head.length <= most) return matching;
+    const first = head.slice(0, most);
+    const using = head.find((choice) => choice.on);
+    if (using === undefined || first.includes(using)) return [...first, ...parts];
+    return [...first.slice(0, most - 1), using, ...parts];
   });
   let left = $derived(choices.length - shown.length);
   let said = $derived(
@@ -137,15 +144,38 @@
     shift = left - holder.left;
   }
 
+  /** How tall it may be, once measured. */
+  let room = $state<number | null>(null);
+
+  /** Measures the room between what holds it and the window's edge it
+      opens toward, leaving a little to spare. */
+  function fit() {
+    if (menu === null) return;
+    const spare = 8;
+    if (at !== null) {
+      room = window.innerHeight - at.bottom - spare;
+      return;
+    }
+    const holder = menu.parentElement?.getBoundingClientRect();
+    if (holder === undefined) return;
+    room = below ? window.innerHeight - holder.bottom - 6 - spare : holder.top - 6 - spare;
+  }
+
   onMount(() => {
     place();
-    (menu?.querySelector<HTMLButtonElement>("[aria-checked='true']") ?? items()[0])?.focus();
+    fit();
+    void tick().then(() => {
+      (menu?.querySelector<HTMLButtonElement>("[aria-checked='true']") ?? items()[0])?.focus();
+    });
   });
 
   $effect(() => {
-    if (!end) return;
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    const resized = () => {
+      place();
+      fit();
+    };
+    window.addEventListener("resize", resized);
+    return () => window.removeEventListener("resize", resized);
   });
 
   function onkeydown(e: KeyboardEvent) {
@@ -237,6 +267,7 @@
   style:left={at !== null ? `${at.left}px` : shift !== null ? `${shift}px` : undefined}
   style:right={shift !== null ? "auto" : undefined}
   style:bottom={at === null ? undefined : `${at.bottom}px`}
+  style:max-height={room === null ? undefined : `${Math.max(room, 96)}px`}
   role="menu"
   tabindex="-1"
   aria-label={label}
@@ -244,9 +275,10 @@
   data-testid={testid}
 >
   {#if heading !== null}<p class="heading" data-testid="{testid}-heading">{heading}</p>{/if}
-  {#each shown as choice (choice.value)}
-    {#if choice.rule || choice.section !== undefined}<div class="rule" role="separator" data-testid="{testid}-rule"></div>{/if}
-    {#if choice.section !== undefined}<p class="heading" data-testid="{testid}-section">{choice.section}</p>{/if}
+  {#each shown as choice, at (choice.value)}
+    {@const starts = choice.section !== undefined && shown[at - 1]?.section !== choice.section}
+    {#if choice.rule || starts}<div class="rule" role="separator" data-testid="{testid}-rule"></div>{/if}
+    {#if starts}<p class="heading" data-testid="{testid}-section">{choice.section}</p>{/if}
     {@render entry(choice, actions)}
   {/each}
   {#if said !== null}
@@ -283,6 +315,12 @@
     white-space: normal;
     text-transform: none;
     letter-spacing: normal;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .menu > :global(*) {
+    flex-shrink: 0;
   }
 
   .menu.below {
