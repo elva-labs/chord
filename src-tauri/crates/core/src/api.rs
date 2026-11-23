@@ -3480,7 +3480,9 @@ mod tests {
     }
 
     #[test]
-    fn the_user_waives_a_gate_from_any_session_of_the_run_and_the_window_hears_it() {
+    fn the_users_waiver_names_its_run_by_the_token_of_any_session_in_it_and_the_window_hears_it() {
+        // The window waives for the user; the token it sends only picks the
+        // run, here by a member's.
         let (home, _dir) = crate::run::tests::started(
             "api-waive",
             crate::team::SHIP_WITH_CHECKS,
