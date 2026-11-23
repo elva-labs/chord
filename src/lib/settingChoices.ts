@@ -29,6 +29,8 @@ export interface Choice {
   icon?: string;
   /** A rule is drawn above it, setting it apart from the choices before. */
   rule?: boolean;
+  /** It starts a part of the list with this heading, under a rule. */
+  section?: string;
 }
 
 /** Claude Code's entry for its own default model. */

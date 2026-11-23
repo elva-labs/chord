@@ -1686,6 +1686,13 @@ export interface RunState {
   waitsForTheUser: boolean;
 }
 
+/** A problem the core finds with a team being edited. A quiet one is a
+    hint, and does not keep the team from being saved. */
+export interface TeamProblem {
+  text: string;
+  quiet: boolean;
+}
+
 /** The user's preferences, one set per machine, kept by the core. */
 export interface Settings {
   appearance: "system" | "light" | "dark";
@@ -2130,6 +2137,16 @@ export interface Core {
       them where the project is: the settings file's own, or for a file
       with none, those its workflows give. */
   teamsInUse(project: string): Promise<Team[]>;
+  /** Every problem with a team being edited, the one that matters most
+      first, beside the other teams in use where the project is.
+      `editing` is the name the team was opened with, null for a new one;
+      a path that matches no file in `folders` gets a quiet hint. */
+  teamCheck(
+    project: string,
+    draft: Team,
+    editing: string | null,
+    folders: string[],
+  ): Promise<TeamProblem[]>;
   /** The team's run the session with this token is in, as its lead or a
       member, read where its project is; null when it is in none. */
   runState(project: string, token: string): Promise<RunState | null>;
@@ -2735,6 +2752,8 @@ const tauriCore: Core = {
   notesForget: (project, tokens) => invoke<void>("notes_forget", { project, tokens }),
   runEnd: (project, token) => invoke<boolean>("run_end", { project, token }),
   teamsInUse: (project) => invoke<Team[]>("teams_in_use", { project }),
+  teamCheck: (project, draft, editing, folders) =>
+    invoke<TeamProblem[]>("team_check", { project, draft, editing, folders }),
   runState: (project, token) => invoke<RunState | null>("run_state", { project, token }),
   runWaive: (project, token, gate, reason) =>
     invoke<RunWaiver>("run_waive", { project, token, gate, reason }),
@@ -3157,6 +3176,9 @@ const detachedCore: Core = {
     return false;
   },
   async teamsInUse() {
+    return [];
+  },
+  async teamCheck() {
     return [];
   },
   async runState() {

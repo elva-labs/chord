@@ -14,6 +14,7 @@ import { adoptAccounts, accountsSettings } from "$lib/accounts.svelte";
 import { core, type Settings, type StoredSettings } from "$lib/core";
 import { adoptWorkflows, knowWorkflows, workflowsSettings } from "$lib/workflows.svelte";
 import { adoptAgents, agentsSettings } from "$lib/agents.svelte";
+import { adoptTeams, teamsSettings } from "$lib/teams.svelte";
 import { adoptHooks, hooksSettings } from "$lib/hook.svelte";
 import { adoptPastSessions, pastSessionsSettings } from "$lib/sessions.svelte";
 import { adoptSessionKinds, sessionKindSettings } from "$lib/sessionKind.svelte";
@@ -40,6 +41,7 @@ export function currentSettings(): Settings {
     accounts: accountsSettings(),
     workflows: workflowsSettings(),
     agents: agentsSettings(),
+    ...teamsSettings(),
     ...pastSessionsSettings(),
     ...sessionKindSettings(),
     ...inactiveAfterSettings(),
@@ -78,6 +80,7 @@ export function adopt(settings: Settings) {
   adoptAccounts(settings.accounts);
   adoptWorkflows(settings.workflows);
   adoptAgents(settings.agents);
+  adoptTeams(settings.teams);
   adoptHooks(settings.hooks ?? { everywhere: false, overrides: {} }, hookedProjects());
 }
 

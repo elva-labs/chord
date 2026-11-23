@@ -24,7 +24,7 @@
    * it again, and Escape clears it before it puts the menu away. Actions
    * after the choices, under a rule, stay whatever is typed.
    *
-   * It opens above what holds it, from its left edge or with `end` from
+   * It opens above what holds it, or with `below` under it, from its left edge or with `end` from
    * its right, or at a place the owner gives, where what holds it cuts off
    * what overflows it. Opened from the right edge it moves as far as it
    * takes to stay inside the box the owner names, as when what holds it
@@ -45,6 +45,8 @@
     /** It opens from the right edge of what holds it, for a holder near
         the right of a row. */
     end?: boolean;
+    /** It opens under what holds it, as in a page that scrolls. */
+    below?: boolean;
     /** What it stays inside when it opens from the right edge. */
     within?: HTMLElement | null;
     /** Opened with the pointer: the choice the keyboard is on is marked
@@ -73,6 +75,7 @@
     onclose,
     at = null,
     end = false,
+    below = false,
     within = null,
     pointer = false,
     actions = false,
@@ -227,6 +230,7 @@
   data-card
   class:placed={at !== null}
   class:end
+  class:below
   class:pointing
   {onpointermove}
   {onfocusout}
@@ -241,7 +245,8 @@
 >
   {#if heading !== null}<p class="heading" data-testid="{testid}-heading">{heading}</p>{/if}
   {#each shown as choice (choice.value)}
-    {#if choice.rule}<div class="rule" role="separator" data-testid="{testid}-rule"></div>{/if}
+    {#if choice.rule || choice.section !== undefined}<div class="rule" role="separator" data-testid="{testid}-rule"></div>{/if}
+    {#if choice.section !== undefined}<p class="heading" data-testid="{testid}-section">{choice.section}</p>{/if}
     {@render entry(choice, actions)}
   {/each}
   {#if said !== null}
@@ -278,6 +283,11 @@
     white-space: normal;
     text-transform: none;
     letter-spacing: normal;
+  }
+
+  .menu.below {
+    top: calc(100% + 6px);
+    bottom: auto;
   }
 
   .menu.placed {

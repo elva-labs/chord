@@ -1,6 +1,10 @@
 <script lang="ts">
   /**
-   * The Agents tab of the settings. The agents Chord ships and the user's
+   * The Agents tab of the settings. Over the agents, the teams in use, each
+   * with how many gates and agents it has, ending in a row that makes a new
+   * one; a team opens in place of the lists to edit.
+   *
+   * The agents Chord ships and the user's
    * own stand in one list, each with its first line and a lock where it
    * only reads, ending in a row that makes a new one. Under it, the agents
    * installed for the active project's harnesses, a list for each place
@@ -19,6 +23,8 @@
   import Icon from "$lib/components/conversation/Icon.svelte";
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
   import UnreadEntries from "$lib/components/UnreadEntries.svelte";
+  import TeamEditor from "$lib/components/TeamEditor.svelte";
+  import { loadTeams, teams, teamSummary } from "$lib/teams.svelte";
   import {
     type Agent,
     agentByKey,
@@ -54,6 +60,11 @@
     if (project !== null) void loadInstalled(project);
   });
 
+  // The teams in use are asked of the core each time the tab opens.
+  $effect(() => {
+    void loadTeams();
+  });
+
   /** The places installed agents are read from, in the order listed. */
   const SOURCES: { source: InstalledAgent["source"]; label: string }[] = [
     { source: "claude", label: "From Claude Code" },
@@ -71,14 +82,18 @@
 
   /** What the tab shows: the lists, one of the user's agents being made
       (`editing` null) or edited, a shipped one edited (`shipped` the title
-      it ships under), or an installed one to read. */
+      it ships under), an installed one to read, or a team made or
+      edited. */
   type View =
     | { kind: "list" }
     | { kind: "edit"; editing: string | null; shipped?: string }
-    | { kind: "read"; key: string };
+    | { kind: "read"; key: string }
+    | { kind: "team"; editing: string | null };
   let view = $state<View>({ kind: "list" });
   /** The agent last opened or kept, marked in the list. */
   let last = $state<string | null>(null);
+  /** The team last opened or kept, marked in its list. */
+  let lastTeam = $state<string | null>(null);
 
   let draft = $state<OwnAgent>(newAgent());
   let folded = $state(true);
@@ -96,16 +111,21 @@
   let section: HTMLElement;
 
   /** Shows a view and puts the keyboard in it: the title of a form, Back
-      over an agent read, and in the lists the agent last opened or kept,
-      else New agent. */
+      over an agent read, and in the lists the team or agent last opened
+      or kept, else New agent. A team's form puts the keyboard in itself. */
   async function show(next: View, focus = true) {
     view = next;
     folded = true;
     problem = null;
     removing = false;
-    if (!focus) return;
+    if (!focus || next.kind === "team") return;
     await tick();
-    const marked = last === null ? null : `[data-testid="agent-row"][data-agent="${CSS.escape(last)}"]`;
+    const marked =
+      lastTeam !== null
+        ? `[data-testid="team-row"][data-team="${CSS.escape(lastTeam)}"]`
+        : last === null
+          ? null
+          : `[data-testid="agent-row"][data-agent="${CSS.escape(last)}"]`;
     const target =
       next.kind === "edit"
         ? section.querySelector<HTMLElement>('[data-testid="agent-title"]')
@@ -122,7 +142,19 @@
     void show({ kind: "list" }, false);
   }
 
+  function openTeam(name: string | null) {
+    lastTeam = name;
+    void show({ kind: "team", editing: name });
+  }
+
+  /** Back from a team to the lists, the team kept marked. */
+  function closeTeam(kept: string | null) {
+    lastTeam = kept;
+    void show({ kind: "list" });
+  }
+
   function open(agent: Agent) {
+    lastTeam = null;
     last = agent.key;
     if (agent.kind === "installed") {
       void show({ kind: "read", key: agent.key });
@@ -144,6 +176,7 @@
 
   /** The form for a new agent, as New agent opens it. */
   export function create() {
+    lastTeam = null;
     draft = newAgent();
     void show({ kind: "edit", editing: null });
   }
@@ -252,6 +285,41 @@
 
 <section class="agents" data-testid="settings-agents" bind:this={section}>
   {#if view.kind === "list"}
+    <h3>Teams</h3>
+    {#if teams.inUse.length === 0}
+      <p class="note teams-none" data-testid="team-none">
+        A team is the agents a lead may call and the gates their work passes.
+      </p>
+    {/if}
+    <div class="alist" data-testid="team-list">
+      {#each teams.inUse as team (team.name)}
+        <button
+          type="button"
+          class="arow"
+          class:on={team.name === lastTeam}
+          onclick={() => openTeam(team.name)}
+          data-testid="team-row"
+          data-team={team.name}
+        >
+          <span class="av" aria-hidden="true"><Icon name="team" size={14} /></span>
+          <span class="txt">
+            <b class="t1">{team.name}</b>
+            <span class="t2">{teamSummary(team)}</span>
+          </span>
+          <span></span>
+        </button>
+      {/each}
+      <button type="button" class="arow dim" onclick={() => openTeam(null)} data-testid="team-new">
+        <span class="av" aria-hidden="true"><Icon name="plus" size={13} /></span>
+        <span class="txt"><b class="t1">New team</b></span>
+        <span></span>
+      </button>
+    </div>
+    <UnreadEntries field="teams" />
+    {#if teams.refused !== null}
+      <p class="error" role="alert" data-testid="team-refused">{teams.refused}</p>
+    {/if}
+
     <h3>Agents</h3>
     <div class="alist" data-testid="agent-list">
       {#each listed as agent (agent.key)}
@@ -276,6 +344,8 @@
         {/each}
       </div>
     {/each}
+  {:else if view.kind === "team"}
+    <TeamEditor editing={view.editing} {project} onclose={closeTeam} />
   {:else if view.kind === "edit"}
     <div class="pg-h">
       <button type="button" class="back" onclick={() => void show({ kind: "list" })} data-testid="agent-back"
@@ -779,6 +849,10 @@
     font-size: 12.5px;
     line-height: 1.5;
     color: var(--ink-3);
+  }
+
+  .teams-none {
+    margin-bottom: 8px;
   }
 
   .note code {
