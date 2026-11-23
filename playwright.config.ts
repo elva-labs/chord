@@ -36,6 +36,8 @@ export default defineConfig({
     },
     // WebKit is the app's own webview on macOS, where Tab passes over a
     // control unless it is made a stop; what depends on that runs there too.
+    // A spec named .webkit runs in both, and one that holds only in WebKit
+    // skips itself in Chromium.
     {
       name: "webkit",
       testMatch: /\.webkit\.spec\.ts$/,

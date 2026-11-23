@@ -1501,6 +1501,12 @@ export interface KeyChord {
   alt: boolean;
 }
 
+/** A key chord as the settings file holds it: one step, or a sequence as
+    its first step and the step that follows it, with no key of its own. */
+export type StoredKeyChord =
+  | KeyChord
+  | { first: KeyChord & { ctrl?: boolean }; then: KeyChord & { modifier?: boolean } };
+
 /** The spans a past session may stay listed for. */
 export type PastSessions = "forever" | "month" | "week" | "day";
 
@@ -1703,7 +1709,7 @@ export interface Settings {
   terminalFont: "system" | "plex" | "jetbrains";
   interfaceFont: "system" | "plex" | "inter";
   /** The whole chord table, by action. Empty is the default preset. */
-  keys: Record<string, KeyChord>;
+  keys: Record<string, StoredKeyChord>;
   hooks: { everywhere: boolean; overrides: Record<string, boolean> };
   /** The harnesses' logins kept apart, by name. The one every project runs
       under, or null for the harnesses' own directories, and the projects

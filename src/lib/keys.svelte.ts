@@ -1,3 +1,4 @@
+import type { KeyChord, StoredKeyChord } from "$lib/core";
 import { isMac } from "$lib/platform";
 import { persist } from "$lib/persist";
 import { unreadOf } from "$lib/unread.svelte";
@@ -8,8 +9,11 @@ import { unreadOf } from "$lib/unread.svelte";
  * Every chord carries the platform modifier, Cmd on macOS and Ctrl elsewhere:
  * unmodified keys belong to whatever terminal has focus, and that is not
  * negotiable here. Within that rule the user picks: a preset, or a chord of
- * their own per action. The stored shape is the whole table, so a custom
- * arrangement survives a change to the presets. The core keeps the table
+ * their own per action. A chord may be a sequence: a first step, the prefix,
+ * and a second step pressed after it, a key alone or held with the first
+ * step's modifier. On macOS a prefix may be held with Ctrl in place of
+ * Cmd. The stored shape is the whole table, so a custom arrangement
+ * survives a change to the presets. The core keeps the table
  * for the machine; the window keeps a copy, read before the core answers.
  */
 
@@ -26,6 +30,7 @@ export type ActionKey =
   | "session.next"
   | "session.previous"
   | "session.attention"
+  | "send.now"
   | "review"
   | "view"
   | "scope"
@@ -44,12 +49,27 @@ export type ActionKey =
   | "theme"
   | "settings";
 
-/** A key with the platform modifier, and whether Shift and Alt join it. */
-export interface Chord {
+/** A key, and whether Shift and Alt join it. */
+export interface Step {
   /** As `KeyboardEvent.key` spells it, letters in lower case. */
   key: string;
   shift: boolean;
   alt: boolean;
+}
+
+/** A key with the platform modifier, and whether Shift and Alt join it,
+    or the first step of a sequence when a second step follows it. */
+export interface Chord extends Step {
+  /** On macOS, a sequence's first step held with Ctrl in place of Cmd.
+      Nothing else carries it. */
+  ctrl?: boolean;
+  then?: SecondStep;
+}
+
+/** The key pressed after a sequence's first step. */
+export interface SecondStep extends Step {
+  /** Held with the first step's modifier, rather than alone. */
+  modifier?: boolean;
 }
 
 export type PresetName = "default" | "vim";
@@ -75,6 +95,7 @@ export const ACTIONS: ActionInfo[] = [
   { key: "session.next", label: "Next session or shell", group: "Sessions" },
   { key: "session.previous", label: "Previous session or shell", group: "Sessions" },
   { key: "session.attention", label: "Next session that needs you", group: "Sessions" },
+  { key: "send.now", label: "Send waiting messages now", group: "Sessions" },
   { key: "review", label: "Open or close the file viewer", group: "Changes" },
   { key: "view", label: "Diff, whole file or rendered", group: "Changes" },
   { key: "scope", label: "Changed files or all files", group: "Changes" },
@@ -97,6 +118,13 @@ export const ACTIONS: ActionInfo[] = [
 const plain = (key: string): Chord => ({ key, shift: false, alt: false });
 const shifted = (key: string): Chord => ({ key, shift: true, alt: false });
 const withAlt = (key: string): Chord => ({ key, shift: false, alt: true });
+/** Ctrl+X, then S, as in Claude Code. Off macOS Ctrl is the modifier, so
+    the flag is left off there. */
+const SEND_NOW = (mac: boolean): Chord => ({
+  ...plain("x"),
+  ...(mac ? { ctrl: true } : {}),
+  then: { key: "s", shift: false, alt: false },
+});
 
 /** The presets as they stand on macOS. Elsewhere `ELSEWHERE` is laid
     over them. */
@@ -114,6 +142,7 @@ const MACOS: Record<PresetName, Keymap> = {
     "session.next": shifted("ArrowDown"),
     "session.previous": shifted("ArrowUp"),
     "session.attention": plain("."),
+    "send.now": SEND_NOW(true),
     review: plain("d"),
     view: plain("e"),
     scope: shifted("a"),
@@ -147,6 +176,7 @@ const MACOS: Record<PresetName, Keymap> = {
     "session.next": shifted("n"),
     "session.previous": shifted("p"),
     "session.attention": plain("."),
+    "send.now": SEND_NOW(true),
     review: plain("d"),
     view: plain("e"),
     scope: shifted("a"),
@@ -175,6 +205,7 @@ const MACOS: Record<PresetName, Keymap> = {
 const ELSEWHERE: Partial<Keymap> = {
   "terminal.new": shifted("t"),
   theme: shifted("d"),
+  "send.now": SEND_NOW(false),
 };
 
 function presetsFor(mac: boolean): Record<PresetName, Keymap> {
@@ -199,12 +230,46 @@ export const keys = $state({
     Windows and Linux the modifier is Ctrl, and these are the agent's. */
 const RESERVED = new Set(["c", "r"]);
 
+/** Whether the table is macOS's, where Ctrl may hold a sequence's first
+    step. */
+let onMac = isMac();
+
 export function chordFor(action: ActionKey): Chord {
   return keys.bindings[action];
 }
 
-export function sameChord(a: Chord, b: Chord): boolean {
+function sameStep(a: Step, b: Step): boolean {
   return a.key === b.key && a.shift === b.shift && a.alt === b.alt;
+}
+
+/** Whether two chords' first steps are the same keys, a sequence's or not. */
+export function sameFirst(a: Chord, b: Chord): boolean {
+  return sameStep(a, b) && Boolean(a.ctrl) === Boolean(b.ctrl);
+}
+
+export function sameChord(a: Chord, b: Chord): boolean {
+  if (!sameFirst(a, b)) return false;
+  if (a.then === undefined || b.then === undefined) return a.then === b.then;
+  return sameStep(a.then, b.then) && Boolean(a.then.modifier) === Boolean(b.then.modifier);
+}
+
+/** Whether two chords cannot both be bound: the same chord, or a chord
+    alone that is the first step of a sequence, which would then never get
+    its second step. Two sequences may share a first step. */
+export function clash(a: Chord, b: Chord): boolean {
+  if (sameChord(a, b)) return true;
+  return (a.then === undefined) !== (b.then === undefined) && sameFirst(a, b);
+}
+
+/** Why a chord cannot be bound to anything, or null when it can. */
+function unbindable(chord: Chord): string | null {
+  if (!chord.shift && RESERVED.has(chord.key)) {
+    return `${describe(chord, onMac)} stays with the agent: it interrupts, or searches history, there.`;
+  }
+  if (chord.ctrl && chord.then === undefined) {
+    return `${describe(chord, onMac)} is the agent's on macOS. A Ctrl chord can only begin a sequence there.`;
+  }
+  return null;
 }
 
 /** The action a chord is bound to, if any. */
@@ -235,12 +300,17 @@ export function applyPreset(name: PresetName) {
  * not silently unbound, since the user did not ask for that.
  */
 export function setBinding(action: ActionKey, chord: Chord): string | null {
-  if (!chord.shift && RESERVED.has(chord.key)) {
-    return `${describe(chord)} stays with the agent: it interrupts, or searches history, there.`;
-  }
-  const holder = actionOf(chord);
-  if (holder !== null && holder !== action) {
-    return `${describe(chord)} is already ${labelOf(holder)}. Change that one first.`;
+  const refused = unbindable(chord);
+  if (refused !== null) return refused;
+  const holder = ACTIONS.find(({ key }) => key !== action && clash(keys.bindings[key], chord))?.key;
+  if (holder !== undefined) {
+    const held = keys.bindings[holder];
+    if (sameChord(held, chord)) {
+      return `${describe(chord, onMac)} is already ${labelOf(holder)}. Change that one first.`;
+    }
+    return held.then === undefined
+      ? `${describe(held, onMac)} is already ${labelOf(holder)}, so it cannot begin a sequence. Change that one first.`
+      : `${describe(chord, onMac)} begins ${describe(held, onMac)}, which is ${labelOf(holder)}. Change that one first.`;
   }
   keys.bindings[action] = chord;
   keys.preset = presetOf(keys.bindings);
@@ -249,18 +319,19 @@ export function setBinding(action: ActionKey, chord: Chord): string | null {
 }
 
 /** Why a whole table cannot be used, or null when it can: a chord two
-    actions share, or one the agent needs. */
+    actions share, a chord that begins another's sequence, or one the agent
+    needs. */
 export function tableProblem(table: Keymap): string | null {
   for (const { key } of ACTIONS) {
     const chord = table[key];
-    if (!chord.shift && RESERVED.has(chord.key)) {
-      return `${describe(chord)} stays with the agent: it interrupts, or searches history, there.`;
-    }
-    const other = ACTIONS.find(
-      (action) => action.key !== key && sameChord(table[action.key], chord),
-    );
+    const refused = unbindable(chord);
+    if (refused !== null) return refused;
+    const other = ACTIONS.find((action) => action.key !== key && clash(table[action.key], chord));
     if (other !== undefined) {
-      return `${describe(chord)} would be both ${labelOf(key)} and ${labelOf(other.key)}.`;
+      const theirs = table[other.key];
+      return sameChord(theirs, chord)
+        ? `${describe(chord, onMac)} would be both ${labelOf(key)} and ${labelOf(other.key)}.`
+        : `${describe(chord.then === undefined ? chord : theirs, onMac)} would be ${labelOf(chord.then === undefined ? key : other.key)} and begin ${labelOf(chord.then === undefined ? other.key : key)}.`;
     }
   }
   return null;
@@ -292,9 +363,28 @@ const MODIFIER_NAMES = new Set(["mod", "cmd", "command", "ctrl", "control", "met
  * A chord as it is written in text: its key, with shift and alt before it
  * when wanted, joined by +, such as `shift+k` or `alt+shift+down`. The
  * platform modifier is part of every chord, so writing it is allowed and
- * changes nothing. Null for text that is not one chord.
+ * changes nothing. A sequence is its two steps with a space between, such
+ * as `ctrl+x s`: a modifier written on the second step holds it with the
+ * first step's. On macOS `ctrl` holds Ctrl in place of Cmd, which only a
+ * sequence's first step may, so `ctrl+x` alone reads as that and binding it
+ * is refused with the reason. Null for text that is not one chord.
  */
-export function parseChord(text: string): Chord | null {
+export function parseChord(text: string, mac: boolean = onMac): Chord | null {
+  const steps = text.trim().split(/(?<!\+)\s+(?!\+)/);
+  const first = parseStep(steps[0]);
+  if (first === null) return null;
+  const chord: Chord = { key: first.key, shift: first.shift, alt: first.alt };
+  if (mac && first.ctrl) chord.ctrl = true;
+  if (steps.length === 1) return chord;
+  const second = parseStep(steps[1]);
+  if (second === null || steps.length > 2) return null;
+  chord.then = { key: second.key, shift: second.shift, alt: second.alt };
+  if (second.modifier) chord.then.modifier = true;
+  return chord;
+}
+
+/** One step as text, and whether Ctrl, or any modifier, was written on it. */
+function parseStep(text: string): (Step & { ctrl: boolean; modifier: boolean }) | null {
   const trimmed = text.trim();
   if (trimmed === "") return null;
   // A lone plus is the key itself, and so is a plus at the end.
@@ -307,22 +397,34 @@ export function parseChord(text: string): Chord | null {
   if (name === "") return null;
   let shift = false;
   let alt = false;
+  let ctrl = false;
+  let modifier = false;
   for (const part of parts) {
-    const modifier = part.trim().toLowerCase();
-    if (modifier === "shift") shift = true;
-    else if (modifier === "alt" || modifier === "option" || modifier === "opt") alt = true;
-    else if (!MODIFIER_NAMES.has(modifier)) return null;
+    const written = part.trim().toLowerCase();
+    if (written === "shift") shift = true;
+    else if (written === "alt" || written === "option" || written === "opt") alt = true;
+    else if (MODIFIER_NAMES.has(written)) {
+      modifier = true;
+      if (written === "ctrl" || written === "control") ctrl = true;
+    } else return null;
   }
   const key =
     KEY_NAMES[name.toLowerCase()] ?? (name.length === 1 ? name.toLowerCase() : name);
   if (key.length > 1 && !/^[A-Z][A-Za-z0-9]*$/.test(key)) return null;
-  return { key, shift, alt };
+  return { key, shift, alt, ctrl, modifier };
 }
 
-/** A chord written the way `parseChord` reads it. */
-export function chordText(chord: Chord): string {
-  const named = Object.entries(KEY_NAMES).find(([, key]) => key === chord.key)?.[0];
-  return [chord.alt ? "alt" : null, chord.shift ? "shift" : null, named ?? chord.key]
+/** A chord written the way `parseChord` reads it. A sequence's first step
+    names its modifier, so the text says which one holds it. */
+export function chordText(chord: Chord, mac: boolean = onMac): string {
+  if (chord.then === undefined) return stepText(chord, null);
+  const modifier = chord.ctrl || !mac ? "ctrl" : "cmd";
+  return `${stepText(chord, modifier)} ${stepText(chord.then, chord.then.modifier ? modifier : null)}`;
+}
+
+function stepText(step: Step, modifier: string | null): string {
+  const named = Object.entries(KEY_NAMES).find(([, key]) => key === step.key)?.[0];
+  return [modifier, step.alt ? "alt" : null, step.shift ? "shift" : null, named ?? step.key]
     .filter((part) => part !== null)
     .join("+");
 }
@@ -353,6 +455,36 @@ export function chordFromEvent(
   if (!mod) return null;
   if (["Meta", "Control", "Shift", "Alt"].includes(e.key)) return null;
   return { key: keyOf(e), shift: Boolean(e.shiftKey), alt: Boolean(e.altKey) };
+}
+
+type KeyEvent = Parameters<typeof chordFromEvent>[0];
+
+/** The chord a key event spells as the first step of a sequence: as
+    `chordFromEvent` reads it, or on macOS held with Ctrl alone. */
+export function firstStepFromEvent(e: KeyEvent, mac: boolean = isMac()): Chord | null {
+  if (mac && e.ctrlKey && !e.metaKey) {
+    if (["Meta", "Control", "Shift", "Alt"].includes(e.key)) return null;
+    return { key: keyOf(e), shift: Boolean(e.shiftKey), alt: Boolean(e.altKey), ctrl: true };
+  }
+  if (mac && e.ctrlKey) return null;
+  return chordFromEvent(e, mac);
+}
+
+/** The second step a key event spells after `first`: undefined for a
+    modifier pressed alone, which the step waits past, and null for a key
+    held with the other of Cmd and Ctrl, which no sequence has. */
+export function secondStepFromEvent(
+  e: KeyEvent,
+  first: Chord,
+  mac: boolean = isMac(),
+): SecondStep | null | undefined {
+  if (["Meta", "Control", "Shift", "Alt"].includes(e.key)) return undefined;
+  const own = mac && !first.ctrl ? e.metaKey : e.ctrlKey;
+  const other = mac && (first.ctrl ? e.metaKey : e.ctrlKey);
+  if (other) return null;
+  const step: SecondStep = { key: keyOf(e), shift: Boolean(e.shiftKey), alt: Boolean(e.altKey) };
+  if (own) step.modifier = true;
+  return step;
 }
 
 /** The key a chord is on. With Alt held, macOS spells the character Option
@@ -391,14 +523,22 @@ const OTHER_KEYS: Record<string, string> = {
 };
 
 /** A chord as the status bar and the settings spell it, in the platform's
-    own glyphs: `⌘⇧↓` or `Ctrl+Shift+Down`. */
+    own glyphs: `⌘⇧↓` or `Ctrl+Shift+Down`, and a sequence's steps with a
+    space between: `⌃X S` or `Ctrl+X S`. */
 export function describe(chord: Chord, mac: boolean = isMac()): string {
+  const modifier = mac ? (chord.ctrl ? "⌃" : "⌘") : "Ctrl+";
+  const first = spellStep(chord, modifier, mac);
+  if (chord.then === undefined) return first;
+  return `${first} ${spellStep(chord.then, chord.then.modifier ? modifier : "", mac)}`;
+}
+
+function spellStep(step: Step, modifier: string, mac: boolean): string {
   if (mac) {
-    const key = MAC_KEYS[chord.key] ?? chord.key.toUpperCase();
-    return `⌘${chord.shift ? "⇧" : ""}${chord.alt ? "⌥" : ""}${key}`;
+    const key = MAC_KEYS[step.key] ?? step.key.toUpperCase();
+    return `${modifier}${step.shift ? "⇧" : ""}${step.alt ? "⌥" : ""}${key}`;
   }
-  const key = OTHER_KEYS[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key);
-  return `Ctrl+${chord.shift ? "Shift+" : ""}${chord.alt ? "Alt+" : ""}${key}`;
+  const key = OTHER_KEYS[step.key] ?? (step.key.length === 1 ? step.key.toUpperCase() : step.key);
+  return `${modifier}${step.shift ? "Shift+" : ""}${step.alt ? "Alt+" : ""}${key}`;
 }
 
 /** A stored table as a whole keymap. Every action it has a chord for takes
@@ -412,8 +552,8 @@ function fromTable(table: unknown): Keymap {
   const stored: Partial<Keymap> = {};
   if (typeof table === "object" && table !== null) {
     for (const { key } of ACTIONS) {
-      const chord = (table as Record<string, unknown>)[key];
-      if (isChord(chord)) stored[key] = { key: chord.key, shift: chord.shift, alt: chord.alt };
+      const chord = storedChord((table as Record<string, unknown>)[key], key);
+      if (chord !== null) stored[key] = chord;
     }
   }
   // A table with no chord for a new shell may hold the theme on Shift+T,
@@ -430,7 +570,7 @@ function fromTable(table: unknown): Keymap {
   const followed = followedPreset(stored);
   const bindings: Partial<Keymap> = { ...stored };
   const held = (chord: Chord) =>
-    Object.values(bindings).some((other) => other !== undefined && sameChord(other, chord));
+    Object.values(bindings).some((other) => other !== undefined && clash(other, chord));
   for (const { key } of ACTIONS) {
     if (bindings[key] !== undefined) continue;
     const presets = [PRESETS[followed][key], ...Object.values(PRESETS).map((preset) => preset[key])];
@@ -478,7 +618,7 @@ export function loadKeys() {
 
 /** Takes the table the core has for the machine. Nothing is sent back,
     since this is the core's word. */
-export function adoptKeys(table: Record<string, Chord>) {
+export function adoptKeys(table: Record<string, StoredKeyChord>) {
   const bindings = fromTable(table);
   if (ACTIONS.every(({ key }) => sameChord(bindings[key], keys.bindings[key]))) return;
   keys.bindings = bindings;
@@ -486,20 +626,61 @@ export function adoptKeys(table: Record<string, Chord>) {
   remember();
 }
 
-function isChord(value: unknown): value is Chord {
+/** A stored chord as this platform reads it, or null for one it cannot
+    use. Ctrl is the modifier off macOS, so a Ctrl first step is a plain
+    one there. A one-step chord equal to the first step of the action's
+    default sequence is that sequence with its second step lost, and is
+    not taken. */
+function storedChord(value: unknown, action: ActionKey): Chord | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { first, then } = value as { first?: unknown; then?: unknown };
+  if (first === undefined) {
+    if (!isStep(value)) return null;
+    const chord: Chord = { key: value.key, shift: value.shift, alt: value.alt };
+    const fallback = PRESETS.default[action];
+    return fallback.then !== undefined && sameStep(chord, fallback) ? null : chord;
+  }
+  if (!isStep(first) || !isStep(then)) return null;
+  const chord: Chord = {
+    key: first.key,
+    shift: first.shift,
+    alt: first.alt,
+    then: { key: then.key, shift: then.shift, alt: then.alt },
+  };
+  if ((then as SecondStep).modifier === true) chord.then!.modifier = true;
+  if ((first as Chord).ctrl === true && onMac) chord.ctrl = true;
+  return chord;
+}
+
+function isStep(value: unknown): value is Step {
   if (typeof value !== "object" || value === null) return false;
-  const chord = value as Record<string, unknown>;
+  const step = value as Record<string, unknown>;
   return (
-    typeof chord.key === "string" &&
-    chord.key !== "" &&
-    typeof chord.shift === "boolean" &&
-    typeof chord.alt === "boolean"
+    typeof step.key === "string" &&
+    step.key !== "" &&
+    typeof step.shift === "boolean" &&
+    typeof step.alt === "boolean"
+  );
+}
+
+/** A chord as it is stored. A sequence keeps its first step under
+    `first`, so a version that reads one step only sets it aside whole. */
+function toStored(chord: Chord): StoredKeyChord {
+  const step: KeyChord = { key: chord.key, shift: chord.shift, alt: chord.alt };
+  if (chord.then === undefined) return step;
+  return { first: chord.ctrl ? { ...step, ctrl: true } : step, then: { ...chord.then } };
+}
+
+/** A chord table as it is stored. */
+export function storedTable(table: Partial<Keymap>): Record<string, StoredKeyChord> {
+  return Object.fromEntries(
+    Object.entries(table).map(([action, chord]) => [action, toStored(chord)]),
   );
 }
 
 function remember() {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ bindings: keys.bindings }));
+    localStorage.setItem(KEY, JSON.stringify({ bindings: storedTable(keys.bindings) }));
   } catch {
     // Non-fatal: the next start uses the default until the core answers.
   }
@@ -508,15 +689,15 @@ function remember() {
 /** The chord table as the core is sent it. An action whose chord the file
     holds and the app does not use keeps the default here, and is left out
     until it is chosen, so the file's entry is not written over. */
-export function keysSettings(): Keymap {
-  const table = { ...keys.bindings };
+export function keysSettings(): Record<string, StoredKeyChord> {
+  const table: Partial<Keymap> = { ...keys.bindings };
   for (const entry of unreadOf("keys")) {
     const action = entry.name as ActionKey;
     if (table[action] !== undefined && sameChord(table[action], PRESETS.default[action])) {
-      delete (table as Partial<Keymap>)[action];
+      delete table[action];
     }
   }
-  return table;
+  return storedTable(table);
 }
 
 function save() {
@@ -527,6 +708,7 @@ function save() {
 /** Test seam: the default table, of macOS's presets or the others' when
     `mac` says which, else of the platform's. */
 export function resetKeys({ mac = isMac() }: { mac?: boolean } = {}) {
+  onMac = mac;
   Object.assign(PRESETS, presetsFor(mac));
   keys.bindings = { ...PRESETS.default };
   keys.preset = "default";

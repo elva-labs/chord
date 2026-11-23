@@ -16,16 +16,19 @@
     PRESET_LABELS,
     PRESETS,
     applyPreset,
-    chordFromEvent,
     describe,
+    firstStepFromEvent,
     keys,
     resetBinding,
     sameChord,
+    secondStepFromEvent,
     setBinding,
     type ActionKey,
+    type Chord,
     type PresetName,
   } from "$lib/keys.svelte";
-  import { closeAlso } from "$lib/keymap";
+  import { SEQUENCE_TIMEOUT, closeAlso } from "$lib/keymap";
+  import { isMac } from "$lib/platform";
   import { returnFocus } from "$lib/layout.svelte";
   import { closeSettings, settings } from "$lib/settings.svelte";
   import {
@@ -120,6 +123,11 @@
   let dialog: HTMLElement;
   /** The action whose shortcut is being recorded, if any. */
   let recording = $state<ActionKey | null>(null);
+  /** The action and first step just recorded, while a second key may
+      still follow to make a sequence of them, and what is wrong with the
+      first step alone, shown only if it stays alone. */
+  let following = $state<{ action: ActionKey; first: Chord; problem: string | null } | null>(null);
+  let followTimer: ReturnType<typeof setTimeout> | null = null;
   let problem = $state<{ action: ActionKey; text: string } | null>(null);
 
   let tabs: HTMLElement;
@@ -344,9 +352,37 @@
   }
 
   function record(action: ActionKey) {
+    stopFollowing();
     recording = action;
     problem = null;
   }
+
+  function stopFollowing() {
+    if (followTimer !== null) clearTimeout(followTimer);
+    followTimer = null;
+    following = null;
+  }
+
+  /** No second key came: the first step stays alone, with its problem. */
+  function endFollowing() {
+    const ended = following;
+    stopFollowing();
+    if (ended?.problem != null) problem = { action: ended.action, text: ended.problem };
+  }
+
+  function bind(action: ActionKey, chord: Chord) {
+    const text = setBinding(action, chord);
+    problem = text === null ? null : { action, text };
+  }
+
+  /** Keys that are never a second step: they end the recording and do what
+      they always do, move on, close, or open and close the settings. */
+  function endsRecording(e: KeyboardEvent): boolean {
+    if (e.key === "Tab" || e.key === "Escape") return true;
+    return (e.metaKey || e.ctrlKey) && ["w", ","].includes(e.key.toLowerCase());
+  }
+
+  $effect(() => stopFollowing);
 
   function onKeydown(e: KeyboardEvent) {
     if (recording !== null) {
@@ -357,11 +393,33 @@
         recording = null;
         return;
       }
-      const chord = chordFromEvent(e);
-      if (chord === null) return;
-      const text = setBinding(recording, chord);
-      problem = text === null ? null : { action: recording, text };
+      const first = firstStepFromEvent(e);
+      if (first === null) return;
+      // The chord is bound as it is, and for as long as a sequence waits a
+      // second key makes a sequence of it instead.
+      // What is wrong with it alone waits until no second key comes.
+      const action = recording;
       recording = null;
+      problem = null;
+      following = { action, first, problem: setBinding(action, first) };
+      followTimer = setTimeout(endFollowing, SEQUENCE_TIMEOUT);
+      return;
+    }
+    if (following !== null && endsRecording(e)) {
+      endFollowing();
+    } else if (following !== null) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      const second = secondStepFromEvent(e, following.first);
+      if (second === undefined) return;
+      const { action, first } = following;
+      if (second === null) {
+        endFollowing();
+        return;
+      }
+      stopFollowing();
+      bind(action, { ...first, then: second });
       return;
     }
     if (e.key === "Escape") {
@@ -1044,8 +1102,12 @@
         {:else}
           <UnreadEntries field="keys" />
           <p class="note">
-            Every shortcut uses {describe({ key: "", shift: false, alt: false }).replace(/\+$/, "")}; the keys
-            without it belong to the agent.
+            {#if isMac()}
+              Every shortcut uses ⌘, or ⌃ when a second key follows it; the keys without them belong to the agent.
+            {:else}
+              Every shortcut uses Ctrl; the keys without it belong to the agent.
+            {/if}
+            A second key pressed right after the first makes a shortcut of two steps.
           </p>
           <div class="row">
             <span class="name">Preset</span>
@@ -1084,12 +1146,16 @@
                 {/if}
                 <button
                   class="chord"
-                  class:recording={recording === action.key}
+                  class:recording={recording === action.key || following?.action === action.key}
                   onclick={() => record(action.key)}
                   aria-label="Change the shortcut for {action.label}"
                   data-testid="chord-{action.key}"
                 >
-                  {recording === action.key ? "Press keys…" : describe(keys.bindings[action.key])}
+                  {recording === action.key
+                    ? "Press keys…"
+                    : following?.action === action.key
+                      ? `${describe(following.first)}, then…`
+                      : describe(keys.bindings[action.key])}
                 </button>
               </div>
               {#if problem?.action === action.key}

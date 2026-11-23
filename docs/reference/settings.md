@@ -660,6 +660,25 @@ that differs from its preset shows Reset beside it, and Reset all shortcuts at
 the end of the tab puts the default preset back. What the app may claim and why
 is in [focus](../focus-model.md).
 
+A shortcut of two steps reads as both, Ctrl+X S, or ⌃X S on macOS. Clicking
+a shortcut and pressing a chord binds it at once; a second key pressed
+within a second and a half makes the two one shortcut. Meanwhile the
+shortcut reads as its first step, then…, and what is wrong with the first
+step alone shows only once no second key came. Tab, Escape, and Cmd with W
+or comma (Ctrl off macOS) are never a second step: they keep the single
+chord, end the recording, and do what they always do. Which shortcuts are
+refused, how one waits and where it begins is in
+[focus](../focus-model.md#shortcuts-of-two-steps).
+
+A table kept by an earlier version reads as it did, with Send waiting
+messages now on its default. Where that table already gives Ctrl+X to
+another action, on Windows and Linux, Send waiting messages now takes
+Ctrl+Alt+X S instead, and Reset gives it Ctrl+X S once the other action has
+moved. A version from before shortcuts of two steps runs on the same table:
+it reads every chord of one step, and sets a shortcut of two steps aside,
+keeping it as it is and using its default for that action until a shortcut
+is picked for it there.
+
 ## Notifications
 
 Two switches for a session that starts waiting for you, or a question that
@@ -678,7 +697,8 @@ when the user asks the agent for a change to the workbench itself, a darker
 appearance or a shortcut of their own, and the agent is told so.
 
 Reading answers at once, with every setting, what it takes, and the shortcut
-of every action. A change names only what should change, and the agent may
+of every action. A shortcut of two steps is written with a space between
+them, its first step naming its modifier, as `ctrl+x s`. A change names only what should change, and the agent may
 give a reason in the user's terms. It is checked whole before the user
 sees it: a value a setting does not take, an action that does not exist, a
 shortcut two actions would share or one the agent's terminal needs, and the

@@ -395,3 +395,112 @@ describe("the status bar's chord", () => {
     expect(keys.preset).toBe("default");
   });
 });
+
+describe("a shortcut of two steps", () => {
+  const ctrlX = (mac: boolean) => ({ key: "x", shift: false, alt: false, ...(mac ? { ctrl: true } : {}) });
+  const sendNow = (mac: boolean) => ({ ...ctrlX(mac), then: { key: "s", shift: false, alt: false } });
+
+  it("sends the waiting messages on Ctrl+X S on every platform", () => {
+    resetKeys({ mac: true });
+    expect(chordFor("send.now")).toEqual(sendNow(true));
+    expect(spell(chordFor("send.now"), true)).toBe("⌃X S");
+    resetKeys({ mac: false });
+    expect(chordFor("send.now")).toEqual(sendNow(false));
+    expect(spell(chordFor("send.now"), false)).toBe("Ctrl+X S");
+  });
+
+  it("reads and writes as two steps with a space between", () => {
+    expect(parseChord("ctrl+x s", true)).toEqual(sendNow(true));
+    expect(parseChord("ctrl+x s", false)).toEqual(sendNow(false));
+    expect(parseChord("cmd+k shift+s", true)).toEqual({
+      key: "k", shift: false, alt: false, then: { key: "s", shift: true, alt: false },
+    });
+    expect(parseChord("cmd+k cmd+s", true)?.then).toEqual({ key: "s", shift: false, alt: false, modifier: true });
+    expect(parseChord("ctrl+x s t", true)).toBeNull();
+    expect(chordText(sendNow(true), true)).toBe("ctrl+x s");
+    expect(chordText(sendNow(false), false)).toBe("ctrl+x s");
+    expect(chordText({ key: "k", shift: false, alt: false, then: { key: "s", shift: false, alt: false, modifier: true } }, true)).toBe("cmd+k cmd+s");
+    for (const text of ["ctrl+x s", "cmd+k cmd+s", "cmd+alt+k shift+down"]) {
+      expect(chordText(parseChord(text, true)!, true)).toBe(text);
+    }
+  });
+
+  it("reads Ctrl alone on macOS as Ctrl, which is refused with the reason, not as Cmd", () => {
+    resetKeys({ mac: true });
+    const alone = parseChord("ctrl+g", true)!;
+    expect(alone).toEqual({ key: "g", shift: false, alt: false, ctrl: true });
+    expect(tableProblem({ ...keys.bindings, review: alone })).toMatch(/agent's on macOS/);
+    expect(parseChord("ctrl+g", false)).toEqual({ key: "g", shift: false, alt: false });
+  });
+
+  it("spells a second step with the modifier only when it holds it", () => {
+    const k = { key: "k", shift: false, alt: false };
+    expect(spell({ ...k, then: { ...k, key: "s", modifier: true } }, true)).toBe("⌘K ⌘S");
+    expect(spell({ ...k, then: { ...k, key: "s", modifier: true } }, false)).toBe("Ctrl+K Ctrl+S");
+  });
+
+  it("is refused where its first step is another action's whole chord", () => {
+    resetKeys({ mac: true });
+    // ⌘E is the diff toggle's.
+    const text = setBinding("send.now", { key: "e", shift: false, alt: false, then: { key: "s", shift: false, alt: false } });
+    expect(text).toMatch(/⌘E is already .*, so it cannot begin a sequence/);
+    expect(chordFor("send.now")).toEqual(sendNow(true));
+  });
+
+  it("refuses a whole chord that begins another action's sequence", () => {
+    resetKeys({ mac: false });
+    setBinding("send.now", { key: "k", shift: false, alt: false, then: { key: "s", shift: false, alt: false } });
+    const free = ACTIONS.find(({ key }) => key !== "send.now")!.key;
+    expect(setBinding(free, chord("k"))).toMatch(/Ctrl\+K begins Ctrl\+K S, which is Send waiting messages now/);
+  });
+
+  it("refuses the same sequence twice, and lets two sequences share a first step", () => {
+    resetKeys({ mac: true });
+    const other = ACTIONS.find(({ key }) => key !== "send.now")!.key;
+    expect(setBinding(other, sendNow(true))).toMatch(/is already Send waiting messages now/);
+    expect(setBinding(other, { ...ctrlX(true), then: { key: "d", shift: false, alt: false } })).toBeNull();
+  });
+
+  it("does not take Ctrl alone on macOS, where it is the agent's", () => {
+    resetKeys({ mac: true });
+    expect(setBinding("review", ctrlX(true))).toMatch(/agent's on macOS/);
+  });
+
+  it("finds a table's clashes between a chord and a sequence", () => {
+    resetKeys({ mac: false });
+    const table = { ...PRESETS.default, review: chord("x") };
+    expect(tableProblem(table)).toMatch(/Ctrl\+X would be .* and begin Send waiting messages now/);
+  });
+
+  it("is stored as its first step and the step after, with no key of its own", () => {
+    resetKeys({ mac: true });
+    setBinding("review", { ...ctrlX(true), then: { key: "d", shift: false, alt: false } });
+    const stored = JSON.parse(localStorage.getItem("chord.keys")!).bindings;
+    expect(stored.review).toEqual({
+      first: { key: "x", shift: false, alt: false, ctrl: true },
+      then: { key: "d", shift: false, alt: false },
+    });
+    expect(stored.find).toEqual(PRESETS.default.find);
+    resetKeys({ mac: true });
+    loadKeys();
+    expect(chordFor("review")).toEqual({ ...ctrlX(true), then: { key: "d", shift: false, alt: false } });
+  });
+
+  it("drops Ctrl from a stored first step off macOS, where Ctrl is the modifier", () => {
+    resetKeys({ mac: false });
+    adoptKeys({
+      ...PRESETS.default,
+      "send.now": { first: { ...ctrlX(true), ctrl: true }, then: { key: "d", shift: false, alt: false } },
+    });
+    expect(chordFor("send.now")).toEqual({ ...ctrlX(false), then: { key: "d", shift: false, alt: false } });
+  });
+
+  it("does not take a stored first step alone for an action whose default is a sequence", () => {
+    for (const mac of [true, false]) {
+      resetKeys({ mac });
+      adoptKeys({ ...PRESETS.default, review: chord("g"), "send.now": chord("x") });
+      expect(chordFor("send.now")).toEqual(sendNow(mac));
+      expect(chordFor("review")).toEqual(chord("g"));
+    }
+  });
+});

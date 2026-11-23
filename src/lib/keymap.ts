@@ -4,9 +4,14 @@ import {
   chordFor,
   chordFromEvent,
   describe,
+  firstStepFromEvent,
+  keys,
   sameChord,
+  sameFirst,
+  secondStepFromEvent,
   type ActionKey,
   type Chord,
+  type SecondStep,
 } from "$lib/keys.svelte";
 import { isMac } from "$lib/platform";
 
@@ -46,6 +51,16 @@ export { isMac };
  * viewer while reviewing, goes back to the editor in editor mode, and does
  * nothing else. Save and close are the app's from it, and find there is
  * find in the conversation.
+ *
+ * A sequence is a first step and a second key after it. Its first step may
+ * be held with Ctrl on macOS too, as Ctrl+X is, since the chord alone is
+ * still nothing the app takes: Ctrl+X does nothing until its second key
+ * comes. A first step held with Ctrl, which is every first step off macOS,
+ * begins nothing while a terminal has the keyboard, so the process gets it
+ * as before. In a text field a first step that edits there does that and
+ * begins nothing: see `editsThere`. After a first step the next key within
+ * `SEQUENCE_TIMEOUT` completes the sequence, or ends it and goes where it
+ * would have gone; Escape ends it and goes nowhere.
  */
 
 export type Action =
@@ -90,7 +105,9 @@ export type Action =
   | { type: "attention" }
   /** The terminal with the keyboard drawn a pixel larger, smaller, or at
       its default size. */
-  | { type: "zoom"; step: 1 | -1 | 0 };
+  | { type: "zoom"; step: 1 | -1 | 0 }
+  /** The messages that wait in the integrated session in front, sent now. */
+  | { type: "sendNow" };
 
 export interface KeyState {
   key: string;
@@ -137,6 +154,7 @@ const ACTION_OF: Record<ActionKey, Action> = {
   "session.next": { type: "cycle", direction: 1 },
   "session.previous": { type: "cycle", direction: -1 },
   "session.attention": { type: "attention" },
+  "send.now": { type: "sendNow" },
   "zoom.in": { type: "zoom", step: 1 },
   "zoom.out": { type: "zoom", step: -1 },
   "zoom.reset": { type: "zoom", step: 0 },
@@ -160,6 +178,97 @@ const ACTION_OF: Record<ActionKey, Action> = {
     a key event: the palette. */
 export function actionFor(key: ActionKey): Action {
   return ACTION_OF[key];
+}
+
+/** How long a sequence's first step waits for the second, in ms. */
+export const SEQUENCE_TIMEOUT = 1500;
+
+/** What the field a key goes to does with keys: a text field, the code
+    editor, which cuts and copies the whole line with nothing selected, or
+    nothing that takes text. */
+export type Field = "text" | "code" | null;
+
+export interface SequenceContext extends KeyContext {
+  /** The field the key goes to. */
+  field?: Field;
+  /** Whether that field has text selected. */
+  selection?: boolean;
+  /** Whether the key goes to a terminal, whatever the pane in focus. */
+  terminal?: boolean;
+}
+
+/** What a key does to sequences: begins one, completes one with an action,
+    ends one on Escape, ends one and goes on where it would have gone (Escape
+    in a terminal among them), or has nothing to do with them. */
+export type SequenceStep =
+  | { type: "begin"; first: Chord }
+  | { type: "complete"; action: ActionKey }
+  | { type: "cancel" }
+  | { type: "end" }
+  | null;
+
+/** Cocoa's text keys with Ctrl, which a text field on macOS answers. */
+const COCOA_CTRL = new Set(["a", "b", "d", "e", "f", "h", "k", "n", "o", "p", "t", "v", "y"]);
+
+/** Whether a first step does something of its own in a field, so it does
+    that rather than begin a sequence: a key that is not a character, select
+    all, paste, undo and redo, cut and copy with something selected or in
+    the code editor, and on macOS Ctrl with one of Cocoa's text keys. */
+export function editsThere(first: Chord, field: Field, selection: boolean): boolean {
+  if (field === null) return false;
+  if (first.key.length > 1) return true;
+  if (first.ctrl) return COCOA_CTRL.has(first.key);
+  if (["a", "v", "z", "y"].includes(first.key)) return true;
+  if (first.key === "x" || first.key === "c") return selection || field === "code";
+  return false;
+}
+
+/** The action whose sequence is `first` then `second` exactly, if one is. */
+function completes(table: typeof keys.bindings, first: Chord, second: SecondStep): ActionKey | null {
+  for (const [action, chord] of Object.entries(table) as [ActionKey, Chord][]) {
+    if (chord.then !== undefined && sameChord(chord, { ...first, then: second })) return action;
+  }
+  return null;
+}
+
+/**
+ * What a key does to sequences, given the first step pressed before it, if
+ * one waits. The caller keeps that first step, and drops it once
+ * `SEQUENCE_TIMEOUT` passes.
+ */
+export function resolveSequence(
+  e: KeyState,
+  pending: Chord | null,
+  ctx: SequenceContext = DEFAULT_CONTEXT,
+): SequenceStep {
+  const mac = ctx.mac ?? isMac();
+  const table = keys.bindings;
+  const terminal =
+    ctx.terminal === true || (isTerminal(ctx.focus) && !(ctx.focus === "agent" && ctx.integrated));
+  if (pending !== null) {
+    if (e.key === "Escape") return terminal ? { type: "end" } : { type: "cancel" };
+    const second = secondStepFromEvent(e, pending, mac);
+    if (second === undefined) return null;
+    if (second !== null) {
+      const action = completes(table, pending, second);
+      if (action !== null) return { type: "complete", action };
+      // The first step's modifier held on through the second key, when no
+      // sequence has that second step with it.
+      if (second.modifier) {
+        const plain = completes(table, pending, { key: second.key, shift: second.shift, alt: second.alt });
+        if (plain !== null) return { type: "complete", action: plain };
+      }
+    }
+    return { type: "end" };
+  }
+  const first = firstStepFromEvent(e, mac);
+  if (first === null) return null;
+  if (!Object.values(table).some((chord) => chord.then !== undefined && sameFirst(chord, first))) {
+    return null;
+  }
+  if (terminal && (first.ctrl || !mac)) return null;
+  if (editsThere(first, ctx.field ?? null, ctx.selection ?? false)) return null;
+  return { type: "begin", first };
 }
 
 /** On a layout where = needs Shift, or + has a key of its own, Cmd+= arrives

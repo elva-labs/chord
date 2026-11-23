@@ -4,11 +4,14 @@ import {
   closeAlso,
   closeLabel,
   closeTarget,
+  editsThere,
   isMac,
   resolveAction as resolve,
+  resolveSequence,
   type CloseState,
   type KeyContext,
   type KeyState,
+  type SequenceContext,
 } from "$lib/keymap";
 import { applyPreset, resetKeys, setBinding } from "$lib/keys.svelte";
 
@@ -520,5 +523,100 @@ describe("the status bar", () => {
     expect(resolveAction(mod("5"), { focus: "changes", editing: true, inEditor: true })).toEqual({ type: "focusStatus" });
     applyPreset("vim");
     expect(resolveAction(mod("5"), { focus: "agent" })).toEqual({ type: "focusStatus" });
+  });
+});
+
+describe("sequences", () => {
+  const ctrlX: KeyState = { key: "x", ctrlKey: true };
+  const ctrlS: KeyState = { key: "s", ctrlKey: true };
+  const s: KeyState = { key: "s" };
+  const first = { key: "x", shift: false, alt: false, ctrl: true };
+  const step = (e: KeyState, pending: Parameters<typeof resolveSequence>[1], ctx: Partial<SequenceContext> = {}) =>
+    resolveSequence(e, pending, { focus: "agent", reviewing: false, integrated: true, mac: true, ...ctx });
+
+  it("begins on Ctrl+X and sends now on S", () => {
+    expect(step(ctrlX, null)).toEqual({ type: "begin", first });
+    expect(step(s, first)).toEqual({ type: "complete", action: "send.now" });
+  });
+
+  it("ends on any other second key, which then goes where it would have gone", () => {
+    expect(step({ key: "d" }, first)).toEqual({ type: "end" });
+    expect(step({ key: "s", metaKey: true }, first)).toEqual({ type: "end" });
+  });
+
+  it("completes with Ctrl held on through the second key, unless a sequence has that key with it", () => {
+    expect(step(ctrlS, first)).toEqual({ type: "complete", action: "send.now" });
+    setBinding("review", { ...first, then: { key: "s", shift: false, alt: false, modifier: true } });
+    expect(step(ctrlS, first)).toEqual({ type: "complete", action: "review" });
+    expect(step(s, first)).toEqual({ type: "complete", action: "send.now" });
+  });
+
+  it("is cancelled by Escape, and waits past a modifier pressed alone", () => {
+    expect(step({ key: "Escape" }, first)).toEqual({ type: "cancel" });
+    expect(step({ key: "Shift", shiftKey: true }, first)).toBeNull();
+    expect(step({ key: "Control", ctrlKey: true }, first)).toBeNull();
+  });
+
+  it("begins nothing on a chord no sequence starts with", () => {
+    expect(step({ key: "k", ctrlKey: true }, null)).toBeNull();
+    expect(step({ key: "x", metaKey: true }, null)).toBeNull();
+    expect(step({ key: "x" }, null)).toBeNull();
+  });
+
+  it("leaves a Ctrl prefix to a terminal, the agent's and the shell's", () => {
+    expect(step(ctrlX, null, { integrated: false })).toBeNull();
+    expect(step(ctrlX, null, { focus: "terminal" })).toBeNull();
+    resetKeys({ mac: false });
+    expect(step(ctrlX, null, { mac: false, integrated: false })).toBeNull();
+    expect(step(ctrlX, null, { mac: false })).toEqual({ type: "begin", first: { key: "x", shift: false, alt: false } });
+  });
+
+  it("begins a Cmd prefix on macOS in a terminal too, and lets Escape through to it", () => {
+    setBinding("send.now", { key: "k", shift: false, alt: false, then: { key: "s", shift: false, alt: false } });
+    const cmdK = { key: "k", shift: false, alt: false };
+    expect(step({ key: "k", metaKey: true }, null, { integrated: false })).toEqual({ type: "begin", first: cmdK });
+    expect(step({ key: "Escape" }, cmdK, { integrated: false })).toEqual({ type: "end" });
+    expect(step({ key: "Escape" }, cmdK, { focus: "sessions", terminal: true })).toEqual({ type: "end" });
+  });
+
+  it("takes a key in a terminal's field as in a terminal, whatever the pane in focus", () => {
+    expect(step(ctrlX, null, { focus: "sessions", terminal: true })).toBeNull();
+    resetKeys({ mac: false });
+    expect(step(ctrlX, null, { mac: false, focus: "changes", terminal: true })).toBeNull();
+  });
+
+  it("lets a text field cut with a selection, and begins without one", () => {
+    resetKeys({ mac: false });
+    const off = { mac: false, field: "text" as const };
+    expect(step(ctrlX, null, { ...off, selection: true })).toBeNull();
+    expect(step(ctrlX, null, { ...off, selection: false })?.type).toBe("begin");
+    expect(step(ctrlX, null, { mac: false, field: "code" })).toBeNull();
+    // Ctrl+X cuts nothing on macOS, where Cmd+X cuts.
+    resetKeys({ mac: true });
+    expect(step(ctrlX, null, { field: "text", selection: true })?.type).toBe("begin");
+  });
+});
+
+describe("what a field does with a first step", () => {
+  const off = (key: string) => ({ key, shift: false, alt: false });
+  const ctrl = (key: string) => ({ ...off(key), ctrl: true });
+
+  it("is nothing outside a field", () => {
+    expect(editsThere(off("a"), null, true)).toBe(false);
+  });
+
+  it("is select all, paste, undo and redo, and cut and copy with a selection", () => {
+    for (const key of ["a", "v", "z", "y"]) expect(editsThere(off(key), "text", false)).toBe(true);
+    expect(editsThere(off("x"), "text", false)).toBe(false);
+    expect(editsThere(off("x"), "text", true)).toBe(true);
+    expect(editsThere(off("c"), "code", false)).toBe(true);
+    expect(editsThere(off("ArrowLeft"), "text", false)).toBe(true);
+    expect(editsThere(off("k"), "text", false)).toBe(false);
+  });
+
+  it("is Cocoa's text keys with Ctrl on macOS", () => {
+    expect(editsThere(ctrl("k"), "text", false)).toBe(true);
+    expect(editsThere(ctrl("e"), "text", false)).toBe(true);
+    expect(editsThere(ctrl("x"), "text", true)).toBe(false);
   });
 });

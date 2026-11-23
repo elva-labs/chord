@@ -131,7 +131,7 @@ vi.mock("$lib/core", () => ({
 }));
 
 import { ensure, hook, loadHooks, reset as resetHooks, setEverywhere } from "$lib/hook.svelte";
-import { PRESETS, applyPreset, keys, resetKeys, setBinding } from "$lib/keys.svelte";
+import { PRESETS, applyPreset, keys, resetKeys, setBinding, storedTable } from "$lib/keys.svelte";
 import { flush, resetPersist } from "$lib/persist";
 import { refusal, showRefusal } from "$lib/refusal.svelte";
 import { unread } from "$lib/unread.svelte";
@@ -694,7 +694,7 @@ describe("adopt", () => {
       palette: "mono",
       terminalFont: "jetbrains",
       interfaceFont: "inter",
-      keys: { ...PRESETS.vim },
+      keys: storedTable(PRESETS.vim),
       hooks: { everywhere: false, overrides: { "/x": true } },
       compact: true,
       lastChosen: { "claude-code": { model: "opus", mode: "acceptEdits" } },
