@@ -1,7 +1,7 @@
 import { tick } from "svelte";
 import { withoutArrowControls } from "$lib/strayKeys";
 import { dirFor } from "$lib/accounts.svelte";
-import { filesBackNote, spoken } from "$lib/instructions";
+import { filesBackNote, ownImages, spoken, unansweredNote } from "$lib/instructions";
 import {
   agentAhead,
   agentAheadBack,
@@ -200,6 +200,9 @@ export class Link {
   attaching: Promise<boolean> | null = null;
   /** The first prompt was sent, for a session started with one. */
   prompted = false;
+  /** The messages the user wrote on the composer that this window sent,
+      by id: the only ones carried to the agent as the user's own. */
+  typed = new Set<string>();
   /** The run behind the row is being started again under the workflow
       just picked. The session counts as ready meanwhile: a message sent
       waits for the new run, and a change of model or mode is made on it. */
@@ -1328,10 +1331,25 @@ export function send(
   // The agent picked on the composer is told ahead of the user's own next
   // message, once.
   const agent = from === null ? agentAhead(key) : null;
-  const text = [briefing, agent, told, note?.text ?? null, words].filter((part) => part !== null).join("\n\n");
+  // The user's messages a usage limit left unanswered go with the first
+  // message after it, whoever sends it, word for word with their images,
+  // until one that carries them is answered or refused in turn.
+  const carried = link.conversation
+    .unanswered()
+    .filter((said) => link.typed.has(said.id))
+    .map((said) => ({ text: spoken(said.text, true).text, images: ownImages(said.text, said.images) }));
+  const unanswered =
+    carried.length === 0
+      ? null
+      : unansweredNote(carried.map((said) => ({ text: said.text, images: said.images.length })));
+  const text = [briefing, unanswered, agent, told, note?.text ?? null, words]
+    .filter((part) => part !== null)
+    .join("\n\n");
+  const sent = [...carried.flatMap((said) => said.images), ...images];
   const id = crypto.randomUUID();
   mentionedIn(id, mentions);
-  link.conversation.sending(id, text, images);
+  if (from === null) link.typed.add(id);
+  link.conversation.sending(id, text, sent);
   link.backSaid = null;
   link.filesBack = from === null ? [] : link.filesBack;
   if (note !== null || files.length > 0)
@@ -1368,7 +1386,7 @@ export function send(
     if (title !== null && !nameTaken(title, key) && !reservedName(title)) namedForNow(key, title);
   }
   core()
-    .integratedSend(link.handle, id, text, images)
+    .integratedSend(link.handle, id, text, sent)
     .catch((error) => {
       link.conversation.sendFailed(id, message(error));
       settleNotes(key, link);
@@ -1826,9 +1844,10 @@ export function restore(key: string, said: Message, caret: "start" | "end" | nul
   const link = links.get(key);
   if (link === undefined) return;
   const back = unsent(spoken(said.text, senderOf(said) === null).text, mentionsOf(said.id));
+  const images = ownImages(said.text, said.images);
   const chain = link.upChain;
   if (chain !== null && chain.ids.includes(said.id) && link.draft === chain.draft) {
-    chain.back[said.id] = { draft: back.draft, mentions: back.picked, images: [...said.images] };
+    chain.back[said.id] = { draft: back.draft, mentions: back.picked, images };
     const kept = chain.ids.flatMap((id) => chain.back[id] ?? []);
     link.draft = kept.map((one) => one.draft).join("\n");
     link.mentions = [...new Set(kept.flatMap((one) => one.mentions))];
@@ -1839,7 +1858,7 @@ export function restore(key: string, said: Message, caret: "start" | "end" | nul
     if (chain !== null && link.draft !== chain.draft) link.upChain = null;
     link.draft = link.draft.trim() === "" ? back.draft : `${back.draft}\n\n${link.draft}`;
     link.mentions = [...new Set([...link.mentions, ...back.picked])];
-    link.images = [...said.images, ...link.images];
+    link.images = [...images, ...link.images];
   }
   if (!said.placed) link.conversation.forget(said.id);
   void tick().then(() => {

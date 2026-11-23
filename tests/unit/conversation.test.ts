@@ -1059,3 +1059,56 @@ describe("a command of the user's", () => {
     expect(read.commands[C3]).toMatchObject({ text: "ls", state: "done", exitCode: 0, output: "a\nb\n" });
   });
 });
+
+describe("the messages a usage limit left unanswered", () => {
+  const refused = (play: ReturnType<typeof played>, message: string, text: string) => {
+    play.send(message, text);
+    play.fake.startTurn(play.id);
+    play.fake.emit(play.id, { type: "limitReached", window: "session", resetsAt: 5000 });
+    play.fake.endTurn(play.id, "failed", "You've hit your limit");
+  };
+
+  it("are those of the refused turns since the last that ended otherwise, oldest first", () => {
+    const play = played();
+    play.send(M1, "Done before.");
+    play.fake.turn(play.id, "ok");
+    expect(play.conversation.unanswered()).toEqual([]);
+    refused(play, M2, "Build it.");
+    refused(play, M3, "Also add tests.");
+    expect(play.conversation.unanswered().map((said) => said.text)).toEqual(["Build it.", "Also add tests."]);
+  });
+
+  it("are none while a turn runs or a message is on its way", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    play.conversation.sending(M2, "Go on.");
+    expect(play.conversation.unanswered()).toEqual([]);
+    play.fake.send(play.id, M2, "Go on.");
+    expect(play.conversation.unanswered()).toEqual([]);
+    play.fake.startTurn(play.id);
+    expect(play.conversation.unanswered()).toEqual([]);
+    play.fake.endTurn(play.id, "done");
+    expect(play.conversation.unanswered()).toEqual([]);
+  });
+
+  it("take in a turn of the agent's own the limit refused, and end at one it finished", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    play.fake.emit(play.id, { type: "turnStarted", messages: [] });
+    play.fake.emit(play.id, { type: "limitReached", window: "session", resetsAt: 5000 });
+    play.fake.endTurn(play.id, "failed", "You've hit your limit");
+    expect(play.conversation.unanswered().map((said) => said.text)).toEqual(["Build it."]);
+    play.fake.emit(play.id, { type: "turnStarted", messages: [] });
+    play.fake.endTurn(play.id);
+    expect(play.conversation.unanswered()).toEqual([]);
+  });
+
+  it("are none where the last turn was stopped or failed some other way", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    play.send(M2, "Go on.");
+    play.fake.startTurn(play.id);
+    play.fake.endTurn(play.id, "failed", "API Error: 529 overloaded");
+    expect(play.conversation.unanswered()).toEqual([]);
+  });
+});

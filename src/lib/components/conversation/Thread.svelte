@@ -2,7 +2,7 @@
   import { tick, untrack } from "svelte";
   import type { Command, Conversation, Entry, Message } from "$lib/conversation.svelte";
   import { clock, commandEnd, drawnPart, lineCount, notRead, nowDoing, replyMarkdown, speaker, startedIds, timeBreaks, tokens, toHear, exactTime, dayName } from "$lib/thread";
-  import { agentAt, reportsShown, spoken, wakeShown } from "$lib/instructions";
+  import { agentAt, ownImages, reportsShown, spoken, wakeShown } from "$lib/instructions";
   import { sentParts, unsent } from "$lib/mention";
   import { mentionsOf } from "$lib/mentioned.svelte";
   import { sessionName, timeOf, type Sender } from "$lib/senders.svelte";
@@ -222,6 +222,7 @@
       reports: null,
       filesBack: null,
       briefing: undefined,
+      carried: undefined,
       agent: led?.agent,
     };
   }
@@ -1380,11 +1381,13 @@
         reports: null,
         filesBack: null,
         briefing: spoken(said.text).briefing,
+        carried: spoken(said.text).carried,
       }
     : from?.plugin
       ? pluginWords(said.text)
       : spoken(said.text, from === null)}
   {@const putBack = from?.workbench ? undefined : onPutBack}
+  {@const images = ownImages(said.text, said.images)}
   <article
     class="msg you"
     class:from={from !== null}
@@ -1423,9 +1426,9 @@
       {/if}
     </header>
     <div class="bubble">
-      {#if said.images.length > 0}
+      {#if images.length > 0}
         <div class="images">
-          {#each said.images as image, at (at)}
+          {#each images as image, at (at)}
             <img src="data:{image.mediaType};base64,{image.data}" alt="Attached image {at + 1}" />
           {/each}
         </div>
@@ -1489,6 +1492,13 @@
       {#if unfolded[shown]}<p class="state briefing" data-testid="workbench-briefing-text"
           ><Plain text={words.briefing} /></p
         >{/if}
+    {/if}
+    {#if words.carried !== undefined}
+      <p class="state" data-testid="workbench-carried">
+        {words.carried.messages === 1
+          ? "Your message the usage limit left unanswered went with it"
+          : `Your ${words.carried.messages} messages the usage limit left unanswered went with it`}
+      </p>
     {/if}
     {#if words.reports !== null}
       {@const shown = `${said.id}:reports`}

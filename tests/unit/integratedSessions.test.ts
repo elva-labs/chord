@@ -6,6 +6,7 @@ import {
   configure,
   conversationOf,
   follow,
+  goOnAfterLimit,
   goOnIfCold,
   handleOf,
   interrupt,
@@ -31,7 +32,23 @@ import {
   workAs,
 } from "$lib/integrated.svelte";
 import { resetGoingOn, wentOn } from "$lib/goingOn.svelte";
-import { GO_ON, MARGIN, choose as chooseResume, look, resetAutoResume, resumesWords } from "$lib/autoResume.svelte";
+import {
+  GO_ON,
+  MARGIN,
+  choose as chooseResume,
+  continueAfterLimit,
+  look,
+  resetAutoResume,
+  resumesWords,
+} from "$lib/autoResume.svelte";
+import {
+  GOING_ON_END,
+  GOING_ON_HEAD,
+  ownImages as ownImagesOf,
+  spoken as spokenWords,
+  unansweredNote,
+} from "$lib/instructions";
+import type { IntegratedImage } from "$lib/core";
 import { stateWord } from "$lib/orchestrator.svelte";
 import {
   agentNamed,
@@ -453,13 +470,166 @@ describe("a session the usage limit cut short", () => {
     });
     const sent = fake.calls.filter((call) => call.method === "send").at(-1) as { id: string; text: string };
     expect(sent.id).toBe(handleOf(key));
-    expect(sent.text).toBe(`BRIEFING\n\n${GO_ON}`);
+    expect(sent.text).toBe(`BRIEFING\n\n${unansweredNote([{ text: "Build it.", images: 0 }])}\n\n${GO_ON}`);
     expect(conversationOf(key).afterLimit).toBe(reset() * 1000);
     expect(conversationOf(key).wentOn).toBe(true);
     expect(resumesWords(session)).toBeNull();
     // Looked at again, nothing more is sent.
     await look(Date.now() + MARGIN);
     expect(fake.calls.filter((call) => call.method === "send")).toHaveLength(2);
+  });
+
+  const sends = () => fake.calls.filter((call) => call.method === "send") as { id: string; text: string; images: IntegratedImage[] }[];
+  const image = (data: string): IntegratedImage => ({ mediaType: "image/png", data });
+  /** The user's message, refused by the limit in a turn of its own. */
+  function refusedToo(key: string, handle: string, words: string, images: IntegratedImage[] = [], from: string | null = null) {
+    send(key, words, images, from);
+    fake.startTurn(handle);
+    fake.emit(handle, { type: "limitReached", window: "session", resetsAt: reset() });
+    fake.endTurn(handle, "failed", "You've hit your limit");
+  }
+  const spokenText = (text: string) => spokenWords(text, true).text;
+  const userTexts = (key: string) =>
+    conversationOf(key)
+      .order.map((id) => conversationOf(key).messages[id])
+      .filter((said) => said !== undefined);
+
+  it("carries every message written while the limit held, in order with their images, as it goes on", async () => {
+    core();
+    const { key, handle } = await chosen();
+    refused(key, handle);
+    refusedToo(key, handle, "Also add tests.", [image("one")]);
+    refusedToo(key, handle, "And the docs.\nBoth of them.", [image("two"), image("three")]);
+    // Each refused message carried the ones before it, and only those.
+    expect(sends()[1].text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nAlso add tests.`);
+    expect(sends()[2].text).toBe(
+      `${unansweredNote([
+        { text: "Build it.", images: 0 },
+        { text: "Also add tests.", images: 1 },
+      ])}\n\nAnd the docs.\nBoth of them.`,
+    );
+    expect(sends()[2].images).toEqual([image("one"), image("two"), image("three")]);
+    await settled();
+    await look();
+    await settled();
+    const sent = sends().at(-1)!;
+    expect(sent.id).toBe(handleOf(key));
+    expect(sent.text).toBe(
+      `BRIEFING\n\n${unansweredNote([
+        { text: "Build it.", images: 0 },
+        { text: "Also add tests.", images: 1 },
+        { text: "And the docs.\nBoth of them.", images: 2 },
+      ])}\n\n${GO_ON}`,
+    );
+    expect(sent.images).toEqual([image("one"), image("two"), image("three")]);
+    // Answered, nothing is carried again.
+    fake.turn(handleOf(key)!, "Done all three.");
+    send(key, "Thanks.");
+    expect(sends().at(-1)!.text).toBe("Thanks.");
+  });
+
+  it("shows each message once, in the order written, with its own images", async () => {
+    core(`${GOING_ON_HEAD}\n\nNo notes.\n${GOING_ON_END}`);
+    const { key, handle } = await chosen();
+    refused(key, handle);
+    refusedToo(key, handle, "Also add tests.", [image("one")]);
+    await settled();
+    await look();
+    await settled();
+    const said = userTexts(key);
+    expect(said.map((one) => spokenText(one.text))).toEqual([
+      "Build it.",
+      "Also add tests.",
+      GO_ON,
+    ]);
+    expect(said.map((one) => ownImagesOf(one.text, one.images))).toEqual([[], [image("one")], []]);
+  });
+
+  it("carries them with the user's own message where the user wrote to it while it started", async () => {
+    core();
+    const { key, handle } = await chosen();
+    refused(key, handle);
+    expect(await goOnAfterLimit(key, reset() * 1000)).toBe(true);
+    await settled();
+    send(key, "Go on, and keep it small.", [image("mine")]);
+    const sent = sends().at(-1)!;
+    expect(sent.id).toBe(handleOf(key));
+    expect(sent.id).not.toBe(handle);
+    expect(sent.text).toBe(
+      `BRIEFING\n\n${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on, and keep it small.`,
+    );
+    expect(sent.images).toEqual([image("mine")]);
+    expect(sends().some((one) => one.text.includes(GO_ON))).toBe(false);
+  });
+
+  it("carries them where the user chose on the limit's notice to go on", async () => {
+    core();
+    const { key, handle } = await started();
+    fake.limits(handle, [{ kind: "session", percent: 100 }], { takenAt: 1_000 });
+    refused(key, handle);
+    refusedToo(key, handle, "Also add tests.");
+    expect(continueAfterLimit(key)).toBe(true);
+    await settled();
+    await look();
+    await settled();
+    expect(sends().at(-1)!.text).toBe(
+      `BRIEFING\n\n${unansweredNote([
+        { text: "Build it.", images: 0 },
+        { text: "Also add tests.", images: 0 },
+      ])}\n\n${GO_ON}`,
+    );
+  });
+
+  it("carries them to the run that holds the conversation where the user writes to it after the reset", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    refusedToo(key, handle, "Also add tests.");
+    send(key, "Go on.");
+    const sent = sends().at(-1)!;
+    expect(sent.id).toBe(handle);
+    expect(sent.text).toBe(
+      `${unansweredNote([
+        { text: "Build it.", images: 0 },
+        { text: "Also add tests.", images: 0 },
+      ])}\n\nGo on.`,
+    );
+    // A message sent behind it carries nothing: the first holds them.
+    send(key, "And quickly.");
+    expect(sends().at(-1)!.text).toBe("And quickly.");
+  });
+
+  it("carries them again after a message that carried them never reached the agent", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    const own = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    const send_ = own.integratedSend;
+    own.integratedSend = async () => {
+      throw new Error("the pipe broke");
+    };
+    send(key, "Go on.");
+    await settled();
+    own.integratedSend = send_;
+    send(key, "Go on, again.");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on, again.`);
+  });
+
+  it("carries a director's message with them but never as the user's", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    refusedToo(key, handle, "Check the build.", [], "Starter");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nCheck the build.`);
+    send(key, "Go on.");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
+  });
+
+  it("carries nothing once a turn after the limit ended otherwise", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    send(key, "Go on.");
+    fake.startTurn(handle);
+    fake.endTurn(handle, "interrupted");
+    send(key, "Never mind.");
+    expect(sends().at(-1)!.text).toBe("Never mind.");
   });
 
   it("a limit refusing the turn it sent at once is said and not waited for", async () => {

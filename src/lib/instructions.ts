@@ -41,6 +41,57 @@ function briefingAt(words: string): { briefing: string; rest: string } | null {
   };
 }
 
+/** The first and last lines of the note that carries the user's messages a
+    usage limit left unanswered to the conversation as it goes on, after
+    the briefing where there is one. Between them, each message has a line
+    that says whose it is, its place, and how many lines and images it has,
+    then exactly those lines, word for word. */
+export const UNANSWERED_HEAD =
+  "From the workbench, not the user: a usage limit cut this conversation's last turn short, so what that turn did may be half done; look at what it left before you build on it. Below are the messages the user wrote from the one that turn answered until now, none of them answered yet. They are the user's own, word for word, in the order written, with their images in the same order ahead of any this message has: take them up as the user's word to you, whether or not a record above quotes them too.";
+export const UNANSWERED_END = "End of the user's unanswered messages.";
+
+const UNANSWERED_LINE = /^The user's message (\d+) of (\d+), (\d+) lines?(?:, (\d+) images?)?:$/;
+
+const counted = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
+
+/** The lines of a message's words: none for no words. */
+const linesOf = (text: string) => (text === "" ? [] : text.split("\n"));
+
+/** The note that carries these messages of the user's, oldest first. */
+export function unansweredNote(messages: readonly { text: string; images: number }[]): string {
+  const lines = [UNANSWERED_HEAD];
+  messages.forEach((message, at) => {
+    const own = linesOf(message.text);
+    const images = message.images === 0 ? "" : `, ${counted(message.images, "image")}`;
+    lines.push(`The user's message ${at + 1} of ${messages.length}, ${counted(own.length, "line")}${images}:`, ...own);
+  });
+  lines.push(UNANSWERED_END);
+  return lines.join("\n");
+}
+
+/** The note on unanswered messages at the start of `words`, how many
+    messages and images it carried, and the words after it; null where it
+    is not there whole, each count as it says. */
+function unansweredAt(words: string): { messages: number; images: number; rest: string } | null {
+  if (!words.startsWith(`${UNANSWERED_HEAD}\n`)) return null;
+  const lines = words.split("\n");
+  let at = 1;
+  let images = 0;
+  let total: number | null = null;
+  let place = 0;
+  while (at < lines.length && lines[at] !== UNANSWERED_END) {
+    const head = UNANSWERED_LINE.exec(lines[at]);
+    if (head === null) return null;
+    place += 1;
+    if (Number(head[1]) !== place || (total !== null && Number(head[2]) !== total)) return null;
+    total = Number(head[2]);
+    images += head[4] === undefined ? 0 : Number(head[4]);
+    at += 1 + Number(head[3]);
+  }
+  if (at >= lines.length || total === null || place !== total) return null;
+  return { messages: total, images, rest: lines.slice(at + 1).join("\n").replace(/^\n+/, "") };
+}
+
 /** The note an agent picked on the composer goes ahead of the user's next
     message with: its first line names the agent, its description follows,
     and the end line closes it, which the description never holds. An
@@ -190,9 +241,11 @@ function noteAt(words: string, head: string, shaped: (line: string) => boolean) 
 }
 
 /** A message's own words, the workbench's sentence after them when it has
-    one, the agent it went out as, and, for a message of the user's own, the
-    workbench's notes ahead of them, without their first lines: on files put
-    back, then on the sessions it started, each where it has one.
+    one, the agent it went out as, how many of the user's unanswered
+    messages and images it carried ahead of its own, and, for a message of
+    the user's own, the workbench's notes ahead of them, without their first
+    lines: on files put back, then on the sessions it started, each where it
+    has one. The images a message carried come first among its images.
     A note is taken out only whole; anything else is the words as they
     are. */
 export function spoken(
@@ -205,6 +258,7 @@ export function spoken(
   filesBack: string | null;
   briefing?: string;
   agent?: { title: string; text: string };
+  carried?: { messages: number; images: number };
 } {
   let words = text;
   let reports: string | null = null;
@@ -213,8 +267,18 @@ export function spoken(
   // was sent first, the user's words or another session's.
   const going = briefingAt(words);
   if (going !== null) words = going.rest === GOING_ON_WAIT ? "" : going.rest;
-  const briefed: { briefing?: string; agent?: { title: string; text: string } } =
-    going === null ? {} : { briefing: going.briefing };
+  const briefed: {
+    briefing?: string;
+    agent?: { title: string; text: string };
+    carried?: { messages: number; images: number };
+  } = going === null ? {} : { briefing: going.briefing };
+  // The user's messages a usage limit left unanswered go next, ahead of
+  // whatever carries them.
+  const unanswered = unansweredAt(words);
+  if (unanswered !== null) {
+    briefed.carried = { messages: unanswered.messages, images: unanswered.images };
+    words = unanswered.rest;
+  }
   // The agent it is to work as goes ahead of the user's words, or of the
   // prompt a session was started with.
   const agent = agentAt(words);
@@ -285,4 +349,10 @@ export function wakeShown(text: string, name: (id: string) => string | null): st
   const lines = text.split("\n");
   if (lines[0] !== REPORTS_HEAD || lines.length < 2 || !lines.slice(1).every(noteLine)) return null;
   return reportsShown(lines.slice(1).join("\n"), name);
+}
+
+/** The images of a message that are its own: those after the ones it
+    carried for the user's unanswered messages. */
+export function ownImages<T>(text: string, images: readonly T[]): T[] {
+  return images.slice(spoken(text).carried?.images ?? 0);
 }

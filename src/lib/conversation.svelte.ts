@@ -406,6 +406,37 @@ export class Conversation {
       .filter((message) => message !== undefined && !message.placed);
   }
 
+  /**
+   * The messages the turns a usage limit refused answered, oldest first:
+   * those of the turns at the end of the thread that each ended on the
+   * limit, back to the last turn that ended otherwise, with the runs that
+   * no turn of the agent's held passed over. None while a turn runs or a
+   * message is on its way to the agent, which then carries them or will be
+   * answered with them, and none where the last turn ended otherwise.
+   */
+  unanswered(): Message[] {
+    if (this.current !== null) return [];
+    const ahead = (message: Message | undefined) =>
+      message !== undefined && (message.state === "sending" || message.state === "sent" || message.state === "queued");
+    if (this.order.some((id) => ahead(this.messages[id]))) return [];
+    const seen = new Set<number>();
+    const refused: Turn[] = [];
+    for (let at = this.entries.length - 1; at >= 0; at--) {
+      const entry = this.entries[at];
+      if (entry.kind !== "agent" || seen.has(entry.turn)) continue;
+      seen.add(entry.turn);
+      if (this.#loose.has(entry.turn)) continue;
+      const turn = this.turns[entry.turn];
+      if (turn === undefined) continue;
+      if (turn.limit === null) break;
+      refused.push(turn);
+    }
+    return refused
+      .reverse()
+      .flatMap((turn) => turn.messages.map((id) => this.messages[id]))
+      .filter((message) => message !== undefined);
+  }
+
   /** The messages and commands not standing in the thread, in the order
       sent: what `waiting` holds, and the commands that wait, failed to
       send, or run while a turn does. */
