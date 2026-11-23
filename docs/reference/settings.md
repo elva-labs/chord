@@ -355,6 +355,50 @@ at the foot of the pane until it is used again, as
 session running or waiting for you stays whatever the span. Never keeps
 every project in the list.
 
+### Keep notes
+
+Whether sessions keep [notes](sessions.md#notes) and go on from them, on
+to begin with, kept as `notesOn`. Off, a session is not told to keep
+notes, and its note and notes tools are neither listed nor answered: a
+call says notes are switched off. A conversation taken up again is
+resumed whole, however large and cold, and so is one going on by itself
+once a usage limit resets, where it would otherwise
+[go on from its notes](sessions.md#going-on-from-the-notes). The notes
+already kept stay where they are, and Show notes still shows them. A
+session connected before the change keeps the tools it was told of, and
+they answer as the switch now stands.
+
+### Agents and teams
+
+Whether [agents](#agents), [teams](#teams) and their gates are offered,
+on to begin with, kept as `agentsOn`. Off:
+
+- the composer has no agent chip and its menu no agent, and a session is
+  started as itself; an agent picked for a session not yet sent waits, and
+  is there again once the switch is on;
+- the Agents tab is gone from the settings, and a link to it opens the
+  Sessions tab;
+- a session's question to start another has no As choice, and a plugin's
+  start suggests no agent;
+- the start tool has no `agent`, and a start that names one is refused;
+- the run's tools, `plan`, `gate_add`, `verdict` and `gates`, are neither
+  listed nor answered, and no session shows a gate line;
+- no team's run begins: a session picked as a team's lead starts as a
+  plain one, and so does a lead resumed.
+
+A session that already works as an agent keeps working as one. A team's
+run already going on is kept as it is, its plan, gates and verdicts, but
+holds nothing: building, a push, a pull request and the lead's stop all
+go ahead as in a session of no team. A session that joins the run while
+the switch is off is still counted as its member. Turned on again, the
+agents and teams are offered as before, and the run holds again as it
+stands.
+
+Both switches are the user's to change, and an agent's settings tools
+refuse them. A file written before them has neither, which reads as both
+on, and an earlier version of the app keeps both as entries it does not
+read.
+
 ## Agents
 
 An agent is a role: a title, and a description whose first line says in a
@@ -725,8 +769,8 @@ shortcut two actions would share or one the agent's terminal needs, and the
 agent is told why without the user being troubled. The agent hooks, the
 plugins, the accounts, which workflow a project follows, how long past
 sessions stay listed, how long a project stays active, whether every
-start of a session is asked about, the notifications and the chime are
-refused outright, as the user's to change. Compact mode is a matter of
+start of a session is asked about, whether notes are kept, whether agents
+and teams are offered, the notifications and the chime are refused outright, as the user's to change. Compact mode is a matter of
 how the window looks, as the look is, and the agent may ask for it.
 
 A change that will do is put to the user over the window, where a
@@ -800,7 +844,7 @@ on, whichever machine the agent runs on.
 The appearance, the look, compact mode, the palette, the fonts, the shortcuts, the answer
 on hooks, the accounts, your own agents, the workflows and the projects' choices among them, the teams,
 how long past sessions stay listed, how long a project stays active, what
-new sessions start on, the notifications, your own themes, the backgrounds and the cards' shares are kept for the machine, in `settings.json` under `~/.chord`, and every
+new sessions start on, the notes and agents switches, the notifications, your own themes, the backgrounds and the cards' shares are kept for the machine, in `settings.json` under `~/.chord`, and every
 window on the machine follows the same file.
 The window reads it at start and hears of every change to it, whether made
 in the settings, by another window, or by an edit to the file itself, which
