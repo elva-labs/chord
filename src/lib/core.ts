@@ -1718,6 +1718,12 @@ export interface Settings {
   /** The user's own agents, in the order they are kept. A file from
       before has none. */
   agents?: OwnAgent[];
+  /** The teams the file holds that read, in the order the user keeps
+      them. Missing for a file with no teams, whose leads are given the
+      teams its workflows make. A team that does not read is in
+      `unreadEntries` under the field "teams", at its place in the list,
+      and is written back as it was. */
+  teams?: Team[];
   /** What the file holds and the app does not use, each with the rule it
       breaks: an entry of the keys, the hooks, the accounts or the themes, a
       choice of account that names one, a value of a setting, or a field

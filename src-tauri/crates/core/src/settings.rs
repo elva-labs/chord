@@ -3430,6 +3430,16 @@ mod tests {
         assert!(read.unread_entries[0]
             .reason
             .contains("not one of its agents"));
+        // The window reads it among the unread entries, under its field and
+        // at its place, beside the teams that read.
+        let seen = serde_json::to_value(&read).unwrap();
+        assert_eq!(seen["teams"], json!([good.clone()]));
+        let aside = &seen["unreadEntries"][0];
+        assert_eq!(
+            (&aside["field"], &aside["at"]),
+            (&json!("teams"), &json!(0))
+        );
+        assert_eq!(aside["entry"], broken);
         let written: Value = serde_json::from_str(&render(&read)).unwrap();
         assert_eq!(written["teams"], file["teams"]);
         // A save of the teams that read keeps the other where it stood.
