@@ -644,9 +644,10 @@ pub fn merge_base(dir: &Path, one: &str, other: &str) -> Option<String> {
 /// the same hash on any branch and after any rebase. It is made in a copy
 /// of the checkout's index, so the index, the branch and the stashes are
 /// left as they were and a file the index knows unchanged is not read
-/// again. In the copy, a file marked unchanged is read anyway, and so is
-/// one marked to be skipped when it is there; one a sparse checkout left
-/// out stays as committed. The objects it writes are git's to clear away.
+/// again; the copy keeps the index's time, so a file git cannot know
+/// unchanged from its stat data is read. In the copy, a file marked
+/// unchanged is read anyway, and so is one marked to be skipped when it is
+/// there; one a sparse checkout left out stays as committed. The objects it writes are git's to clear away.
 /// A file monitor or an untracked cache the folder is set up with is not
 /// asked.
 pub fn tree_hash(dir: &Path) -> Result<String, String> {
@@ -677,9 +678,11 @@ pub fn tree_hash(dir: &Path) -> Result<String, String> {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     };
     let made = (|| {
-        if std::fs::copy(Path::new(&git_dir).join("index"), &index).is_err() && head(dir).is_some()
-        {
-            in_index(&["read-tree", "HEAD"])?;
+        if copy_index(&Path::new(&git_dir).join("index"), &index).is_err() {
+            let _ = std::fs::remove_file(&index);
+            if head(dir).is_some() {
+                in_index(&["read-tree", "HEAD"])?;
+            }
         }
         let listed = in_index(&["ls-files", "-v", "-z"])?;
         let (mut unchanged, mut skipped) = (Vec::new(), Vec::new());
@@ -708,6 +711,19 @@ pub fn tree_hash(dir: &Path) -> Result<String, String> {
     let _ = std::fs::remove_file(&index);
     let _ = std::fs::remove_file(index.with_extension("lock"));
     made
+}
+
+/// Copies an index with its modification time. Git trusts an entry's stat
+/// data only when the file was not changed in or after the second the index
+/// was written, and reads the rest again; with the original's time the copy
+/// trusts the same entries the original does, and a file rewritten at the
+/// same size in that second is still read.
+fn copy_index(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut source = std::fs::File::open(from)?;
+    let modified = source.metadata()?.modified()?;
+    let mut copy = std::fs::File::create_new(to)?;
+    std::io::copy(&mut source, &mut copy)?;
+    copy.set_modified(modified)
 }
 
 /// The tree of the commit the folder's branch is on, none before its first
@@ -1650,6 +1666,61 @@ mod tests {
         // A commit of the same files keeps the hash.
         commit(&dir);
         assert_eq!(tree_hash(&dir).unwrap(), ignoring);
+    }
+
+    /// The tree of the folder's files as an index made from nothing holds
+    /// them, every file read afresh.
+    fn fresh_tree(dir: &Path) -> String {
+        let index = dir.join(".git").join("fresh-index");
+        let in_fresh = |args: &[&str]| {
+            let output = Command::new("git")
+                .args(args)
+                .env("GIT_INDEX_FILE", &index)
+                .current_dir(dir)
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        };
+        in_fresh(&["add", "--all"]);
+        let tree = in_fresh(&["write-tree"]);
+        std::fs::remove_file(&index).unwrap();
+        tree
+    }
+
+    #[test]
+    fn a_file_changed_in_the_second_the_index_was_written_changes_the_tree_hash() {
+        let dir = repo("tree-racy");
+        // Stat data compared in whole seconds, as a git built without
+        // sub-second times compares it.
+        run(&dir, &["config", "core.checkStat", "minimal"]).unwrap();
+        let second = || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        };
+        for round in 0..20 {
+            // Starts just after a second turns, so the commit and the
+            // rewrite fall in one second and the hash in the next.
+            let start = second();
+            while second() == start {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            let within = second();
+            write(&dir, "a.txt", &format!("one {round:02}\n"));
+            commit(&dir);
+            write(&dir, "a.txt", &format!("two {round:02}\n"));
+            if second() != within {
+                continue;
+            }
+            while second() == within {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            assert_eq!(tree_hash(&dir).unwrap(), fresh_tree(&dir), "round {round}");
+            return;
+        }
+        panic!("no round fell within one second");
     }
 
     #[test]
