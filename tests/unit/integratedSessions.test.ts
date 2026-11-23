@@ -460,7 +460,24 @@ describe("a session the usage limit cut short", () => {
     expect(fake.calls.filter((call) => call.method === "send")).toHaveLength(2);
   });
 
-  it("tries once: the limit refusing the turn it sent is said and not waited for", async () => {
+  it("a limit refusing the turn it sent at once is said and not waited for", async () => {
+    core();
+    const { key, handle, session } = await chosen();
+    refused(key, handle);
+    await look();
+    await settled();
+    const next = handleOf(key)!;
+    fake.startTurn(next);
+    fake.emit(next, { type: "limitReached", window: "session", resetsAt: reset() });
+    fake.endTurn(next, "failed", "You've hit your limit");
+    await settled();
+    expect(resumesWords(session)).toBeNull();
+    expect(notes(conversationOf(key))).toContain(
+      "The usage limit stopped it again. It does not go on by itself until you write to it.",
+    );
+  });
+
+  it("waits again for a later window's limit that ends the turn it sent", async () => {
     core();
     const { key, handle, session } = await chosen();
     refused(key, handle);
@@ -471,9 +488,9 @@ describe("a session the usage limit cut short", () => {
     fake.emit(next, { type: "limitReached", window: "session", resetsAt: reset() + 5 * 3600 });
     fake.endTurn(next, "failed", "You've hit your limit");
     await settled();
-    expect(resumesWords(session)).toBeNull();
-    expect(notes(conversationOf(key))).toContain(
-      "The usage limit stopped it again. It does not go on by itself a second time.",
+    expect(resumesWords(session)).toMatch(/^resumes /);
+    expect(notes(conversationOf(key))).not.toContain(
+      "The usage limit stopped it again. It does not go on by itself until you write to it.",
     );
   });
 
