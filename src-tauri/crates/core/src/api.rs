@@ -76,6 +76,11 @@ const COMPACTED: &str =
 /// Why a Codex conversation cannot go back to before a message alone.
 const TAKEN_INTO: &str = "Codex took this message into a turn that was running, which goes back with the message that began it.";
 
+/// Why a start is refused that names both a team for its run and the run
+/// it is started in: a session is the lead of one run or a member of one.
+const TEAM_AND_JOINING: &str =
+    "A session is started either as the lead of a team's run or into the run it is started from, never both.";
+
 /// Why a session that follows a workflow is not started: it would have no
 /// start tool to hand its work out with.
 pub const NO_TOOLS: &str = "This session follows a workflow, which hands out its work with the workbench's tools, and this machine has no tool server to give it them. Pick an agent to start one alone instead.";
@@ -1085,6 +1090,9 @@ impl Core {
     ) -> Result<Option<Joined>, String> {
         if run.team.is_none() && run.joining.is_none() {
             return Ok(None);
+        }
+        if run.team.is_some() && run.joining.is_some() {
+            return Err(TEAM_AND_JOINING.into());
         }
         let home = self.home.as_deref().ok_or("no home directory")?;
         let token = run
@@ -3295,11 +3303,19 @@ mod tests {
         // An agent the team does not have is not started in its run.
         let other = crate::run::Joining {
             agent: "Tester".into(),
-            ..joining
+            ..joining.clone()
         };
         assert!(core
             .engage(&run("t", None, Some(other)), folder.path(), None)
             .is_err());
+        // A session is a lead with a team or one started in a run, never both.
+        let both = core.engage(
+            &run("both", Some("quick fix"), Some(joining)),
+            folder.path(),
+            None,
+        );
+        assert_eq!(both.err().as_deref(), Some(TEAM_AND_JOINING));
+        assert_eq!(crate::run::state(&home, "both").unwrap(), None);
     }
 
     #[test]
