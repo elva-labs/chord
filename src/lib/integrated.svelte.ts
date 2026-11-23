@@ -68,6 +68,7 @@ import {
   loadHistory,
   knownName,
   keepName,
+  nameLine,
   namedForNow,
   renamed,
   newTurnLine,
@@ -1352,14 +1353,14 @@ export function send(
   newTurnLine(session);
   if (from !== null) sentBy(id, from);
   sentAt(id, Date.now());
-  // Named for now by its first line, without the workbench's
+  // Named for now by its first line with words, without the workbench's
   // sentence after a started session's prompt, until the agent names it.
   // The workbench's own message names nothing, and nor does a slash
   // command: the row waits for a message that is not.
   if (session.title === null && knownName(session) === null && from !== WORKBENCH) {
     const draft = unsent(spoken(text, from === null).text, mentions).draft;
     const first = draft.split("\n").find((candidate) => candidate.trim() !== "");
-    const line = first === undefined || readsAsCommand(first) ? null : first.trim();
+    const line = first === undefined || readsAsCommand(first) ? null : nameLine(draft);
     // A line that reads as another live session's name, or as "You",
     // names nothing.
     const title =

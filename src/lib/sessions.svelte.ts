@@ -1432,15 +1432,36 @@ function promptWords(session: Session): string | null {
     what is stored. */
 export const NAME_LENGTH = 200;
 
-/** The first line of a message, cut to the length a name keeps. Null for
-    nothing. */
+/** The line of a message that names its session until something better
+    does, cut to the length a name keeps: the first line with words,
+    passing over lines that are only an address or a path, or the first
+    line where every line is one. Null for nothing. */
 export function firstWords(text: string | null): string | null {
-  const line = text
-    ?.split("\n")
-    .find((candidate) => candidate.trim() !== "")
-    ?.trim();
-  if (line === undefined) return null;
+  const line = nameLine(text ?? "");
+  if (line === null) return null;
   return shown(line.length > NAME_LENGTH ? `${line.slice(0, NAME_LENGTH - 1)}…` : line);
+}
+
+/** The first line of a message with words, passing over lines that are
+    only an address or a path, or the first line where every line is one.
+    Null for a message with no line. */
+export function nameLine(text: string): string | null {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return lines.find((line) => !onlyAPlace(line)) ?? lines[0] ?? null;
+}
+
+/** Whether a line is only a web address or a path, which says where
+    something is and not what a session is about. */
+export function onlyAPlace(line: string): boolean {
+  const word = line.trim();
+  return (
+    /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(word) ||
+    /^(?:~|\.{1,2})?[\\/]\S*$/.test(word) ||
+    /^[a-z]:[\\/]\S*$/i.test(word)
+  );
 }
 
 /** What a row is known by: its title, the name it was given, or for a

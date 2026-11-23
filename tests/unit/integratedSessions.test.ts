@@ -747,6 +747,21 @@ describe("an integrated session behind its row", () => {
     expect(session.title).toBe("/Users/ada/notes.md has the plan");
   });
 
+  it("passes over a first line that is only an address or a path for a later line with words", async () => {
+    const one = await started();
+    send(one.key, "https://github.com/ada/demo/issues/12\n\nWhy does this crash on start?");
+    expect(one.session.title).toBe("Why does this crash on start?");
+    const two = await started();
+    send(two.key, "  ~/dev/demo/src/app.ts \nTidy this file");
+    expect(two.session.title).toBe("Tidy this file");
+    const three = await started();
+    send(three.key, "https://example.com/page");
+    expect(three.session.title).toBe("https://example.com/page");
+    const four = await started();
+    send(four.key, "C:\\work\\notes.md\n./notes.md\n/srv/plan");
+    expect(four.session.title).toBe("C:\\work\\notes.md");
+  });
+
   it("takes the agent's name once, in place of the first line", async () => {
     const { session, key } = await started();
     send(key, "https://example.com/crash.log");
