@@ -290,7 +290,7 @@ file, and a start names none, so a file that names one, written by hand,
 by a harness's shell or by a later version, starts nothing in it. Claude
 Code's default model, chosen on the chip, keeps no model, and the settings
 let go of everything kept for a harness, as
-[settings](settings.md#sessions) describes. The choices are kept for the
+[settings](reference/settings.md#sessions) describes. The choices are kept for the
 machine in the settings file, by harness.
 
 They are kept per harness, not per account or per project, so they follow
@@ -982,7 +982,7 @@ hour, or the window reads as used up with no time, the wait ends and the
 conversation says so.
 
 Going on, the run is started again as a fresh conversation from its
-notes, as [sessions](sessions.md#going-on-from-the-notes) describes,
+notes, as [sessions](reference/sessions.md#going-on-from-the-notes) describes,
 whatever its size and however long it rested: the whole conversation is
 never read again for it. Where the core cannot write the briefing, the
 run is left as it is and the conversation says so. The fresh conversation

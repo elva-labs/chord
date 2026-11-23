@@ -637,7 +637,7 @@ under its project, and the window stays on what the user was looking at.
 A conversation shows that message as the plugin's. On a no nothing
 starts, and the plugin is told nothing.
 
-- `project` is a project open in the app, and not the orchestrator's folder.
+- `project` is a project open in the app.
 - `prompt` is at most 8 KiB. One that begins with `/`, whatever the
   command, or with `!`, once the characters that draw nothing are passed
   over, is a command, not words, and the app asks nothing for it.

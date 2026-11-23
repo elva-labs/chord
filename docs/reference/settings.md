@@ -18,7 +18,7 @@ switch. A row that has been changed from what it started as shows Reset,
 and a row that has not shows nothing. The close button at the top right,
 or <kbd>Esc</kbd>, closes the dialog.
 
-![The settings over the workbench: the four tabs down the left, and the Appearance tab with its appearance, theme, font and colour choices.](../settings.png)
+![The settings over the workbench: the tabs down the left, and the Appearance tab with its appearance, theme, font and colour choices.](../settings.png)
 
 ## Appearance
 
@@ -288,8 +288,7 @@ among them. Class names are the app's own and change without notice.
 Shown in the Sessions tab as Let sessions talk to Chord, with the line
 Shows when a session works, waits or asks. Off is the watcher only, on is
 the harness's hooks, chosen once for every project; each project you open follows
-it, and a project that should go the other way can say so under By project. The `orchestrator` folder is among those projects while the
-sessions pane lists it (see [orchestrator](../orchestrator.md)). A fresh install starts with the hooks on; a setup from before the
+it, and a project that should go the other way can say so under By project. A fresh install starts with the hooks on; a setup from before the
 choice existed starts with them off, and is told once, in a word over the
 agent pane, what turning them on gives, in every project. Turn on there turns them on for
 every project, as this section's choice does; Not now puts the offer away

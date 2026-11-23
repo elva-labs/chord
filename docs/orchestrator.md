@@ -21,7 +21,7 @@ rather than resume or send to one that did other work, and to relay a
 session's question to the user and answer it with `send`, as well as the
 workflow's own steps. A fresh install has a workflow for exactly that,
 Direct: one step of work, on any model, with as many sessions at once as a
-session may run (see [settings](settings.md#workflows)). Its steps add what
+session may run (see [settings](reference/settings.md#workflows)). Its steps add what
 any workflow's do: edit no files, hand out work only through `start` and
 never through its own subagents, and name the step in each start. A session
 that follows no workflow is told none of this.
@@ -51,23 +51,6 @@ model only their first few lines until the model takes up one of the
 tools, so a Codex session is given them whole as developer instructions
 too, as [the harnesses](adapters.md#naming-the-session-to-its-tools)
 describe.
-
-Earlier versions of the workbench ran such sessions in a project of their
-own, the folder `orchestrator` under the workbench's home. While
-that folder holds past sessions the sessions pane lists it as a project,
-under its name, so they can be read and resumed. A session resumed there is
-a session like any other: it is told nothing of directing, has the tools
-and hooks any project has under the [hooks](hooks.md) setting, where the
-folder has a project override of its own like any project, and keeps
-its token and what it started, as [what is
-remembered](#what-is-remembered) describes. Nothing new starts in the
-folder: it has no new-session button, its menu holds only Close project,
-and neither the agent pane nor the palette offers a new session there.
-Closing it closes its sessions and takes it out of the pane for good; it
-comes back only when a session of it returns from the last quit, or when
-you open the folder again, which lists it in front. It is never one of the
-open projects: `projects` does not list it and `start` refuses it. Nothing
-in the folder is moved or deleted.
 
 ## The tools
 
@@ -111,7 +94,7 @@ on its own, later the longer the line is. A session that runs in Chord
 is sent the text as a message, whole, as the user's own is, and one sent
 while it works waits for its turn. A session being reopened the other way,
 by the user or by the setting of how its harness's sessions run (see
-[sessions](sessions.md#sessions-in-chord)), takes the line once its next
+[sessions](reference/sessions.md#sessions-in-chord)), takes the line once its next
 run is up, the way that run takes one; one not up within half a minute is
 refused, saying to send again in a moment.
 `wait` sits until a session stops working, asks for permission or ends, or
@@ -119,7 +102,7 @@ until the seconds it was given run out. A session whose hooks report its
 turns stops working when they say its turn ended, and never because its
 screen went quiet: an agent running a long command, or thinking, draws
 nothing but its spinner's clock for minutes on end, and is still at work
-(see [sessions](sessions.md)). How the turn ended is said for what it is.
+(see [sessions](reference/sessions.md#what-a-row-says)). How the turn ended is said for what it is.
 A turn the agent ended is "stopped working", and the answer adds a line
 saying the workbench puts the session away once it has rested five
 minutes with nothing open, and that a line sent to it after that resumes
@@ -208,7 +191,7 @@ session's row and its worktree take; a name the project already has is
 numbered rather than refused, so the same work twice is fix-it and fix-it-2.
 The row takes the name cut to 60 characters, and not at all when it would
 pass for the user, the workbench, an agent or another session (see
-[sessions](sessions.md#sessions-in-chord)); the answer says which, with
+[sessions](reference/sessions.md#sessions-in-chord)); the answer says which, with
 the name in quotes as every answer gives a name (see [when the user writes
 to it](#when-the-user-writes-to-it)). The name is kept with what the caller
 started, and stays the session's across a close, a resume by its id, a
@@ -607,10 +590,10 @@ as one harness with no workflow. What the user picks is what starts. Picking
 a harness in the palette's new session, whichever button opened it,
 starts that harness alone. Picking a workflow there starts its orchestrator, on the workflow's harness and model, and a plain new
 session where there was nothing to pick follows the project's workflow, as
-[settings](settings.md#workflows) describes. A new in-Chord session can
+[settings](reference/settings.md#workflows) describes. A new in-Chord session can
 also be given a workflow, or none, in its composer until its first message,
 which starts it again as that workflow's orchestrator or as the harness alone;
-[sessions](sessions.md#sessions-in-chord) says how. A workflow whose
+[sessions](reference/sessions.md#sessions-in-chord) says how. A workflow whose
 orchestrator runs on a harness that is not installed is refused on the row,
 and so is a session under a workflow on a machine with no tool server to
 give it the `start` tool.
@@ -764,7 +747,7 @@ say that a new task is a new session, and that resuming a session or
 sending it a line is for the task it already has, since either carries its
 whole conversation into the work, or for one cold and large, its notes of
 it: such a session goes on as a fresh conversation from its notes, as
-[notes](sessions.md#going-on-from-the-notes) describes. Its place on its
+[notes](reference/sessions.md#going-on-from-the-notes) describes. Its place on its
 starter's list and in a workflow moves to the fresh conversation's id,
 the answer names both ids, or the old one alone where the harness writes the
 fresh one down only later, and the old one still names it in every tool.
@@ -847,7 +830,7 @@ under [following a workflow](#following-a-workflow), past characters that
 draw nothing and with a wide mark read as the plain one.
 
 The settings can put every start to the user instead, in the starter's own
-project too (see [settings](settings.md#sessions)). While they do, no
+project too (see [settings](reference/settings.md#sessions)). While they do, no
 answer stands: the question offers Allow once or Don't allow, as it does for an
 agent the workbench did not start, and a standing answer given before is
 not used.
@@ -870,7 +853,7 @@ many times as the workflow allows. Allow another round?", with Allow one
 more or Stop here. For a caller that runs
 in Chord, the round docks over its composer while its conversation is on
 screen, with the same two choices taken as the dock takes any request (see
-[sessions](sessions.md#sessions-in-chord)), so it never covers the
+[sessions](reference/sessions.md#sessions-in-chord)), so it never covers the
 header that says where the run stands; anywhere else it stands over the
 window as above, and it moves into the dock once the caller is on
 screen. An allowed caller is
@@ -1034,7 +1017,7 @@ Where the header is short of room, a tag's workflow name is cut short and
 then left out, and the place, or the chip's words, stay whole until it has
 gone; only then are they cut short, and
 they go at a letter or two. The chip's pips stay until the title has given
-way, and the words take no room once gone (see [layout](layout.md)). A
+way, and the words take no room once gone (see [layout](reference/layout.md#the-corner)). A
 start the workflow refuses its
 orchestrator is shown over the terminal in one line, whole while the
 pointer or the keyboard is on it, as well as answered to the agent, until
@@ -1056,7 +1039,7 @@ up in the accent, `asking` where the model stands, when the session needs
 a permission, which only you can grant. A starter that runs in Chord
 also holds that request in its dock, to be answered there for that session,
 or for one in a terminal with the way to it (see
-[sessions](sessions.md#sessions-in-chord)). Everything else they wait on, the
+[sessions](reference/sessions.md#sessions-in-chord)). Everything else they wait on, the
 starter hears, so the place to go is still the starter and not the
 session it started. A session whose starter the window no longer has
 stands in its own project like any other.
@@ -1100,7 +1083,7 @@ the pane looks the same after a restart.
 A session that started sessions has the board for them in a section at
 the foot of its changes pane, under the tree and beside Processes and
 Browser, headed Sessions it started with how many (see
-[layout](layout.md#under-the-tree)): stop one or all, send one a line, take
+[layout](reference/layout.md#under-the-tree)): stop one or all, send one a line, take
 back a project it may start in without asking, and clean up the worktrees
 its starts left behind. It is there while the session on
 screen has sessions it started, has been allowed to start more in a project
