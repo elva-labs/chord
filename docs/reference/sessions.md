@@ -69,6 +69,12 @@ row it is archive, which files the session with the earlier ones, behind
 their row. Two steps, so nothing running is archived by accident. On the
 keyboard, Delete does either for the row under the cursor.
 
+Closing the session on screen leaves none selected, and the agent pane shows
+its empty state with the New session button. No other row takes its place,
+since a row left from the last quit would start as soon as it was on screen.
+Closing a session that is not on screen changes nothing on screen. The same
+holds for a session its starter stops and for one the workbench puts away.
+
 Closing a session also closes the browser tabs it owns; see
 [browser](../browser.md#whose-tabs-they-are), and the shells opened beside it;
 see [the terminal panel](layout.md#the-terminal-panel). Closing a session
