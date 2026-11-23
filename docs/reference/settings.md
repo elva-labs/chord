@@ -662,12 +662,22 @@ is in [focus](../focus-model.md).
 
 A shortcut of two steps reads as both, Ctrl+X S, or ⌃X S on macOS. Clicking
 a shortcut and pressing a chord binds it at once; a second key pressed
-within a second and a half makes the two one shortcut, and Escape before it
-keeps the single chord. Meanwhile the shortcut reads as its first step,
-then…. Which shortcuts are refused, how one waits and where it begins is in
+within a second and a half makes the two one shortcut. Meanwhile the
+shortcut reads as its first step, then…, and what is wrong with the first
+step alone shows only once no second key came. Tab, Escape, and Cmd with W
+or comma (Ctrl off macOS) are never a second step: they keep the single
+chord, end the recording, and do what they always do. Which shortcuts are
+refused, how one waits and where it begins is in
 [focus](../focus-model.md#shortcuts-of-two-steps).
+
 A table kept by an earlier version reads as it did, with Send waiting
-messages now on its default.
+messages now on its default. Where that table already gives Ctrl+X to
+another action, on Windows and Linux, Send waiting messages now takes
+Ctrl+Alt+X S instead, and Reset gives it Ctrl+X S once the other action has
+moved. A version from before shortcuts of two steps runs on the same table:
+it reads every chord of one step, and sets a shortcut of two steps aside,
+keeping it as it is and using its default for that action until a shortcut
+is picked for it there.
 
 ## Notifications
 

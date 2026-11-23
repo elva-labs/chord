@@ -92,12 +92,18 @@ The first step waits a second and a half for the second, and the status bar
 says so meanwhile, as in "Ctrl+X, then…" (⌃X on macOS). A second step that
 completes a shortcut does its action and types nothing. Any other key ends
 the wait and goes where it would have gone, and so does the wait running
-out. <kbd>Esc</kbd> ends it and goes no further. <kbd>Shift</kbd>,
+out. <kbd>Esc</kbd> ends it and goes no further, except in a terminal,
+where it ends it and goes on to the terminal. <kbd>Shift</kbd>,
 <kbd>Ctrl</kbd>, <kbd>Alt</kbd> or <kbd>Cmd</kbd> pressed alone keep it
 waiting, so <kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>Shift</kbd><kbd>S</kbd> is
-a step of its own. The second step must match whole:
-<kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>Ctrl</kbd><kbd>S</kbd> is not
-<kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>S</kbd>.
+a step of its own. The first step's modifier may be held on through the
+second key: <kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>Ctrl</kbd><kbd>S</kbd> sends
+as <kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>S</kbd> does, unless another
+shortcut is <kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>Ctrl</kbd><kbd>S</kbd>
+itself.
+
+Send waiting messages now that cannot send says why in the status bar, such
+as that no message waits or that a request waits on an answer first.
 
 A first step that means something where it is pressed keeps that meaning
 and begins nothing:
