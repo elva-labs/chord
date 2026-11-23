@@ -153,11 +153,36 @@ const OFFERED_LATER: [&str; 1] = [workflow::DIRECT_NAME];
 
 /// A chord the app claims: the platform modifier is implied, and Shift and
 /// Alt may join it. The key is spelled as a browser's key event spells it.
+///
+/// A sequence is a chord with a second step to follow it. Its first step
+/// may be held with Ctrl in place of Cmd on macOS, and its second is a key
+/// alone or held with the first step's modifier. A one-step chord is
+/// written without either field, as before sequences were; a version
+/// without them reads a sequence as its first step alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chord {
     pub key: String,
     pub shift: bool,
     pub alt: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ctrl: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub then: Option<Step>,
+}
+
+/// A sequence's second step: a key, with Shift and Alt when they join it,
+/// and the first step's modifier when `modifier` says so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Step {
+    pub key: String,
+    pub shift: bool,
+    pub alt: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub modifier: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// A theme of the user's own: what it is called, its colours for each
@@ -506,6 +531,15 @@ fn chord(action: &str, value: &Value) -> Result<Chord, String> {
         .map_err(|_| format!("the chord for {action} is not a key with shift and alt"))?;
     if chord.key.is_empty() || chord.key.chars().count() > LONGEST_NAME {
         return Err(format!("the chord for {action} has no key"));
+    }
+    if let Some(then) = &chord.then {
+        if then.key.is_empty() || then.key.chars().count() > LONGEST_NAME {
+            return Err(format!("the second step of the chord for {action} has no key"));
+        }
+    } else if chord.ctrl {
+        return Err(format!(
+            "the chord for {action} is held with Ctrl, which only a sequence's first step may be"
+        ));
     }
     Ok(chord)
 }
@@ -2257,6 +2291,58 @@ mod tests {
             })
             .collect();
         assert!(apply(&settings, &json!({ "keys": many })).is_err());
+    }
+
+    #[test]
+    fn a_sequence_is_kept_and_a_one_step_chord_is_written_as_before() {
+        let home = home("sequence");
+        let store = Store::new(&home, Arc::new(Recorder::default()));
+        let sequence = json!({
+            "key": "x", "shift": false, "alt": false, "ctrl": true,
+            "then": { "key": "s", "shift": false, "alt": false }
+        });
+        store
+            .set(&json!({ "keys": {
+                "send.now": sequence,
+                "review": { "key": "g", "shift": false, "alt": false }
+            } }))
+            .unwrap();
+        let text = std::fs::read_to_string(settings_path(&home)).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(value["keys"]["send.now"], sequence);
+        assert_eq!(
+            value["keys"]["review"],
+            json!({ "key": "g", "shift": false, "alt": false }),
+            "no field a version before sequences lacks: {text}"
+        );
+        let read = store.load().settings.keys;
+        let then = read["send.now"].then.as_ref().unwrap();
+        assert!(read["send.now"].ctrl);
+        assert_eq!((then.key.as_str(), then.modifier), ("s", false));
+    }
+
+    #[test]
+    fn a_sequence_is_checked_for_shape() {
+        let settings = Settings::default();
+        let with = |chord: Value| apply(&settings, &json!({ "keys": { "send.now": chord } }));
+        assert!(with(json!({
+            "key": "k", "shift": false, "alt": false,
+            "then": { "key": "s", "shift": false, "alt": false, "modifier": true }
+        }))
+        .is_ok());
+        let empty = with(json!({
+            "key": "x", "shift": false, "alt": false,
+            "then": { "key": "", "shift": false, "alt": false }
+        }))
+        .unwrap_err();
+        assert!(empty.contains("second step"), "{empty}");
+        assert!(with(json!({
+            "key": "x", "shift": false, "alt": false, "then": { "key": "s" }
+        }))
+        .is_err());
+        let ctrl = with(json!({ "key": "x", "shift": false, "alt": false, "ctrl": true }))
+            .unwrap_err();
+        assert!(ctrl.contains("Ctrl"), "{ctrl}");
     }
 
     #[test]
