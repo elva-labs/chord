@@ -247,6 +247,30 @@ fn an_unanswered_note_not_whole_is_left_as_it_is() {
     }
 }
 
+/// A count is digits alone, as the note writes it, and one too large to
+/// count lines by leaves the text as it is; past the note only the blank
+/// lines are taken, so the words after it keep their indent. The window's
+/// reading takes the same inputs the same way.
+#[test]
+fn an_unanswered_note_is_read_by_its_digits_alone() {
+    let most = usize::MAX;
+    for text in [
+        format!("{UNANSWERED_HEAD}\nThe user's message +1 of 1, 1 line:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of +1, 1 line:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, +1 line:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line, +1 image:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, {most} lines:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, 99999999999999999999999 lines:\nBuild it.\n{UNANSWERED_END}\nHi"),
+    ] {
+        assert_eq!(without_briefing(&text), text);
+    }
+    let note = format!(
+        "{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line:\nBuild it.\n{UNANSWERED_END}"
+    );
+    assert_eq!(without_briefing(&format!("{note}\n\n  Hi")), "  Hi");
+    assert_eq!(without_briefing(&format!("{note}\n\tHi")), "\tHi");
+}
+
 /// A transcript named with Windows' `\\?\` prefix, as a Codex index can
 /// hold its rollout, is named without it: tools the agent opens a file
 /// with read such a path wrongly or not at all.

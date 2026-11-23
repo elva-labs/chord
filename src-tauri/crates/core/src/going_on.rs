@@ -117,19 +117,27 @@ fn unanswered_lines(line: &str, place: usize, total: Option<usize>) -> Option<(u
     let (at, rest) = rest.split_once(" of ")?;
     let (of, rest) = rest.split_once(", ")?;
     let (count, rest) = rest.split_once(' ')?;
-    let (count, of) = (count.parse::<usize>().ok()?, of.parse::<usize>().ok()?);
+    let (count, of) = (digits(count)?, digits(of)?);
     let images = |said: &str| {
-        said.split_once(' ').is_some_and(|(n, word)| {
-            n.parse::<usize>().is_ok() && matches!(word, "image" | "images")
-        })
+        said.split_once(' ')
+            .is_some_and(|(n, word)| digits(n).is_some() && matches!(word, "image" | "images"))
     };
     let unit = match rest.split_once(", ") {
         Some((unit, said)) if images(said) => unit,
         Some(_) => return None,
         None => rest,
     };
-    let fits = at.parse::<usize>().ok()? == place && total.is_none_or(|total| total == of);
+    let fits = digits(at)? == place && total.is_none_or(|total| total == of);
     (fits && matches!(unit, "line" | "lines")).then_some((count, of))
+}
+
+/// A count as the note writes one: ASCII digits only, no sign, and one
+/// that fits.
+fn digits(said: &str) -> Option<usize> {
+    if said.is_empty() || !said.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    said.parse().ok()
 }
 
 fn without_unanswered(text: &str) -> &str {
@@ -145,13 +153,16 @@ fn without_unanswered(text: &str) -> &str {
             return text;
         };
         total = Some(of);
-        at += 1 + count;
+        let Some(next) = count.checked_add(1).and_then(|lines| at.checked_add(lines)) else {
+            return text;
+        };
+        at = next;
     }
     if at >= lines.len() || total != Some(place) {
         return text;
     }
     let taken: usize = lines[..=at].iter().map(|line| line.len()).sum();
-    text[taken..].trim_start()
+    text[taken..].trim_start_matches('\n')
 }
 
 /// The briefing a fresh conversation goes on with. `notes` is the brief
