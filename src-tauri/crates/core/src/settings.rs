@@ -594,7 +594,9 @@ fn chord(action: &str, value: &Value) -> Result<Chord, String> {
     }
     if let Some(then) = &chord.then {
         if then.key.is_empty() || then.key.chars().count() > LONGEST_NAME {
-            return Err(format!("the second step of the chord for {action} has no key"));
+            return Err(format!(
+                "the second step of the chord for {action} has no key"
+            ));
         }
     }
     Ok(chord)
@@ -2450,8 +2452,10 @@ mod tests {
             "first": { "key": "x", "shift": false, "alt": false }, "then": { "key": "s" }
         }))
         .is_err());
-        assert!(with(json!({ "first": { "key": "", "shift": false, "alt": false },
-            "then": { "key": "s", "shift": false, "alt": false } }))
+        assert!(with(
+            json!({ "first": { "key": "", "shift": false, "alt": false },
+            "then": { "key": "s", "shift": false, "alt": false } })
+        )
         .is_err());
     }
 

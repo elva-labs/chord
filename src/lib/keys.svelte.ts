@@ -671,7 +671,8 @@ function toStored(chord: Chord): StoredKeyChord {
   return { first: chord.ctrl ? { ...step, ctrl: true } : step, then: { ...chord.then } };
 }
 
-function storedTable(table: Partial<Keymap>): Record<string, StoredKeyChord> {
+/** A chord table as it is stored. */
+export function storedTable(table: Partial<Keymap>): Record<string, StoredKeyChord> {
   return Object.fromEntries(
     Object.entries(table).map(([action, chord]) => [action, toStored(chord)]),
   );
