@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { BUILD_AND_REVIEW, PROJECT, installFakeCore, startNew } from "./fake";
+import { BUILD_AND_REVIEW, PROJECT, installFakeCore, leaveRow, startNew } from "./fake";
 
 /**
  * The workflow chip in the composer of a new conversation: it says the
@@ -186,10 +186,11 @@ test("picking a workflow makes the session its orchestrator, as New session unde
   await expect(page.getByTestId("run-chip")).toHaveCount(0);
   await expect(page.getByTestId("workflow-tag")).toHaveCount(0);
 
-  // Sent, the choice is kept: the chip leaves the composer and the
-  // header's chip names the workflow.
+  // Sent, the choice is kept: the chip leaves the composer once the row
+  // is left, and the header's chip names the workflow.
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("user-message")).toHaveCount(1);
+  await leaveRow(page);
   await expect(chip(page)).toHaveCount(0);
   await expect(page.getByTestId("run-words")).toHaveText("Build and review");
   await expect(model).toHaveAttribute("aria-disabled", "true");
@@ -242,6 +243,7 @@ test("a message sent while the session starts again waits for the new run", asyn
   await expect(input).toHaveValue("");
   const sent = (await calls(page)).filter((call) => call.method === "send");
   expect(sent.map((call) => call.id)).toEqual(["int-2"]);
+  await leaveRow(page);
   await expect(chip(page)).toHaveCount(0);
 });
 

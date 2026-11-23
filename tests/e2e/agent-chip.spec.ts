@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore, startNew } from "./fake";
+import { PROJECT, fromPlus, installFakeCore, leaveRow, startNew } from "./fake";
 
 // The composer's agent chip: a list of agents beside the model, effort
 // and mode, which runs the session as the one picked from the next
@@ -135,7 +135,12 @@ test("offers only agents mid-session, from the next message, and picking a mode 
   expect((await calls(page)).filter((call) => call.method === "configure").at(-1)).toMatchObject({
     settings: { readsOnly: false },
   });
-  await expect(chip(page, "mode")).not.toHaveText("Reads only · Default");
+  // Default goes behind the plus once the row is left, and is read there.
+  await leaveRow(page);
+  await expect(chip(page, "mode")).toHaveCount(0);
+  await fromPlus(page, "Mode");
+  await expect(chip(page, "mode")).toHaveText("Default");
+  await expect(chip(page, "mode")).not.toHaveAttribute("data-reads-only");
 });
 
 test("opens Settings on a new agent from the list", async ({ page }) => {

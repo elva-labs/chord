@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore, startNew } from "./fake";
+import { PROJECT, fromPlus, installFakeCore, leaveRow, startNew } from "./fake";
 
 /**
  * A session's row menu reopens a terminal session as a conversation and a
@@ -258,7 +258,12 @@ test("goes on in a terminal in the mode chosen on the chip", async ({ page }) =>
   await expect(chip).toHaveText("Auto");
   await chip.click();
   await page.getByTestId("mode-option").filter({ hasText: "Default" }).click();
+  // Default goes behind the plus once the row is left, and is read there.
+  await leaveRow(page);
+  await expect(chip).toHaveCount(0);
+  await fromPlus(page, "Mode");
   await expect(chip).toHaveText("Default");
+  await page.keyboard.press("Escape");
   // Spoken to and answered: there is a conversation to go on with.
   await page.getByTestId("composer-input").fill("Go");
   await page.keyboard.press("Enter");
