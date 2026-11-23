@@ -4064,6 +4064,40 @@ mod tests {
         );
     }
 
+    /// Claude Code calls the session's PreToolUse hook for a subagent's
+    /// tool calls too, naming the subagent, in the shape 2.1.330 sends: a
+    /// lead's subagent is held from handing over as the lead is.
+    #[test]
+    fn a_subagent_of_a_held_lead_is_refused_a_pull_request() {
+        let (mut stream, _home, _folder) = in_a_run("stream-subagent-push", "lead");
+        let reading = stream.read(
+            &json!({
+                "type": "control_request",
+                "request_id": "h1",
+                "request": {
+                    "subtype": "hook_callback",
+                    "callback_id": READS_ONLY_HOOK,
+                    "input": {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": { "command": "gh pr create --fill" },
+                        "agent_id": "a91f5de28f08fa653",
+                        "agent_type": "general-purpose",
+                    },
+                    "tool_use_id": "toolu_sub",
+                },
+            })
+            .to_string(),
+        );
+        let answer: Value = serde_json::from_str(&reading.writes[0]).unwrap();
+        let decided = &answer["response"]["response"]["hookSpecificOutput"];
+        assert_eq!(decided["permissionDecision"], "deny");
+        assert!(decided["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .starts_with("Handing over is held: "));
+    }
+
     #[test]
     fn a_held_lead_is_sent_back_once_each_time_it_would_stop() {
         let (mut stream, home, _folder) = in_a_run("stream-stop", "lead");
