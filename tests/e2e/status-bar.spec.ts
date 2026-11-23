@@ -423,7 +423,7 @@ test.describe("a narrow window", () => {
     await page.keyboard.press("ControlOrMeta+=");
     await expect(page.getByTestId("flash-readout")).not.toHaveText("");
     const seen: string[] = [];
-    for (let width = 1440; width >= 380; width -= 20) {
+    for (let width = 1440; width >= 300; width -= 20) {
       await settled(page, width);
       const fit = (await bar(page).getAttribute("data-fit")) ?? "";
       const taken = fit.split(" ").filter(Boolean);
