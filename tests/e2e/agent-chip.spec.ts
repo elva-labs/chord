@@ -135,7 +135,16 @@ test("offers only agents mid-session, from the next message, and picking a mode 
   expect((await calls(page)).filter((call) => call.method === "configure").at(-1)).toMatchObject({
     settings: { readsOnly: false },
   });
-  await expect(chip(page, "mode")).not.toHaveText("Reads only · Default");
+  // The pick leaves the pointer where the menu was, above the row. A chip
+  // back at its default goes once the row is left, and whether the browser
+  // has noticed the pointer left with the menu is up to its next hover
+  // update, so the pointer is moved off the row before the chip is read.
+  await page.getByRole("log", { name: "The conversation" }).hover();
+  await expect(chip(page, "mode")).toHaveCount(0);
+  await chip(page, "more").click();
+  await page.getByTestId("more-option").filter({ hasText: "Mode" }).click();
+  await expect(chip(page, "mode")).toHaveText("Default");
+  await expect(chip(page, "mode")).not.toHaveAttribute("data-reads-only");
 });
 
 test("opens Settings on a new agent from the list", async ({ page }) => {
