@@ -1618,7 +1618,7 @@ test.describe("the conversation's text", () => {
           await expect(page.getByTestId("composer-input")).toBeVisible();
           await agent(
             page,
-            `f.send("${H}", crypto.randomUUID(), "Fix the scan"); f.startTurn("${H}");
+            `f.send("${H}", crypto.randomUUID(), "> The scan runs twice\\nFix the \\\`scan\\\` [here](https://example.com/scan)"); f.startTurn("${H}");
              f.tool("${H}", "Read", { file_path: "${PROJECT}/src/a.ts" }, "x, see the link", { kind: "read" });
              f.emit("${H}", { type: "text", block: "t", parent: null, text: "Done, with \`code\` and a [link](https://example.com).", done: true });
              f.notice("${H}", "Fell back to Sonnet", "warning");
@@ -1659,6 +1659,80 @@ test.describe("the conversation's text", () => {
           await page.close();
         }
     expect(failures).toEqual([]);
+  });
+});
+
+test.describe("the user's own Markdown", () => {
+  const SAID = [
+    "> The scan runs twice",
+    "> on a cold start.",
+    "My answer under it:",
+    "* keep one scan",
+    "* share it",
+    "Run `npm test`, then read [the notes](https://example.com/notes).",
+    "```",
+    "const scanned = await scan(root, { depth: 12, follow: false, ignore: ['node_modules', 'target'] }); // \u202e",
+    "```",
+  ].join("\n");
+
+  test("draws a quote, a list, code and a link in the bubble, and copies what was typed", async ({ page }) => {
+    await openIntegrated(page);
+    await agent(page, `f.send("${H}", crypto.randomUUID(), ${JSON.stringify(SAID)}); f.turn("${H}", "Done.");`);
+    const mine = page.getByTestId("user-message");
+    const bubble = mine.locator(".bubble");
+    const sent = mine.getByTestId("sent-markdown");
+    await expect(sent).toBeVisible();
+    const box = (await bubble.boundingBox())!;
+    const inside = async (locator: ReturnType<Page["locator"]>) => {
+      const own = (await locator.boundingBox())!;
+      expect(own.x).toBeGreaterThanOrEqual(box.x);
+      expect(own.x + own.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+      return own;
+    };
+    // The quote is its two lines, with a bar, and the answer stands below it.
+    const quote = await inside(sent.locator("blockquote"));
+    await expect(sent.locator("blockquote")).toHaveText("The scan runs twiceon a cold start.");
+    expect(parseFloat(await sent.locator("blockquote").evaluate((node) => getComputedStyle(node).borderLeftWidth))).toBeGreaterThan(0);
+    const answer = await inside(sent.locator("p", { hasText: "My answer under it:" }));
+    expect(answer.y).toBeGreaterThanOrEqual(quote.y + quote.height);
+    // The list's items stand in from the words.
+    await expect(sent.locator("li")).toHaveText(["keep one scan", "share it"]);
+    expect((await sent.locator("li").first().boundingBox())!.x).toBeGreaterThan(answer.x + 4);
+    await expect(sent.locator("p code")).toHaveText("npm test");
+    const link = sent.getByRole("link", { name: "the notes" });
+    await expect(link).toHaveAttribute("href", "https://example.com/notes");
+    await expect(link).toHaveAttribute("tabindex", "-1");
+    // The long line of code scrolls in its box rather than widen the bubble.
+    const pre = sent.locator("pre");
+    await inside(pre);
+    expect(await pre.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+    await expect(pre.getByTestId("unseen-character")).toHaveText("⟨U+202E⟩");
+    expect(await sent.evaluate((node) => getComputedStyle(node).direction)).toBe("ltr");
+    // Copy copies the message as it was typed.
+    await mine.hover();
+    await mine.getByTestId("copy-message").click();
+    const copied = await page.evaluate(() => (window as unknown as { __copied?: string[] }).__copied ?? []);
+    expect(copied).toEqual([SAID]);
+  });
+
+  test("draws a message that is not Markdown as typed, and a waiting one as a placed one", async ({ page }) => {
+    await openIntegrated(page);
+    const prose = "Is 2 * 3 * 4 still 24 when snake_case_name < other_name?\n  Indented, kept.";
+    await agent(page, `f.send("${H}", crypto.randomUUID(), ${JSON.stringify(prose)}); f.turn("${H}", "Yes.");`);
+    const first = page.getByTestId("user-message").first();
+    await expect(first.getByTestId("sent-markdown")).toHaveCount(0);
+    await expect(first.locator(".bubble p")).toHaveText(prose);
+    // A message sent while the agent works waits, drawn the same way.
+    await agent(page, `f.startTurn("${H}"); f.emit("${H}", { type: "text", block: "w", parent: null, text: "On it", done: false });`);
+    await page.getByTestId("composer-input").focus();
+    await page.keyboard.type("> waiting quote");
+    await page.keyboard.press("Shift+Enter");
+    await page.keyboard.type("* an item");
+    await page.keyboard.press("Enter");
+    const waiting = page.getByTestId("user-message").filter({ hasText: "waiting quote" });
+    await expect(waiting).toHaveAttribute("data-state", "queued");
+    await expect(waiting.locator("blockquote")).toHaveText("waiting quote");
+    await expect(waiting.locator("li")).toHaveText("an item");
   });
 });
 

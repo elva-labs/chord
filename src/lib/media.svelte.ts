@@ -15,7 +15,16 @@
  */
 
 import { Tokenizer, type TokenizerCallbacks } from "htmlparser2";
-import { marked, Parser, type Renderer, type TextRenderer, type Token } from "marked";
+import {
+  Lexer,
+  marked,
+  Tokenizer as Lexing,
+  Parser,
+  type Renderer,
+  type TextRenderer,
+  type Token,
+  type Tokens,
+} from "marked";
 import { runnable } from "$lib/bang";
 import { core, type Media, type PresentRequest } from "$lib/core";
 import { wholeLineageOf } from "$lib/goingOn.svelte";
@@ -23,6 +32,7 @@ import { forProject, sessions } from "$lib/sessions.svelte";
 import { held, projectFor, relativeTo, sessionFor } from "$lib/show.svelte";
 import { activate, workspace } from "$lib/workspace.svelte";
 import { showMedia } from "$lib/files.svelte";
+import { revealed, shown } from "$lib/unseen";
 
 export interface MediaItem {
   id: string;
@@ -794,6 +804,169 @@ export function settled(markdown: string): number {
   // The lexer reads line ends its own way; what it read must be the text
   // as it stands for its length to say where the blocks end.
   return markdown.startsWith(whole) ? whole.length : 0;
+}
+
+// ---- what the user sent ----
+
+/** How the lexer reads a message the user typed. A message is not a
+    document: a `#` line, a `---` line, a table, a `~` and a reference
+    definition show as typed, and so does HTML, as text. A quote is only
+    its own `>` lines and a list ends at a line that is neither a list item
+    nor indented under one, so the line typed after either is a line of
+    its own and never drawn into it. */
+class Typed extends Lexing {
+  override heading(): undefined {}
+  override lheading(): undefined {}
+  override hr(): undefined {}
+  override table(): undefined {}
+  override def(): undefined {}
+  override html(): undefined {}
+  override del(): undefined {}
+  override blockquote(src: string): Tokens.Blockquote | undefined {
+    const lines = /^(?: {0,3}>[^\n]*(?:\n|$))+/.exec(src);
+    return lines === null ? undefined : super.blockquote(lines[0]);
+  }
+  override list(src: string): Tokens.List | undefined {
+    const lines = src.split("\n");
+    const end = lines.findIndex((line, at) => at > 0 && /^\S/.test(line) && !/^(?:[*+-]|\d{1,9}[.)])(?:[ \t]|$)/.test(line));
+    return super.list(end === -1 ? src : lines.slice(0, end).join("\n") + "\n");
+  }
+}
+
+/** The options a message is read and drawn with: GFM, and a line break
+    where the user typed one. */
+const TYPED = { async: false as const, gfm: true, breaks: true };
+
+/** A message's text drawn as text: escaped, isolated left to right, each
+    character that would change how it reads without being seen shown as
+    its marker, as `Plain` draws it, in code as anywhere else. */
+function reveal(text: string): string {
+  const parts = revealed(text).map((part) =>
+    part.unseen
+      ? `<span class="unseen" data-testid="unseen-character">${escapeAttribute(part.text)}</span>`
+      : escapeAttribute(part.text),
+  );
+  return `<span class="plain">${parts.join("")}</span>`;
+}
+
+/** The renderer for a message the user sent. It draws text only as text,
+    loads nothing, and draws a link only where `LINK` allows. */
+const sent = new marked.Renderer();
+sent.text = (token) =>
+  "tokens" in token && token.tokens ? sent.parser.parseInline(token.tokens) : reveal(token.text);
+sent.html = ({ text }) => reveal(text);
+sent.codespan = ({ text }) => `<code>${reveal(text)}</code>`;
+sent.code = ({ text }) => `<pre><code>${reveal(text)}</code></pre>\n`;
+sent.checkbox = ({ checked }) => reveal(checked ? "[x] " : "[ ] ");
+sent.link = ({ href, title, tokens }) => {
+  const text = sent.parser.parseInline(tokens);
+  const address = typedBack(href);
+  if (!LINK.test(address)) return text;
+  const named = title ? ` title="${escapeAttribute(shown(typedBack(title)))}"` : "";
+  return `<a href="${escapeAttribute(address)}"${named} rel="noopener noreferrer" tabindex="-1">${text}</a>`;
+};
+sent.image = ({ href, text }) => {
+  const address = typedBack(href);
+  if (!/^https?:/i.test(address)) return reveal(text);
+  return `<a href="${escapeAttribute(address)}" rel="noopener noreferrer" tabindex="-1">${reveal(text || address)}</a>`;
+};
+
+/** A piece of a message as `sentParts` splits it: words, or a mention of
+    a file or folder by its path. */
+export interface SentPart {
+  text: string;
+  path?: string;
+}
+
+/** The mentions of the message being drawn, each by the character that
+    stands in for it while it is read (see `sentHtml`). */
+let standIns = new Map<string, SentPart>();
+
+/** Text with every mention standing in it as its `@` word again, for an
+    address or a title, where it can only be text. */
+function typedBack(text: string): string {
+  let out = "";
+  for (const char of text) out += standIns.get(char)?.text ?? char;
+  return out;
+}
+
+/** A mention as the bubble draws it, as a button that opens its file
+    when it can be opened. */
+function mentioned(part: SentPart, at: number, opens: boolean): string {
+  const word = reveal(part.text);
+  if (!opens) return `<span class="mention" data-testid="message-mention">${word}</span>`;
+  const title = escapeAttribute(`Open ${shown(part.path!)}`);
+  return `<button class="mention link-file" tabindex="-1" data-thread-item data-mention="${at}" title="${title}" data-testid="message-mention">${word}</button>`;
+}
+
+/** Whether what was read draws anything a plain paragraph would not:
+    a message of plain paragraphs, line breaks, escapes and `<` words is
+    drawn as typed instead, backslashes and all. */
+function plain(tokens: Token[]): boolean {
+  return tokens.every(
+    (token) =>
+      token.type === "space" ||
+      (token.type === "paragraph" &&
+        (token.tokens ?? []).every((inline) => ["text", "br", "escape", "html"].includes(inline.type))),
+  );
+}
+
+/** Lines read as paragraphs of their own because a line the lexer would
+    have read as a heading or a rule stood after them, joined again, so
+    the user's line break stays a line break. */
+function joined(tokens: Token[]): Token[] {
+  const out: Token[] = [];
+  for (const token of tokens) {
+    if ("tokens" in token && token.tokens && token.type !== "paragraph") token.tokens = joined(token.tokens);
+    if (token.type === "list") for (const item of token.items as Tokens.ListItem[]) item.tokens = joined(item.tokens);
+    const last = out.at(-1);
+    if (token.type === "paragraph" && last?.type === "paragraph") {
+      last.tokens!.push({ type: "br", raw: "\n" }, ...token.tokens!);
+      last.raw += token.raw;
+      last.text += "\n" + token.text;
+    } else out.push(token);
+  }
+  return out;
+}
+
+/** A message the user typed as HTML, or null when it is plain text and
+    is drawn as typed. Quotes, lists, code, bold, italic and links are
+    drawn; anything else shows as typed. A mention is drawn as its `@`
+    word, a button marked with its part's place in `parts` when `opens`
+    says its file can be opened. */
+export function sentHtml(parts: readonly SentPart[], opens: (path: string) => boolean = () => false): string | null {
+  const text = parts.map((part) => part.text).join("");
+  if (text === "") return null;
+  // Each mention stands in the text as a character of its own that the
+  // text does not hold, so the Markdown around it is read as typed.
+  const used = new Set(text);
+  let next = 0xe000;
+  const standing = new Map<string, number>();
+  let source = "";
+  parts.forEach((part, at) => {
+    if (part.path === undefined) {
+      source += part.text;
+      return;
+    }
+    while (used.has(String.fromCodePoint(next))) next++;
+    const char = String.fromCodePoint(next++);
+    standing.set(char, at);
+    source += char;
+  });
+  standIns = new Map([...standing].map(([char, at]) => [char, parts[at]]));
+  try {
+    const tokens = new Lexer({ ...marked.defaults, ...TYPED, tokenizer: new Typed() }).lex(source);
+    if (plain(tokens)) return null;
+    const html = new Parser({ ...marked.defaults, ...TYPED, renderer: sent }).parse(joined(tokens));
+    let out = "";
+    for (const char of html) {
+      const at = standing.get(char);
+      out += at === undefined ? char : mentioned(parts[at], at, opens(parts[at].path!));
+    }
+    return out;
+  } finally {
+    standIns = new Map();
+  }
 }
 
 function decode(base64: string): string {

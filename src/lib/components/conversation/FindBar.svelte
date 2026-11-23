@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import type { Conversation, Message } from "$lib/conversation.svelte";
-  import { Finder, clearMatches, findAsked, paintMatches } from "$lib/find.svelte";
+  import { Finder, clearMatches, findAsked, paintMatches, sentText } from "$lib/find.svelte";
   import { giveBack, lend } from "$lib/folds";
   import { spoken } from "$lib/instructions";
   import { actionOf, chordFromEvent } from "$lib/keys.svelte";
@@ -41,8 +41,9 @@
 
   /** A message's words as its bubble shows them. */
   function words(message: Message): string {
-    const said = spoken(message.text, senderOf(message) === null).text;
-    return unsent(said, mentionsOf(message.id)).draft;
+    const own = senderOf(message) === null;
+    const said = spoken(message.text, own).text;
+    return own ? sentText(said, mentionsOf(message.id)) : unsent(said, mentionsOf(message.id)).draft;
   }
 
   const finder = new Finder(
