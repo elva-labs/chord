@@ -4,10 +4,11 @@ Settings open from the native menu, or with <kbd>Cmd</kbd><kbd>,</kbd>
 (<kbd>Ctrl</kbd> on Windows and Linux), over the workbench. A choice applies
 at once.
 
-The settings are in eight tabs down the left. Appearance carries the
+The settings are in seven tabs down the left. Appearance carries the
 appearance, theme, compact mode, font, colour, background and custom styles sections; sessions,
-agents, workflows, accounts, plugins, keys and notifications each carry
-the section of that name, and sessions carries live updates too. Opening the settings again lands on the tab last used, for as long as
+agents, accounts, plugins, keys and notifications each carry
+the section of that name, sessions carries live updates too, and agents
+carries the teams. Opening the settings again lands on the tab last used, for as long as
 the window is open. The dialog follows the look the panes are drawn in. It
 has one size for every tab, so nothing moves when the tab changes, and the
 content of each sits in a column at the width it reads at, in the middle.
@@ -362,7 +363,8 @@ it works. One line under the description says what it runs on: a model on
 one harness or the session's own, an effort or the session's own, and
 whether it reads only or changes files.
 
-The tab lists the agents Chord ships first, Researcher, Developer,
+Above the agents, the tab lists the [teams](#teams). It then lists the
+agents Chord ships first, Researcher, Developer,
 Debugger, Tester, Reviewer, Security reviewer, Cloud architect and Docs
 writer, then the user's own in the order they were made, and New agent at
 the foot. A lock marks an agent that reads only, and its title says what
@@ -372,8 +374,8 @@ a command it runs is left to the session's mode.
 New agent opens a form: the title, the description, and the line of what
 it runs on, which opens to choose the model, the effort, and Reads only or
 Changes files. A new agent starts on Sonnet on Claude Code, at high
-effort, reading only. The models are those the [workflows](#workflows)
-offer, by harness. Save keeps the agent, Cancel goes back without it, and
+effort, reading only. The models are those each harness offers, as
+[workflows](#workflows) lists them. Save keeps the agent, Cancel goes back without it, and
 Remove, on an agent already kept, asks once and takes it away. Opening one
 of the user's own opens the same form with what it holds. Opening a
 shipped agent opens the same form too: a shipped agent the user saved
@@ -421,18 +423,23 @@ work and review to. It holds a name, the orchestrator's model, and steps in
 order. The roles are fixed: the orchestrator is the session the user talks
 to, a worker does a piece of work, and a reviewer checks it.
 
+Workflows are kept in the settings file, and no tab shows them: the window
+offers [teams](#teams) instead. A workflow the file holds still starts
+sessions as this section says, and an agent may still change one with the
+user's leave, as [an agent changing them](#an-agent-changing-them)
+describes. The default and the projects' choices are changed in the file.
+
 A model is a harness and a model name, since a model's name belongs to one
 harness. Claude Code offers the aliases its command line takes, fable, opus,
 sonnet and haiku. Codex offers Codex first, which means whatever Codex runs
 by default, then the models Codex lists, by the names its list gives them.
 The list is the one a Codex session gave when it was ready, else one read
-for the account of each open project while the tab is open: a Codex of
-Chord's own is started on the project's machine under the account's home
-and asked for its models, once for each account on each machine while the
-window is open, and again when the tab is next opened where it could not
-say or listed none. A model a workflow names that no list offers is shown
-by its id. Only the harnesses found on the machine are offered, with any a
-workflow already names so that its choice can still be shown.
+for the account of each open project while the [agents](#agents) tab is
+open: a Codex of Chord's own is started on the project's machine under the
+account's home and asked for its models, once for each account on each
+machine while the window is open, and again when the tab is next opened
+where it could not say or listed none. A model that no list offers is shown
+by its id.
 
 A step has a name, a kind and the models it may use. The models are any, or
 a chosen set across the harnesses, and the first one chosen is the default, the one
@@ -448,8 +455,7 @@ a few words, forty characters at most, and is unique among the steps of a
 workflow and among the workflows, of which there are sixteen at most, the
 upper and lower case of a letter from A to Z counting as the same. A model is named in
 one word of forty characters at most, and a step lists a model once and
-sixteen at most. The window holds a change to the same rules the settings
-file is kept by, so a change it shows is one that is kept.
+sixteen at most.
 
 A fresh install has two workflows. In Build and review the orchestrator is
 on Claude's most capable model alias, the Work step is on Sonnet, and the
@@ -464,14 +470,12 @@ workflows existed gets the same two, and a list written before Direct
 shipped is given Direct once, at its end, unless it holds a workflow of
 that name or as many as it may. They are ordinary workflows, changed,
 renamed or deleted like any other, and one deleted stays deleted. New
-sessions follow none until the user turns a workflow on, in this tab or by
-picking one when starting a session.
+sessions follow none until the file names a default or a project's choice.
 
 A workflow in the file that does not read or keep the rules is not used, and
 neither is a default or a project choice that names it. It is not dropped:
-the tab names it, says the rule it breaks, and offers to remove it from the
-file, and until then every write keeps it in the file as it was written,
-with the default and the project choices that named it. Choosing another
+until it is removed from the file, every write keeps it there as it was
+written, with the default and the project choices that named it. Choosing another
 default, or another workflow for such a project, takes the place of the one
 in the file. Its name stays taken, so no other workflow can be given it and
 then be read as the one the file's choices mean. A choice naming a workflow
@@ -514,89 +518,80 @@ whether to resume it without a workflow. A session another session started follo
 none. How a workflow's session directs the others is in
 [orchestrator](../orchestrator.md).
 
-The tab lists the workflows across the top, with the default tagged, and
-New workflow after them. The picked one has its name above the diagram,
-with Duplicate. The diagram draws the orchestrator as the frame, since it is
-the session the user talks to, with its model in a menu on its head. Inside
-sit the steps in order with an arrow between each, each showing its role
-and its models. A plus on every arrow opens a menu to add a work step or a
-review step there; the step added is picked and has the keyboard. A new
-review is numbered after the reviews before it, Review 2 after Review, and
-one added before a review already there is a Check, so no number reads out
-of order. The
-picked step has two arrows above it that move it earlier or later, as Alt
-with the left or right arrow key does on the step. A review that goes back
-draws a line under the row from itself to the step it repeats, lines that
-arrive at one step standing side by side so they do not cross, and under all
-the lines a label names the review and says where the work goes back to,
-until when (the reviewer approves, the orchestrator agrees, or both approve)
-and how many times at most, as the step's settings say it. A review that
-sends the work back at most three times reviews a piece four times at most;
-the round counted on a review's header and in the question past the limit
-count reviews the same way. The steps share the width there is; where even
-the narrowest steps do not fit, the row scrolls sideways under the
-orchestrator's head, which stays in place, with the hidden edge faded, and
-the step picked is scrolled into view.
+A project's choices are kept with the settings, by project path.
 
-The diagram stays at the top while the rest of the tab works around it.
-Picking a step shows its settings beside the diagram where the window has
-room for a workflow of four steps and the settings together, and under it
-where it has not, whatever the number of steps; there they take two columns
-where they have the width. They scroll on their own and the diagram does
-not move. The settings read from top to bottom: the step's name, whether it
-does work or reviews it, the models it may use with the default marked,
-and the settings of its kind, a review's ending in one sentence such as go
-back to Work at most 3 times, then ask me. A model other than the default can
-be made the default with a button that shows when the pointer is over its row
-or the row has focus, and always where there is no hover. Any model stays
-ticked until a model is chosen.
-Removing a step, at the foot of its settings, asks first and says which
-reviews would go back elsewhere. Renaming a step carries the reviews that go
-back to it, and removing or moving one points a review that went back to it
-at the nearest work step before the review.
+## Teams
 
-A control the rules would always refuse is dimmed and does nothing, and says
-why when the pointer rests on it and to a screen reader: moving a step past
-the end, or where a review would come first; removing the only step, or one
-whose review would then come first; and turning off the one way left for a
-review to pass. A change whose refusal cannot be known before, such as a
-name another step has, is said beside the control it came from until
-another step is picked. A change the settings file refuses, when it cannot
-be written, is said at the top of the tab, and the window shows what is
-stored. Every control can be reached with the keyboard, and the two kinds
-are a radio group the arrow keys move through.
+A team is the agents a lead may call and the gates their work passes, as
+[teams](../teams.md) describes. The settings file keeps them in `teams`, a
+list in the order the user keeps them, beside `workflows`.
 
-Under the diagram, a box, Hand out work only as sessions you can see, says
-whether the orchestrator keeps its own subagents, with a line on what that
-means. What the orchestrator is told unfolds into the instructions the
-workflow comes to: a short numbered list. The first tells the orchestrator
-to direct the work rather than do it, and to delegate by starting sessions
-with the workbench's `start` tool, not with its own subagents, or, where it
-keeps them, to use them for help and not for a piece of the work; to name
-the step each start is for, give the harness and the model each step names
-and no model for Codex's own default, and name, for a review, the session
-whose work it checks. Then each step has a sentence naming the step, what a
-piece has come out of or passed before it, the models it may use with the
-first as the one to use, and how many of its sessions may run at once,
-with each to be stopped once its work is taken up and nothing more is
-wanted from it. For a review, the sentence says when the work passes, and
-that its review is stopped once it does. When it does not pass, the work
-goes back with `send` to the piece's own session for the step it returns
-to, resumed first if it is not running, or carried on in a new session
-that names it where the orchestrator stopped it; the sentence names the
-steps the piece is taken through again, says that it is reviewed again by a new review or
-a line to the reviewer, how many times, and that the user is asked after
-that. The last sentence says to report to the user once every piece has
-come out of or passed the last step.
+A team is a name, a few words of 40 characters at most with no quotation
+marks and nothing unprintable, and unique among the teams ignoring case,
+of which there are 16 at most; `members`, from 1
+to 16, each an agent's title once, with `models`, each a harness and a
+model's name, 16 at most; and `gates`, 16 at most, each naming one of its
+members in `who`, `plan` or `change` in `when`, and optionally `touches`,
+from 1 to 16 globs relative to the project of 200 characters at most,
+with no part that is empty, `.` or `..`, and no backtick or unprintable
+character. One
+member approves the plan or the change once at most. `startOnly` is
+written only when the lead may change files itself. A team sets neither
+how many sessions of a member run at once nor how many times a gate asks
+for changes: Chord runs three at once and lets a gate ask three times. A
+`count`, `rounds` or `lead` in the file is kept as written and not used.
 
-The foot always shows. A switch there marks the workflow for new sessions, with a line
-saying which workflow new sessions start with. Turning it off leaves them
-with none. Delete workflow stands apart at the other end, drawn as
-destructive, and asks first, saying what follows: new sessions starting with
-none, or projects following the default again. After what the orchestrator
-is told, Project choices lists each open project with a menu: as for new
-sessions, no workflow, or one of the workflows. The choices are kept with
-the settings, by project path.
+The [agents](#agents) tab lists the teams in use above the agents, with
+New team at the foot. A team opens on one screen: its name, its agents
+with Add at their end, and its gates, each a sentence saying who approves
+and when, with its menu holding the paths it waits on and Remove gate. Add
+a gate asks who approves, the agents that only read listed first, and puts
+the agent picked on the team. Taking an agent off the team takes its gates
+with it, and the editor says so, with Undo. Save, or Enter in the name,
+keeps the team, Cancel leaves it as it was, and Remove team is in the menu
+by a kept team's name. Back, Cancel or Escape asks first whether to
+discard the changes, when there are any.
+
+Chord checks the team as it is edited and the editor shows every rule it
+breaks at once, the name's first, and Save keeps nothing until none is
+left. A glob that no file in the open projects matches yet gets a quiet
+note and does not stop the save. A team that a session in a run leads can
+be changed: the change applies to runs begun after it, and a run in
+progress keeps the team as it began. The first change writes every team in
+use to the file as `teams`, and leaves its workflows as they were.
+
+A fresh install has the two shipped teams. A file with no `teams` is given
+its teams each time it is read, and nothing of them is written to it: a
+team for each workflow that reads, in order, then each shipped team whose
+name is free, while there is room. A workflow equal, as it reads, to one
+Chord ships is given none, since the shipped teams stand for it, so a file
+whose workflows were never changed has only the shipped teams. Of a
+workflow:
+
+- the work steps become one Developer, on every model they list, or any
+  where one lists none;
+- the review steps become one Reviewer, on the models they list in the
+  same way, and a gate on the change;
+- a workflow with no review has no gate;
+- whether the orchestrator hands out work only as sessions the user can
+  see carries over;
+- the orchestrator's model, how many times a review sent the work back and
+  how many sessions a step ran at once are not carried over, since the
+  lead is the session the user starts and a team uses Chord's own counts;
+- who agrees with a review and which step it goes back to are not kept,
+  since a team has no order of steps.
+
+A workflow whose team would break a rule, or whose name a team already
+has, is given none, and stays in the workflows only. The workflows
+themselves are read and written as they were, the default and the
+projects' choices with them, so a version of Chord that knows no teams
+goes on reading them. A file that has `teams`, an empty list among them, is
+never given them again.
+
+A team in the file that does not read or keep the rules is not used, and
+is kept as written in its place in the list until a team of its name
+replaces it. A field of a team, a member, a gate or a model that this
+version does not know is kept as written.
 
 ## Accounts
 
@@ -763,7 +758,7 @@ on, whichever machine the agent runs on.
 ## Where they are kept
 
 The appearance, the look, compact mode, the palette, the fonts, the shortcuts, the answer
-on hooks, the accounts, your own agents, the workflows and the projects' choices among them,
+on hooks, the accounts, your own agents, the workflows and the projects' choices among them, the teams,
 how long past sessions stay listed, how long a project stays active, what
 new sessions start on, the notifications, your own themes, the backgrounds and the cards' shares are kept for the machine, in `settings.json` under `~/.chord`, and every
 window on the machine follows the same file.
