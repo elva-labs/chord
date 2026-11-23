@@ -188,8 +188,9 @@ pub enum Event {
         effort: Option<String>,
         efforts: Vec<String>,
     },
-    /// Whether the session reads only changed: while `on`, the agent is
-    /// kept from changing files by its own tools.
+    /// Whether the session reads only changed: while `on`, the agent's
+    /// edits of files are refused, and a command it runs is the mode's to
+    /// allow.
     ReadsOnly { on: bool },
     /// The slash commands and skills changed, or the agent said more of
     /// which is which. All of them, as they now are.
@@ -325,8 +326,9 @@ pub enum Event {
     /// made it ask, when there is one; `choices` the answers it takes, each
     /// with what it remembers. `truncated` says a string in `input` was
     /// cut short; the answer carries the whole input back regardless.
-    /// `reads_only` says it asks while the session reads only, so that
-    /// allowing it lets the session change files.
+    /// `reads_only` says the session reads only and the tool is one that
+    /// reading only puts to the user, so that allowing it may let the
+    /// session change something.
     PermissionAsked {
         request: String,
         call: Option<String>,

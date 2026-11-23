@@ -781,8 +781,11 @@ struct AppServer {
     /// Whether Codex's own subagent tools are turned off for the thread.
     start_only: bool,
     /// Whether the session reads only: its turns run in the read-only
-    /// sandbox whatever the mode, and its asks to change files are turned
-    /// down without asking the user.
+    /// sandbox whatever the mode, its asks to change files are turned down
+    /// without asking the user, and an ask to widen the sandbox or to run
+    /// a server's tool other than the workbench's own contained ones says
+    /// the session reads only. A command approval is the mode's to answer,
+    /// and approving it runs the command outside the sandbox.
     reads_only: bool,
     /// The core's home and the session's token, where a team's run it
     /// leads or is in may hold handing the work over.
@@ -2545,8 +2548,10 @@ impl AppServer {
                 )
             }
             // Reading only turns down every change of a file, whatever the
-            // mode would ask. Anything else asked while it is on reaches
-            // the user saying that the session reads only.
+            // mode would ask. A command approval is the mode's to answer, as
+            // it is with reading only off, and approving it runs the command
+            // outside the sandbox; an ask to widen the sandbox reaches the
+            // user saying that the session reads only.
             "item/fileChange/requestApproval" if self.reads_only => {
                 out.writes.push(turned_down(id, method));
                 return;
@@ -2670,7 +2675,8 @@ impl AppServer {
                     truncated: false,
                     description: text(&params["message"]),
                     path: None,
-                    reads_only: self.reads_only,
+                    reads_only: self.reads_only
+                        && !(attached && crate::show::CONTAINED_TOOLS.contains(&tool.as_str())),
                     choices: asked.offers(),
                 });
                 self.asked.insert(key, asked);
@@ -2712,7 +2718,7 @@ impl AppServer {
             truncated: false,
             description,
             path,
-            reads_only: self.reads_only,
+            reads_only: self.reads_only && matches!(asked.asking, Asking::Permissions { .. }),
             choices: asked.offers(),
         });
         self.asked.insert(key, asked);

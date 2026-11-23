@@ -2785,6 +2785,27 @@ mod tests {
     }
 
     #[test]
+    fn each_tool_left_to_the_mode_while_reading_only_is_one_the_server_offers() {
+        let mut offered = tools();
+        offered.extend(conductor_tools());
+        let names: Vec<&str> = offered
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect();
+        for tool in show::CONTAINED_TOOLS {
+            assert!(names.contains(tool), "{tool}");
+            assert!(
+                show::contained_tool(&format!("mcp__chord__{tool}")),
+                "{tool}"
+            );
+        }
+        assert!(!show::contained_tool("notes"));
+        assert!(!show::contained_tool("mcp__chord__start"));
+        assert!(!show::contained_tool("mcp__chord__browser_snapshot"));
+        assert!(!show::contained_tool("mcp__other__notes"));
+    }
+
+    #[test]
     fn lists_a_plugin_tool_after_the_app_s_own() {
         let home = home("plugin-list");
         let ask = |home: &Path| {

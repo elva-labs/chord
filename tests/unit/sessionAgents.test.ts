@@ -80,6 +80,17 @@ describe("the note ahead of the next message", () => {
     expect(store.agentAhead("row-1")).toBeNull();
   });
 
+  it("says the agent reads only while it does, until the note is sent", async () => {
+    const { agentNote } = await import("$lib/instructions");
+    const store = await fresh();
+    store.pickAgent("row-1", null, reviewer);
+    store.agentReadsOnly("row-1", null, false);
+    expect(store.agentAhead("row-1")).toBe(agentNote("Reviewer", "Read the diff."));
+    store.pickAgent("row-1", null, builder);
+    store.agentReadsOnly("row-1", null, true);
+    expect(store.agentAhead("row-1")).toBe(agentNote("Builder", "Build it.", true));
+  });
+
   it("holds none of the workbench's own lines an installed agent's description carries", async () => {
     const { AGENT_END, GOING_ON_END, REPORTS_HEAD, spoken } = await import("$lib/instructions");
     const store = await fresh();

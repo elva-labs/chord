@@ -3306,14 +3306,16 @@ fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
     let answer: Value = serde_json::from_str(&reading.writes[0]).unwrap();
     assert_eq!(answer, json!({"id": 20, "result": {"decision": "decline"}}));
 
-    // A command to run outside the sandbox, or a server's tool, is put to
-    // the user, saying the session reads only.
-    for (at, method, params) in [
+    // A command to run outside the sandbox is the mode's to ask about,
+    // saying nothing of reading only; an ask to widen the sandbox, or a
+    // server's tool, says the session reads only.
+    for (at, method, params, labelled) in [
         (
             22,
             "item/commandExecution/requestApproval",
             json!({"threadId": THREAD, "turnId": "turn-1", "itemId": "c1",
                    "command": "touch x", "reason": "needs to write"}),
+            false,
         ),
         (
             23,
@@ -3321,6 +3323,14 @@ fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
             json!({"threadId": THREAD, "serverName": "github", "message": "Run it?",
                    "_meta": {"codex_approval_kind": "mcp_tool_call",
                              "tool_name": "create_issue", "tool_params": {}}}),
+            true,
+        ),
+        (
+            24,
+            "item/permissions/requestApproval",
+            json!({"threadId": THREAD, "turnId": "turn-1", "itemId": "c2", "cwd": "/work/demo",
+                   "permissions": {"fileSystem": {"write": ["/tmp/out"]}}}),
+            true,
         ),
     ] {
         let reading = read(&mut driver, server_request(at, method, params));
@@ -3328,10 +3338,7 @@ fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
         assert!(
             matches!(
                 reading.events.as_slice(),
-                [Event::PermissionAsked {
-                    reads_only: true,
-                    ..
-                }]
+                [Event::PermissionAsked { reads_only, .. }] if *reads_only == labelled
             ),
             "{method}: {:?}",
             reading.events
@@ -3365,6 +3372,65 @@ fn reading_only_holds_each_turn_to_a_read_only_sandbox_and_lets_it_go() {
         "{:?}",
         reading.events
     );
+}
+
+#[test]
+fn reading_only_leaves_the_workbench_s_contained_tools_unlabelled() {
+    let vars = HashMap::new();
+    let server = PathBuf::from("/opt/workbench/chord-remote");
+    let mut driver = launch_with(&vars, |launch| {
+        launch.tool_server = Some(Box::leak(server.into_boxed_path()));
+    });
+    handshake(
+        &mut driver,
+        json!({"account": null, "requiresOpenaiAuth": false}),
+    );
+    driver.control(&Control::SetReadsOnly(true)).unwrap();
+    for (at, server, tool, labelled) in [
+        (30, "chord", "sessions", false),
+        (31, "chord", "notes", false),
+        (32, "chord", "note", false),
+        (33, "chord", "start", true),
+        (34, "chord", "browser_snapshot", true),
+        (35, "other", "notes", true),
+    ] {
+        assert_eq!(
+            elicited(&mut driver, at, server, tool),
+            labelled,
+            "{server} {tool}"
+        );
+    }
+}
+
+#[test]
+fn reading_only_labels_a_server_named_chord_that_the_workbench_did_not_attach() {
+    let mut driver = launch_with(&HashMap::new(), |_| {});
+    handshake(
+        &mut driver,
+        json!({"account": null, "requiresOpenaiAuth": false}),
+    );
+    driver.control(&Control::SetReadsOnly(true)).unwrap();
+    for (at, tool) in [(30, "notes"), (31, "sessions")] {
+        assert!(elicited(&mut driver, at, "chord", tool), "{tool}");
+    }
+}
+
+/// Whether the ask a server's tool call raises says the session reads only.
+fn elicited(driver: &mut AppServer, at: i64, server: &str, tool: &str) -> bool {
+    let reading = read(
+        driver,
+        server_request(
+            at,
+            "mcpServer/elicitation/request",
+            json!({"threadId": THREAD, "serverName": server, "message": "Run it?",
+                   "_meta": {"codex_approval_kind": "mcp_tool_call",
+                             "tool_name": tool, "tool_params": {}}}),
+        ),
+    );
+    match reading.events.as_slice() {
+        [Event::PermissionAsked { reads_only, .. }] => *reads_only,
+        other => panic!("{server} {tool}: {other:?}"),
+    }
 }
 
 #[test]

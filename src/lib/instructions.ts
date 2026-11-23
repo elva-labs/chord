@@ -43,34 +43,56 @@ function briefingAt(words: string): { briefing: string; rest: string } | null {
 
 /** The note an agent picked on the composer goes ahead of the user's next
     message with: its first line names the agent, its description follows,
-    and the end line closes it, which the description never holds. */
+    and the end line closes it, which the description never holds. An
+    agent that reads only is told so on the line before the end line. */
 const AGENT_HEAD = /^From the workbench, not the user: from this message on, work as the agent "(.*)", as described below\.$/;
 export const AGENT_END = "End of the agent's description.";
+
+/** The line an agent that reads only is told just ahead of the end line.
+    Its edits of files are refused anyway, but a command it runs is left
+    to the mode, so this is what keeps a command from changing files. */
+export const AGENT_READS_ONLY = "You read only: change no files, whether by editing them or by a command you run.";
 
 /** How each of the workbench's own notes begins. */
 const NOTE_HEAD = "From the workbench, not the user";
 
-/** The note that tells a conversation to work as the agent `title`. The
-    description, which may be a repository's text, holds none of the
-    workbench's own lines: a line that begins as one of its notes does, or
-    that ends one, is left out. */
-export function agentNote(title: string, text: string): string {
+/** The note that tells a conversation to work as the agent `title`, and,
+    where `readsOnly`, that it changes no files. The description, which may
+    be a repository's text, holds none of the workbench's own lines: a line
+    that begins as one of its notes does, that ends one, or that says the
+    agent reads only, is left out. */
+export function agentNote(title: string, text: string, readsOnly = false): string {
   const description = text
     .split("\n")
     .filter((line) => {
       const bare = line.trim();
-      return !bare.startsWith(NOTE_HEAD) && bare !== AGENT_END && bare !== GOING_ON_END;
+      return (
+        !bare.startsWith(NOTE_HEAD) &&
+        bare !== AGENT_END &&
+        bare !== GOING_ON_END &&
+        bare !== AGENT_READS_ONLY
+      );
     })
     .join("\n")
     .trim();
   return [
     `From the workbench, not the user: from this message on, work as the agent "${oneLine(title)}", as described below.`,
     description,
+    ...(readsOnly ? [AGENT_READS_ONLY] : []),
     AGENT_END,
   ].join("\n");
 }
 
 const oneLine = (title: string) => title.replace(/\s+/g, " ").trim();
+
+/** The agent note `note` saying the agent reads only where `readsOnly`,
+    and not saying so otherwise. */
+export function agentNoteReadsOnly(note: string, readsOnly: boolean): string {
+  const lines = note.split("\n").filter((line) => line !== AGENT_READS_ONLY);
+  const end = lines.lastIndexOf(AGENT_END);
+  if (readsOnly && end !== -1) lines.splice(end, 0, AGENT_READS_ONLY);
+  return lines.join("\n");
+}
 
 /** Whether `text` holds a line of an agent note: only the workbench writes
     one, so a session's words that do would read as the workbench's. */
@@ -79,7 +101,8 @@ export function holdsAgentNote(text: string): boolean {
 }
 
 /** The agent note at the start of `words`, the agent it names with its
-    description, and the words after it; null where it is not there whole.
+    description, which leaves out the line saying it reads only, and the
+    words after it; null where it is not there whole.
     A plugin's words never hold a line of one, so a note ahead of a
     plugin's start prompt is the workbench's. */
 export function agentAt(words: string): { agent: { title: string; text: string }; rest: string } | null {
@@ -89,7 +112,13 @@ export function agentAt(words: string): { agent: { title: string; text: string }
   const end = lines.indexOf(AGENT_END);
   if (end === -1) return null;
   return {
-    agent: { title: head[1], text: lines.slice(1, end).join("\n").trim() },
+    agent: {
+      title: head[1],
+      text: lines
+        .slice(1, lines[end - 1] === AGENT_READS_ONLY ? end - 1 : end)
+        .join("\n")
+        .trim(),
+    },
     rest: lines.slice(end + 1).join("\n").replace(/^\n+/, ""),
   };
 }

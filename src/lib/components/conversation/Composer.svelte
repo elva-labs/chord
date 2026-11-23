@@ -1727,7 +1727,7 @@
           aria-haspopup="menu"
           aria-expanded={menu === "mode"}
           title={readsOnly
-            ? `${working?.readsOnly ? `Set by ${working.title}. ` : ""}Reads only: file edits are refused, and anything else that could change files asks you first. ${modeLabel} decides the rest.`
+            ? `${working?.readsOnly ? `Set by ${working.title}. ` : ""}Reads only: file edits are refused and the agent is told to change nothing. A command it runs is left to ${modeLabel}.`
             : "What the session may do without asking"}
           data-testid="mode-chip"
           data-reads-only={readsOnly ? "" : undefined}

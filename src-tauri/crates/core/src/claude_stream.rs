@@ -90,10 +90,9 @@ pub(crate) const PLAN_TOOL: &str = "ExitPlanMode";
 pub(crate) const TODO_TOOL: &str = "TodoWrite";
 
 /// The id of the hook the stream registers for every tool, which the agent
-/// calls back before each use: a tool that changes files is refused while
-/// the session reads only, and a command that hands the work over while a
-/// gate of the session's team run holds it; anything else is left to the
-/// mode.
+/// calls back before each use: [`Stream::hooked`] answers it, by whether the
+/// session reads only and by whether a gate of its team run holds a command
+/// that hands the work over.
 const READS_ONLY_HOOK: &str = "chord_reads_only";
 
 /// The id of the hook the stream registers for the end of a turn in a
@@ -106,10 +105,20 @@ const TEAM_HOLD_HOOK: &str = "chord_team_hold";
 const READS_ONLY_ASK: &str = "This session reads only. Allowing this lets it change files.";
 
 /// The tools the reads-only hook leaves to the mode besides those that
-/// only read: a subagent's own tool calls pass the same hook, the
-/// question and the plan go to the user anyway, and a tool search only
-/// loads tools.
+/// only read: a command, and the tools that watch, read or stop one running
+/// in the background, are the mode's to allow, as the agent is told to
+/// change nothing; a subagent's own tool calls pass the same hook; the
+/// question and the plan go to the user anyway; and a tool search only
+/// loads tools. A tool is here under each name a harness has given it.
 const LEFT_TO_MODE: &[&str] = &[
+    "Bash",
+    "PowerShell",
+    "Monitor",
+    "TaskOutput",
+    "TaskStop",
+    "BashOutput",
+    "KillShell",
+    "KillBash",
     "Agent",
     "Task",
     "AskUserQuestion",
@@ -289,6 +298,7 @@ impl Protocol for ClaudeStream {
             launch.effort,
         );
         stream.reads_only = launch.reads_only;
+        stream.attached = launch.tool_server.is_some();
         stream.run = launch
             .home
             .zip(launch.token)
@@ -537,6 +547,9 @@ struct Stream {
     effort: Option<String>,
     /// Whether the tools that change files are refused.
     reads_only: bool,
+    /// Whether the session was started with the workbench's tool server,
+    /// so that a tool named for it is the workbench's.
+    attached: bool,
     /// The core's home and the session's token, by which the team's run it
     /// leads or is in is read.
     run: Option<(PathBuf, String)>,
@@ -1049,6 +1062,7 @@ impl Stream {
             asked_mode: mode.map(str::to_string),
             effort: effort.map(str::to_string),
             reads_only: false,
+            attached: false,
             run: None,
             refused: None,
             models: Vec::new(),
@@ -2095,10 +2109,12 @@ impl Stream {
 
     /// The answer to the reads-only hook for one tool use. A command that
     /// hands the work over is refused while the session's team run holds
-    /// that. While the session reads only, a tool that writes files is
-    /// refused, one that only reads is left to the mode, and any other is
-    /// put to the user whatever the mode or the allow rules say. Off, every
-    /// tool is left to the mode.
+    /// that, whether the session reads only or not. While the session reads
+    /// only, a tool that edits files is refused; one that only reads, a
+    /// command, and the workbench's own tools that change no file and reach
+    /// nothing outside it, where its server is attached, are left to the
+    /// mode; and any other is put to the user whatever the mode or the allow
+    /// rules say. Off, every tool is left to the mode.
     fn hooked(&self, id: &str, input: &Value) -> Value {
         let tool = input["tool_name"].as_str().unwrap_or_default();
         let handing_over = (tool == "Bash")
@@ -2120,6 +2136,7 @@ impl Stream {
         } else if !self.reads_only
             || crate::agents::READING_TOOLS.contains(&tool)
             || LEFT_TO_MODE.contains(&tool)
+            || (self.attached && crate::show::contained_tool(tool))
         {
             json!({})
         } else if crate::agents::CHANGING_TOOLS.contains(&tool) {
@@ -4065,6 +4082,33 @@ mod tests {
     }
 
     #[test]
+    fn reading_only_in_a_held_run_is_refused_a_push_and_left_its_other_commands() {
+        let (mut stream, home, _folder) = in_a_run("stream-push-reads-only", "rev");
+        stream.control(&Control::SetReadsOnly(true)).unwrap();
+        let refused = called_back(&mut stream, READS_ONLY_HOOK, bash("git push origin main"));
+        assert_eq!(refused["hookSpecificOutput"]["permissionDecision"], "deny");
+        let reason = refused["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap();
+        assert!(reason.starts_with("Handing over is held: "), "{reason}");
+        assert_eq!(
+            called_back(&mut stream, READS_ONLY_HOOK, bash("git diff")),
+            json!({}),
+            "a command that hands nothing over is left to the mode"
+        );
+        crate::run::waive(&home, "lead", 1, "Checked it myself.").unwrap();
+        assert_eq!(
+            called_back(&mut stream, READS_ONLY_HOOK, bash("git push origin main")),
+            json!({}),
+            "a waived gate holds nothing, and a command is the mode's"
+        );
+        assert_eq!(
+            hook(&mut stream, "Edit")["hookSpecificOutput"]["permissionDecision"],
+            "deny"
+        );
+    }
+
+    #[test]
     fn a_held_lead_is_sent_back_once_each_time_it_would_stop() {
         let (mut stream, home, _folder) = in_a_run("stream-stop", "lead");
         let initialize: Value = serde_json::from_str(&stream.opening()[0]).unwrap();
@@ -4126,12 +4170,7 @@ mod tests {
             );
             assert_eq!(decided["hookSpecificOutput"]["hookEventName"], "PreToolUse");
         }
-        for tool in [
-            "Bash",
-            "mcp__workbench__send",
-            "mcp__github__create_issue",
-            "Unheard",
-        ] {
+        for tool in ["mcp__chord__send", "mcp__github__create_issue", "Unheard"] {
             let decided = hook(&mut stream, tool);
             assert_eq!(
                 decided["hookSpecificOutput"]["permissionDecision"], "ask",
@@ -4163,6 +4202,63 @@ mod tests {
     }
 
     #[test]
+    fn reading_only_leaves_a_command_and_the_workbench_s_contained_tools_to_the_mode() {
+        let mut stream = stream();
+        stream.attached = true;
+        stream.control(&Control::SetReadsOnly(true)).unwrap();
+        for tool in [
+            "Bash",
+            "Monitor",
+            "TaskOutput",
+            "TaskStop",
+            "BashOutput",
+            "KillShell",
+            "mcp__chord__notes",
+            "mcp__chord__note",
+            "mcp__chord__sessions",
+            "mcp__chord__wait",
+            "mcp__chord__read",
+            "mcp__chord__selection",
+        ] {
+            assert_eq!(
+                hook(&mut stream, tool),
+                json!({}),
+                "{tool} is left to the mode"
+            );
+        }
+        for tool in [
+            "mcp__chord__start",
+            "mcp__chord__send",
+            "mcp__chord__terminal",
+            "mcp__chord__browser_snapshot",
+            "mcp__chord__browser_console",
+            "mcp__chord__browser_screenshot",
+            "mcp__github__create_issue",
+            "mcp__other__notes",
+        ] {
+            assert_eq!(
+                hook(&mut stream, tool)["hookSpecificOutput"]["permissionDecision"],
+                "ask",
+                "{tool}"
+            );
+        }
+    }
+
+    #[test]
+    fn reading_only_asks_a_tool_named_for_the_workbench_where_its_server_is_not_attached() {
+        let mut stream = stream();
+        stream.control(&Control::SetReadsOnly(true)).unwrap();
+        for tool in ["mcp__chord__notes", "mcp__chord__read"] {
+            assert_eq!(
+                hook(&mut stream, tool)["hookSpecificOutput"]["permissionDecision"],
+                "ask",
+                "{tool}"
+            );
+        }
+        assert_eq!(hook(&mut stream, "Bash"), json!({}));
+    }
+
+    #[test]
     fn an_ask_the_reads_only_hook_made_says_so() {
         let mut stream = stream();
         let ask = |stream: &mut Stream, id: &str, reason: Value| {
@@ -4172,8 +4268,8 @@ mod tests {
                     "request_id": id,
                     "request": {
                         "subtype": "can_use_tool",
-                        "tool_name": "Bash",
-                        "input": { "command": "git commit -am x" },
+                        "tool_name": "mcp__github__create_issue",
+                        "input": { "title": "x" },
                         "tool_use_id": "c1",
                         "decision_reason": reason,
                         "decision_reason_type": "hook",
@@ -4184,7 +4280,7 @@ mod tests {
         };
         let reading = ask(&mut stream, "r1", json!(READS_ONLY_ASK));
         assert!(
-            matches!(&reading.events[..], [Event::PermissionAsked { reads_only: true, tool, .. }] if tool == "Bash"),
+            matches!(&reading.events[..], [Event::PermissionAsked { reads_only: true, tool, .. }] if tool == "mcp__github__create_issue"),
             "{:?}",
             reading.events
         );

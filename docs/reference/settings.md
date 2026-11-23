@@ -365,7 +365,9 @@ whether it reads only or changes files.
 The tab lists the agents Chord ships first, Researcher, Developer,
 Debugger, Tester, Reviewer, Security reviewer, Cloud architect and Docs
 writer, then the user's own in the order they were made, and New agent at
-the foot. A lock marks an agent that reads only.
+the foot. A lock marks an agent that reads only, and its title says what
+that does: file edits are refused, the agent is told to change nothing, and
+a command it runs is left to the session's mode.
 
 New agent opens a form: the title, the description, and the line of what
 it runs on, which opens to choose the model, the effort, and Reads only or
