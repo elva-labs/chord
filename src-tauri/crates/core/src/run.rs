@@ -7,24 +7,26 @@
 //! adds; none is ever removed. A plan is kept in versions, each with a
 //! hash of its text and its paths sorted. The run's work is in places:
 //! the lead's folder and each folder a member that changes files joined
-//! in. The change in a place is its tree as it stands, untracked files
-//! included, and the paths changed there since the run began, or for a
-//! folder other than the lead's, since the newest commit it shares with
-//! the run's. A verdict names
-//! the plan version or the place and tree its member read, is refused when
-//! that is no longer what stands, and records the hash it was given on, so
-//! a plan or a tree that changed since makes an approval out of date, and
-//! a rebase that keeps the tree keeps it. A gate on the change is judged in
-//! each place something changed in, and a push is judged against them all
-//! and the folder of the session that pushes, since worktrees share their
-//! branches.
+//! in; a member's folder that is gone is left out. The change in a place
+//! is the tree of its checkout as it stands, untracked files included, and
+//! the paths changed there since the run began, or for a folder other than
+//! the lead's, since the newest commit it shares with the run's. Paths, in
+//! the change and in a gate, are measured from the run's folder. A verdict
+//! names the plan version or the place and tree its member read, is
+//! refused when that is no longer what stands, and records the hash it was
+//! given on, so a plan or a tree that changed since makes an approval out
+//! of date, and a rebase that keeps the tree keeps it. A gate on the change
+//! is judged in each place something changed in, and a push is judged
+//! against them all, since worktrees share their branches.
 //!
 //! A gate is Waiting, Approved, Out of date, Waived or Not needed. While a
 //! gate on the plan is open, building is held: starting a session that
 //! changes files. While any gate is open, handing over is held: the lead's
-//! done, a pull request, a merge and a push. A gate that asked for changes
-//! as many times as its rounds waits for the user, whose waiver, with a
-//! reason, is the only way past it, and lasts for this run.
+//! done, a pull request, a merge and a push. A push and a pull request send
+//! commits alone, so they are held too while a place where a gate on the
+//! change stands approved holds work that is not committed. A gate that
+//! asked for changes as many times as its rounds waits for the user, whose
+//! waiver, with a reason, is the only way past it, and lasts for this run.
 //!
 //! The record is kept in a small database in the core's home, written by
 //! the tool server and read by the window and the harnesses' holds.
@@ -287,6 +289,8 @@ pub struct Place {
     pub folder: PathBuf,
     /// The commit the change there counts from.
     pub base: Option<String>,
+    /// The tree of the commit the folder's branch is on.
+    pub head: Option<String>,
     /// The folder's tree, or why it could not be read.
     pub tree: Result<String, String>,
     /// The paths changed there since the base, or why they could not be
@@ -295,11 +299,13 @@ pub struct Place {
 }
 
 impl Place {
-    fn read(folder: &Path, base: Option<&str>) -> Place {
+    /// The place a folder is, with the paths changed there measured from
+    /// `from`, where the run's folder is in the repository.
+    fn read(folder: &Path, from: &str, base: Option<&str>) -> Place {
         let tree = git::tree_hash(folder);
         let changed = tree
             .clone()
-            .and_then(|tree| git::changed_paths(folder, base, &tree))
+            .and_then(|tree| git::changed_paths(folder, from, base, &tree))
             .map_err(|e| {
                 format!(
                     "what the change in {} touches cannot be read: {e}",
@@ -309,6 +315,7 @@ impl Place {
         Place {
             folder: folder.to_path_buf(),
             base: base.map(str::to_string),
+            head: git::head_tree(folder),
             tree,
             changed,
         }
@@ -331,6 +338,8 @@ pub struct State {
     pub plan: Option<Plan>,
     /// The folders the run's work is in, the lead's first.
     pub places: Vec<Place>,
+    /// The folders of members that are gone, left out of the places.
+    pub gone: Vec<PathBuf>,
     /// The paths the plan names and those changed in every place.
     pub paths: Vec<String>,
     pub gates: Vec<GateState>,
@@ -392,6 +401,31 @@ impl State {
     pub fn handing_over_held(&self) -> Option<String> {
         self.first_open(None)
             .map(|gate| format!("Handing over is held: {}.", gate.reason))
+    }
+
+    /// Why a push or a pull request is held beyond handing over: a place
+    /// where a gate on the change stands approved holds work that is not
+    /// committed, and only commits go out.
+    pub fn uncommitted_held(&self) -> Option<String> {
+        let approved = |place: &Place| {
+            self.gates
+                .iter()
+                .flat_map(|gate| &gate.folders)
+                .any(|folder| {
+                    folder.standing == Standing::Approved && same(&folder.folder, &place.folder)
+                })
+        };
+        let place = self.places.iter().find(|place| {
+            place
+                .tree
+                .as_ref()
+                .is_ok_and(|tree| place.head.as_ref() != Some(tree))
+                && approved(place)
+        })?;
+        Some(format!(
+            "Sending is held: the approved change in {} is not all committed, and only commits go out. Commit it, or remove what should not go out.",
+            place.folder.display()
+        ))
     }
 
     /// Whether every open gate waits for the user, so nothing the lead
@@ -1023,29 +1057,19 @@ pub fn waive(home: &Path, lead: &str, gate: i64, reason: &str) -> Result<Waiver,
     })
 }
 
-/// The run of a lead as it stands now, or none where it has none.
-pub fn state(home: &Path, lead: &str) -> Result<Option<State>, String> {
-    state_with(home, lead, None)
-}
-
-/// The run of the session a token names, as its lead or a member, with
-/// the member's own folder among the places.
+/// The run of the session a token names, as its lead or a member.
 pub fn state_of(home: &Path, token: &str) -> Result<Option<State>, String> {
     let Some(runs) = Runs::existing(home)? else {
         return Ok(None);
     };
-    if runs.run(token)?.is_some() {
-        return state_with(home, token, None);
-    }
-    match runs.member(token)? {
-        Some(member) => state_with(home, &member.lead, Some(&member)),
+    match runs.lead_of(token)? {
+        Some(lead) => state(home, &lead),
         None => Ok(None),
     }
 }
 
-/// The run of a lead as it stands now, with the folder of `caller` among
-/// its places when the caller is a member.
-fn state_with(home: &Path, lead: &str, caller: Option<&Member>) -> Result<Option<State>, String> {
+/// The run of a lead as it stands now, or none where it has none.
+pub fn state(home: &Path, lead: &str) -> Result<Option<State>, String> {
     let Some(runs) = Runs::existing(home)? else {
         return Ok(None);
     };
@@ -1057,18 +1081,25 @@ fn state_with(home: &Path, lead: &str, caller: Option<&Member>) -> Result<Option
     let waivers = runs.waivers(lead)?;
     let members = runs.members(lead)?;
     let mut folders: Vec<(&Path, Option<&str>)> = vec![(&run.folder, run.base.as_deref())];
-    let changing = members.iter().filter(|member| !member.reads_only);
-    for member in changing.chain(caller) {
-        if !folders
+    let mut gone: Vec<PathBuf> = Vec::new();
+    for member in members.iter().filter(|member| !member.reads_only) {
+        if folders
             .iter()
             .any(|(folder, _)| same(folder, &member.folder))
+            || gone.contains(&member.folder)
         {
+            continue;
+        }
+        if member.folder.exists() {
             folders.push((&member.folder, member.base.as_deref()));
+        } else {
+            gone.push(member.folder.clone());
         }
     }
+    let from = git::prefix(&run.folder).unwrap_or_default();
     let places: Vec<Place> = folders
         .iter()
-        .map(|(folder, base)| Place::read(folder, *base))
+        .map(|(folder, base)| Place::read(folder, &from, *base))
         .collect();
     let mut paths: Vec<String> = plan
         .as_ref()
@@ -1094,6 +1125,7 @@ fn state_with(home: &Path, lead: &str, caller: Option<&Member>) -> Result<Option
         run,
         plan,
         places,
+        gone,
         paths,
         gates,
     }))
@@ -1443,7 +1475,8 @@ pub fn stop_held(home: &Path, token: &str) -> Option<String> {
 }
 
 /// Why a shell command a session in a run would run is refused: it hands
-/// the work over while a gate holds that. A run that cannot be read holds
+/// the work over while a gate holds that, or while approved work is not
+/// committed. A run that cannot be read holds
 /// it too. None for a command that hands nothing over, a session in no
 /// run, or a run with no gate open.
 pub fn command_held(home: &Path, token: &str, command: &str) -> Option<String> {
@@ -1451,8 +1484,11 @@ pub fn command_held(home: &Path, token: &str, command: &str) -> Option<String> {
         return None;
     }
     match state_of(home, token) {
-        Ok(state) => state?.handing_over_held().map(|held| {
-            format!("{held} Pushing and opening or merging a pull request wait until every gate passes or the user waives it.")
+        Ok(state) => state.and_then(|state| {
+            state
+                .handing_over_held()
+                .map(|held| format!("{held} Pushing and opening or merging a pull request wait until every gate passes or the user waives it."))
+                .or_else(|| state.uncommitted_held())
         }),
         Err(e) => Some(format!(
             "Handing over is held: the team's run this session is in cannot be read: {e}"

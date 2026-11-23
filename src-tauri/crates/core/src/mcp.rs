@@ -2096,7 +2096,7 @@ pub fn verdict_tool() -> Value {
 pub fn gates_tool() -> Value {
     json!({
         "name": "gates",
-        "description": "Reads the team's run you are in: the plan, its version and hash, the tree of the change in each folder the work is in, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request.",
+        "description": "Reads the team's run you are in: the plan, its version and hash, the tree of the change in each folder the work is in, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A tree is the folder's files as they are, committed or not, but only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
         "inputSchema": { "type": "object", "properties": {} }
     })
 }
@@ -2292,6 +2292,15 @@ fn gates_text(state: &crate::run::State) -> String {
                 place.folder.display()
             ),
         });
+    }
+    for folder in &state.gone {
+        lines.push(format!(
+            "{} no longer exists, so it is left out of the change.",
+            folder.display()
+        ));
+    }
+    if let Some(held) = state.uncommitted_held() {
+        lines.push(held);
     }
     for gate in &state.gates {
         lines.push(gate_line(gate));

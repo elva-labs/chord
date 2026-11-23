@@ -818,9 +818,18 @@ fn a_push_from_a_members_worktree_is_judged_on_the_change_there() {
     assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
     let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
     assert!(same(given[0].folder.as_deref().unwrap(), &tree_dir));
+    let held = command_held(home.path(), "dev", "git push origin work").unwrap();
+    assert!(held.contains("is not all committed"), "{held}");
+    assert_eq!(
+        stop_held(home.path(), "lead"),
+        None,
+        "the stop sends nothing"
+    );
+    commit(&tree_dir);
     assert_eq!(
         command_held(home.path(), "dev", "git push origin work"),
-        None
+        None,
+        "the approved tree is the one committed"
     );
 
     write(&tree_dir, "src/main.rs", "fn main() { more() }\n");
@@ -842,11 +851,67 @@ fn a_push_from_a_members_worktree_is_judged_on_the_change_there() {
     );
     given_in(home.path(), Some(&tree_dir)).unwrap();
     given_in(home.path(), Some(&dir)).unwrap();
+    commit(&tree_dir);
+    commit(&dir);
     assert_eq!(
         command_held(home.path(), "dev", "git push origin work"),
         None
     );
     let _ = std::fs::remove_dir_all(&tree_dir);
+}
+
+#[test]
+fn a_members_folder_that_is_gone_is_left_out_of_the_change() {
+    let (home, dir) = started("worktree-gone", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    let tree_dir = worktree(&dir, "gone");
+    join(
+        home.path(),
+        "lead",
+        "dev",
+        "Developer",
+        &tree_dir,
+        None,
+        false,
+        "",
+    )
+    .unwrap();
+    write(&tree_dir, "src/main.rs", "fn main() { work() }\n");
+    write(&dir, "src/main.rs", "fn main() { lead() }\n");
+    commit(&dir);
+    given_in(home.path(), Some(&dir)).unwrap();
+    assert!(command_held(home.path(), "lead", "git push").is_some());
+
+    std::fs::remove_dir_all(&tree_dir).unwrap();
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.places.len(), 1);
+    assert_eq!(now.gone, vec![tree_dir]);
+    assert_eq!(command_held(home.path(), "lead", "git push"), None);
+    assert_eq!(stop_held(home.path(), "lead"), None);
+}
+
+#[test]
+fn paths_in_a_run_in_a_subfolder_are_measured_from_it() {
+    let home = Scratch::new("run-home-subfolder");
+    let dir = repo("subfolder");
+    write(&dir, "apps/web/src/main.rs", "fn main() {}\n");
+    commit(&dir);
+    let web = dir.join("apps/web");
+    begin(home.path(), "lead", &team(SHIP_WITH_CHECKS), &web).unwrap();
+    plan(home.path(), "lead", "Add a page.", &["src/page.rs".into()]).unwrap();
+    let architect = || standing(home.path(), "Cloud architect", When::Plan).standing;
+    assert_eq!(architect(), Standing::NotNeeded);
+
+    write(&dir, "infra/main.tf", "resource {}\n");
+    assert_eq!(architect(), Standing::NotNeeded, "outside the run's folder");
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert!(
+        now.paths.contains(&"../../infra/main.tf".to_string()),
+        "{:?}",
+        now.paths
+    );
+
+    write(&web, "infra/main.tf", "resource {}\n");
+    assert_eq!(architect(), Standing::Waiting);
 }
 
 #[test]
