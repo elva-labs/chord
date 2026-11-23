@@ -45,6 +45,12 @@
   let { children } = $props();
 
   onMount(() => {
+    // The welcome and About are small windows of their own: they take the
+    // look and nothing of the workspace.
+    if (/^\/(welcome|about)\b/.test(location.pathname)) {
+      loadTheme();
+      return;
+    }
     // The window's own copies first, so the first frame is painted as the
     // last one was; the core's settings follow as soon as it answers. The
     // hooks are read before the workspace is, which is what tells a fresh

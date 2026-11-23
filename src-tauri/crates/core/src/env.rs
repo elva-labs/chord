@@ -4,7 +4,8 @@
 //! directly means no `.zshrc`, so no nvm, mise, asdf or Homebrew paths, and
 //! `claude` is simply not found on a machine where it works perfectly in a
 //! terminal. The fix is to ask the user's own shell what its environment looks
-//! like, once, and spawn everything with that.
+//! like, once, and spawn everything with that. The setup checks can ask it
+//! again, for a program installed while the app is open.
 //!
 //! Known sharp edge: a `.zshrc` that blocks forever. The capture is given a
 //! deadline, after which the shell is killed and this process's own
@@ -13,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
@@ -31,11 +32,34 @@ pub struct Environment {
     pub from_login_shell: bool,
 }
 
-static ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
+static FIRST: OnceLock<Environment> = OnceLock::new();
 
-/// Resolved once and reused. The shell is not consulted again.
+/// A later read that stands in for the first, once `refresh` has made one.
+static FRESH: RwLock<Option<&'static Environment>> = RwLock::new(None);
+
+/// Resolved at first use and reused until `refresh` reads the shell again.
 pub fn environment() -> &'static Environment {
-    ENVIRONMENT.get_or_init(resolve)
+    let fresh = *FRESH
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    fresh.unwrap_or_else(|| FIRST.get_or_init(resolve))
+}
+
+/// Reads the login shell again and uses what it says from then on, so a
+/// program installed since the first read is found and can be started. A
+/// read that fails keeps a good one from before. Each read is kept for the
+/// life of the process, a few kilobytes, since callers hold it as `'static`.
+pub fn refresh() -> &'static Environment {
+    let current = environment();
+    let read = resolve();
+    if !read.from_login_shell && current.from_login_shell {
+        return current;
+    }
+    let read: &'static Environment = Box::leak(Box::new(read));
+    *FRESH
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(read);
+    read
 }
 
 fn resolve() -> Environment {

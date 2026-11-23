@@ -1247,7 +1247,9 @@ starts. Under an account that is not signed in, the pane says so and gives
 the command to sign in with in a terminal; the workbench never signs in. A
 session that ended or could not start says why, and Resume starts it again
 on the same conversation, the thread drawn so far staying above what comes,
-with a quiet line saying when it resumed.
+with a quiet line saying when it resumed. One that could not start because
+its agent is not on the PATH also offers Open Setup, which opens the Setup
+tab in Settings.
 
 An in-Chord session opened from the past sessions, brought back after
 a restart, or moved from a terminal by the setting or by Reopen, draws its

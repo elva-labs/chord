@@ -665,6 +665,13 @@ pub fn dispatch(
             let p: AgentParams = parse(params)?;
             value(core.detect(&p.id)?)
         }
+        "setup_checks" => {
+            let fresh = params
+                .get("fresh")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            value(core.setup_checks(fresh)?)
+        }
         "pty_spawn" => {
             let p: SpawnParams = parse(params)?;
             value(core.spawn(

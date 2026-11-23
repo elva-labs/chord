@@ -4,9 +4,9 @@ Settings open from the native menu, or with <kbd>Cmd</kbd><kbd>,</kbd>
 (<kbd>Ctrl</kbd> on Windows and Linux), over the workbench. A choice applies
 at once.
 
-The settings are in seven tabs down the left. Appearance carries the
+The settings are in eight tabs down the left. Appearance carries the
 appearance, theme, compact mode, font, colour, background and custom styles sections; sessions,
-agents, accounts, plugins, keys and notifications each carry
+agents, setup, accounts, plugins, keys and notifications each carry
 the section of that name, sessions carries live updates too, and agents
 carries the teams. Opening the settings again lands on the tab last used, for as long as
 the window is open. The dialog follows the look the panes are drawn in. It
@@ -592,6 +592,26 @@ A team in the file that does not read or keep the rules is not used, and
 is kept as written in its place in the list until a team of its name
 replaces it. A field of a team, a member, a gate or a model that this
 version does not know is kept as written.
+
+## Setup
+
+The Setup tab says what Chord found on the machine: Claude Code and Codex under Agents, one of which Chord needs, and git under Source control, which worktrees and diffs need. Each is looked for on the login shell's PATH, the one a terminal would have, and asked for its version; a program that gives none within five seconds shows as Found. Every program the checks run is stopped after five seconds. A found agent is also looked at for the credentials its sign-in leaves. For Claude Code that is a variable that signs it in, such as an API key or a cloud provider's, its credentials file, the account its state file records, or on macOS the item it keeps in the keychain, of which only the presence is asked. For Codex it is the file its sign-in writes; Codex set to keep its sign-in elsewhere, such as the system's keyring, cannot be looked at, and its row says nothing about sign-in. None of this starts a conversation, spends usage or reaches the network. On macOS git counts once the developer tools are installed, since until then the git the system ships only asks for them.
+
+A found program shows its version, and a found agent Signed in or Not signed in. An agent that is not signed in shows the command that starts it, which asks for a sign-in on its first run. A program that is not found shows Not found, its install command for the platform, which a button copies, and a link to its install guide; with no command for the platform it shows the guide alone. While one agent is found, the other's row is quiet and opens on Install. While neither is, both rows are open and the tab says to install Claude Code or Codex and check again. When the login shell could not be read, or the checks could not be made, a program not found may be there all the same: the tab says so instead, and nothing is held back. Without git Chord still runs.
+
+The tab reads the machine each time it is opened, and Check again reads it once more, asking the login shell for its PATH afresh, so a program installed since Chord started is found and sessions started after that find it too. Show welcome opens the welcome over the window. The palette has Check setup, which opens this tab, and Show welcome.
+
+### The welcome
+
+The welcome is a small window of its own, fixed in size and centred, that stands in for the main window at the first launch on a machine. After a short pause the mark draws itself in the middle, moves up to its place, and the checks come in under it, the same rows as the Setup tab. The machine is read while the mark plays. With an agent found, Continue goes on to the main window, and the welcome is not shown at a launch after that. On macOS the welcome fades out as the main window fades in; elsewhere, and under reduced motion, one replaces the other at once. With no agent found, Continue is not there: the welcome says to install Claude Code or Codex, and Check again reads the machine once more. When the checks could not tell, because the login shell could not be read or the checks failed, the welcome says so in a line and offers Continue all the same. Closing the welcome before Continue quits the app as Quit does, asking first when work would be lost. A machine that ran Chord before it had a welcome does not see it.
+
+At a later launch Chord looks for an agent on the PATH, without running one, before any window shows; the main window loads meanwhile, unseen. Finding one, it shows the main window. Finding none, it shows the welcome in the main window's place, headed Chord needs an agent, with the checks shown at once and no animation. The heading follows the checks: once Check again finds an agent it reads Welcome to Chord, and Continue goes on.
+
+While the system asks for reduced motion, the mark is there at once in both the welcome and About, and the checks with it. Whether the welcome has been gone through is kept in `welcome.json` under `~/.chord`, apart from the settings.
+
+### About
+
+About is a small window of its own over the main window, with the mark, which draws itself after the same pause, the version, and a link to the project's page. The button beside the version copies it with the commit it was built from, the system with its version, and the processor, as `Chord 1.0.0 (130ca02e), macOS 27.2, arm64`, for an issue. On macOS About opens from the app menu, and on Windows and Linux from the menu button at the start of the sessions pane's header. <kbd>Esc</kbd> closes it.
 
 ## Accounts
 

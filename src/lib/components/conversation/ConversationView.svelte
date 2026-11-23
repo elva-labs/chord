@@ -24,7 +24,8 @@
   import { backOf, canGoBack, closeBack, markedOf, openBack, unrested } from "$lib/rewind.svelte";
   import { actionOf, describe } from "$lib/keys.svelte";
   import { stepsGist, workflows } from "$lib/workflows.svelte";
-  import { close, profileGone, resumeWithout, resumeWithoutProfile, type Session } from "$lib/sessions.svelte";
+  import { agentMissing, close, profileGone, resumeWithout, resumeWithoutProfile, type Session } from "$lib/sessions.svelte";
+  import { openSetup } from "$lib/settings.svelte";
   import { senderOf } from "$lib/senders.svelte";
   import { spoken } from "$lib/instructions";
   import { agentByTitle } from "$lib/agents.svelte";
@@ -438,6 +439,9 @@
               >Resume without the profile</button
             >
           {:else}
+            {#if agentMissing(session)}
+              <button tabindex="0" onclick={openSetup} data-testid="open-setup">Open Setup</button>
+            {/if}
             <button class="primary" tabindex="0" disabled={link.busy} onclick={() => resume(session.key)} data-testid="resume-session"
               >{session.status === "failed" ? "Try again" : "Resume"}</button
             >

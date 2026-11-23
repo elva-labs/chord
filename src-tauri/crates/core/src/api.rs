@@ -578,6 +578,13 @@ impl Core {
         }
     }
 
+    /// What this machine has of what the app needs, with the login shell
+    /// read afresh when `fresh` is set. See the setup module.
+    pub fn setup_checks(&self, fresh: bool) -> Result<crate::setup::Setup, String> {
+        let home = self.home.as_deref().ok_or("no home folder")?;
+        Ok(crate::setup::check(home, fresh))
+    }
+
     pub fn detect(&self, id: &str) -> Result<DetectReport, String> {
         let adapter = adapter_for(id).ok_or_else(|| format!("no adapter for {id}"))?;
         let environment = env::environment();

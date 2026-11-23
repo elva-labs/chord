@@ -92,10 +92,16 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     }
 }
 
-/// Quit, from a menu: asks first while anything would be lost.
+/// Quit, from a menu or from closing the welcome: asks first while anything
+/// would be lost. The question is put up in the main window, which shows
+/// for it when the welcome stands in its place.
 pub fn quit<R: Runtime>(app: &AppHandle<R>) {
     let leaving = Arc::clone(&app.state::<Arc<Leaving>>());
     if leaving.holds() {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.show();
+            let _ = main.set_focus();
+        }
         ask(app, &leaving, Kind::Quit);
     } else {
         app.exit(0);

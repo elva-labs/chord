@@ -49,6 +49,7 @@ pub mod run;
 pub mod scratch;
 pub mod selection;
 pub mod settings;
+pub mod setup;
 pub mod shell;
 pub(crate) mod short_lived;
 pub mod show;

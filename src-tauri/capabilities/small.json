@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "small",
+  "description": "Capability for the welcome and About",
+  "windows": [
+    "welcome",
+    "about"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "clipboard-manager:allow-write-text",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close"
+  ]
+}
