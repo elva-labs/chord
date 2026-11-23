@@ -8,6 +8,7 @@ import {
 } from "@testing-library/svelte";
 import Settings from "$lib/components/Settings.svelte";
 import { chordFor, keys, resetKeys } from "$lib/keys.svelte";
+import { SEQUENCE_TIMEOUT } from "$lib/keymap";
 import { closeSettings, openSettings, settings } from "$lib/settings.svelte";
 import { setPalette, setTheme, theme } from "$lib/theme.svelte";
 
@@ -186,6 +187,60 @@ describe("the settings", () => {
       "Diff, whole file or rendered",
     );
     expect(chordFor("review")).toEqual({ key: "d", shift: false, alt: false });
+  });
+
+  it("records a shortcut of two steps from a second key pressed soon after", async () => {
+    vi.useFakeTimers();
+    try {
+      await open("keys");
+      await fireEvent.click(screen.getByTestId("chord-review"));
+      const dialog = screen.getByTestId("settings");
+      await fireEvent.keyDown(dialog, { key: "k", ctrlKey: true });
+      expect(screen.getByTestId("chord-problem")).toHaveTextContent("agent's on macOS");
+      expect(screen.getByTestId("chord-review")).toHaveTextContent("⌃K, then…");
+      await fireEvent.keyDown(dialog, { key: "Control", ctrlKey: true });
+      await fireEvent.keyDown(dialog, { key: "d" });
+      expect(chordFor("review")).toEqual({
+        key: "k",
+        shift: false,
+        alt: false,
+        ctrl: true,
+        then: { key: "d", shift: false, alt: false },
+      });
+      expect(screen.getByTestId("chord-review")).toHaveTextContent("⌃K D");
+      expect(screen.queryByTestId("chord-problem")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a one-step chord once no second key follows in time", async () => {
+    vi.useFakeTimers();
+    try {
+      await open("keys");
+      await fireEvent.click(screen.getByTestId("chord-review"));
+      const dialog = screen.getByTestId("settings");
+      await fireEvent.keyDown(dialog, { key: "g", metaKey: true });
+      await vi.advanceTimersByTimeAsync(SEQUENCE_TIMEOUT);
+      await fireEvent.keyDown(dialog, { key: "d" });
+      expect(chordFor("review")).toEqual({ key: "g", shift: false, alt: false });
+      expect(screen.getByTestId("chord-review")).toHaveTextContent("⌘G");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a one-step chord on Escape while a second key may follow, and stays open", async () => {
+    await open("keys");
+    await fireEvent.click(screen.getByTestId("chord-review"));
+    const dialog = screen.getByTestId("settings");
+    await fireEvent.keyDown(dialog, { key: "g", metaKey: true });
+    await fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(settings.open).toBe(true);
+    expect(chordFor("review")).toEqual({ key: "g", shift: false, alt: false });
+    expect(screen.getByTestId("chord-review")).toHaveTextContent("⌘G");
+    await fireEvent.keyDown(dialog, { key: "d" });
+    expect(chordFor("review")).toEqual({ key: "g", shift: false, alt: false });
   });
 
   it("gives up recording on Escape, and closes on Escape otherwise", async () => {

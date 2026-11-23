@@ -174,6 +174,18 @@ describe("plan", () => {
     expect(changes).toEqual([{ field: "keyPreset", label: "Keys", from: "Default", to: "Vim" }]);
   });
 
+  it("reads a shortcut of two steps", () => {
+    resetKeys({ mac: false });
+    const { next } = plan({ keys: { review: "ctrl+k d" } });
+    expect(next.keys?.review).toEqual({
+      key: "k",
+      shift: false,
+      alt: false,
+      then: { key: "d", shift: false, alt: false },
+    });
+    expect(() => plan({ keys: { review: "x" } })).toThrow(/begin Send waiting messages now/);
+  });
+
   it("lays chords over a preset", () => {
     const { next } = plan({ keyPreset: "vim", keys: { review: "g" } });
     expect(next.keys?.["focus.sessions"]).toEqual(PRESETS.vim["focus.sessions"]);
