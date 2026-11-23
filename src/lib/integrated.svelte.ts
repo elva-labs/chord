@@ -90,6 +90,7 @@ import {
   toldFor,
   originOf,
   starterTokenOf,
+  NAME_LENGTH,
   type Carried,
   type Session,
   type Told,
@@ -1331,7 +1332,7 @@ export function send(
     // A first line that reads as another live session's name, or as "You",
     // names nothing.
     const title =
-      line === undefined || readsAsCommand(line) ? null : line.length > 60 ? `${line.slice(0, 59)}…` : line;
+      line === undefined || readsAsCommand(line) ? null : line.length > NAME_LENGTH ? `${line.slice(0, NAME_LENGTH - 1)}…` : line;
     if (title !== null && !nameTaken(title, key) && !reservedName(title)) named(key, title);
   }
   core()

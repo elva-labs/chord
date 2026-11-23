@@ -23,6 +23,7 @@ import {
   shownName,
   toldName,
   firstWords,
+  NAME_LENGTH,
   earlierLabel,
   loadHistory,
   loadHistories,
@@ -555,9 +556,10 @@ describe("labels", () => {
     expect(rowName(session)).toBe("Login test");
   });
 
-  it("cuts a long first message to fit a row", () => {
-    const words = firstWords("a".repeat(80))!;
-    expect(words).toHaveLength(60);
+  it("keeps a long first line whole up to the length a name keeps, and cuts it after", () => {
+    expect(firstWords("a".repeat(NAME_LENGTH))).toBe("a".repeat(NAME_LENGTH));
+    const words = firstWords("a".repeat(NAME_LENGTH + 20))!;
+    expect(words).toHaveLength(NAME_LENGTH);
     expect(words.endsWith("…")).toBe(true);
     expect(firstWords("  \n ")).toBeNull();
     expect(firstWords(null)).toBeNull();

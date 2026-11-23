@@ -1386,14 +1386,20 @@ function promptWords(session: Session): string | null {
   return session.prompt === null ? null : firstWords(spoken(session.prompt).text);
 }
 
-/** The first line of a message, cut to fit a row. Null for nothing. */
+/** The most characters a name taken from a message keeps. A row and the
+    agent pane's header each cut a name to the room they have; this bounds
+    what is stored. */
+export const NAME_LENGTH = 200;
+
+/** The first line of a message, cut to the length a name keeps. Null for
+    nothing. */
 export function firstWords(text: string | null): string | null {
   const line = text
     ?.split("\n")
     .find((candidate) => candidate.trim() !== "")
     ?.trim();
   if (line === undefined) return null;
-  return shown(line.length > 60 ? `${line.slice(0, 59)}…` : line);
+  return shown(line.length > NAME_LENGTH ? `${line.slice(0, NAME_LENGTH - 1)}…` : line);
 }
 
 /** What a row is known by: its title, the name it was given, or for a
