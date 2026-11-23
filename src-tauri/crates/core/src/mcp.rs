@@ -2087,7 +2087,7 @@ pub fn verdict_tool() -> Value {
                 "on": { "type": "string", "enum": ["plan", "change"], "description": "What the verdict is on." },
                 "plan": { "type": "integer", "description": "On the plan: the version you read." },
                 "tree": { "type": "string", "description": "On the change: the tree you read." },
-                "folder": { "type": "string", "description": "On the change: the folder whose tree you read, when the change is in more than one." },
+                "folder": { "type": "string", "description": "On the change: the folder whose tree you read, when the change is in more than one, or your own folder when you read in it and it has the change of one of them." },
                 "approved": { "type": "boolean", "description": "true to approve, false to ask for changes." },
                 "findings": { "type": "string", "description": "What you found; what must change, when you ask for changes." }
             },
@@ -2274,10 +2274,45 @@ fn gates_call(home: &Path, session: Option<&str>) -> Result<Value, String> {
     let Some(token) = session else {
         return Ok(said(none));
     };
-    match crate::run::state_of(home, token)? {
-        Some(state) => Ok(said(run_text(&state))),
-        None => Ok(said(none)),
+    let Some(state) = crate::run::state_of(home, token)? else {
+        return Ok(said(none));
+    };
+    let mut text = run_text(&state);
+    if let Some(line) = own_folder_line(home, token, &state)? {
+        text = format!("{line}\n{text}");
     }
+    Ok(said(text))
+}
+
+/// For a member that reads in a folder of its own, which is no place of
+/// the run's work, what a verdict naming that folder is on.
+fn own_folder_line(
+    home: &Path,
+    token: &str,
+    state: &crate::run::State,
+) -> Result<Option<String>, String> {
+    let Some(member) = crate::run::Runs::existing(home)?
+        .map(|runs| runs.member(token))
+        .transpose()?
+        .flatten()
+    else {
+        return Ok(None);
+    };
+    if state
+        .places
+        .iter()
+        .any(|place| crate::run::same(&place.folder, &member.folder))
+    {
+        return Ok(None);
+    }
+    let own = member.folder.display();
+    Ok(Some(match state.read_in(&member.folder) {
+        Ok(place) => format!(
+            "You read in {own}, which has the change in {}: a verdict naming {own} is on that change.",
+            place.folder.display()
+        ),
+        Err(e) => format!("You read in {own}, so a verdict naming it is refused: {e}"),
+    }))
 }
 
 /// The run's gates as its lead reads them after a change to it.
@@ -4579,6 +4614,10 @@ mod tests {
         );
         assert!(read.contains("It touches: src/page.rs"), "{read}");
         assert!(read.contains("The plan is at version 1, hash "), "{read}");
+        assert!(
+            !read.contains("You read in"),
+            "a member in the lead's folder reads the change there: {read}"
+        );
         assert!(read.contains(" has tree "), "{read}");
         let approved = called(
             &home,

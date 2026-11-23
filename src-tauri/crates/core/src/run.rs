@@ -15,7 +15,9 @@
 //! names the plan version or the place and tree its member read, is
 //! refused when that is no longer what stands, and records the hash it was
 //! given on, so a plan or a tree that changed since makes an approval out
-//! of date, and a rebase that keeps the tree keeps it. A gate on the change
+//! of date, and a rebase that keeps the tree keeps it. A member that only
+//! reads makes no place of its folder; reading there, it approves the
+//! change in the place whose tree that folder has. A gate on the change
 //! is judged in each place something changed in, and a push is judged
 //! against them all, since worktrees share their branches.
 //!
@@ -101,7 +103,7 @@ pub const KEPT_ENDED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const SCHEMA: i64 = 1;
 
 /// Whether two paths name the same folder, as written or once resolved.
-fn same(a: &Path, b: &Path) -> bool {
+pub(crate) fn same(a: &Path, b: &Path) -> bool {
     a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(a), Ok(b)) if a == b)
 }
 
@@ -409,6 +411,45 @@ impl State {
                     list(several)
                 )),
             },
+        }
+    }
+
+    /// The place whose change a member that reads in a folder of its own,
+    /// which is no place of the run's work, reads there: the one place
+    /// whose tree is the tree that folder has now. None has it, or more
+    /// than one does, and the member reads the change where it is and
+    /// names that folder.
+    pub fn read_in(&self, own: &Path) -> Result<&Place, String> {
+        let tree =
+            git::tree_hash(own).map_err(|e| format!("{} cannot be read: {e}", own.display()))?;
+        let with: Vec<&Place> = self
+            .places
+            .iter()
+            .filter(|place| place.tree.as_ref() == Ok(&tree))
+            .collect();
+        match with.as_slice() {
+            [one] => Ok(one),
+            [] => Err(format!(
+                "{} has tree {tree}, which is the change in none of the run's folders: {}. Check the change out there, or read it in the folder it is in and name that folder.",
+                own.display(),
+                self.places
+                    .iter()
+                    .map(|place| match &place.tree {
+                        Ok(tree) => format!("{} has {tree}", place.folder.display()),
+                        Err(_) => format!("{} cannot be read", place.folder.display()),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            several => Err(format!(
+                "{} has the tree of the change in more than one folder, so a verdict names the one it is on: {}.",
+                own.display(),
+                several
+                    .iter()
+                    .map(|place| place.folder.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
         }
     }
 
@@ -1544,7 +1585,10 @@ pub enum Read<'a> {
 
 /// Records the verdict of the session `token` names on what it read, the
 /// plan's version or the change's tree in one place, on each gate of the
-/// run its agent approves then. A verdict on something that no longer
+/// run its agent approves then. A member that reads in a folder of its
+/// own, which is no place of the run's work, and names it, gives its
+/// verdict on the change in the place whose tree that folder has; see
+/// [`State::read_in`]. A verdict on something that no longer
 /// stands is refused, saying what changed. A gate the user waived, or one
 /// that waits for the user, takes none. Asking for changes says what must
 /// change.
@@ -1602,7 +1646,17 @@ pub fn verdict(
             (plan.hash.clone(), Some(plan.version), None)
         }
         Read::Change { folder, tree } => {
-            let place = now_state.place_for(folder)?;
+            let own = folder.filter(|folder| {
+                same(folder, &member.folder)
+                    && !now_state
+                        .places
+                        .iter()
+                        .any(|place| same(&place.folder, folder))
+            });
+            let place = match own {
+                Some(own) => now_state.read_in(own)?,
+                None => now_state.place_for(folder)?,
+            };
             let now = place.tree.clone().map_err(|e| {
                 format!(
                     "The change in {} cannot be read: {e}",

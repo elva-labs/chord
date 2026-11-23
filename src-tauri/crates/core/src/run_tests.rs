@@ -960,6 +960,44 @@ fn given_in(home: &Path, folder: Option<&Path>) -> Result<Vec<GateState>, String
 }
 
 #[test]
+fn a_reviewer_reading_in_its_own_folder_approves_the_change_with_its_tree() {
+    let (home, dir) = started("own-folder", QUICK_FIX, &[]);
+    write(&dir, "src/main.rs", "fn main() { fixed() }\n");
+    commit(&dir);
+    let own = worktree(&dir, "review");
+    join(home.path(), "lead", "rev", "Reviewer", &own, None, true, "").unwrap();
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.places.len(), 1, "a folder that only reads is no place");
+    let tree = git::tree_hash(&own).unwrap();
+    assert_eq!(Ok(&tree), now.places[0].tree.as_ref());
+    let read = Read::Change {
+        folder: Some(&own),
+        tree: &tree,
+    };
+    let gates = verdict(home.path(), "rev", read, true, "", None).unwrap();
+    assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert!(
+        same(given[0].folder.as_deref().unwrap(), &dir),
+        "the verdict is on the lead's folder, where the change is"
+    );
+
+    write(&dir, "src/main.rs", "fn main() { fixed_more() }\n");
+    let gate = standing(home.path(), REVIEWER, When::Change);
+    assert_eq!(gate.standing, Standing::OutOfDate, "{}", gate.reason);
+    let read = Read::Change {
+        folder: Some(&own),
+        tree: &tree,
+    };
+    let refused = verdict(home.path(), "rev", read, true, "", None).unwrap_err();
+    assert!(
+        refused.contains("which is the change in none of the run's folders"),
+        "{refused}"
+    );
+    let _ = std::fs::remove_dir_all(&own);
+}
+
+#[test]
 fn a_verdict_on_a_plan_that_was_replaced_is_refused() {
     let (home, _dir) = started(
         "replaced",
