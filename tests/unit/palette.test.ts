@@ -413,12 +413,14 @@ describe("commands", () => {
   it("is the jump first, then the commands without a chord, then the actions", () => {
     const items = commandItems("");
     expect(items[0]).toMatchObject({ kind: "attention", label: ATTENTION_LABEL });
-    expect(items.slice(1, 4).map((item) => item.label)).toEqual([
+    expect(items.slice(1, 6).map((item) => item.label)).toEqual([
       "New session",
       "Open project",
       "Open remote project",
+      "Check setup",
+      "Show welcome",
     ]);
-    expect(items.slice(4).every((item) => item.kind === "action")).toBe(true);
+    expect(items.slice(6).every((item) => item.kind === "action")).toBe(true);
   });
 
   it("offers a new session in the project on screen only while one is", () => {

@@ -5,9 +5,9 @@
 //! and paste have no key equivalents in the webview, and a Window menu. On
 //! Windows and Linux the window is undecorated and a bar would sit in the row
 //! the app took, so there is a native popup instead, opened from a button at
-//! the top left of the window: the File menu's items, Settings, and Quit.
-//! Choosing Settings either way tells the window, which opens its settings
-//! view.
+//! the top left of the window: the File menu's items, Settings, About, and
+//! Quit. Choosing Settings either way tells the window, which opens its
+//! settings view. About opens a window of its own; see [`crate::welcome`].
 //!
 //! The File menu's items, New File, New File in Tree, New Shell, Save and
 //! Close, do what an action of the window's chord table does, so the window
@@ -26,6 +26,11 @@
 //! edits; see [`crate::leaving`]. Close Window is on Shift+Cmd+W, since
 //! Cmd+W closes what is in front.
 //!
+//! While the welcome stands in for the main window, the items that act on
+//! the main window do nothing. While the welcome or About is in front,
+//! Close and Close Window close it, the File menu's other items do nothing,
+//! and Settings brings the main window forward with its settings open.
+//!
 //! Both also carry Turn Off Custom Styles, which turns the user's own
 //! stylesheet off in the settings file itself. It works whatever that
 //! stylesheet has done to the page, since neither the menu nor the file is
@@ -38,6 +43,7 @@ use tauri::menu::{ContextMenu, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{App, AppHandle, Emitter, Manager, State, Window, Wry};
 
 use crate::browser_keys::Chord;
+use crate::welcome;
 use chord_core::Core;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
@@ -47,6 +53,7 @@ const SETTINGS_ID: &str = "settings";
 const STYLES_OFF_ID: &str = "styles-off";
 const QUIT_ID: &str = "quit";
 const CLOSE_WINDOW_ID: &str = "close-window";
+const ABOUT_ID: &str = "about";
 
 /// The File menu's items: the action of the chord table each does, and its
 /// name in the menu until the window names it. The id of each item is its
@@ -131,6 +138,11 @@ fn styles_off(app: &AppHandle) {
     });
 }
 
+/// About, which opens its own window.
+fn about_item(handle: &AppHandle, text: &str) -> tauri::Result<MenuItem<Wry>> {
+    MenuItem::with_id(handle, ABOUT_ID, text, true, None::<&str>)
+}
+
 /// Quit, with its chord on the menu bar and none on the popup, which
 /// answers no keys.
 fn quit_item(handle: &AppHandle, text: &str, chord: bool) -> tauri::Result<MenuItem<Wry>> {
@@ -168,6 +180,8 @@ pub fn install(app: &App) -> tauri::Result<()> {
             &settings_item(handle)?,
             &styles_off_item(handle)?,
             &PredefinedMenuItem::separator(handle)?,
+            &about_item(handle, &format!("About {}", handle.package_info().name))?,
+            &PredefinedMenuItem::separator(handle)?,
             &quit_item(handle, "Quit", false)?,
         ],
     )?;
@@ -182,21 +196,41 @@ pub fn install(app: &App) -> tauri::Result<()> {
     app.manage(FileItems::default());
     app.manage(FixedItems::default());
 
-    app.on_menu_event(|app, event| match event.id().as_ref() {
-        SETTINGS_ID => {
-            let _ = app.emit(OPEN_SETTINGS, ());
+    app.on_menu_event(|app, event| {
+        let id = event.id().as_ref();
+        match id {
+            STYLES_OFF_ID => styles_off(app),
+            QUIT_ID => crate::leaving::quit(app),
+            ABOUT_ID => welcome::open_about(app),
+            SETTINGS_ID if welcome::main_shown(app) => {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.set_focus();
+                }
+                let _ = app.emit(OPEN_SETTINGS, ());
+            }
+            _ => {}
         }
-        STYLES_OFF_ID => styles_off(app),
-        QUIT_ID => crate::leaving::quit(app),
-        CLOSE_WINDOW_ID => {
-            if let Some(window) = app.get_webview_window("main") {
+        let small = welcome::small_in_front(app);
+        if small.is_some() && (id == CLOSE_WINDOW_ID || id == "file.close") {
+            if let Some(window) = small {
                 let _ = window.close();
             }
+            return;
         }
-        id if FILE_ITEMS.iter().any(|(action, _)| *action == id) => {
-            let _ = app.emit(MENU_ACTION, id);
+        if small.is_some() || !welcome::main_shown(app) {
+            return;
         }
-        _ => {}
+        match id {
+            CLOSE_WINDOW_ID => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.close();
+                }
+            }
+            id if FILE_ITEMS.iter().any(|(action, _)| *action == id) => {
+                let _ = app.emit(MENU_ACTION, id);
+            }
+            _ => {}
+        }
     });
 
     if cfg!(target_os = "macos") {
@@ -367,7 +401,7 @@ fn menu_bar(app: &App) -> tauri::Result<Menu<Wry>> {
         &name,
         true,
         &[
-            &PredefinedMenuItem::about(handle, Some(&format!("About {name}")), None)?,
+            &about_item(handle, &format!("About {name}"))?,
             &PredefinedMenuItem::separator(handle)?,
             &settings,
             &styles_off_item(handle)?,

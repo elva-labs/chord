@@ -21,6 +21,7 @@ mod page_files;
 mod probe;
 pub mod remote;
 pub mod ssh;
+mod welcome;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -91,6 +92,14 @@ where
             blocking(move || remotes.connection(&host)?.call(method, params(rest))).await
         }
     }
+}
+
+/// What the app found on the machine: the agents, git, and how to install
+/// each that is missing.
+#[tauri::command]
+async fn setup_checks(core: State<'_, Arc<Core>>) -> Result<Value, String> {
+    let core = Arc::clone(&core);
+    blocking(move || core.setup_checks().and_then(value)).await
 }
 
 #[tauri::command]
@@ -2607,10 +2616,19 @@ pub fn run() {
             probe::maybe_run_probe(app.handle());
             let cwd = std::env::current_dir().unwrap_or_default();
             launch::request(app.handle(), launch::folders(std::env::args(), &cwd));
+            welcome::at_launch(app.handle());
             Ok(())
         })
-        .on_window_event(leaving::on_window_event)
+        .on_window_event(|window, event| {
+            leaving::on_window_event(window, event);
+            welcome::on_window_event(window, event);
+        })
         .invoke_handler(tauri::generate_handler![
+            setup_checks,
+            welcome::welcome_continue,
+            welcome::welcome_show,
+            welcome::about_open,
+            welcome::about_info,
             agent_detect,
             read_media,
             read_document_image,

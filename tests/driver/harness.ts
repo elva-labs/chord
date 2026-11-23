@@ -113,6 +113,9 @@ export function fixtures(): { home: string; bin: string } {
   const home = mkdtempSync(join(tmpdir(), "workbench-home-"));
   const bin = join(home, "bin");
   mkdirSync(bin);
+  // The welcome counts as gone through, so the main window opens at once.
+  mkdirSync(join(home, ".chord"));
+  writeFileSync(join(home, ".chord", "welcome.json"), '{"seen":true}');
   for (const name of ["claude", "codex"]) {
     if (WINDOWS) {
       writeFileSync(

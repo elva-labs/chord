@@ -74,12 +74,14 @@ pub fn on_event(app: &AppHandle, event: RunEvent) {
 }
 
 /// Makes a second launch on Linux and Windows hand its folders to the
-/// running app, which comes to the front, and exit.
+/// running app, which comes to the front, and exit. The welcome comes
+/// forward in place of the main window while it is open.
 #[cfg(any(target_os = "linux", windows))]
 pub fn single_instance() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_single_instance::init(|app, args, cwd| {
         request(app, folders(args, Path::new(&cwd)));
-        if let Some(window) = app.get_webview_window("main") {
+        let welcome = app.get_webview_window(crate::welcome::WELCOME);
+        if let Some(window) = welcome.or_else(|| app.get_webview_window("main")) {
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.set_focus();

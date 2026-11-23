@@ -37,7 +37,8 @@ import {
 } from "$lib/codexProfiles.svelte";
 import { catalogName } from "$lib/modelCatalog.svelte";
 import { chosenFor, defaultModelOf, modelToStart } from "$lib/lastChosen.svelte";
-import type { HarnessId } from "$lib/core";
+import { core, type HarnessId } from "$lib/core";
+import { openSetup } from "$lib/settings.svelte";
 import {
   overrideOf,
   workflowGist,
@@ -97,7 +98,17 @@ import { browser } from "$lib/browser.svelte";
 
 export type Mode = "goto" | "commands" | "new";
 
-export type CommandId = "new" | "newHere" | "newOther" | "open" | "remote" | "goBack" | "preview" | "source";
+export type CommandId =
+  | "new"
+  | "newHere"
+  | "newOther"
+  | "open"
+  | "remote"
+  | "goBack"
+  | "preview"
+  | "source"
+  | "setup"
+  | "welcome";
 
 /** An answer to one of the questions a new session asks. */
 export type Step =
@@ -470,6 +481,8 @@ export function commandItems(query: string): PaletteItem[] {
     ...(view === null ? [] : [view]),
     command("open", "Open project"),
     command("remote", "Open remote project"),
+    command("setup", "Check setup"),
+    command("welcome", "Show welcome"),
   ];
   const actions = ACTIONS.filter(
     ({ key }) => key !== "palette" && key !== "session.attention",
@@ -1094,6 +1107,10 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
           return { type: "close", then: () => setView("rendered") };
         case "source":
           return { type: "close", then: () => setView("content") };
+        case "setup":
+          return { type: "close", then: openSetup };
+        case "welcome":
+          return { type: "close", then: () => void core().welcomeShow() };
         case "goBack": {
           const key = sessions.active;
           if (key === null) return { type: "stay" };

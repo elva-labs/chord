@@ -739,6 +739,46 @@ export async function installFakeCore(
           caps: { resumable: true, titles: true, acp: false, integrated: integrable.includes(agent) },
           fromLoginShell: true,
         }),
+        // What the machine holds: what a test put in `__setup`, or both
+        // agents and git found. Each read is counted in `__setupReads`.
+        setupChecks: async () => {
+          const w = window as unknown as { __setup?: unknown; __setupReads?: number };
+          w.__setupReads = (w.__setupReads ?? 0) + 1;
+          const found = (id: string, name: string, binary: string, agent: boolean, version: string) => ({
+            id,
+            name,
+            binary,
+            agent,
+            path: `/usr/local/bin/${binary}`,
+            version,
+            signedIn: agent ? true : null,
+            install: { command: `install ${binary}`, link: `https://example.com/${binary}` },
+          });
+          return (
+            w.__setup ?? {
+              checks: [
+                found("claude-code", "Claude Code", "claude", true, "2.1.34"),
+                found("codex", "Codex", "codex", true, "0.118.0"),
+                found("git", "git", "git", false, "2.51.0"),
+              ],
+              fromLoginShell: true,
+            }
+          );
+        },
+        // The window commands, in `__windowCommands` for a test to read.
+        welcomeContinue: async () => {
+          const w = window as unknown as { __windowCommands?: string[] };
+          (w.__windowCommands ??= []).push("welcome_continue");
+        },
+        welcomeShow: async () => {
+          const w = window as unknown as { __windowCommands?: string[] };
+          (w.__windowCommands ??= []).push("welcome_show");
+        },
+        aboutOpen: async () => {
+          const w = window as unknown as { __windowCommands?: string[] };
+          (w.__windowCommands ??= []).push("about_open");
+        },
+        aboutInfo: async () => ({ version: "1.0.0-test", os: "macOS", arch: "arm64" }),
         pickProject: async () => null,
         // What the file picker hands back: what a test put in `__picked`,
         // once, or nothing, as when the user cancels.

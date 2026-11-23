@@ -38,6 +38,43 @@ export interface DetectReport {
   fromLoginShell: boolean;
 }
 
+/** One thing the app looks for on the machine: an agent or git. */
+export interface SetupCheck {
+  /** `claude-code`, `codex` or `git`. */
+  id: string;
+  name: string;
+  /** The program looked up on the PATH. */
+  binary: string;
+  /** True for the agents, one of which the app needs. */
+  agent: boolean;
+  /** Where the program was found, null when it was not. */
+  path: string | null;
+  version: string | null;
+  /** For a found agent, whether the credentials of a sign-in are there;
+      null for git and for an agent that was not found. */
+  signedIn: boolean | null;
+  /** The command that installs it on this platform, when there is one, and
+      the page that says more. */
+  install: { command: string | null; link: string };
+}
+
+/** What About shows and copies. */
+export interface AboutInfo {
+  version: string;
+  /** The system, as `macOS`, `Windows` or `Linux`. */
+  os: string;
+  /** The processor, as `arm64` or `x86_64`. */
+  arch: string;
+}
+
+/** What the app found on the machine, in the order it is shown. */
+export interface Setup {
+  checks: SetupCheck[];
+  /** False when the login shell could not be read, so a program that was
+      not found may be there all the same. */
+  fromLoginShell: boolean;
+}
+
 /** The directories of one account: where Claude Code keeps its
     configuration and where Codex keeps its home, either null for the
     agent's own. Spelled as the user wrote them, `~` standing for the home
@@ -1871,6 +1908,17 @@ export interface StoredSettings {
 
 export interface Core {
   detect(agent: string): Promise<DetectReport>;
+  /** Looks for the agents and git on the login shell's PATH. Nothing is
+      sent anywhere and no agent is asked anything. */
+  setupChecks(): Promise<Setup>;
+  /** The welcome is gone through: the main window takes its place. */
+  welcomeContinue(): Promise<void>;
+  /** Opens the welcome over the main window. */
+  welcomeShow(): Promise<void>;
+  /** Opens About. */
+  aboutOpen(): Promise<void>;
+  /** The app's version, the system and the processor, for About. */
+  aboutInfo(): Promise<AboutInfo>;
   /** Opens the native folder picker. Null when the user cancels. */
   pickProject(): Promise<string | null>;
   /** Opens the native picker for files of any kind, several at once.
@@ -2531,6 +2579,11 @@ export function toBytes(payload: unknown): Uint8Array {
 
 const tauriCore: Core = {
   detect: (agent) => invoke<DetectReport>("agent_detect", { id: agent }),
+  setupChecks: () => invoke<Setup>("setup_checks"),
+  welcomeContinue: () => invoke("welcome_continue"),
+  welcomeShow: () => invoke("welcome_show"),
+  aboutOpen: () => invoke("about_open"),
+  aboutInfo: () => invoke<AboutInfo>("about_info"),
 
   async pickProject() {
     const chosen = await openDialog({
@@ -3002,6 +3055,15 @@ const tauriCore: Core = {
 const detachedCore: Core = {
   async detect(agent) {
     return { id: agent, path: null, caps: null, fromLoginShell: false };
+  },
+  async setupChecks() {
+    return { checks: [], fromLoginShell: false };
+  },
+  async welcomeContinue() {},
+  async welcomeShow() {},
+  async aboutOpen() {},
+  async aboutInfo() {
+    return { version: "", os: "", arch: "" };
   },
   async pickProject() {
     return null;

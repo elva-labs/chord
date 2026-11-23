@@ -1,6 +1,6 @@
 <script module lang="ts">
   /** The columns of settings, one on screen at a time. */
-  type Tab = "appearance" | "sessions" | "agents" | "accounts" | "plugins" | "keys" | "notifications";
+  type Tab = "appearance" | "sessions" | "agents" | "setup" | "accounts" | "plugins" | "keys" | "notifications";
 
   /** The tab last chosen. It belongs to the module rather than the dialog, so
       closing the settings and opening them again lands where you were; a new
@@ -49,7 +49,9 @@
     updateSource,
   } from "$lib/plugins.svelte";
   import { lastSegment } from "$lib/paths";
-  import type { HarnessId, PluginInfo, PluginSource } from "$lib/core";
+  import { core, type HarnessId, type PluginInfo, type PluginSource } from "$lib/core";
+  import { checkSetup, setup } from "$lib/setup.svelte";
+  import { blocked } from "$lib/setupRows";
   import { hook, overrideOf, reapply, setEverywhere, setOverride } from "$lib/hook.svelte";
   import {
     OWN_LABEL,
@@ -95,6 +97,7 @@
   import BackgroundPicker from "$lib/components/BackgroundPicker.svelte";
   import UnreadEntries from "$lib/components/UnreadEntries.svelte";
   import AgentsTab from "$lib/components/AgentsTab.svelte";
+  import SetupChecks from "$lib/components/SetupChecks.svelte";
 
   /**
    * The settings, over the workbench. Reached from the native menu or its
@@ -114,6 +117,7 @@
     { name: "appearance", label: "Appearance" },
     { name: "sessions", label: "Sessions" },
     { name: "agents", label: "Agents" },
+    { name: "setup", label: "Setup" },
     { name: "accounts", label: "Accounts" },
     { name: "plugins", label: "Plugins" },
     { name: "keys", label: "Keys" },
@@ -131,13 +135,14 @@
   let problem = $state<{ action: ActionKey; text: string } | null>(null);
 
   let tabs: HTMLElement;
-  let tab = $state<Tab>(settings.newAgent ? "agents" : remembered);
+  let tab = $state<Tab>(settings.setup ? "setup" : settings.newAgent ? "agents" : remembered);
 
   let agentsTab: AgentsTab | undefined = $state();
 
   /** The tab picked again goes back to its top: the Agents tab to its lists. */
   function show(next: Tab) {
     if (next === tab && next === "agents") agentsTab?.home();
+    if (next === "setup" && next !== tab) void checkSetup();
     tab = next;
     remembered = next;
   }
@@ -176,6 +181,18 @@
     remembered = "agents";
     agentsTab?.create();
   });
+
+  /** Opened on the Setup tab, or landing on it: the machine read again. */
+  onMount(() => {
+    if (settings.setup) {
+      settings.setup = false;
+      remembered = "setup";
+    }
+    if (tab === "setup") void checkSetup();
+  });
+
+  /** What stands between the machine and a session, once read. */
+  const setupDemand = $derived(setup.found ? blocked(setup.found) : null);
 
   /** The plugin sources, read when the dialog opens. */
   onMount(() => {
@@ -840,6 +857,19 @@
           </section>
         {:else if tab === "agents"}
           <AgentsTab bind:this={agentsTab} />
+        {:else if tab === "setup"}
+          <section data-testid="settings-setup">
+            <div class="sources-tools">
+              <button class="tool" onclick={() => void core().welcomeShow()} data-testid="setup-welcome">Show welcome</button>
+              <button class="tool" onclick={() => void checkSetup()} disabled={setup.busy} data-testid="setup-check"
+                >{setup.busy ? "Checking" : "Check again"}</button
+              >
+            </div>
+            <SetupChecks />
+            {#if setupDemand}
+              <p class="note" role="status" data-testid="setup-demand">{setupDemand}</p>
+            {/if}
+          </section>
         {:else if tab === "accounts"}
           <section data-testid="settings-accounts">
             <UnreadEntries field="accounts" />
@@ -1792,6 +1822,7 @@
   }
 
   .add-source button:disabled,
+  .sources-tools .tool:disabled,
   .source-head .tool:disabled {
     opacity: 0.5;
     cursor: default;
@@ -1807,6 +1838,7 @@
   .sources-tools {
     display: flex;
     justify-content: flex-end;
+    gap: 6px;
     margin: 0 0 6px;
   }
 
