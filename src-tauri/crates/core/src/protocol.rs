@@ -243,6 +243,13 @@ struct InstalledAgentsParams {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SwitchesParams {
+    notes_on: bool,
+    agents_on: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GoingOnParams {
     agent: String,
     project: PathBuf,
@@ -791,6 +798,10 @@ pub fn dispatch(
         "integrated_snapshot" => {
             let p: IdParams = parse(params)?;
             value(core.integrated_snapshot(&p.id)?)
+        }
+        "switches" => {
+            let p: SwitchesParams = parse(params)?;
+            value(core.switches_set(p.notes_on, p.agents_on)?)
         }
         "going_on" => {
             let p: GoingOnParams = parse(params)?;

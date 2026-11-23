@@ -531,6 +531,19 @@ impl Core {
         self.settings()?.set(change)
     }
 
+    /// Takes the two switches of the window that reaches this machine from
+    /// another, so that what is checked here follows the user's switches.
+    /// The settings are written only where a switch differs from them.
+    pub fn switches_set(&self, notes_on: bool, agents_on: bool) -> Result<(), String> {
+        if self.switched_on(|s| s.notes_on) == notes_on
+            && self.switched_on(|s| s.agents_on) == agents_on
+        {
+            return Ok(());
+        }
+        self.settings_set(&serde_json::json!({ "notesOn": notes_on, "agentsOn": agents_on }))
+            .map(|_| ())
+    }
+
     /// Hands over the settings a window holds, for a machine whose file is
     /// not there. They are written only if it is still not there; a file
     /// that is there by then stands, and is what the answer holds.
@@ -2880,6 +2893,21 @@ mod tests {
         assert!(!judged.goes_on);
         assert_eq!(judged.context, None);
         assert_eq!(judged.briefing, None);
+    }
+
+    #[test]
+    fn the_switches_of_a_window_elsewhere_are_taken_and_written_only_where_they_differ() {
+        let dir = Scratch::new("switches-set");
+        let core = Core::at_home(Arc::new(Recorder::default()), Some(dir.to_path_buf()));
+        let file = crate::settings::settings_path(&dir);
+        core.switches_set(true, true).unwrap();
+        assert!(!file.exists());
+        core.switches_set(false, true).unwrap();
+        assert!(!crate::settings::notes_on(&dir));
+        assert!(crate::settings::agents_on(&dir));
+        core.switches_set(true, false).unwrap();
+        assert!(crate::settings::notes_on(&dir));
+        assert!(!crate::settings::agents_on(&dir));
     }
 
     #[test]
