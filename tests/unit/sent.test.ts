@@ -50,7 +50,7 @@ describe("a message the user typed", () => {
   });
 
   it("draws code, bold, italic and links", () => {
-    const html = drawn("Run `npm test`, **now**, _please_, see https://example.com\n```\nlet a = 1;\n```");
+    const html = drawn("Run `npm test`, **now**, *please*, see https://example.com\n```\nlet a = 1;\n```");
     expect(found(html, "p code")[0].textContent).toBe("npm test");
     expect(found(html, "strong")[0].textContent).toBe("now");
     expect(found(html, "em")[0].textContent).toBe("please");
@@ -77,10 +77,76 @@ describe("a message the user typed", () => {
     expect(seen(html)).toContain("<img src=x onerror=alert(1)> <b>no</b>");
   });
 
-  it("draws a link only where a link may point", () => {
-    const html = drawn("**Go** [here](javascript:alert(1)) or [there](mailto:a@b.c)");
-    expect(found(html, "a").map((a) => a.getAttribute("href"))).toEqual(["mailto:a@b.c"]);
-    expect(seen(html)).toContain("here");
+  it("draws a link only to the web, and anything else as typed", () => {
+    const typed = '**Go** [here](javascript:alert(1)) [top](#top) [there](mailto:a@b.c) foo@bar.com <a@b.c> [c](&#106;avascript:alert(1)) [d](data:text/html,x)';
+    const html = drawn(typed);
+    expect(found(html, "a")).toHaveLength(0);
+    expect(seen(html).trim()).toBe(typed.replaceAll("**", ""));
+    expect(drawn("[top](#top) and mail foo@bar.com")).toBeNull();
+  });
+
+  it("keeps a hostile title and address inside their attributes", () => {
+    const html = drawn('[a](<https://x.com/"q>) [b](https://x.com "t\\" onmouseover=\\"x")');
+    const [a, b] = found(html, "a");
+    expect(a.getAttribute("href")).toBe('https://x.com/"q');
+    expect(b.getAttribute("title")).toBe('t" onmouseover="x (https://x.com)');
+    expect(a.getAttributeNames().sort()).toEqual(["href", "rel", "tabindex", "title"]);
+    expect(b.getAttributeNames().sort()).toEqual(["href", "rel", "tabindex", "title"]);
+  });
+
+  it("shows where a link goes: in its title, and after words that name another address", () => {
+    const html = drawn('Click [https://github.com/acme/app](https://evil.example/login "Docs") or ![https://good.com](https://evil.com/x.png)');
+    const [link, image] = found(html, "a");
+    expect(link.getAttribute("title")).toBe("Docs (https://evil.example/login)");
+    expect(image.getAttribute("title")).toBe("https://evil.com/x.png");
+    expect(seen(html)).toBe("Click https://github.com/acme/app (https://evil.example/login) or https://good.com (https://evil.com/x.png)\n");
+    const same = drawn("[example.com](https://example.com/) [docs](https://example.com) https://example.com");
+    expect(seen(same).trim()).toBe("example.com docs https://example.com");
+    expect(found(drawn("[a](https://a.com/\u202Ecod.exe)"), "a")[0].getAttribute("title")).toBe("https://a.com/⟨U+202E⟩cod.exe");
+  });
+
+  it("makes emphasis only of * runs that stand around words", () => {
+    expect(drawn("glob src/*.ts and lib/*.js please")).toBeNull();
+    expect(drawn("edit __init__.py and _this_ and ls *.ts lib/*")).toBeNull();
+    const html = drawn("`x` src/*.ts and lib/*.js, __init__.py, _no_, a*b*c, (*no*) **yes** *yes*, ***both***.");
+    expect(seen(html).trim()).toBe("x src/*.ts and lib/*.js, __init__.py, _no_, a*b*c, (*no*) yes yes, both.");
+    expect(found(html, "strong").map((el) => el.textContent)).toEqual(["yes", "both"]);
+    expect(found(html, "em").map((el) => el.textContent)).toEqual(["yes", "both"]);
+  });
+
+  it("shows backslashes and character references as typed", () => {
+    const typed = "Path C:\\Users\\me\\*.txt and C:\\tmp\\_cache\\\n&#106; &copy; &lt; https://a.com";
+    const html = drawn(typed);
+    expect(found(html, "a")).toHaveLength(1);
+    expect(found(html, "p")[0].innerHTML.replace(/<br>/g, "\n").replace(/<[^>]+>/g, "")).toBe(
+      typed.replaceAll("&", "&amp;"),
+    );
+  });
+
+  it("shows every list item's marker as typed", () => {
+    const html = drawn("Things:\n* one\n- two\n1. three\n2026. was a year");
+    expect(found(html, "ul, ol")).toHaveLength(1);
+    expect(found(html, "li").map((li) => li.textContent)).toEqual(["one", "two", "1. three", "2026. was a year"]);
+    expect(found(html, "li > .marker.bullet")).toHaveLength(2);
+    expect(seen(drawn("2026. was the year")).trim()).toBe("2026. was the year");
+    expect(seen(drawn("7) seven\n9) nine")).trim()).toBe("7) seven9) nine");
+  });
+
+  it("makes a code block only of a fence", () => {
+    const html = drawn("    indented prose here\n\tTabbed line\n**b**");
+    expect(found(html, "pre")).toHaveLength(0);
+    expect(seen(html).trim()).toBe("indented prose here\tTabbed lineb");
+    expect(seen(html)).toContain("    indented prose here");
+    expect(drawn("    indented prose here")).toBeNull();
+  });
+
+  it("keeps every blank line the user typed", () => {
+    expect(found(drawn("**a**\n\n\n\nb"), "p + .gap + .gap + .gap + p")).toHaveLength(1);
+    expect(found(drawn("**a**\n\nb"), ".gap")).toHaveLength(1);
+    expect(found(drawn("> q\n\n\nafter"), "blockquote + .gap + .gap + p")).toHaveLength(1);
+    expect(found(drawn("* a\n\n* b\n* c\n\nd"), ".gap")).toHaveLength(2);
+    expect(found(drawn("```\nx\n```\n\n\n- l"), "pre + .gap + .gap + ul")).toHaveLength(1);
+    expect(found(drawn("**a**\nb"), ".gap")).toHaveLength(0);
   });
 
   it("shows an unseen character as its marker, in code too, isolated left to right", () => {
@@ -100,6 +166,23 @@ describe("a message the user typed", () => {
     expect(mention.textContent).toBe("@src/a_b.ts");
     expect(found(sentHtml(parts), "span.mention")).toHaveLength(1);
     expect(sentHtml([{ text: "See " }, { text: "@a.ts", path: "a.ts" }])).toBeNull();
+  });
+
+  it("draws a mention in a fence as its button, and one in a link as its plain @ word", () => {
+    const at: SentPart = { text: "@a.ts", path: "a.ts" };
+    const fence = sentHtml([{ text: "```\nsee " }, at, { text: "\n```" }], () => true);
+    expect(found(fence, "pre button[data-testid='message-mention']").map((el) => el.textContent)).toEqual(["@a.ts"]);
+    for (const parts of [
+      [{ text: "https://x.com/" }, at],
+      [{ text: "[see " }, at, { text: "](https://a.com)" }],
+      [{ text: "![" }, at, { text: "](https://a.com/i.png)" }],
+    ]) {
+      const html = sentHtml(parts, () => true);
+      expect(found(html, "a")).toHaveLength(1);
+      expect(found(html, "a button, a [data-testid='message-mention']")).toHaveLength(0);
+      expect(found(html, "a")[0].textContent).toContain("@a.ts");
+    }
+    expect(found(sentHtml([{ text: "https://x.com/" }, at], () => true), "a")[0].getAttribute("href")).toBe("https://x.com/@a.ts");
   });
 
   it("is found as it reads", () => {

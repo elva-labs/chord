@@ -239,12 +239,37 @@ export type Loaded =
 const LINK = /^(?:https?:|mailto:|#)/i;
 const IMAGE = /^(?:https?:|data:image\/)/i;
 
+/** Whether a link's words read as an address: one with its scheme or
+    `www.`, or a host under one of the common endings. */
+const ADDRESS = /^(?:https?:\/\/|www\.)\S|^[^\s/@:]+\.(?:com|org|net|io|dev|app|ai|co|edu|gov|me|info|xyz)(?:[/:?#]\S*)?$/i;
+
+/** Whether a link's words name an address other than the one it goes to. */
+function elsewhere(words: string, href: string): boolean {
+  const bare = (address: string) =>
+    address
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/+$/, "")
+      .toLowerCase();
+  return ADDRESS.test(words.trim()) && bare(words) !== bare(href);
+}
+
+/** A link drawn so that where it goes can be read: the window has no
+    status bar, so the address stands in the link's title, after the
+    title its Markdown gave it, and after the link itself when its words
+    name another address. `text` is the link's words as HTML and `words`
+    the same as text; `more` is further attributes. */
+function anchor(href: string, title: string | null | undefined, text: string, words: string, more = ""): string {
+  const named = escapeAttribute(shown(title ? `${title} (${href})` : href));
+  const after = elsewhere(words, href) ? `<span class="goes"> (${escapeAttribute(shown(href))})</span>` : "";
+  return `<a href="${escapeAttribute(href)}" title="${named}" rel="noopener noreferrer"${more}>${text}</a>${after}`;
+}
+
 const renderer = new marked.Renderer();
 renderer.link = ({ href, title, tokens }) => {
   const text = renderer.parser.parseInline(tokens);
   if (!LINK.test(href)) return text;
-  const named = title ? ` title="${escapeAttribute(title)}"` : "";
-  return `<a href="${escapeAttribute(href)}"${named} rel="noopener noreferrer">${text}</a>`;
+  return anchor(href, title, text, renderer.parser.parseInline(tokens, renderer.parser.textRenderer));
 };
 renderer.image = ({ href, title, text }) => {
   const src = image(href);
@@ -261,8 +286,7 @@ const said = new marked.Renderer();
 said.link = ({ href, title, tokens }) => {
   const text = said.parser.parseInline(tokens);
   if (!LINK.test(href)) return text;
-  const named = title ? ` title="${escapeAttribute(title)}"` : "";
-  return `<a href="${escapeAttribute(href)}"${named} rel="noopener noreferrer">${text}</a>`;
+  return anchor(href, title, text, said.parser.parseInline(tokens, said.parser.textRenderer));
 };
 said.image = ({ href, title, text }) => {
   if (/^data:image\//i.test(href)) {
@@ -270,7 +294,7 @@ said.image = ({ href, title, text }) => {
     return `<img src="${escapeAttribute(href)}" alt="${escapeAttribute(text)}"${named}>`;
   }
   if (!/^https?:/i.test(href)) return escapeText(text);
-  return `<a href="${escapeAttribute(href)}" rel="noopener noreferrer">${escapeText(text || href)}</a>`;
+  return anchor(href, null, escapeText(text || href), text || href);
 };
 
 /** The languages a fenced block names when it holds words rather than
@@ -808,13 +832,22 @@ export function settled(markdown: string): number {
 
 // ---- what the user sent ----
 
+/** Where a link in a message the user sent may point: the web. */
+const WEB = /^https?:\/\//i;
+
 /** How the lexer reads a message the user typed. A message is not a
-    document: a `#` line, a `---` line, a table, a `~` and a reference
-    definition show as typed, and so does HTML, as text. A quote is only
-    its own `>` lines and a list ends at a line that is neither a list item
-    nor indented under one, so the line typed after either is a line of
-    its own and never drawn into it. */
+    document, and what is not plainly meant as Markdown shows as typed: a
+    `#` line, a `---` line, a table, a `~`, a reference definition, HTML,
+    an indented line, a backslash, a character reference, a `_`, and a
+    link or an image that points anywhere but the web. A quote is only
+    its own `>` lines and a list ends at a line that is neither a list
+    item nor indented under one, so the line typed after either is a line
+    of its own and never drawn into it. */
 class Typed extends Lexing {
+  /** The lengths of `*` run that nothing closes from here on, in the
+      text they were last looked for in. */
+  #unclosed = { text: "", runs: new Set<number>() };
+
   override heading(): undefined {}
   override lheading(): undefined {}
   override hr(): undefined {}
@@ -822,6 +855,8 @@ class Typed extends Lexing {
   override def(): undefined {}
   override html(): undefined {}
   override del(): undefined {}
+  override code(): undefined {}
+  override escape(): undefined {}
   override blockquote(src: string): Tokens.Blockquote | undefined {
     const lines = /^(?: {0,3}>[^\n]*(?:\n|$))+/.exec(src);
     return lines === null ? undefined : super.blockquote(lines[0]);
@@ -830,6 +865,67 @@ class Typed extends Lexing {
     const lines = src.split("\n");
     const end = lines.findIndex((line, at) => at > 0 && /^\S/.test(line) && !/^(?:[*+-]|\d{1,9}[.)])(?:[ \t]|$)/.test(line));
     return super.list(end === -1 ? src : lines.slice(0, end).join("\n") + "\n");
+  }
+  override link(src: string): Tokens.Link | Tokens.Image | undefined {
+    const token = super.link(src);
+    return token !== undefined && WEB.test(typedBack(token.href)) ? token : undefined;
+  }
+  override autolink(src: string): Tokens.Link | undefined {
+    const token = super.autolink(src);
+    return token !== undefined && WEB.test(typedBack(token.href)) ? token : undefined;
+  }
+  override url(src: string): Tokens.Link | undefined {
+    const token = super.url(src);
+    return token !== undefined && WEB.test(typedBack(token.href)) ? token : undefined;
+  }
+  /** A line break is the end of a line, and what stands around it,
+      a backslash before it or spaces after it, is text. */
+  override br(src: string): Tokens.Br | undefined {
+    const raw = /^ *\n/.exec(src)?.[0];
+    return raw === undefined ? undefined : { type: "br", raw };
+  }
+  override inlineText(src: string): Tokens.Text | undefined {
+    const token = super.inlineText(src);
+    if (token !== undefined) token.text = token.raw;
+    return token;
+  }
+  /** Emphasis is only a run of one to three `*` that opens after the
+      start of a line or a space, before a word, and closes after a word,
+      before a space, a mark other than `/`, or the end. A glob such as
+      `src/*.ts` and a name such as `__init__.py` are neither. */
+  override emStrong(src: string, maskedSrc: string): Tokens.Em | Tokens.Strong | undefined {
+    const run = /^(\*{1,3})(?![\s*./])./.exec(src)?.[1].length;
+    if (run === undefined) return undefined;
+    const at = maskedSrc.length - src.length;
+    if (at > 0 && !/\s/.test(maskedSrc[at - 1])) return undefined;
+    if (this.#unclosed.text !== maskedSrc) this.#unclosed = { text: maskedSrc, runs: new Set() };
+    if (this.#unclosed.runs.has(run)) return undefined;
+    const runs = /\*+/g;
+    runs.lastIndex = at + run;
+    for (let found = runs.exec(maskedSrc); found !== null; found = runs.exec(maskedSrc)) {
+      if (found[0].length !== run) continue;
+      const before = maskedSrc[found.index - 1];
+      const after = maskedSrc[found.index + run] ?? "";
+      if (/\s/.test(before)) {
+        // A run that opens in its turn: this one was never closed.
+        if (after !== "" && !/\s/.test(after)) return undefined;
+        continue;
+      }
+      if (before === "/" || before === "\\") continue;
+      if (after !== "" && !/\s/.test(after) && (after === "/" || !/[\p{P}\p{S}]/u.test(after))) continue;
+      const raw = src.slice(0, found.index - at + run);
+      const text = raw.slice(run, -run);
+      const strong = (): Tokens.Strong => ({
+        type: "strong",
+        raw: raw.slice(run - 2, raw.length - (run - 2)),
+        text,
+        tokens: this.lexer.inlineTokens(text),
+      });
+      if (run === 2) return strong();
+      return { type: "em", raw, text: raw.slice(1, -1), tokens: run === 3 ? [strong()] : this.lexer.inlineTokens(text) };
+    }
+    this.#unclosed.runs.add(run);
+    return undefined;
   }
 }
 
@@ -850,7 +946,7 @@ function reveal(text: string): string {
 }
 
 /** The renderer for a message the user sent. It draws text only as text,
-    loads nothing, and draws a link only where `LINK` allows. */
+    loads nothing, and draws a link only to the web. */
 const sent = new marked.Renderer();
 sent.text = (token) =>
   "tokens" in token && token.tokens ? sent.parser.parseInline(token.tokens) : reveal(token.text);
@@ -859,16 +955,31 @@ sent.codespan = ({ text }) => `<code>${reveal(text)}</code>`;
 sent.code = ({ text }) => `<pre><code>${reveal(text)}</code></pre>\n`;
 sent.checkbox = ({ checked }) => reveal(checked ? "[x] " : "[ ] ");
 sent.link = ({ href, title, tokens }) => {
-  const text = sent.parser.parseInline(tokens);
+  const text = worded(sent.parser.parseInline(tokens));
   const address = typedBack(href);
-  if (!LINK.test(address)) return text;
-  const named = title ? ` title="${escapeAttribute(shown(typedBack(title)))}"` : "";
-  return `<a href="${escapeAttribute(address)}"${named} rel="noopener noreferrer" tabindex="-1">${text}</a>`;
+  if (!WEB.test(address)) return text;
+  const words = typedBack(sent.parser.parseInline(tokens, sent.parser.textRenderer));
+  return anchor(address, title ? typedBack(title) : null, text, words, ' tabindex="-1"');
 };
 sent.image = ({ href, text }) => {
   const address = typedBack(href);
-  if (!/^https?:/i.test(address)) return reveal(text);
-  return `<a href="${escapeAttribute(address)}" rel="noopener noreferrer" tabindex="-1">${reveal(text || address)}</a>`;
+  const words = typedBack(text);
+  if (!WEB.test(address)) return reveal(words);
+  return anchor(address, null, reveal(words || address), words || address, ' tabindex="-1"');
+};
+/** Each blank line the user typed stands as a line of its own. */
+sent.space = ({ raw }) => '<div class="gap"></div>'.repeat(raw.length);
+/** Every item shows the marker the user typed: its number as typed, or a
+    bullet. */
+sent.list = ({ ordered, items }) => {
+  const drawn = items.map((item) => {
+    const number = /^[ \t]*(\d{1,9}[.)])/.exec(item.raw)?.[1];
+    const marker =
+      number === undefined ? '<span class="marker bullet"></span>' : `<span class="marker">${reveal(`${number} `)}</span>`;
+    return `<li>${marker}<span class="item">${sent.parser.parse(item.tokens)}</span></li>`;
+  });
+  const tag = ordered ? "ol" : "ul";
+  return `<${tag}>${drawn.join("")}</${tag}>\n`;
 };
 
 /** A piece of a message as `sentParts` splits it: words, or a mention of
@@ -890,6 +1001,17 @@ function typedBack(text: string): string {
   return out;
 }
 
+/** A link's words as HTML with every mention in them as its plain `@`
+    word: a link holds no button. */
+function worded(html: string): string {
+  let out = "";
+  for (const char of html) {
+    const part = standIns.get(char);
+    out += part === undefined ? char : escapeAttribute(shown(part.text));
+  }
+  return out;
+}
+
 /** A mention as the bubble draws it, as a button that opens its file
     when it can be opened. */
 function mentioned(part: SentPart, at: number, opens: boolean): string {
@@ -899,41 +1021,73 @@ function mentioned(part: SentPart, at: number, opens: boolean): string {
   return `<button class="mention link-file" tabindex="-1" data-thread-item data-mention="${at}" title="${title}" data-testid="message-mention">${word}</button>`;
 }
 
-/** Whether what was read draws anything a plain paragraph would not:
-    a message of plain paragraphs, line breaks, escapes and `<` words is
-    drawn as typed instead, backslashes and all. */
+/** Whether what was read draws anything a plain paragraph would not: a
+    message of plain paragraphs, line breaks and `<` words is drawn as
+    typed instead. */
 function plain(tokens: Token[]): boolean {
   return tokens.every(
     (token) =>
       token.type === "space" ||
-      (token.type === "paragraph" &&
-        (token.tokens ?? []).every((inline) => ["text", "br", "escape", "html"].includes(inline.type))),
+      (token.type === "paragraph" && (token.tokens ?? []).every((inline) => ["text", "br", "html"].includes(inline.type))),
   );
 }
 
-/** Lines read as paragraphs of their own because a line the lexer would
-    have read as a heading or a rule stood after them, joined again, so
-    the user's line break stays a line break. */
+/** The blank lines that end `text`, given that a line ends before them. */
+function blanks(text: string): number {
+  const lines = /\s*$/.exec(text)![0].split("\n").length - 1;
+  return Math.max(0, lines - 1);
+}
+
+/** The blocks of a message as they are drawn. Every blank line between
+    two blocks, and before the first, stands as a line (see `sent.space`).
+    Paragraphs with no blank line between them are one paragraph, so the
+    user's line break stays a line break where the lexer split them at a
+    line it would have read as a heading or a rule. Lists with no blank
+    line between them are one list, whatever marker each was typed with. */
 function joined(tokens: Token[]): Token[] {
   const out: Token[] = [];
+  const gap = (lines: number): Token => ({ type: "space", raw: "\n".repeat(lines) });
+  let between = "";
   for (const token of tokens) {
-    if ("tokens" in token && token.tokens && token.type !== "paragraph") token.tokens = joined(token.tokens);
-    if (token.type === "list") for (const item of token.items as Tokens.ListItem[]) item.tokens = joined(item.tokens);
+    if (token.type === "space") {
+      between += token.raw;
+      continue;
+    }
+    if (token.type === "blockquote") token.tokens = joined(token.tokens ?? []);
+    if (token.type === "list") {
+      const items = token.items as Tokens.ListItem[];
+      items.forEach((item, at) => {
+        item.tokens = joined(item.tokens);
+        const under = blanks(item.raw);
+        if (under > 0 && at < items.length - 1) item.tokens.push(gap(under));
+      });
+    }
     const last = out.at(-1);
-    if (token.type === "paragraph" && last?.type === "paragraph") {
+    const empty = last === undefined ? between.split("\n").length - 1 : blanks(between);
+    if (empty > 0) out.push(gap(empty));
+    else if (token.type === "paragraph" && last?.type === "paragraph") {
       last.tokens!.push({ type: "br", raw: "\n" }, ...token.tokens!);
       last.raw += token.raw;
       last.text += "\n" + token.text;
-    } else out.push(token);
+      between = /\s*$/.exec(token.raw)![0];
+      continue;
+    } else if (token.type === "list" && last?.type === "list") {
+      (last.items as Tokens.ListItem[]).push(...(token.items as Tokens.ListItem[]));
+      last.raw += token.raw;
+      between = /\s*$/.exec(token.raw)![0];
+      continue;
+    }
+    out.push(token);
+    between = /\s*$/.exec(token.raw)![0];
   }
   return out;
 }
 
 /** A message the user typed as HTML, or null when it is plain text and
-    is drawn as typed. Quotes, lists, code, bold, italic and links are
-    drawn; anything else shows as typed. A mention is drawn as its `@`
-    word, a button marked with its part's place in `parts` when `opens`
-    says its file can be opened. */
+    is drawn as typed. Quotes, lists, fenced and inline code, bold, italic
+    and links to the web are drawn; anything else shows as typed. A
+    mention is drawn as its `@` word, a button marked with its part's
+    place in `parts` when `opens` says its file can be opened. */
 export function sentHtml(parts: readonly SentPart[], opens: (path: string) => boolean = () => false): string | null {
   const text = parts.map((part) => part.text).join("");
   if (text === "") return null;

@@ -771,17 +771,35 @@ and sending a message takes it to its foot.
 The user's own message is drawn with the little Markdown a message uses: a
 quote of lines that start with `>`, lists of lines that start with `*`, `-`
 or a number and a dot, code in backticks and fenced code, bold, italic and
-links. A quote or a list ends at the first line that does not start as one,
-so the words typed under a quote stand under it, and every line break typed
-is kept. Headings, rules, tables and struck text show as typed, an image is
-never fetched but shows as a link to its web address, and HTML shows as its
-text. A link
-opens in the browser. A fenced block keeps its lines and scrolls sideways.
-A message with none of this, or a stray `*`, `_` or `<` in ordinary words,
-reads exactly as typed. Anything unseen in it, inside code too, shows as its
-marker. A message waiting to be sent, one read back after a rewind or a
-restart, draws the same way; a command run with `!`, what another session
-sent and what the workbench sends of its own show as typed.
+links to the web. Whatever is not plainly meant as one of these shows as
+typed. Bold and italic are made only with `*`, and only where the opening
+`*` stands at the start of a line or after a space, before a word, and the
+closing one stands after a word, before a space, the end, or a mark other
+than `/`. So `src/*.ts and lib/*.js` and `__init__.py` read as typed. A
+backslash, a character reference such as `&copy;`, an indented line,
+headings, rules, tables, struck text and HTML show as typed too.
+
+A quote or a list ends at the first line that does not start as one, so the
+words typed under a quote stand under it. Every line break and every blank
+line typed is kept. Each list item shows the marker it was typed with, its
+number as typed or a bullet, and items typed on adjacent lines make one
+list whatever their markers.
+
+A link is drawn only when it points to an `http` or `https` address, and it
+opens in the browser. Any other link, an email address among them, shows as
+typed. A link's title holds the address it goes to, after the title its
+Markdown gave it, and a link whose words name another address shows the
+real one after it in brackets. A reply's links carry the address in the
+same two ways. An image is never fetched: one with a web address shows as a
+link to it, and any other as typed. A mention inside a link is its plain
+`@` word.
+
+A fenced block keeps its lines and scrolls sideways. A message with none of
+this reads exactly as typed. Anything unseen in a message, inside code and
+in a link's address too, shows as its marker. A message waiting to be sent,
+one read back after a rewind or a restart, draws the same way; a command
+run with `!`, what another session sent and what the workbench sends of its
+own show as typed.
 
 A conversation of any length opens and scrolls as a short one does. The
 thread draws only the messages and runs in and near the view, a screen's

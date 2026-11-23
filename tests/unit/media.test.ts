@@ -391,7 +391,7 @@ describe("presenting", () => {
     expect(html).not.toContain("javascript:");
     expect(html).toMatch(/<p>run <a /);
     expect(html).toContain(
-      'href="https://example.com" title="Ex" rel="noopener noreferrer"',
+      'href="https://example.com" title="Ex (https://example.com)" rel="noopener noreferrer"',
     );
     expect(html).toContain('href="mailto:a@b.c"');
     expect(html).toContain('<img src="https://example.com/y.png" alt="y">');
@@ -499,9 +499,9 @@ describe("what an agent says in a conversation", () => {
       "Look ![chart](https://example.com/leak?x=secret) and ![dot](data:image/png;base64,AAAA) and [docs](https://example.com) <img src=x>",
     );
     expect(html).not.toContain('src="https://example.com');
-    expect(html).toContain('<a href="https://example.com/leak?x=secret" rel="noopener noreferrer">chart</a>');
+    expect(html).toContain('<a href="https://example.com/leak?x=secret" title="https://example.com/leak?x=secret" rel="noopener noreferrer">chart</a>');
     expect(html).toContain('<img src="data:image/png;base64,AAAA" alt="dot">');
-    expect(html).toContain('<a href="https://example.com" rel="noopener noreferrer">docs</a>');
+    expect(html).toContain('<a href="https://example.com" title="https://example.com" rel="noopener noreferrer">docs</a>');
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("&lt;img");
     expect(renderSaid("![x](javascript:alert(1))")).not.toContain("javascript:");

@@ -79,34 +79,61 @@
     margin-bottom: 0;
   }
 
+  /* A blank line the user typed is a line of its own, so the blocks
+     themselves stand as close as the lines typed. */
   .sent :global(p) {
-    margin: 0 0 0.6lh;
+    margin: 0;
+  }
+
+  .sent :global(.gap) {
+    height: 1lh;
   }
 
   .sent :global(blockquote) {
-    margin: 0 0 0.6lh;
+    margin: 0.3lh 0;
     padding: 0 0 0 10px;
     border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
     color: var(--ink-2);
   }
 
-  .sent :global(blockquote) :global(blockquote) {
+  .sent :global(blockquote > :first-child),
+  .sent :global(.item > :first-child) {
+    margin-top: 0;
+  }
+
+  .sent :global(blockquote > :last-child),
+  .sent :global(.item > :last-child) {
     margin-bottom: 0;
   }
 
+  /* A list is two columns: the marker each item was typed with, and the
+     item. */
   .sent :global(ul),
   .sent :global(ol) {
-    margin: 0 0 0.6lh;
-    padding-left: 1.3em;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
-  .sent :global(li > p) {
-    margin: 0;
+  .sent :global(li) {
+    display: contents;
   }
 
-  .sent :global(li > ul),
-  .sent :global(li > ol) {
-    margin: 0;
+  .sent :global(.marker) {
+    padding-left: 0.4em;
+    white-space: pre;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sent :global(.marker.bullet)::before {
+    content: "\2022\a0";
+  }
+
+  .sent :global(.item) {
+    display: block;
+    min-width: 0;
   }
 
   .sent :global(code) {
@@ -118,7 +145,7 @@
   }
 
   .sent :global(pre) {
-    margin: 0 0 0.6lh;
+    margin: 0.3lh 0;
     padding: 7px 10px;
     border-radius: var(--radius-sm);
     background: var(--sent-fill);
@@ -150,6 +177,16 @@
   .sent :global(.plain) {
     unicode-bidi: isolate;
     direction: ltr;
+    white-space: pre-wrap;
+  }
+
+  .sent :global(pre .plain) {
+    white-space: inherit;
+  }
+
+  /* The address a link goes to, where its words name another. */
+  .sent :global(.goes) {
+    color: var(--ink-2);
   }
 
   .sent :global(.unseen) {

@@ -1697,7 +1697,7 @@ test.describe("the user's own Markdown", () => {
     expect(answer.y).toBeGreaterThanOrEqual(quote.y + quote.height);
     // The list's items stand in from the words.
     await expect(sent.locator("li")).toHaveText(["keep one scan", "share it"]);
-    expect((await sent.locator("li").first().boundingBox())!.x).toBeGreaterThan(answer.x + 4);
+    expect((await sent.locator("li .item").first().boundingBox())!.x).toBeGreaterThan(answer.x + 4);
     await expect(sent.locator("p code")).toHaveText("npm test");
     const link = sent.getByRole("link", { name: "the notes" });
     await expect(link).toHaveAttribute("href", "https://example.com/notes");
