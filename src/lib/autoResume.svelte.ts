@@ -36,8 +36,11 @@
  * the user wrote to it while it started. A window that reads as used up until
  * a later time is waited for until then. Where the figures cannot be read
  * for a quarter of an hour the wait ends and the conversation says so.
- * The turn sent is the one try: where the limit refuses it too, the
- * conversation says so and waits for the user.
+ * A limit that ends the turn sent is waited for like any other where it is a
+ * later session window than the one waited for, so the conversation goes on
+ * at every reset. Where the limit refuses the turn sent at once, the window
+ * waited for being in fact still shut, the conversation says so and waits
+ * for the user.
  */
 
 import { dirFor } from "$lib/accounts.svelte";
@@ -57,6 +60,10 @@ export interface Stopped {
 
 /** How long after the reset the usage is first read. */
 export const MARGIN = 60_000;
+/** How much later than the reset waited for a session window's reset must
+    be to count as a new window, not the same one with the time moved a
+    little by the server. A new window starts hours later. */
+export const SAME_WINDOW_WITHIN = 15 * 60_000;
 /** How often the waits are looked at. */
 export const LOOK_EVERY = 20_000;
 /** How long after the reset the usage is still asked for where no read of
@@ -77,8 +84,9 @@ export const autoResume = $state({
   limited: {} as Record<string, number>,
 });
 
-/** The rows whose running turn is the one sent to go on. */
-const tried = new Set<string>();
+/** The rows whose running turn is the one sent to go on, with the reset
+    that was waited for, in milliseconds. */
+const tried = new Map<string, number>();
 
 /** What the store needs of the integrated sessions, set by them. */
 export interface Hands {
@@ -216,13 +224,19 @@ function forget(key: string) {
  * seconds. Only the session window with a time is waited for, and only
  * where the choice is on as the turn ends; where it is off, the turn is
  * kept so its notice can still wait for it. Where the turn was the one
- * sent to go on, that was the one try.
+ * sent to go on, the limit refused it at once where it is not a session
+ * window later than the one waited for by more than SAME_WINDOW_WITHIN: the
+ * conversation says so and waits for the user. A later session window is
+ * waited for like any fresh limit.
  */
 export function limitEnded(key: string, window: string | null, resetsAt: number | null) {
-  if (tried.delete(key)) {
+  const waited = tried.get(key);
+  tried.delete(key);
+  const fresh = window === "session" && resetsAt !== null && resetsAt * 1000 > (waited ?? 0) + SAME_WINDOW_WITHIN;
+  if (waited !== undefined && !fresh) {
     delete autoResume.limited[key];
     forget(key);
-    hands?.say(key, "The usage limit stopped it again. It does not go on by itself a second time.", true);
+    hands?.say(key, "The usage limit stopped it again. It does not go on by itself until you write to it.", true);
     return;
   }
   const session = byKey(key);
@@ -332,7 +346,7 @@ async function goOn(session: Session, stopped: Stopped, now: number) {
   // turned the choice off or wrote to it meanwhile: nothing more is sent.
   const up = byKey(key);
   if (up === null || !isOn(up) || hands?.written(key) === true) return;
-  tried.add(key);
+  tried.set(key, stopped.resetsAt);
   if (hands?.send(key, GO_ON, () => tried.delete(key)) !== true) tried.delete(key);
 }
 

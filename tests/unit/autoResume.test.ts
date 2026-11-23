@@ -475,7 +475,25 @@ describe("going on once the limit resets", () => {
     expect(sent).toHaveLength(0);
   });
 
-  it("tries once: the turn it sent, cut short by the limit too, is said and not waited for", async () => {
+  it("goes on at every reset: the turn it sent, cut short by a later window's limit, is waited for", async () => {
+    withWindow();
+    opens();
+    const one = row();
+    choose("a", true);
+    limitEnded("a", "session", RESET);
+    for (let again = 1; again <= 3; again += 1) {
+      const reset = RESET + (again - 1) * 5 * 3600;
+      read = () => report(reset + 61, [session(2, reset + 5 * 3600, "normal")]);
+      await look(reset * 1000 + MARGIN);
+      expect(sent).toHaveLength(again);
+      turnMoved("a", true);
+      limitEnded("a", "session", RESET + again * 5 * 3600);
+      expect(resumesAt(one)).toBe((RESET + again * 5 * 3600) * 1000);
+    }
+    expect(said).toHaveLength(0);
+  });
+
+  it("a limit that refuses the turn it sent at once is said and not waited for", async () => {
     withWindow();
     opens();
     const one = row();
@@ -484,12 +502,12 @@ describe("going on once the limit resets", () => {
     await look(AFTER);
     expect(sent).toHaveLength(1);
     turnMoved("a", true);
-    limitEnded("a", "session", RESET + 5 * 3600);
+    limitEnded("a", "session", RESET + 60);
     expect(resumesAt(one)).toBeNull();
     expect(said).toEqual([
       {
         key: "a",
-        text: "The usage limit stopped it again. It does not go on by itself a second time.",
+        text: "The usage limit stopped it again. It does not go on by itself until you write to it.",
         warning: true,
       },
     ]);
@@ -497,6 +515,21 @@ describe("going on once the limit resets", () => {
     turnMoved("a", true);
     limitEnded("a", "session", RESET + 5 * 3600);
     expect(resumesAt(one)).toBe((RESET + 5 * 3600) * 1000);
+  });
+
+  it("the same window with its time moved a little, or the week's limit, refuses it at once too", async () => {
+    withWindow();
+    opens();
+    const one = row();
+    choose("a", true);
+    for (const [window, at] of [["session", RESET + 60], ["weekly", RESET + 5 * 3600], ["session", null]] as const) {
+      limitEnded("a", "session", RESET);
+      await look(AFTER);
+      turnMoved("a", true);
+      limitEnded("a", window, at);
+      expect(resumesAt(one)).toBeNull();
+    }
+    expect(said).toHaveLength(3);
   });
 
   it("a turn it sent that ends any other way leaves the next limit to be waited for", async () => {
