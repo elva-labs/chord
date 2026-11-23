@@ -1,6 +1,6 @@
 <script module lang="ts">
   /** The columns of settings, one on screen at a time. */
-  type Tab = "appearance" | "sessions" | "agents" | "workflows" | "accounts" | "plugins" | "keys" | "notifications";
+  type Tab = "appearance" | "sessions" | "agents" | "accounts" | "plugins" | "keys" | "notifications";
 
   /** The tab last chosen. It belongs to the module rather than the dialog, so
       closing the settings and opening them again lands where you were; a new
@@ -91,7 +91,6 @@
   import Switch from "$lib/components/Switch.svelte";
   import BackgroundPicker from "$lib/components/BackgroundPicker.svelte";
   import UnreadEntries from "$lib/components/UnreadEntries.svelte";
-  import WorkflowsTab from "$lib/components/WorkflowsTab.svelte";
   import AgentsTab from "$lib/components/AgentsTab.svelte";
 
   /**
@@ -112,7 +111,6 @@
     { name: "appearance", label: "Appearance" },
     { name: "sessions", label: "Sessions" },
     { name: "agents", label: "Agents" },
-    { name: "workflows", label: "Workflows" },
     { name: "accounts", label: "Accounts" },
     { name: "plugins", label: "Plugins" },
     { name: "keys", label: "Keys" },
@@ -451,7 +449,7 @@
         {/each}
       </nav>
 
-      <div class="panel" class:fill={tab === "workflows"}>
+      <div class="panel">
         {#if tab === "appearance"}
           <UnreadEntries field={["appearance", "look", "compact", "themes", "palette"]} />
           <div class="row">
@@ -784,8 +782,6 @@
           </section>
         {:else if tab === "agents"}
           <AgentsTab bind:this={agentsTab} />
-        {:else if tab === "workflows"}
-          <WorkflowsTab />
         {:else if tab === "accounts"}
           <section data-testid="settings-accounts">
             <UnreadEntries field="accounts" />
@@ -1121,8 +1117,7 @@
     justify-content: center;
   }
 
-  /* One size for every tab, so nothing moves when the tab changes; it is
-     what the workflows' diagram and a step's settings need side by side. */
+  /* One size for every tab, so nothing moves when the tab changes. */
   .dialog {
     width: min(1100px, 92vw);
     height: min(820px, 92vh);
@@ -1233,13 +1228,6 @@
   .panel:not(.fill) > * {
     max-width: 640px;
     margin-inline: auto;
-  }
-
-  /* The workflows fill the panel and scroll their own parts. */
-  .panel.fill {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
   }
 
   .panel > h3:first-child {

@@ -10,14 +10,14 @@ import { accountOf, dirFor } from "$lib/accounts.svelte";
  * how it reads, GPT-6.2-Sol. Every place that shows a Codex model names it
  * from here, as the composer does: a session's row and its tooltip, the
  * card of a session another started, the settings, the status bar, the
- * start tool's reply and the workflow pickers. A model no list names is
+ * start tool's reply and the Agents tab's model pickers. A model no list names is
  * shown by its id. Claude Code's models are named as they always were, so
  * nothing is kept of its list.
  *
  * A list is heard when a session is ready, when a window catches up with a
  * running session, and from a read of Codex's own, asked for where the
  * account's list is wanted before a session of it has run, such as by the
- * workflow pickers. The last one heard for each account on each machine
+ * Agents tab. The last one heard for each account on each machine
  * is kept while the window is open, as the models each account offers
  * are: a project on another machine is named from the Codex there.
  */

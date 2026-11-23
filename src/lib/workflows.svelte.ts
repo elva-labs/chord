@@ -3,7 +3,6 @@ import type {
   ReviewStep,
   Settings,
   UnreadWorkflow,
-  WorkStep,
   Workflow,
   WorkflowModel,
   WorkflowStep,
@@ -26,9 +25,9 @@ import { startsOnly } from "$lib/workflowInstructions";
  */
 
 /** What the core holds the settings to. */
-export const MOST_WORKFLOWS = 16;
+const MOST_WORKFLOWS = 16;
 export const MOST_STEPS = 12;
-export const MOST_MODELS = 16;
+const MOST_MODELS = 16;
 export const LONGEST_NAME = 40;
 export const MOST_PARALLEL = 8;
 export const MOST_ROUNDS = 10;
@@ -76,7 +75,7 @@ export function directWorkflow(): Workflow {
 }
 
 /** The workflows a fresh install has, in their order. */
-export function shippedWorkflows(): Workflow[] {
+function shippedWorkflows(): Workflow[] {
   return [defaultWorkflow(), directWorkflow()];
 }
 
@@ -91,10 +90,8 @@ export const workflows = $state({
       for none, whatever the default. */
   overrides: {} as Record<string, string | null>,
   /** The workflows in the settings file that are not used, each with the
-      rule it breaks, carried through every write until removed. */
+      rule it breaks, carried through every write. */
   unread: [] as UnreadWorkflow[],
-  /** Why the last change in the editor was not kept, while it matters. */
-  refused: null as string | null,
 });
 
 let known: () => void = () => {};
@@ -155,8 +152,6 @@ export function adoptWorkflows(settings: Settings["workflows"] | undefined) {
   workflows.overrides = overrides;
 }
 
-const stepNames = (workflow: Workflow) => workflow.steps.map((step) => step.name);
-
 /** Names are the same when they differ only in the case of A to Z, as the
     core compares them. */
 const asciiLower = (name: string) => name.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
@@ -184,18 +179,10 @@ function modelProblem(model: WorkflowModel): string | null {
 }
 
 /** The step a review may send the work back to: a work step before it. */
-export function canGoBackTo(workflow: Workflow, review: number, name: string): boolean {
+function canGoBackTo(workflow: Workflow, review: number, name: string): boolean {
   return workflow.steps
     .slice(0, review)
     .some((earlier) => earlier.kind === "work" && earlier.name === name);
-}
-
-/** The work step nearest before a place in the order, by name. */
-function nearestWork(steps: WorkflowStep[], before: number): string | undefined {
-  return steps
-    .slice(0, before)
-    .reverse()
-    .find((step) => step.kind === "work")?.name;
 }
 
 /** Why a workflow will not do, or null when it will: the rules the core
@@ -269,16 +256,6 @@ export function setProblem(set: Settings["workflows"]): string | null {
 
 export { startsOnly };
 
-/** Turns a workflow's own subagents off, so start is the one way it
-    delegates, or back on. */
-export function setStartOnly(name: string, on: boolean): string | null {
-  return edit(name, (draft) => {
-    if (on) delete draft.startOnly;
-    else draft.startOnly = false;
-    return null;
-  });
-}
-
 export function workflowNamed(name: string | null | undefined): Workflow | undefined {
   return name === null || name === undefined
     ? undefined
@@ -325,17 +302,6 @@ export function overrideOf(project: string): string | null | undefined {
   return workflowNamed(own) === undefined ? undefined : own;
 }
 
-/** Points each review at a work step before it again after steps moved,
-    went or changed kind: the nearest one, which is where the work came
-    from. */
-function repair(workflow: Workflow) {
-  workflow.steps.forEach((step, index) => {
-    if (step.kind !== "review" || canGoBackTo(workflow, index, step.backTo)) return;
-    const nearest = nearestWork(workflow.steps, index);
-    if (nearest !== undefined) step.backTo = nearest;
-  });
-}
-
 /** The workflow the file holds but cannot use under a name, if any. Its
     name is taken: a workflow of that name would be read as the one the
     file's default and project choices mean. */
@@ -343,317 +309,8 @@ function unreadNamed(name: string, unread: UnreadWorkflow[] = workflows.unread):
   return unread.find((entry) => entry.name !== null && sameName(entry.name, name));
 }
 
-const unreadNames = () =>
-  workflows.unread.flatMap((entry) => (entry.name === null ? [] : [entry.name]));
-
 function unreadProblem(name: string): string {
   return `"${name}" is the name of a workflow in the settings file that is not used. Mend that one there, or remove it, first.`;
-}
-
-/** Changes one workflow: the draft is mended, checked whole, and kept and
-    sent only if it will do. Says why not otherwise. */
-function edit(name: string, change: (draft: Workflow) => string | null): string | null {
-  const index = workflows.list.findIndex((workflow) => workflow.name === name);
-  if (index < 0) return `There is no workflow called ${name}.`;
-  const draft = clone($state.snapshot(workflows.list[index]));
-  const early = change(draft);
-  if (early !== null) return early;
-  repair(draft);
-  const others = workflows.list.filter((_, at) => at !== index);
-  const problem =
-    workflowProblem(draft) ??
-    (others.some((other) => sameName(other.name, draft.name))
-      ? `There is a workflow called ${draft.name} already.`
-      : !sameName(draft.name, name) && unreadNamed(draft.name) !== undefined
-        ? unreadProblem(draft.name)
-        : null);
-  if (problem !== null) return problem;
-  workflows.list[index] = draft;
-  if (draft.name !== name) {
-    if (workflows.default === name) workflows.default = draft.name;
-    for (const [project, choice] of Object.entries(workflows.overrides)) {
-      if (choice === name) workflows.overrides[project] = draft.name;
-    }
-  }
-  keep();
-  return null;
-}
-
-/**
- * Sends the editor's change. When the core refuses it, the window goes back
- * to what is stored and says why; a later change that is kept clears that.
- */
-function keep() {
-  workflows.refused = null;
-  void Promise.resolve(save()).then((refused) => {
-    if (refused === null || refused === undefined) return;
-    workflows.refused = refused;
-  });
-}
-
-/** A name that is not taken: the wanted one, then numbered. */
-export function freeName(wanted: string, taken: string[]): string {
-  if (!taken.some((other) => sameName(other, wanted))) return wanted;
-  for (let n = 2; ; n += 1) {
-    const candidate = `${wanted} ${n}`;
-    if (!taken.some((other) => sameName(other, candidate))) return candidate;
-  }
-}
-
-/** Adds a workflow of the default shape, and answers with its name, or
-    null when the settings hold as many as they can. */
-export function addWorkflow(): string | null {
-  if (workflows.list.length >= MOST_WORKFLOWS) return null;
-  const fresh = defaultWorkflow();
-  fresh.name = freeName("New workflow", [...workflows.list.map((workflow) => workflow.name), ...unreadNames()]);
-  workflows.list.push(fresh);
-  keep();
-  return fresh.name;
-}
-
-/** Copies a workflow under a name of its own, and answers with the name. */
-export function duplicateWorkflow(name: string): string | null {
-  const source = workflowNamed(name);
-  if (source === undefined || workflows.list.length >= MOST_WORKFLOWS) return null;
-  const copy = clone($state.snapshot(source));
-  copy.name = freeName(
-    `${source.name} copy`.slice(0, LONGEST_NAME),
-    [...workflows.list.map((workflow) => workflow.name), ...unreadNames()],
-  );
-  workflows.list.splice(workflows.list.indexOf(source) + 1, 0, copy);
-  keep();
-  return copy.name;
-}
-
-/** Takes a workflow away. If it was the default, new sessions start with
-    none; a project that named it follows the default again. */
-export function deleteWorkflow(name: string) {
-  const index = workflows.list.findIndex((workflow) => workflow.name === name);
-  if (index < 0) return;
-  workflows.list.splice(index, 1);
-  if (workflows.default === name) workflows.default = null;
-  for (const [project, choice] of Object.entries(workflows.overrides)) {
-    if (choice === name) delete workflows.overrides[project];
-  }
-  keep();
-}
-
-/** Takes a workflow the file holds but cannot use out of the file, with
-    the default and the project choices that named it. */
-export function removeUnread(at: number) {
-  const index = workflows.unread.findIndex((entry) => entry.at === at);
-  if (index < 0) return;
-  workflows.unread.splice(index, 1);
-  keep();
-}
-
-export function renameWorkflow(name: string, to: string): string | null {
-  const wanted = to.trim();
-  if (wanted === name) return null;
-  return edit(name, (draft) => {
-    draft.name = wanted;
-    return null;
-  });
-}
-
-/** Marks the workflow new sessions start with; null is none. */
-export function setDefault(name: string | null) {
-  if (name !== null && workflowNamed(name) === undefined) return;
-  workflows.default = name;
-  for (const entry of workflows.unread) entry.default = false;
-  keep();
-}
-
-/** A project's own word, or undefined to have it follow the default. */
-export function setOverride(project: string, choice: string | null | undefined) {
-  if (typeof choice === "string" && workflowNamed(choice) === undefined) return;
-  if (choice === undefined) delete workflows.overrides[project];
-  else workflows.overrides[project] = choice;
-  for (const entry of workflows.unread) {
-    entry.projects = entry.projects.filter((other) => other !== project);
-  }
-  keep();
-}
-
-export function setOrchestrator(name: string, model: WorkflowModel): string | null {
-  return edit(name, (draft) => {
-    draft.orchestrator = { ...model };
-    return null;
-  });
-}
-
-/** The name a review added at a place in the order gets, short enough to
-    show whole on its step: Review, then numbered so the names read in
-    order, Review 2 after Review. Added before a review already there, it
-    is a Check, so no number reads out of order. */
-function reviewName(workflow: Workflow, before: number): string {
-  const taken = stepNames(workflow);
-  const numbered = (name: string) => {
-    const found = /^Review(?: (\d+))?$/.exec(name);
-    return found === null ? null : Number(found[1] ?? 1);
-  };
-  const later = workflow.steps.slice(before).some((step) => numbered(step.name) !== null);
-  if (later) return freeName("Check", taken);
-  const most = Math.max(0, ...taken.map(numbered).filter((n) => n !== null));
-  return freeName(most === 0 ? "Review" : `Review ${most + 1}`, taken);
-}
-
-/** A step of the kind given, with the models and bounds a new one has. */
-export function newStep(workflow: Workflow, kind: WorkflowStep["kind"], before: number): WorkflowStep {
-  const taken = stepNames(workflow);
-  if (kind === "work") {
-    return {
-      kind,
-      name: freeName("Work", taken),
-      models: [{ agent: "claude-code", model: "sonnet" }],
-      parallel: 1,
-    };
-  }
-  const target = nearestWork(workflow.steps, before) ?? "";
-  return {
-    kind,
-    name: reviewName(workflow, before),
-    models: [{ agent: "claude-code", model: "opus" }],
-    reviewerApproves: true,
-    orchestratorAgrees: true,
-    backTo: target,
-    limit: 3,
-  };
-}
-
-/** Adds a step so that it sits at `at`, after the steps before it. */
-export function addStep(name: string, at: number, kind: WorkflowStep["kind"]): string | null {
-  return edit(name, (draft) => {
-    if (kind === "review" && at < 1) return "A review follows a step.";
-    const position = Math.min(Math.max(at, 0), draft.steps.length);
-    draft.steps.splice(position, 0, newStep(draft, kind, position));
-    return null;
-  });
-}
-
-/** A workflow as it would be with a step taken away: each review that went
-    back to it goes back to the nearest work step before it instead. */
-export function withoutStep(workflow: Workflow, at: number): Workflow {
-  const draft = clone($state.snapshot(workflow));
-  draft.steps.splice(at, 1);
-  repair(draft);
-  return draft;
-}
-
-export function removeStep(name: string, at: number): string | null {
-  return edit(name, (draft) => {
-    const problem = removeProblem(draft, at);
-    if (problem !== null) return problem;
-    draft.steps.splice(at, 1);
-    return null;
-  });
-}
-
-/** Why a workflow as it would be after a step moved or went will not do,
-    in terms of what was done: the first step that would be a review, or
-    the rule the result breaks. Null when it will do. */
-function afterProblem(after: Workflow): string | null {
-  if (after.steps[0]?.kind === "review") {
-    return `"${after.steps[0].name}" would come first, and the first step does the work.`;
-  }
-  return workflowProblem(after);
-}
-
-/** A workflow as it would be with a step moved, reviews repointed. */
-export function withMovedStep(workflow: Workflow, from: number, to: number): Workflow {
-  const draft = clone($state.snapshot(workflow));
-  const [step] = draft.steps.splice(from, 1);
-  draft.steps.splice(to, 0, step);
-  repair(draft);
-  return draft;
-}
-
-/** Why a step cannot move to another place, or null when it can. */
-export function moveProblem(workflow: Workflow, from: number, to: number): string | null {
-  if (to < 0) return "It is the first step already.";
-  if (to >= workflow.steps.length) return "It is the last step already.";
-  return afterProblem(withMovedStep(workflow, from, to));
-}
-
-/** Why a step cannot be taken away, or null when it can. */
-export function removeProblem(workflow: Workflow, at: number): string | null {
-  if (workflow.steps.length <= 1) return "A workflow needs at least one step.";
-  return afterProblem(withoutStep(workflow, at));
-}
-
-/** Moves a step to another place in the order. */
-export function moveStep(name: string, from: number, to: number): string | null {
-  return edit(name, (draft) => {
-    if (to < 0 || to >= draft.steps.length || from === to) return null;
-    const problem = moveProblem(draft, from, to);
-    if (problem !== null) return problem;
-    const [step] = draft.steps.splice(from, 1);
-    draft.steps.splice(to, 0, step);
-    return null;
-  });
-}
-
-/** What can be set on a step: its name and models, and the settings of
-    its kind. */
-export type StepPatch = Partial<Omit<WorkStep, "kind">> & Partial<Omit<ReviewStep, "kind">>;
-
-/** Changes a step. Renaming one carries the reviews that go back to it. */
-export function updateStep(name: string, at: number, patch: StepPatch): string | null {
-  return edit(name, (draft) => {
-    const step = draft.steps[at];
-    if (step === undefined) return "There is no such step.";
-    const before = step.name;
-    if (patch.name !== undefined) {
-      const wanted = patch.name.trim();
-      const problem = nameProblem(
-        wanted,
-        draft.steps.filter((_, other) => other !== at).map((other) => other.name),
-      );
-      if (problem !== null) return problem;
-      for (const other of draft.steps) {
-        if (other.kind === "review" && other.backTo === before) other.backTo = wanted;
-      }
-      step.name = wanted;
-    }
-    if (patch.models !== undefined) step.models = patch.models.map((model) => ({ ...model }));
-    if (step.kind === "work") {
-      if (patch.parallel !== undefined) step.parallel = patch.parallel;
-    } else {
-      if (patch.reviewerApproves !== undefined) step.reviewerApproves = patch.reviewerApproves;
-      if (patch.orchestratorAgrees !== undefined) step.orchestratorAgrees = patch.orchestratorAgrees;
-      if (patch.backTo !== undefined) {
-        if (!canGoBackTo(draft, at, patch.backTo)) {
-          return `${step.name} goes back to a work step before it.`;
-        }
-        step.backTo = patch.backTo;
-      }
-      if (patch.limit !== undefined) step.limit = patch.limit;
-    }
-    return null;
-  });
-}
-
-/** Turns a step into the other kind, keeping its name and models. */
-export function setStepKind(name: string, at: number, kind: WorkflowStep["kind"]): string | null {
-  return edit(name, (draft) => {
-    const step = draft.steps[at];
-    if (step === undefined) return "There is no such step.";
-    if (step.kind === kind) return null;
-    if (kind === "review" && at === 0) return "The first step does the work.";
-    const base = { name: step.name, models: step.models };
-    draft.steps[at] =
-      kind === "work"
-        ? { kind, ...base, parallel: 1 }
-        : {
-            kind,
-            ...base,
-            reviewerApproves: true,
-            orchestratorAgrees: true,
-            backTo: nearestWork(draft.steps, at) ?? "",
-            limit: 3,
-          };
-    return null;
-  });
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -746,7 +403,7 @@ function modelsText(models: WorkflowModel[]): string {
 }
 
 /** When a review passes the work, in a few words. */
-export function passesText(step: ReviewStep): string {
+function passesText(step: ReviewStep): string {
   if (step.reviewerApproves && step.orchestratorAgrees) {
     return "the reviewer approves and the orchestrator agrees";
   }
@@ -853,22 +510,19 @@ export function changed(
 /** Replaces the whole set and sends it. Answers with why not when it will
     not do, or with the core's reason when the core refuses it, in which
     case the window goes back to what it held. */
-export async function setWorkflows(next: Settings["workflows"]): Promise<string | null> {
+async function setWorkflows(next: Settings["workflows"]): Promise<string | null> {
   const problem = setProblem(next);
   if (problem !== null) return problem;
   const before = workflowsSettings();
   adoptWorkflows(next);
   const refused = (await save()) ?? null;
-  if (refused !== null) {
-    if (!recovering()) adoptWorkflows(before);
-    workflows.refused = refused;
-  }
+  if (refused !== null && !recovering()) adoptWorkflows(before);
   return refused;
 }
 
 /**
  * Makes an agent's change to the workflows as they are when the user allows
- * it, so edits made in the editor meanwhile stay. Throws the reason when it
+ * it, so other changes made meanwhile stay. Throws the reason when it
  * will not do or the core refuses it. Answers with what undoes it: the
  * workflow written goes back to what it was, or away if it was new; one
  * taken away comes back where it stood, with the projects that chose it;
@@ -932,5 +586,4 @@ export function reset() {
   workflows.default = null;
   workflows.overrides = {};
   workflows.unread = [];
-  workflows.refused = null;
 }
