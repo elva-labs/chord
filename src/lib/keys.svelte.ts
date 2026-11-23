@@ -1,3 +1,4 @@
+import type { KeyChord, StoredKeyChord } from "$lib/core";
 import { isMac } from "$lib/platform";
 import { persist } from "$lib/persist";
 import { unreadOf } from "$lib/unread.svelte";
@@ -10,8 +11,9 @@ import { unreadOf } from "$lib/unread.svelte";
  * negotiable here. Within that rule the user picks: a preset, or a chord of
  * their own per action. A chord may be a sequence: a first step, the prefix,
  * and a second step pressed after it, a key alone or held with the first
- * step's modifier. On macOS a prefix may be held with Ctrl in place of Cmd. The stored shape is the whole table, so a custom
- * arrangement survives a change to the presets. The core keeps the table
+ * step's modifier. On macOS a prefix may be held with Ctrl in place of
+ * Cmd. The stored shape is the whole table, so a custom arrangement
+ * survives a change to the presets. The core keeps the table
  * for the machine; the window keeps a copy, read before the core answers.
  */
 
@@ -549,7 +551,7 @@ function fromTable(table: unknown): Keymap {
   const stored: Partial<Keymap> = {};
   if (typeof table === "object" && table !== null) {
     for (const { key } of ACTIONS) {
-      const chord = storedChord((table as Record<string, unknown>)[key]);
+      const chord = storedChord((table as Record<string, unknown>)[key], key);
       if (chord !== null) stored[key] = chord;
     }
   }
@@ -615,7 +617,7 @@ export function loadKeys() {
 
 /** Takes the table the core has for the machine. Nothing is sent back,
     since this is the core's word. */
-export function adoptKeys(table: Record<string, Chord>) {
+export function adoptKeys(table: Record<string, StoredKeyChord>) {
   const bindings = fromTable(table);
   if (ACTIONS.every(({ key }) => sameChord(bindings[key], keys.bindings[key]))) return;
   keys.bindings = bindings;
@@ -625,33 +627,58 @@ export function adoptKeys(table: Record<string, Chord>) {
 
 /** A stored chord as this platform reads it, or null for one it cannot
     use. Ctrl is the modifier off macOS, so a Ctrl first step is a plain
-    one there; on macOS a Ctrl chord alone is the agent's and not taken. */
-function storedChord(value: unknown): Chord | null {
-  if (!isChord(value)) return null;
-  const chord: Chord = { key: value.key, shift: value.shift, alt: value.alt };
-  const then: unknown = value.then;
-  if (then === undefined || then === null) return value.ctrl === true && onMac ? null : chord;
-  if (!isChord(then)) return null;
-  chord.then = { key: then.key, shift: then.shift, alt: then.alt };
-  if ((then as SecondStep).modifier === true) chord.then.modifier = true;
-  if (value.ctrl === true && onMac) chord.ctrl = true;
+    one there. A one-step chord equal to the first step of the action's
+    default sequence is that sequence with its second step lost, and is
+    not taken. */
+function storedChord(value: unknown, action: ActionKey): Chord | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { first, then } = value as { first?: unknown; then?: unknown };
+  if (first === undefined) {
+    if (!isStep(value)) return null;
+    const chord: Chord = { key: value.key, shift: value.shift, alt: value.alt };
+    const fallback = PRESETS.default[action];
+    return fallback.then !== undefined && sameStep(chord, fallback) ? null : chord;
+  }
+  if (!isStep(first) || !isStep(then)) return null;
+  const chord: Chord = {
+    key: first.key,
+    shift: first.shift,
+    alt: first.alt,
+    then: { key: then.key, shift: then.shift, alt: then.alt },
+  };
+  if ((then as SecondStep).modifier === true) chord.then!.modifier = true;
+  if ((first as Chord).ctrl === true && onMac) chord.ctrl = true;
   return chord;
 }
 
-function isChord(value: unknown): value is Chord {
+function isStep(value: unknown): value is Step {
   if (typeof value !== "object" || value === null) return false;
-  const chord = value as Record<string, unknown>;
+  const step = value as Record<string, unknown>;
   return (
-    typeof chord.key === "string" &&
-    chord.key !== "" &&
-    typeof chord.shift === "boolean" &&
-    typeof chord.alt === "boolean"
+    typeof step.key === "string" &&
+    step.key !== "" &&
+    typeof step.shift === "boolean" &&
+    typeof step.alt === "boolean"
+  );
+}
+
+/** A chord as it is stored. A sequence keeps its first step under
+    `first`, so a version that reads one step only sets it aside whole. */
+function toStored(chord: Chord): StoredKeyChord {
+  const step: KeyChord = { key: chord.key, shift: chord.shift, alt: chord.alt };
+  if (chord.then === undefined) return step;
+  return { first: chord.ctrl ? { ...step, ctrl: true } : step, then: { ...chord.then } };
+}
+
+function storedTable(table: Partial<Keymap>): Record<string, StoredKeyChord> {
+  return Object.fromEntries(
+    Object.entries(table).map(([action, chord]) => [action, toStored(chord)]),
   );
 }
 
 function remember() {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ bindings: keys.bindings }));
+    localStorage.setItem(KEY, JSON.stringify({ bindings: storedTable(keys.bindings) }));
   } catch {
     // Non-fatal: the next start uses the default until the core answers.
   }
@@ -660,15 +687,15 @@ function remember() {
 /** The chord table as the core is sent it. An action whose chord the file
     holds and the app does not use keeps the default here, and is left out
     until it is chosen, so the file's entry is not written over. */
-export function keysSettings(): Keymap {
-  const table = { ...keys.bindings };
+export function keysSettings(): Record<string, StoredKeyChord> {
+  const table: Partial<Keymap> = { ...keys.bindings };
   for (const entry of unreadOf("keys")) {
     const action = entry.name as ActionKey;
     if (table[action] !== undefined && sameChord(table[action], PRESETS.default[action])) {
-      delete (table as Partial<Keymap>)[action];
+      delete table[action];
     }
   }
-  return table;
+  return storedTable(table);
 }
 
 function save() {

@@ -347,7 +347,9 @@ describe("a change", () => {
     expect(keys.bindings.review).toEqual(PRESETS.default.review);
     expect(theme.look).toBe("terminal");
     expect(settingsAsk.undo).toBeNull();
-    expect(sets.at(-1)).toEqual({ keys: { ...PRESETS.default } });
+    // A sequence goes to the core as its first step and its then.
+    const { then, ...first } = PRESETS.default["send.now"];
+    expect(sets.at(-1)).toEqual({ keys: { ...PRESETS.default, "send.now": { first, then } } });
   });
 
   it("is offered for undo for a while, then kept", async () => {

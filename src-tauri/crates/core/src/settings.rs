@@ -156,17 +156,17 @@ const OFFERED_LATER: [&str; 1] = [workflow::DIRECT_NAME];
 ///
 /// A sequence is a chord with a second step to follow it. Its first step
 /// may be held with Ctrl in place of Cmd on macOS, and its second is a key
-/// alone or held with the first step's modifier. A one-step chord is
-/// written without either field, as before sequences were; a version
-/// without them reads a sequence as its first step alone.
+/// alone or held with the first step's modifier. The file holds a one-step
+/// chord as its key, Shift and Alt, and a sequence as its `first` step and
+/// its `then` with no key of its own, so a version that reads one step only
+/// sets a sequence aside whole rather than reading its first step alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "StoredChord", into = "StoredChord")]
 pub struct Chord {
     pub key: String,
     pub shift: bool,
     pub alt: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
     pub ctrl: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub then: Option<Step>,
 }
 
@@ -179,6 +179,66 @@ pub struct Step {
     pub alt: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub modifier: bool,
+}
+
+/// A sequence's first step as the file holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct First {
+    key: String,
+    shift: bool,
+    alt: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    ctrl: bool,
+}
+
+/// A chord as the file holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+enum StoredChord {
+    Sequence { first: First, then: Step },
+    One { key: String, shift: bool, alt: bool },
+}
+
+impl From<StoredChord> for Chord {
+    fn from(stored: StoredChord) -> Self {
+        match stored {
+            StoredChord::Sequence { first, then } => Chord {
+                key: first.key,
+                shift: first.shift,
+                alt: first.alt,
+                ctrl: first.ctrl,
+                then: Some(then),
+            },
+            StoredChord::One { key, shift, alt } => Chord {
+                key,
+                shift,
+                alt,
+                ctrl: false,
+                then: None,
+            },
+        }
+    }
+}
+
+impl From<Chord> for StoredChord {
+    fn from(chord: Chord) -> Self {
+        match chord.then {
+            Some(then) => StoredChord::Sequence {
+                first: First {
+                    key: chord.key,
+                    shift: chord.shift,
+                    alt: chord.alt,
+                    ctrl: chord.ctrl,
+                },
+                then,
+            },
+            None => StoredChord::One {
+                key: chord.key,
+                shift: chord.shift,
+                alt: chord.alt,
+            },
+        }
+    }
 }
 
 fn is_false(value: &bool) -> bool {
@@ -536,10 +596,6 @@ fn chord(action: &str, value: &Value) -> Result<Chord, String> {
         if then.key.is_empty() || then.key.chars().count() > LONGEST_NAME {
             return Err(format!("the second step of the chord for {action} has no key"));
         }
-    } else if chord.ctrl {
-        return Err(format!(
-            "the chord for {action} is held with Ctrl, which only a sequence's first step may be"
-        ));
     }
     Ok(chord)
 }
@@ -2298,7 +2354,7 @@ mod tests {
         let home = home("sequence");
         let store = Store::new(&home, Arc::new(Recorder::default()));
         let sequence = json!({
-            "key": "x", "shift": false, "alt": false, "ctrl": true,
+            "first": { "key": "x", "shift": false, "alt": false, "ctrl": true },
             "then": { "key": "s", "shift": false, "alt": false }
         });
         store
@@ -2321,28 +2377,82 @@ mod tests {
         assert_eq!((then.key.as_str(), then.modifier), ("s", false));
     }
 
+    /// The version before sequences reads a chord as a key with Shift and
+    /// Alt, and sets aside an entry that is not one, writing it back as the
+    /// file held it until a change names its action again. A sequence has
+    /// no key of its own, so it is set aside whole rather than read as its
+    /// first step.
+    #[test]
+    fn a_version_that_reads_one_step_sets_a_sequence_aside_whole() {
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct OneStep {
+            key: String,
+            shift: bool,
+            alt: bool,
+        }
+        let sequence = serde_json::to_value(Chord {
+            key: "x".into(),
+            shift: false,
+            alt: false,
+            ctrl: true,
+            then: Some(Step {
+                key: "s".into(),
+                shift: false,
+                alt: false,
+                modifier: false,
+            }),
+        })
+        .unwrap();
+        assert!(serde_json::from_value::<OneStep>(sequence.clone()).is_err());
+        let one = json!({ "key": "g", "shift": false, "alt": false });
+        assert!(serde_json::from_value::<OneStep>(one.clone()).is_ok());
+
+        // An entry the reader cannot read, the way that version sees a
+        // sequence, goes through its saves as the file held it.
+        let dir = home("sequence-set-aside");
+        let unreadable = json!({ "steps": ["x", "s"] });
+        put(
+            &dir,
+            &json!({ "keys": { "send.now": unreadable, "review": one } }).to_string(),
+        );
+        let store = Store::new(&dir, Arc::new(Recorder::default()));
+        let loaded = store.load().settings;
+        assert!(!loaded.keys.contains_key("send.now"));
+        assert_eq!(loaded.unread_entries[0].name, "send.now");
+        store.set(&json!({ "appearance": "dark" })).unwrap();
+        assert_eq!(file_of(&dir)["keys"]["send.now"], unreadable);
+        store
+            .set(&json!({ "keys": { "review": { "key": "d", "shift": false, "alt": false } } }))
+            .unwrap();
+        assert_eq!(file_of(&dir)["keys"]["send.now"], unreadable);
+        // A change that names the action again replaces it.
+        store.set(&json!({ "keys": { "send.now": one } })).unwrap();
+        assert_eq!(file_of(&dir)["keys"]["send.now"], one);
+    }
+
     #[test]
     fn a_sequence_is_checked_for_shape() {
         let settings = Settings::default();
         let with = |chord: Value| apply(&settings, &json!({ "keys": { "send.now": chord } }));
         assert!(with(json!({
-            "key": "k", "shift": false, "alt": false,
+            "first": { "key": "k", "shift": false, "alt": false },
             "then": { "key": "s", "shift": false, "alt": false, "modifier": true }
         }))
         .is_ok());
         let empty = with(json!({
-            "key": "x", "shift": false, "alt": false,
+            "first": { "key": "x", "shift": false, "alt": false },
             "then": { "key": "", "shift": false, "alt": false }
         }))
         .unwrap_err();
         assert!(empty.contains("second step"), "{empty}");
         assert!(with(json!({
-            "key": "x", "shift": false, "alt": false, "then": { "key": "s" }
+            "first": { "key": "x", "shift": false, "alt": false }, "then": { "key": "s" }
         }))
         .is_err());
-        let ctrl = with(json!({ "key": "x", "shift": false, "alt": false, "ctrl": true }))
-            .unwrap_err();
-        assert!(ctrl.contains("Ctrl"), "{ctrl}");
+        assert!(with(json!({ "first": { "key": "", "shift": false, "alt": false },
+            "then": { "key": "s", "shift": false, "alt": false } }))
+        .is_err());
     }
 
     #[test]

@@ -464,21 +464,35 @@ describe("a shortcut of two steps", () => {
     expect(tableProblem(table)).toMatch(/Ctrl\+X would be .* and begin Send waiting messages now/);
   });
 
-  it("is kept across a restart, and a stored lone Ctrl chord is not taken on macOS", () => {
+  it("is stored as its first step and the step after, with no key of its own", () => {
     resetKeys({ mac: true });
-    localStorage.setItem(
-      "chord.keys",
-      JSON.stringify({ bindings: { ...PRESETS.default, review: ctrlX(true), "send.now": { ...sendNow(true), then: { key: "d", shift: false, alt: false } } } }),
-    );
+    setBinding("review", { ...ctrlX(true), then: { key: "d", shift: false, alt: false } });
+    const stored = JSON.parse(localStorage.getItem("chord.keys")!).bindings;
+    expect(stored.review).toEqual({
+      first: { key: "x", shift: false, alt: false, ctrl: true },
+      then: { key: "d", shift: false, alt: false },
+    });
+    expect(stored.find).toEqual(PRESETS.default.find);
+    resetKeys({ mac: true });
     loadKeys();
-    expect(chordFor("send.now").then?.key).toBe("d");
-    expect(chordFor("send.now").ctrl).toBe(true);
-    expect(chordFor("review")).toEqual(PRESETS.default.review);
+    expect(chordFor("review")).toEqual({ ...ctrlX(true), then: { key: "d", shift: false, alt: false } });
   });
 
   it("drops Ctrl from a stored first step off macOS, where Ctrl is the modifier", () => {
     resetKeys({ mac: false });
-    adoptKeys({ ...PRESETS.default, "send.now": { ...sendNow(true), then: { key: "d", shift: false, alt: false } } });
+    adoptKeys({
+      ...PRESETS.default,
+      "send.now": { first: { ...ctrlX(true), ctrl: true }, then: { key: "d", shift: false, alt: false } },
+    });
     expect(chordFor("send.now")).toEqual({ ...ctrlX(false), then: { key: "d", shift: false, alt: false } });
+  });
+
+  it("does not take a stored first step alone for an action whose default is a sequence", () => {
+    for (const mac of [true, false]) {
+      resetKeys({ mac });
+      adoptKeys({ ...PRESETS.default, review: chord("g"), "send.now": chord("x") });
+      expect(chordFor("send.now")).toEqual(sendNow(mac));
+      expect(chordFor("review")).toEqual(chord("g"));
+    }
   });
 });
