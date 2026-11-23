@@ -249,18 +249,22 @@ Apart from its mode, a session can read only, as the agent it works as
 sets it. The agent is told it reads only and is to change no files, by
 editing them or by a command it runs, and Claude Code is refused its own
 tools that change files, Edit, Write, MultiEdit and NotebookEdit, whatever
-the mode allows. A command it runs is left to the mode, as are its tools
+the mode allows. A command it runs is left to the mode, as are the tools
+that watch, read or stop a command running in the background, its tools
 that only read, a subagent, whose own calls are held to the same, and the
-workbench's own tools that only read or wait, such as notes, sessions,
-read, wait and selection. Any other tool, a server's tool or the
-workbench's own start, send and note among them, is put to the user
+workbench's own tools that change no file of the project and reach nothing
+outside the workbench, such as notes, note, sessions, read, wait and
+selection. Any other tool, a server's tool or the workbench's own start,
+send and browser tools that read a page among them, is put to the user
 whatever the mode or the allow rules say, and the ask says the session
 reads only and that allowing it lets the session change files. Codex runs
 each turn in its read-only sandbox, in which a command that only reads
 runs as it would, and its asks to change files are turned down without
-asking the user. A command to run outside the sandbox is asked about as
-the mode asks. An ask to widen the sandbox, and a server's tool other than
-the workbench's own that only read or wait, reach the user saying the
+asking the user. A command it asks to run outside the sandbox is the
+mode's to answer, as with reading only off, and approving it lets the
+command run outside the sandbox, where it can change files. An ask to
+widen the sandbox, and a server's tool other than the workbench's own that
+change no file and reach nothing outside it, reach the user saying the
 session reads only. Reading only can be turned on and off while the session
 runs, and the window hears which.
 
