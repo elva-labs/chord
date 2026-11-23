@@ -1011,6 +1011,36 @@ reset. Where the limit refuses the turn at once, because the window waited
 for was in fact still shut, the conversation says so and waits for the
 user.
 
+Nothing the user wrote around the limit is lost. The message whose turn
+the limit refused, and every message the user sent after it that the
+limit refused in turn, go with the first message the conversation is
+sent after them, whoever sends it: the line asking the fresh conversation
+to go on, the user's own message where they wrote while it started or
+went on by hand, or a line from the session's starter. They go word for
+word, in the order written, with their images in the same order ahead of
+that message's own, in a note of the workbench's that tells the agent
+they are the user's own and not yet answered, and that what the cut turn
+did may be half done. The same holds while the limit still holds: each
+message the user sends then carries the ones before it, so the turn that
+is finally answered holds them all. Each message stands once in the
+thread, where it was written, and one that carried others says so under
+it. A message that carried them and never reached the agent leaves them
+to the next; one that is refused again keeps them for the next, and one
+answered ends them. Only messages the user wrote on the composer in this
+window are carried: a line from another session is not passed off as the
+user's, and once the window is opened again the turns the limit refused
+are no longer known as such. Codex is not carried for, since it does not
+say a limit ended its turn.
+
+The note goes after the briefing's end line, outside the quoted records,
+and every message in it is framed by a line that says how many lines it
+has, so no line a message holds can close the note or start another
+message. A record quoted from a tool, a page or another agent can never
+become one: the note is written from the messages the user sent from this
+window, never from the transcript or the notes. A later briefing quotes
+the message that carried them without the note, so the user's words are
+quoted once.
+
 ### Reading the limits with no session
 
 The window asks for the figures of every account in use: each account a

@@ -1438,7 +1438,9 @@ A conversation held at a point it went back to is judged as it stands
 there, not by the turns it went back on. The same rule holds for the
 user's own sessions, the one on screen included, and for sessions another
 started. A conversation that goes on by itself once a usage limit resets
-goes on from its notes whatever its size and rest, as
+goes on from its notes whatever its size and rest, and the messages of
+the user's that the limit left unanswered go after the briefing as the
+user's own, as
 [sessions in Chord](../integrated.md#going-on-after-a-limit) describes.
 
 Going on, the row starts a fresh conversation of the harness's, with the
