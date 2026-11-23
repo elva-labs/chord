@@ -752,6 +752,29 @@ mod tests {
     }
 
     #[test]
+    fn the_shipped_agents_that_only_read_are_the_same_in_the_app() {
+        let app = include_str!("../../../../src/lib/agents.svelte.ts");
+        let shipped = app.split_once("export const SHIPPED").unwrap().1;
+        let shipped = shipped.split_once("\n];").unwrap().0;
+        let agents: Vec<(&str, bool)> = shipped
+            .split("title: \"")
+            .skip(1)
+            .map(|agent| {
+                let title = agent.split_once('"').unwrap().0;
+                (title, agent.contains("readsOnly: true"))
+            })
+            .collect();
+        let titles: Vec<&str> = agents.iter().map(|(title, _)| *title).collect();
+        assert_eq!(titles, SHIPPED_TITLES);
+        let reads_only: Vec<&str> = agents
+            .iter()
+            .filter(|(_, reads_only)| *reads_only)
+            .map(|(title, _)| *title)
+            .collect();
+        assert_eq!(reads_only, SHIPPED_READS_ONLY);
+    }
+
+    #[test]
     fn an_agent_is_a_title_and_a_description_and_the_rest_may_be_left_out() {
         let read = one(json!({ "title": " Migrations ", "description": "Checks migrations.\n\nYou read them.\n" })).unwrap();
         assert_eq!(read[0].title, "Migrations");
