@@ -946,6 +946,55 @@ pub fn join_from(
     .map(Some)
 }
 
+/// Why a start the caller asks for is refused for leaving its run: a
+/// session in a team's run starts only the team's agents, and resumes only
+/// the run's members, so every session it starts is in the run and held as
+/// the run is. `agent` and `resumed` are what the start names. None for a
+/// caller in no run, and for a start the run takes.
+pub fn start_outside(
+    home: &Path,
+    caller: &str,
+    agent: Option<&str>,
+    resumed: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(runs) = Runs::existing(home)? else {
+        return Ok(None);
+    };
+    let Some(lead) = runs.lead_of(caller)? else {
+        return Ok(None);
+    };
+    let Some(run) = runs.run(&lead)? else {
+        return Ok(None);
+    };
+    drop(runs);
+    if let Some(resumed) = resumed.map(str::trim).filter(|id| !id.is_empty()) {
+        return Ok(member_by_session(home, caller, resumed)?
+            .is_none()
+            .then(|| format!("This session is in {}'s run, which resumes only the sessions in it; {resumed} is not one of them.", run.team.name)));
+    }
+    let agents = || {
+        run.team
+            .members
+            .iter()
+            .map(|member| member.agent.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    Ok(match agent.map(str::trim).filter(|agent| !agent.is_empty()) {
+        Some(agent) if run.team.member(agent).is_some() => None,
+        Some(agent) => Some(format!(
+            "{agent} is not one of {}'s agents; this session is in its run, which starts only {}.",
+            run.team.name,
+            agents()
+        )),
+        None => Some(format!(
+            "This session is in {}'s run, which starts only its agents: name one of {}.",
+            run.team.name,
+            agents()
+        )),
+    })
+}
+
 /// The paths a plan names, each as written in the folder, without a
 /// leading `./`, once, in order.
 fn plan_paths(paths: &[String]) -> Result<Vec<String>, String> {

@@ -1195,7 +1195,10 @@ fn call(
         "gates" => gates_call(home, session),
         "start" | "send" => match start_held_in_run(home, session, &arguments)? {
             Some(held) => Err(held),
-            None => conduct_call(home, cwd, session, name, &arguments, waits, cancelled),
+            None => match start_outside_run(home, session, name, &arguments)? {
+                Some(outside) => Err(outside),
+                None => conduct_call(home, cwd, session, name, &arguments, waits, cancelled),
+            },
         },
         _ if CONDUCT_TOOLS.contains(&name) => {
             conduct_call(home, cwd, session, name, &arguments, waits, cancelled)
@@ -2145,6 +2148,22 @@ fn start_held_in_run(
     Ok((!reads_only).then(|| {
         format!("{held} Until the plan is approved, only a session that only reads is started or sent work, such as the reviewers the plan's gates wait on.")
     }))
+}
+
+/// Why a start the caller asks for is refused for leaving the team's run
+/// the caller is in. A send goes to a session started already.
+fn start_outside_run(
+    home: &Path,
+    session: Option<&str>,
+    name: &str,
+    arguments: &Value,
+) -> Result<Option<String>, String> {
+    let Some(caller) = session.filter(|_| name == "start") else {
+        return Ok(None);
+    };
+    let text = |key: &str| arguments.get(key).and_then(Value::as_str);
+    crate::run::start_outside(home, caller, text("agent"), text("session"))
+        .map_err(|e| format!("The team's run this session is in cannot be read: {e}"))
 }
 
 fn when_of(arguments: &Value, key: &str) -> Result<crate::team::When, String> {
@@ -4429,6 +4448,24 @@ mod tests {
         assert!(text_of(&sent).starts_with("Building is held: "));
         let asked = std::fs::read_to_string(crate::show::requests_path(&home)).unwrap_or_default();
         assert!(!asked.contains("Build it now"), "the window is never asked");
+    }
+
+    #[test]
+    fn a_session_in_a_run_starts_only_its_teams_agents_and_members() {
+        let (home, _folder) = in_a_run("run-outside");
+        let outside = |session: Option<&str>, name: &str, arguments: Value| {
+            start_outside_run(&home, session, name, &arguments).unwrap()
+        };
+        let unnamed = outside(Some("lead"), "start", json!({})).unwrap();
+        assert!(unnamed.contains("name one of Researcher, Developer"), "{unnamed}");
+        let other = outside(Some("dev"), "start", json!({ "agent": "Designer" })).unwrap();
+        assert!(other.starts_with("Designer is not one of"), "{other}");
+        assert!(outside(Some("lead"), "start", json!({ "session": "nobody-12345" })).is_some());
+        assert_eq!(outside(Some("dev"), "start", json!({ "agent": "tester" })), None);
+        assert_eq!(outside(Some("lead"), "start", json!({ "session": "sec-1234" })), None);
+        assert_eq!(outside(Some("lead"), "send", json!({ "session": "x" })), None);
+        assert_eq!(outside(Some("other"), "start", json!({})), None);
+        assert_eq!(outside(None, "start", json!({})), None);
     }
 
     #[test]
