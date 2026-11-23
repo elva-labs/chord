@@ -1131,7 +1131,8 @@ pub fn join_from(
 /// session in a team's run starts only the team's agents, and resumes only
 /// the run's members, so every session it starts is in the run and held as
 /// the run is. `agent` and `resumed` are what the start names. None for a
-/// caller in no run, and for a start the run takes.
+/// caller in no run, for a start the run takes, and while agents are
+/// switched off.
 pub fn start_outside(
     home: &Path,
     caller: &str,
@@ -1141,6 +1142,9 @@ pub fn start_outside(
     let Some(runs) = Runs::existing(home)? else {
         return Ok(None);
     };
+    if paused(home) {
+        return Ok(None);
+    }
     let Some(lead) = runs.lead_of(caller)? else {
         return Ok(None);
     };
@@ -1786,23 +1790,32 @@ pub fn verdict(
 /// Why starting a session in a run is held: while a gate on the plan is
 /// open, a session that changes files does not start. `reads_only` is
 /// whether the session's agent only reads, or for a session resumed,
-/// whether the member it resumes did. None when nothing holds it, or the
-/// caller leads no run and is in none.
+/// whether the member it resumes did. None when nothing holds it, the
+/// caller leads no run and is in none, or agents are switched off.
 pub fn start_held(home: &Path, caller: &str, reads_only: bool) -> Result<Option<String>, String> {
     if reads_only {
         return Ok(None);
     }
-    Ok(state_of(home, caller)?.and_then(|state| state.building_held()))
+    let held = state_of(home, caller)?.and_then(|state| state.building_held());
+    Ok(held.filter(|_| !paused(home)))
+}
+
+/// Whether every run holds nothing: agents are switched off in the
+/// settings. The runs are kept as they are and hold again once agents are
+/// on.
+fn paused(home: &Path) -> bool {
+    !crate::settings::agents_on(home)
 }
 
 /// Why the lead of a run goes on rather than ending its turn: a gate holds
 /// the hand-over and something the lead does can move it on, so the turn
 /// would end with the work not handed over. None for a session that leads
-/// no run, when nothing holds, when every open gate waits for the user, or
-/// when the run cannot be read, so a broken store never keeps a lead going.
+/// no run, when nothing holds, when every open gate waits for the user,
+/// while agents are switched off, or when the run cannot be read, so a
+/// broken store never keeps a lead going.
 pub fn stop_held(home: &Path, token: &str) -> Option<String> {
     let state = state(home, token).ok().flatten()?;
-    if state.waits_for_the_user() {
+    if state.waits_for_the_user() || paused(home) {
         return None;
     }
     state.handing_over_held().map(|held| {
@@ -1814,9 +1827,9 @@ pub fn stop_held(home: &Path, token: &str) -> Option<String> {
 /// the work over while a gate holds that, or while approved work is not
 /// committed. A run that cannot be read holds
 /// it too. None for a command that hands nothing over, a session in no
-/// run, or a run with no gate open.
+/// run, a run with no gate open, or while agents are switched off.
 pub fn command_held(home: &Path, token: &str, command: &str) -> Option<String> {
-    if !hands_over(command) {
+    if !hands_over(command) || paused(home) {
         return None;
     }
     match state_of(home, token) {

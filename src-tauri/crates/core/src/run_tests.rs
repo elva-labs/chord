@@ -1356,3 +1356,34 @@ fn a_lead_reads_no_run_once_it_ended() {
     assert_eq!(lead_of(home.path(), "rev").unwrap(), None);
     assert_eq!(lead_of(Path::new("/nowhere-at-all"), "lead").unwrap(), None);
 }
+
+fn agents_switched(home: &Path, on: bool) {
+    let path = crate::settings::settings_path(home);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, format!(r#"{{ "agentsOn": {on} }}"#)).unwrap();
+}
+
+#[test]
+fn a_run_holds_nothing_while_agents_are_off_and_holds_again_once_on() {
+    let (home, _dir) = started("paused", SHIP_WITH_CHECKS, &[("dev", "Developer", false)]);
+    let holds = |home: &Path| {
+        (
+            start_held(home, "lead", false).unwrap().is_some(),
+            stop_held(home, "lead").is_some(),
+            command_held(home, "lead", "git push origin main").is_some(),
+            start_outside(home, "lead", Some("Designer"), None)
+                .unwrap()
+                .is_some(),
+        )
+    };
+    let before = holds(home.path());
+    assert!(before.0 && before.3, "{before:?}");
+    agents_switched(home.path(), false);
+    assert_eq!(holds(home.path()), (false, false, false, false));
+    assert!(
+        state(home.path(), "lead").unwrap().is_some(),
+        "the run is kept"
+    );
+    agents_switched(home.path(), true);
+    assert_eq!(holds(home.path()), before);
+}

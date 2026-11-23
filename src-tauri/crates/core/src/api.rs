@@ -446,6 +446,15 @@ impl Core {
             .ok_or_else(|| "no home directory".to_string())
     }
 
+    /// Whether a switch of the settings is on, as stored, or as by default
+    /// where there are none.
+    fn switched_on(&self, switch: impl Fn(&crate::settings::Settings) -> bool) -> bool {
+        switch(&self.home.as_deref().map_or_else(
+            crate::settings::Settings::default,
+            crate::settings::read_from,
+        ))
+    }
+
     /// The machine's settings, and whether a file held them yet. A list of
     /// workflows written before one shipped is offered it first, once.
     pub fn settings_get(&self) -> Result<crate::settings::Stored, String> {
@@ -1178,7 +1187,8 @@ impl Core {
     /// Begins the team's run of a lead started with one, and records a
     /// session started for one in a run as its member, in `folder`, before
     /// the session's first turn. Answers with what the member is recorded
-    /// by, for its harness's id once that is known.
+    /// by, for its harness's id once that is known. Neither while agents
+    /// are switched off: the session starts as a plain one.
     fn engage(
         &self,
         run: &Run,
@@ -1190,6 +1200,9 @@ impl Core {
         }
         if run.team.is_some() && run.joining.is_some() {
             return Err(TEAM_AND_JOINING.into());
+        }
+        if !self.switched_on(|settings| settings.agents_on) {
+            return Ok(None);
         }
         let home = self.home.as_deref().ok_or("no home directory")?;
         let token = run
@@ -1473,8 +1486,8 @@ impl Core {
     /// Claude Code or Codex conversation that is cold and large, as a
     /// fresh one from the briefing this answers with. With `always` it
     /// goes on from the briefing whatever its size and however long it
-    /// rested. Whole for any other agent, and where no transcript or
-    /// rollout of it is found.
+    /// rested. Whole for any other agent, while notes are switched off,
+    /// and where no transcript or rollout of it is found.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1495,6 +1508,9 @@ impl Core {
         let Some(home) = self.home.as_ref() else {
             return Ok(whole);
         };
+        if !self.switched_on(|settings| settings.notes_on) {
+            return Ok(whole);
+        }
         let environment = env::environment();
         let notes = |since| crate::notes::briefing_since(home, token, since);
         let now = crate::notes::now() as u64 * 1000;
@@ -2819,6 +2835,20 @@ mod tests {
             .unwrap();
         assert!(!unknown.goes_on);
         assert_eq!(unknown.context, None);
+        let settings = crate::settings::settings_path(home.path());
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(&settings, r#"{ "notesOn": false }"#).unwrap();
+        let whole = core
+            .taken_up("codex", home.path(), None, "thread", dir, "token", true)
+            .unwrap();
+        assert!(!whole.goes_on, "notes switched off resume it whole");
+        assert_eq!(whole.briefing, None);
+        std::fs::write(&settings, r#"{ "notesOn": true }"#).unwrap();
+        assert!(
+            core.taken_up("codex", home.path(), None, "thread", dir, "token", false)
+                .unwrap()
+                .goes_on
+        );
     }
 
     /// A cold and large Codex conversation whose rollout the account's
