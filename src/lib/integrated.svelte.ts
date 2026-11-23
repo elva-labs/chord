@@ -38,6 +38,7 @@ import {
   type IntegratedEventBody,
   type IntegratedImage,
   type IntegratedState,
+  type Joining,
   type PermissionChoice,
 } from "$lib/core";
 import { Conversation, type Command, type Message, type Part, type Ready } from "$lib/conversation.svelte";
@@ -88,6 +89,7 @@ import {
   toldAtStart,
   toldFor,
   originOf,
+  starterTokenOf,
   type Carried,
   type Session,
   type Told,
@@ -657,6 +659,15 @@ export async function launch(key: string): Promise<void> {
 
 /** Asks the core to start the agent behind a row, as the row is now and
     told what it is told, and takes the run up once it is. */
+/** What a session another started as one of its agents tells the core, so
+    it joins the starter's run where the starter is in one. */
+function joiningOf(key: string, starting: Session): { joining?: Joining } {
+  const by = starterTokenOf(starting);
+  const agent = agentOfRow(key, starting.id);
+  if (by === null || agent === null) return {};
+  return { joining: { by, agent: agent.title, ...(starting.prompt ? { brief: starting.prompt } : {}) } };
+}
+
 async function begin(key: string, link: Link, starting: Session, told: Told) {
   link.ranOn = { agent: starting.agent, told: toldText(told.instructions, told.startOnly) };
   link.granted = [];
@@ -687,6 +698,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     profile: starting.profile ?? undefined,
     ...told,
     ...originOf(starting),
+    ...joiningOf(key, starting),
   });
   link.busy = false;
   const row = byKey(key);

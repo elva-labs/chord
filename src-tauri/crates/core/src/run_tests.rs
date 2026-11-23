@@ -1066,3 +1066,71 @@ fn a_store_kept_by_a_later_build_is_not_read() {
     assert!(refused.contains("kept by a later Chord"), "{refused}");
     assert!(command_held(home.path(), "lead", "git push").is_some());
 }
+
+#[test]
+fn a_session_started_for_one_in_a_run_joins_its_leads_run() {
+    let (home, dir) = started("join-from", SHIP_WITH_CHECKS, &[]);
+    let joining = |by: &str, agent: &str| Joining {
+        by: by.into(),
+        agent: agent.into(),
+        brief: "build it".into(),
+    };
+    let developer = join_from(
+        home.path(),
+        &joining("lead", "developer"),
+        "dev",
+        &dir,
+        None,
+        false,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!((developer.lead.as_str(), developer.agent.as_str()), ("lead", "Developer"));
+    assert_eq!(developer.brief, "build it");
+    // A member's own start is in the lead's run too.
+    let reviewer = join_from(
+        home.path(),
+        &joining("dev", REVIEWER),
+        "rev",
+        &dir,
+        Some("abc"),
+        true,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(reviewer.lead, "lead");
+    assert_eq!(reviewer.session.as_deref(), Some("abc"));
+    assert!(reviewer.reads_only);
+    // The id the harness gives later is taken; the rest stands.
+    let again = join_from(
+        home.path(),
+        &joining("lead", REVIEWER),
+        "dev",
+        &dir,
+        Some("xyz"),
+        true,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(again.session.as_deref(), Some("xyz"));
+    assert_eq!((again.agent.as_str(), again.reads_only), ("Developer", false));
+    // An agent the team does not have is refused.
+    let refused = join_from(home.path(), &joining("lead", "Designer"), "t", &dir, None, false);
+    assert!(refused.unwrap_err().contains("not one of"));
+    // A session in no run starts nothing in one.
+    let outside = join_from(home.path(), &joining("other", "Developer"), "o", &dir, None, false);
+    assert_eq!(outside.unwrap(), None);
+}
+
+#[test]
+fn a_start_outside_any_run_makes_no_store() {
+    let home = Scratch::new("run-home-join-none");
+    let joining = Joining {
+        by: "lead".into(),
+        agent: "Developer".into(),
+        brief: String::new(),
+    };
+    let none = join_from(home.path(), &joining, "dev", home.path(), None, false).unwrap();
+    assert_eq!(none, None);
+    assert!(!folder(home.path()).join(FILE).exists());
+}

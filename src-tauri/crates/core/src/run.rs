@@ -36,7 +36,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::agents::Agent;
 use crate::git;
@@ -893,6 +893,57 @@ pub fn join(
         runs.member(token)?
             .ok_or_else(|| "The member could not be recorded.".to_string())
     })
+}
+
+/// What a session started for another says of it: the token of the
+/// session that asked for it, the agent it is and the brief it was given.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Joining {
+    pub by: String,
+    pub agent: String,
+    #[serde(default)]
+    pub brief: String,
+}
+
+/// Records a session as a member of the run the session that asked for it
+/// is in, as its lead or a member, so a member's own start is in its
+/// lead's run as well. None, and nothing kept, when that session is in no
+/// run.
+pub fn join_from(
+    home: &Path,
+    joining: &Joining,
+    token: &str,
+    folder: &Path,
+    session: Option<&str>,
+    reads_only: bool,
+) -> Result<Option<Member>, String> {
+    let by = joining.by.trim();
+    if by.is_empty() {
+        return Ok(None);
+    }
+    let Some(runs) = Runs::existing(home)? else {
+        return Ok(None);
+    };
+    let Some(lead) = runs.lead_of(by)? else {
+        return Ok(None);
+    };
+    drop(runs);
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("A session in a team's run needs its token.".into());
+    }
+    join(
+        home,
+        &lead,
+        token,
+        &joining.agent,
+        folder,
+        session,
+        reads_only,
+        &joining.brief,
+    )
+    .map(Some)
 }
 
 /// The paths a plan names, each as written in the folder, without a

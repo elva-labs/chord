@@ -1817,6 +1817,14 @@ export function toldFor(session: Session): Told {
   };
 }
 
+/** The token of the session that started this one, which a team's run
+    knows its sessions by, where the window still has its row. */
+export function starterTokenOf(session: Session): string | null {
+  const starter = starterOf(session.key);
+  if (starter === null) return null;
+  return byToken(starter)?.token ?? sessions.all.find((row) => row.id === starter)?.token ?? null;
+}
+
 /** What a start tells the core of where a session comes from, which the
     plugins are told in turn: the agent id of the session that started it,
     whether it runs in a worktree made for it, and the request of the

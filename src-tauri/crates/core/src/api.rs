@@ -149,7 +149,23 @@ struct Run {
     made_worktree: bool,
     /// The request of the plugin's start this session is, if it is one.
     plugin_start: Option<String>,
+    /// The team a lead is started with, by name: its run begins with the
+    /// session.
+    team: Option<String>,
+    /// What the session that asked for this one says of it, so it joins
+    /// the run that session is in.
+    joining: Option<crate::run::Joining>,
     undo: Option<Undo>,
+}
+
+/// A session recorded as a member of a team's run as it starts, and what
+/// records it again once its harness gives its id.
+struct Joined {
+    home: PathBuf,
+    joining: crate::run::Joining,
+    token: String,
+    folder: PathBuf,
+    reads_only: bool,
 }
 
 /// Where a Claude Code conversation's transcript is, for the usage log.
@@ -824,6 +840,12 @@ impl Core {
     /// tools, the same way a terminal session is. With `reads_only` the
     /// harness's own tools that change files are refused from the first
     /// turn. `profile` is the Codex profile, as for [`Core::spawn`].
+    ///
+    /// With `team`, one of the teams in use by name, the session is the
+    /// lead of a team's run that begins before its first turn, so the
+    /// run's holds are on from then. With `joining`, the session is
+    /// recorded in the run the session that asked for it is in, as one of
+    /// the team's agents; one the team does not have is not started.
     #[allow(clippy::too_many_arguments)]
     pub fn integrated_start(
         &self,
@@ -845,6 +867,8 @@ impl Core {
         starter: Option<&str>,
         made_worktree: bool,
         plugin_start: Option<&str>,
+        team: Option<&str>,
+        joining: Option<crate::run::Joining>,
     ) -> Result<crate::integrated::Started, String> {
         let run = Run {
             agent: agent.to_string(),
@@ -867,6 +891,11 @@ impl Core {
                 .map(str::to_string),
             made_worktree,
             plugin_start: plugin_start.map(str::to_string),
+            team: team
+                .map(str::trim)
+                .filter(|team| !team.is_empty())
+                .map(str::to_string),
+            joining,
             undo: None,
         };
         // A conversation held at the point it went back to goes on from
@@ -953,6 +982,7 @@ impl Core {
             &environment.vars,
             project,
         );
+        let joining = self.engage(&run, project, session.as_deref())?;
         let launch = crate::integrated::Launch {
             project,
             env: &environment.vars,
@@ -1003,6 +1033,19 @@ impl Core {
                 runs.lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .insert(started.id.clone(), kept);
+                // The harness's id, once it gives one, names the member
+                // its holds and verdicts are looked up by. The member is
+                // recorded already, so a failure here leaves it without.
+                if let (Some(joined), Some(session)) = (&joining, &started.session_id) {
+                    let _ = crate::run::join_from(
+                        &joined.home,
+                        &joined.joining,
+                        &joined.token,
+                        &joined.folder,
+                        Some(session),
+                        joined.reads_only,
+                    );
+                }
                 if let Some(plugins) = starting {
                     plugins.session_started(
                         &started.id,
@@ -1028,6 +1071,54 @@ impl Core {
                 }
             }),
         )
+    }
+
+    /// Begins the team's run of a lead started with one, and records a
+    /// session started for one in a run as its member, in `folder`, before
+    /// the session's first turn. Answers with what the member is recorded
+    /// by, for its harness's id once that is known.
+    fn engage(
+        &self,
+        run: &Run,
+        folder: &Path,
+        session: Option<&str>,
+    ) -> Result<Option<Joined>, String> {
+        if run.team.is_none() && run.joining.is_none() {
+            return Ok(None);
+        }
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        let token = run
+            .token
+            .as_deref()
+            .map(str::trim)
+            .filter(|token| !token.is_empty());
+        if let Some(name) = &run.team {
+            let lead = token.ok_or("A lead started with a team needs its token.")?;
+            let stored = self.settings()?.load();
+            if stored.unreadable {
+                return Err(format!(
+                    "The settings cannot be read, so the team {name} is not known."
+                ));
+            }
+            let team = stored
+                .settings
+                .team_named(name)
+                .ok_or_else(|| format!("There is no team named {name}."))?;
+            crate::run::begin(home, lead, &team, folder)?;
+        }
+        let Some(joining) = &run.joining else {
+            return Ok(None);
+        };
+        let token = token.unwrap_or_default();
+        let joined =
+            crate::run::join_from(home, joining, token, folder, session, run.reads_only)?;
+        Ok(joined.map(|_| Joined {
+            home: home.to_path_buf(),
+            joining: joining.clone(),
+            token: token.to_string(),
+            folder: folder.to_path_buf(),
+            reads_only: run.reads_only,
+        }))
     }
 
     /// Records that the user trusts the folder an integrated session of the
@@ -2975,6 +3066,8 @@ mod tests {
                     None,
                     false,
                     None,
+                    None,
+                    None,
                 )
                 .unwrap_err();
             assert!(
@@ -3023,6 +3116,8 @@ mod tests {
             starter: None,
             made_worktree: false,
             plugin_start: None,
+            team: None,
+            joining: None,
             undo: None,
         };
         let again = |session: Option<&str>, at: Option<&str>| Again {
@@ -3056,6 +3151,78 @@ mod tests {
     }
 
     #[test]
+    fn a_lead_started_with_a_team_begins_its_run_and_its_starts_join_it() {
+        let home = Scratch::new("api-team-start");
+        let folder = Scratch::new("api-team-start-folder");
+        let core = Core {
+            settings: Some(Arc::new(crate::settings::Store::new(
+                &home,
+                Arc::new(Recorder::default()),
+            ))),
+            ..core_at(&home)
+        };
+        let run = |token: &str, team: Option<&str>, joining: Option<crate::run::Joining>| Run {
+            agent: "claude-code".into(),
+            project: folder.path().to_path_buf(),
+            cwd: None,
+            session: None,
+            token: Some(token.into()),
+            model: None,
+            mode: None,
+            effort: None,
+            config_dir: None,
+            profile: None,
+            instructions: None,
+            start_only: false,
+            afresh: false,
+            compact_at: None,
+            reads_only: false,
+            starter: None,
+            made_worktree: false,
+            plugin_start: None,
+            team: team.map(str::to_string),
+            joining,
+            undo: None,
+        };
+        // A team that is not in use starts nothing.
+        let unknown = core.engage(&run("lead", Some("Nobody"), None), folder.path(), None);
+        assert_eq!(unknown.err().as_deref(), Some("There is no team named Nobody."));
+        assert!(core.engage(&run("", Some("quick fix"), None), folder.path(), None).is_err());
+        // With no settings file, the shipped teams are in use.
+        assert!(core
+            .engage(&run("lead", Some("quick fix"), None), folder.path(), None)
+            .unwrap()
+            .is_none());
+        let state = crate::run::state(&home, "lead").unwrap().unwrap();
+        assert_eq!(state.run.team.name, crate::team::QUICK_FIX);
+        let joining = crate::run::Joining {
+            by: "lead".into(),
+            agent: "Developer".into(),
+            brief: "build it".into(),
+        };
+        let joined = core
+            .engage(&run("dev", None, Some(joining.clone())), folder.path(), Some("id"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(joined.token, "dev");
+        let member = crate::run::Runs::existing(&home)
+            .unwrap()
+            .unwrap()
+            .member("dev")
+            .unwrap()
+            .unwrap();
+        assert_eq!((member.lead.as_str(), member.session.as_deref()), ("lead", Some("id")));
+        // An agent the team does not have is not started in its run.
+        let other = crate::run::Joining {
+            agent: "Tester".into(),
+            ..joining
+        };
+        assert!(core
+            .engage(&run("t", None, Some(other)), folder.path(), None)
+            .is_err());
+    }
+
+    #[test]
     fn an_integrated_session_under_a_workflow_is_refused_where_no_tool_server_can_reach_it() {
         let home = Scratch::new("api-integrated-workflow");
         for agent in ["claude-code", "codex"] {
@@ -3077,6 +3244,8 @@ mod tests {
                 false,
                 None,
                 false,
+                None,
+                None,
                 None,
             );
             // Refused before the folder is asked about, since trusting it

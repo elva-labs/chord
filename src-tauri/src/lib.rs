@@ -201,6 +201,8 @@ async fn integrated_start(
     starter: Option<String>,
     made_worktree: Option<bool>,
     plugin_start: Option<String>,
+    team: Option<String>,
+    joining: Option<chord_core::run::Joining>,
 ) -> Result<Value, String> {
     let core = Arc::clone(&core);
     let remotes = Arc::clone(&remotes);
@@ -228,11 +230,13 @@ async fn integrated_start(
             starter.as_deref(),
             made_worktree.unwrap_or(false),
             plugin_start.as_deref(),
+            team.as_deref(),
+            joining,
         )?),
         Route::Remote { host, rest } => {
             let started = remotes.connection(&host)?.call(
                 "integrated_start",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "readsOnly": reads_only.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "readsOnly": reads_only.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start, "team": team, "joining": joining }),
             )?;
             let id = started["id"].as_str().ok_or("no session id")?;
             let id = with_host_id(&host, id);

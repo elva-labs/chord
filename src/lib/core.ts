@@ -224,6 +224,21 @@ export interface IntegratedStartOptions {
   /** The plugin's request the user allowed this session for, as for
       `spawn`. */
   pluginStart?: string;
+  /** The team a lead session is started with, by name: the team's run
+      begins before the first turn and its gates hold from then on. */
+  team?: string;
+  /** For a session another started as one of its agents: the starter's
+      token, the agent's title and the prompt it is started with. Where the
+      starter is in a team's run, the session joins it, and an agent the
+      team lacks is not started. */
+  joining?: Joining;
+}
+
+/** What a session started as an agent tells the core of who asked for it. */
+export interface Joining {
+  by: string;
+  agent: string;
+  brief?: string;
 }
 
 /** What starting an integrated session hands back: the id every other

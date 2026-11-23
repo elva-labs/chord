@@ -181,6 +181,13 @@ struct IntegratedStartParams {
     /// plugin asked for.
     #[serde(default)]
     plugin_start: Option<String>,
+    /// The team a lead is started with, by name.
+    #[serde(default)]
+    team: Option<String>,
+    /// What the session that asked for this one says of it, for a session
+    /// the start tool starts.
+    #[serde(default)]
+    joining: Option<crate::run::Joining>,
 }
 
 #[derive(Deserialize)]
@@ -684,6 +691,8 @@ pub fn dispatch(
                 p.starter.as_deref(),
                 p.made_worktree,
                 p.plugin_start.as_deref(),
+                p.team.as_deref(),
+                p.joining,
             )?)
         }
         "integrated_trust" => {
@@ -1599,6 +1608,26 @@ mod tests {
         let start: IntegratedStartParams =
             parse(json!({ "agent": "claude-code", "project": "/p" })).unwrap();
         assert_eq!(start.compact_at, None);
+    }
+
+    #[test]
+    fn a_start_names_its_team_and_what_asked_for_it() {
+        let start: IntegratedStartParams = parse(json!({
+            "agent": "claude-code",
+            "project": "/p",
+            "team": "Quick fix",
+            "joining": { "by": "lead", "agent": "Developer", "brief": "build it" },
+        }))
+        .unwrap();
+        assert_eq!(start.team.as_deref(), Some("Quick fix"));
+        let joining = start.joining.unwrap();
+        assert_eq!(
+            (joining.by.as_str(), joining.agent.as_str(), joining.brief.as_str()),
+            ("lead", "Developer", "build it")
+        );
+        let start: IntegratedStartParams =
+            parse(json!({ "agent": "claude-code", "project": "/p" })).unwrap();
+        assert_eq!((start.team, start.joining), (None, None));
     }
 
     #[test]
