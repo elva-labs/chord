@@ -43,10 +43,10 @@ Let sessions talk to Chord, in the Sessions tab. Off, the app learns what a sess
 - **Ask before a session starts another**: Outside its project to begin with, so a session may start one in its own project without asking. Every time puts every start to you.
 - **Keep listed**: how long past sessions stay listed, forever, 30 days, 7 days or 1 day. Older ones are still there to resume behind the project's Earlier line.
 - **Fold inactive projects after**: 1 day, 7 days, 30 days or never, 7 days to begin with.
-- **Keep notes**: on to begin with. Off, a session is not asked to keep notes, and a conversation is always resumed whole rather than going on from its notes.
-- **Agents and teams**: on to begin with. Off, nothing offers an agent, a team or a gate: the composer has no agent chip, the Agents tab is gone, and a session cannot start another as an agent. A team's run already going on stops holding anything until they are on again.
+- **Keep notes**: on to begin with. Off, a session is not asked to keep notes, and a conversation is always resumed whole rather than going on from its notes. One too large for the model is left to the harness's own compaction.
+- **Agents and teams**: on to begin with. Off, nothing offers an agent, a team or a gate: the composer has no agent chip, the Agents tab is gone, and a session cannot start another as an agent. A team's run already going on stops holding anything until they are on again, so work it held goes through. Workflows stay offered, since they name harnesses, not agents.
 
-Neither switch deletes anything. Turned on again, the notes, agents, teams and runs are all as they were.
+A remote machine follows both switches. Neither switch deletes anything. Turned on again, the notes, agents, teams and runs are all as they were.
 
 See [sessions](reference/settings.md#sessions).
 

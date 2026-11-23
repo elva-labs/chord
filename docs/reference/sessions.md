@@ -1442,7 +1442,8 @@ there, not by the turns it went back on. The same rule holds for the
 user's own sessions, the one on screen included, and for sessions another
 started. A conversation that goes on by itself once a usage limit resets
 goes on from its notes whatever its size and rest, as
-[sessions in Chord](../integrated.md#going-on-after-a-limit) describes.
+[sessions in Chord](../integrated.md#going-on-after-a-limit) describes,
+unless [notes are switched off](settings.md#keep-notes).
 
 Going on, the row starts a fresh conversation of the harness's, with the
 same row, name and token, so the notes and everything the workbench

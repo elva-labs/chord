@@ -139,7 +139,8 @@ sent back to work is going on for the reason the line shows.
 Agents and teams can be switched off on the Sessions tab of the settings.
 Off, nothing offers a team or a gate, and no team's run begins. A run
 already going on is kept as it is but holds nothing until they are on
-again, when it holds as before. Nothing is deleted. See
+again, when it holds as before: work it held when they went off goes
+through. Nothing is deleted. See
 [agents and teams](reference/settings.md#agents-and-teams).
 
 ## The run's tools

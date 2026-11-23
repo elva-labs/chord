@@ -360,13 +360,17 @@ every project in the list.
 Whether sessions keep [notes](sessions.md#notes) and go on from them, on
 to begin with, kept as `notesOn`. Off, a session is not told to keep
 notes, and its note and notes tools are neither listed nor answered: a
-call says notes are switched off. A conversation taken up again is
-resumed whole, however large and cold, and so is one going on by itself
-once a usage limit resets, where it would otherwise
-[go on from its notes](sessions.md#going-on-from-the-notes). The notes
-already kept stay where they are, and Show notes still shows them. A
-session connected before the change keeps the tools it was told of, and
-they answer as the switch now stands.
+call says notes are switched off. The start tool no longer says a session
+resumed may go on from its notes. A conversation taken up again is
+resumed whole, however large and cold, where it would otherwise
+[go on from its notes](sessions.md#going-on-from-the-notes). One going on
+by itself once a usage limit resets is not started again: the session at
+rest is sent the line as it is and goes on with the whole of its
+conversation, and where it is not at rest by then the conversation says
+so. A conversation too large for the model is left to the harness's own
+compaction. The notes already kept stay where they are, and Show notes
+still shows them. A session connected before the change keeps the tools
+it was told of, and they answer as the switch now stands.
 
 ### Agents and teams
 
@@ -374,8 +378,11 @@ Whether [agents](#agents), [teams](#teams) and their gates are offered,
 on to begin with, kept as `agentsOn`. Off:
 
 - the composer has no agent chip and its menu no agent, and a session is
-  started as itself; an agent picked for a session not yet sent waits, and
-  is there again once the switch is on;
+  started as itself; an agent picked for a session not yet sent sets
+  nothing, the session back on the model and effort it had and reading
+  only no longer, and the mode chip names no agent. The pick is kept, and
+  sets the session again once the switch is on, unless a message was sent
+  meanwhile, which goes plain and lets the pick go;
 - the Agents tab is gone from the settings, and a link to it opens the
   Sessions tab;
 - a session's question to start another has no As choice, and a plugin's
@@ -384,12 +391,16 @@ on to begin with, kept as `agentsOn`. Off:
 - the run's tools, `plan`, `gate_add`, `verdict` and `gates`, are neither
   listed nor answered, and no session shows a gate line;
 - no team's run begins: a session picked as a team's lead starts as a
-  plain one, and so does a lead resumed.
+  plain one, which its conversation says, and so does a lead resumed.
+
+[Workflows](../orchestrator.md) are offered all the same, since they name
+harnesses and models, not agents.
 
 A session that already works as an agent keeps working as one. A team's
 run already going on is kept as it is, its plan, gates and verdicts, but
 holds nothing: building, a push, a pull request and the lead's stop all
-go ahead as in a session of no team. A session that joins the run while
+go ahead as in a session of no team, and work the run held when the
+switch went off goes through. A session that joins the run while
 the switch is off is still counted as its member. Turned on again, the
 agents and teams are offered as before, and the run holds again as it
 stands.
@@ -397,7 +408,9 @@ stands.
 Both switches are the user's to change, and an agent's settings tools
 refuse them. A file written before them has neither, which reads as both
 on, and an earlier version of the app keeps both as entries it does not
-read.
+read. A remote machine follows the two switches of the machine the window
+runs on: it is told them when the window reaches it and at each change,
+and keeps them in its own settings.
 
 ## Agents
 
@@ -770,8 +783,9 @@ agent is told why without the user being troubled. The agent hooks, the
 plugins, the accounts, which workflow a project follows, how long past
 sessions stay listed, how long a project stays active, whether every
 start of a session is asked about, whether notes are kept, whether agents
-and teams are offered, the notifications and the chime are refused outright, as the user's to change. Compact mode is a matter of
-how the window looks, as the look is, and the agent may ask for it.
+and teams are offered, the notifications and the chime are refused
+outright, as the user's to change. Compact mode is a matter of how the
+window looks, as the look is, and the agent may ask for it.
 
 A change that will do is put to the user over the window, where a
 session's question to start another stands when it is not docked (see
@@ -946,7 +960,8 @@ without the file, that copy is what the file is first written from.
 
 The plugins keep their own record, described in [plugins](../plugins.md). A
 window on a remote machine's project still follows the settings of the
-machine the window runs on.
+machine the window runs on, and the remote machine takes the
+[notes](#keep-notes) and [agents](#agents-and-teams) switches from it.
 
 ## An install from before Chord
 
