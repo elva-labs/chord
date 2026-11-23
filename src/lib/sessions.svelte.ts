@@ -116,8 +116,9 @@ export interface Session {
   ownTitle: boolean;
   /** The title is only a line of the first message the user sent a
       conversation, which stands until the agent names the conversation:
-      the one name of the agent's own the row takes. Not kept across a
-      restart, where the line stays the name. */
+      the one name of the agent's own the row takes. Kept by the session's
+      id, so a restart or a resume before the agent names it still takes
+      the agent's name. */
   placeholder: boolean;
   /** The directory the process was last seen working in. */
   cwd: string | null;
@@ -279,6 +280,7 @@ export function carriedFor(session: Session): Carried | null {
 const MINE_KEY = "chord.mine";
 const NAMES_KEY = "chord.names";
 const OWN_NAMES_KEY = "chord.ownNames";
+const PLACEHOLDERS_KEY = "chord.placeholderNames";
 const TOKENS_KEY = "chord.tokens";
 const PREFERRED_KEY = "chord.harnesses";
 /** Where the version before keeps the same. It is read when the new key
@@ -370,6 +372,10 @@ export const sessions = $state({
   /** The session ids whose name the user gave, kept between runs, so an
       automatic title never replaces it after a resume or a restart. */
   own: {} as Record<string, true>,
+  /** The session ids whose kept name is only a line of the first message,
+      kept between runs, so the agent's name still replaces it after a
+      resume or a restart. */
+  placeholders: {} as Record<string, true>,
   /** The token each session's tools name it by, with the project it runs
       in, by the agent's id for the session, kept between runs, so a session
       resumed is named as it was and still owns what was kept under its
@@ -743,6 +749,17 @@ export function loadRemembered() {
     }
   } catch {
     // No name is the user's own, then.
+  }
+  try {
+    const raw = localStorage.getItem(PLACEHOLDERS_KEY);
+    const stored: unknown = raw === null ? null : JSON.parse(raw);
+    if (Array.isArray(stored)) {
+      const placeholders: Record<string, true> = {};
+      for (const id of stored) if (typeof id === "string") placeholders[id] = true;
+      sessions.placeholders = placeholders;
+    }
+  } catch {
+    // Every kept name is a name, then.
   }
   inheritNames();
   loadWaiting();
@@ -1119,13 +1136,13 @@ function rememberName(id: string, name: string) {
 }
 
 /** The name kept for a conversation, or else for the nearest one it went
-    on from, and whether it is the user's own. Null where none in the line
-    has one. */
-function keptName(id: string): { name: string; own: boolean } | null {
+    on from, whether it is the user's own, and whether it is only a line
+    of the first message. Null where none in the line has one. */
+function keptName(id: string): { name: string; own: boolean; placeholder: boolean } | null {
   for (const at of lineageOf(id).reverse()) {
     const name = sessions.names[at];
     if (name !== undefined && name.trim() !== "" && !reservedName(name))
-      return { name, own: sessions.own[at] === true };
+      return { name, own: sessions.own[at] === true, placeholder: sessions.placeholders[at] === true };
   }
   return null;
 }
@@ -1139,6 +1156,7 @@ function inheritNames() {
     if (kept === null) continue;
     rememberName(id, kept.name);
     if (kept.own) rememberOwn(id);
+    if (kept.placeholder) rememberPlaceholder(id, true);
   }
 }
 
@@ -1149,6 +1167,19 @@ function rememberOwn(id: string) {
     localStorage.setItem(OWN_NAMES_KEY, JSON.stringify(Object.keys(sessions.own)));
   } catch {
     // Non-fatal: a later automatic title may replace the name after a restart.
+  }
+}
+
+/** Keeps, or forgets, that a session's kept name is only a line of its
+    first message. */
+function rememberPlaceholder(id: string, placeholder: boolean) {
+  if ((sessions.placeholders[id] === true) === placeholder) return;
+  if (placeholder) sessions.placeholders[id] = true;
+  else delete sessions.placeholders[id];
+  try {
+    localStorage.setItem(PLACEHOLDERS_KEY, JSON.stringify(Object.keys(sessions.placeholders)));
+  } catch {
+    // Non-fatal: after a restart the line stays the name.
   }
 }
 
@@ -1453,15 +1484,35 @@ export function nameLine(text: string): string | null {
   return lines.find((line) => !onlyAPlace(line)) ?? lines[0] ?? null;
 }
 
-/** Whether a line is only a web address or a path, which says where
-    something is and not what a session is about. */
+/** A web address, with its scheme or starting at www. */
+const ADDRESS = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S+$/i;
+/** A path from the root, home or here, on any system, with its spaces
+    escaped as a shell pastes them. */
+const PATH = /^(?:(?:~|\.{1,2})?[\\/]|[a-z]:[\\/])(?:\\ |\S)*$/i;
+/** A Markdown link or image, whatever its text. */
+const LINK = /^!?\[[^\]]*\]\([^)\s]+\)$/;
+
+/** Whether a line is only web addresses, paths or links, which say where
+    something is and not what a session is about: one or several, bare or
+    in quotes or angle brackets, and a path whose spaces are kept, where
+    every word after the first goes on with a slash. */
 export function onlyAPlace(line: string): boolean {
-  const word = line.trim();
-  return (
-    /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(word) ||
-    /^(?:~|\.{1,2})?[\\/]\S*$/.test(word) ||
-    /^[a-z]:[\\/]\S*$/i.test(word)
-  );
+  const text = unwrapped(line.trim());
+  if (text === "") return false;
+  if (LINK.test(text)) return true;
+  const [first, ...rest] = text.split(/\s+/);
+  if (PATH.test(first) && rest.every((word) => /[\\/]/.test(word))) return true;
+  return text.split(/(?<!\\)\s+/).every((part) => {
+    const word = unwrapped(part);
+    return ADDRESS.test(word) || PATH.test(word) || LINK.test(word);
+  });
+}
+
+/** Text without the quotes or angle brackets around it whole. */
+function unwrapped(text: string): string {
+  const pair = /^(["'<])(.*)(["'>])$/.exec(text);
+  if (pair === null) return text;
+  return pair[3] === (pair[1] === "<" ? ">" : pair[1]) ? pair[2].trim() : text;
 }
 
 /** What a row is known by: its title, the name it was given, or for a
@@ -1586,6 +1637,7 @@ export function keepName(session: Session) {
   if (name === null || name.trim() === "" || reservedName(name)) return;
   rememberName(session.id, name);
   if (session.ownTitle && session.title === name) rememberOwn(session.id);
+  rememberPlaceholder(session.id, session.placeholder && session.title === name);
 }
 
 /** The agent's index calls the session this. Taken as it is, unlike a
@@ -1595,7 +1647,9 @@ export function named(key: string, title: string) {
   if (session === null || title === "") return;
   session.title = title;
   session.placeholder = false;
-  if (session.id !== null) rememberName(session.id, title);
+  if (session.id === null) return;
+  rememberName(session.id, title);
+  rememberPlaceholder(session.id, false);
 }
 
 /** Names a conversation after a line of the first message the user sent
@@ -1605,6 +1659,7 @@ export function namedForNow(key: string, title: string) {
   if (session === null || title === "") return;
   named(key, title);
   session.placeholder = true;
+  if (session.id !== null) rememberPlaceholder(session.id, true);
 }
 
 /** The agent named its conversation. The row takes the name once, in
@@ -1633,7 +1688,10 @@ export function renamed(key: string, title: string) {
   if (session === null || name === "" || reservedName(name) || nameTaken(name, key)) return;
   session.ownTitle = true;
   session.placeholder = false;
-  if (session.id !== null) rememberOwn(session.id);
+  if (session.id !== null) {
+    rememberOwn(session.id);
+    rememberPlaceholder(session.id, false);
+  }
   if (session.title === name) return;
   session.title = name;
   if (session.id !== null) rememberName(session.id, name);
@@ -2185,7 +2243,9 @@ function row(
     // A resumed session keeps the name it had until the agent says otherwise.
     title: kept?.name ?? null,
     ownTitle: kept?.own === true || (resumedFrom !== null && sessions.own[resumedFrom] === true),
-    placeholder: false,
+    // A line of the first message stays a placeholder until the agent's
+    // name arrives, across a resume too.
+    placeholder: kept?.placeholder === true && kept.own !== true,
     cwd: null,
     startIn,
     madeTree: false,
@@ -3915,6 +3975,7 @@ export function reset() {
   sessions.mine = {};
   sessions.names = {};
   sessions.own = {};
+  sessions.placeholders = {};
   sessions.tokens = {};
   sessions.workflows = {};
   pending.clear();

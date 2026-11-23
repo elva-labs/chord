@@ -42,6 +42,7 @@ import {
   loadRemembered,
   markUnread,
   noted,
+  onlyAPlace,
   onScreenNow,
   renamed,
   reopened,
@@ -762,6 +763,30 @@ describe("an integrated session behind its row", () => {
     expect(four.session.title).toBe("C:\\work\\notes.md");
   });
 
+  it("passes over the other shapes an address or a path is pasted in", () => {
+    for (const place of [
+      "<https://github.com/ada/demo/issues/12>",
+      "[the issue](https://github.com/ada/demo/issues/12)",
+      "![shot](./shot.png)",
+      "www.example.com/page",
+      "https://example.com/a https://example.com/b",
+      "/Users/ada/My\\ Documents/plan.md",
+      "/Users/ada/My Documents/plan.md",
+      "'/Users/ada/My Documents/plan.md'",
+      "\"C:\\work\\My notes\\plan.md\"",
+    ]) {
+      expect(onlyAPlace(place), place).toBe(true);
+    }
+    for (const words of [
+      "/Users/ada/notes.md has the plan",
+      "https://example.com/a and https://example.com/b",
+      "Read www.example.com/page",
+      "[Fix the login redirect](https://github.com/ada/demo/issues/12) please",
+    ]) {
+      expect(onlyAPlace(words), words).toBe(false);
+    }
+  });
+
   it("takes the agent's name once, in place of the first line", async () => {
     const { session, key } = await started();
     send(key, "https://example.com/crash.log");
@@ -770,6 +795,32 @@ describe("an integrated session behind its row", () => {
     expect(label(session)).toBe("Read the crash log");
     agentNamed(key, "Something else");
     expect(label(session)).toBe("Read the crash log");
+  });
+
+  it("still takes the agent's name after the row is closed and resumed, or the window restarted, before the agent named it", async () => {
+    const one = await started();
+    send(one.key, "https://example.com/crash.log\nWhy does it crash?");
+    const id = one.session.id!;
+    expect(sessions.placeholders[id]).toBe(true);
+    close(one.key);
+    const resumed = await started({ resumedFrom: id });
+    expect(label(resumed.session)).toBe("Why does it crash?");
+    agentNamed(resumed.key, "Find the crash");
+    expect(label(resumed.session)).toBe("Find the crash");
+    expect(sessions.placeholders[resumed.session.id!]).toBeUndefined();
+
+    const two = await started();
+    send(two.key, "Tidy the build");
+    const kept = two.session.id!;
+    stopListening();
+    resetSessions();
+    resetIntegrated();
+    stopListening = await listenIntegrated();
+    loadRemembered();
+    const back = reopened(PROJECT, kept, "claude-code", null, null, null, "integrated");
+    expect(label(back)).toBe("Tidy the build");
+    agentNamed(back.key, "Speed up the build");
+    expect(label(back)).toBe("Speed up the build");
   });
 
   it("takes the agent's name before any message names the row, and a first message after it changes nothing", async () => {
