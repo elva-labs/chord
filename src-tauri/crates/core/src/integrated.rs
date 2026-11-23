@@ -971,6 +971,10 @@ pub struct Launch<'a> {
     /// `key=value` for `-c`, as [`crate::codex_profiles::settings`] gives
     /// them. Empty for none.
     pub profile: &'a [String],
+    /// The core's home, where a team's run the session leads or is in is
+    /// kept, so the agent's hooks hold what the run's gates hold. None
+    /// where there is none.
+    pub home: Option<&'a Path>,
 }
 
 /// How one agent is started and spoken to as an integrated session.
@@ -3175,9 +3179,13 @@ pub fn start(
     });
     std::thread::spawn(move || write_lines(stdin, queued));
     let tail = Arc::new(Mutex::new(String::new()));
+    let (kept, tail_done) = mpsc::channel::<()>();
     std::thread::spawn({
         let tail = Arc::clone(&tail);
-        move || keep_tail(stderr, tail)
+        move || {
+            keep_tail(stderr, tail);
+            let _ = kept.send(());
+        }
     });
     let (reading, read_done) = mpsc::channel::<()>();
     std::thread::spawn({
@@ -3188,7 +3196,7 @@ pub fn start(
         let live = Arc::clone(&live);
         let name = protocol.name();
         move || {
-            let status = wait(&live, child, killed, read_done);
+            let status = wait(&live, child, killed, read_done, tail_done);
             sessions
                 .inner
                 .lock()
@@ -3544,7 +3552,8 @@ fn ask_to_end(child: &Child) -> bool {
     false
 }
 
-/// Waits for the child to end, then for the last of its output. Asked to
+/// Waits for the child to end, then for the last of its output and of its
+/// stderr, within one `DRAIN` between them. Asked to
 /// end it, the waiter asks the agent to end, and kills it and its group
 /// if it is still there a little later.
 fn wait(
@@ -3552,6 +3561,7 @@ fn wait(
     mut child: Child,
     killed: Receiver<()>,
     read_done: Receiver<()>,
+    tail_done: Receiver<()>,
 ) -> Option<std::process::ExitStatus> {
     let mut deadline: Option<std::time::Instant> = None;
     let status = loop {
@@ -3577,7 +3587,9 @@ fn wait(
         }
     };
     end_group(&child, live.deadlines.group_grace);
+    let by = std::time::Instant::now() + DRAIN;
     let _ = read_done.recv_timeout(DRAIN);
+    let _ = tail_done.recv_timeout(by.saturating_duration_since(std::time::Instant::now()));
     live.outbox.close();
     live.writer.lock().expect("writer lock").take();
     status
@@ -6027,6 +6039,7 @@ mod tests {
             resume_at: None,
             reads_only: false,
             profile: &[],
+            home: None,
         };
         let sessions = Arc::new(Sessions::default());
         for (session, said) in [(None, None), (Some("resumed"), Some("resumed".to_string()))] {

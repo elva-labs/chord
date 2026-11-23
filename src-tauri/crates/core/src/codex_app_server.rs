@@ -787,6 +787,9 @@ struct AppServer {
     /// the session reads only. A command approval is the mode's to answer,
     /// and approving it runs the command outside the sandbox.
     reads_only: bool,
+    /// The core's home and the session's token, where a team's run it
+    /// leads or is in may hold handing the work over.
+    run: Option<(PathBuf, String)>,
 
     next: i64,
     sent: HashMap<i64, Sent>,
@@ -1432,6 +1435,10 @@ impl AppServer {
             instructions: launch.instructions.map(str::to_string),
             start_only: launch.start_only,
             reads_only: launch.reads_only,
+            run: launch
+                .home
+                .zip(launch.token)
+                .map(|(home, token)| (home.to_path_buf(), token.to_string())),
             next: 0,
             sent: HashMap::new(),
             version: None,
@@ -2498,6 +2505,16 @@ impl AppServer {
             .as_ref()
             .and_then(|call| self.calls.get(call))
             .map(|open| open.input.clone());
+        if method == "item/commandExecution/requestApproval" {
+            let held = text(&params["command"]).zip(self.run.as_ref()).and_then(
+                |(command, (home, token))| crate::run::command_held(home, token, &command),
+            );
+            if let Some(held) = held {
+                out.writes.push(turned_down(id, method));
+                self.notice(NoticeLevel::Warning, Some(held), out);
+                return;
+            }
+        }
         let (asking, tool, input, description, path) = match method {
             "item/commandExecution/requestApproval" => {
                 let command = text(&params["command"]);

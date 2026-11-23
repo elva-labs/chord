@@ -44,6 +44,7 @@ pub mod project;
 pub mod protocol;
 pub mod pty;
 pub mod rewind;
+pub mod run;
 #[cfg(any(test, feature = "test-support"))]
 pub mod scratch;
 pub mod selection;
@@ -52,6 +53,7 @@ pub mod shell;
 pub(crate) mod short_lived;
 pub mod show;
 pub mod styles;
+pub mod team;
 pub mod transcripts;
 pub mod usage;
 pub mod user_command;
