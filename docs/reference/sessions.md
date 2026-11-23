@@ -553,8 +553,9 @@ of `main-truck` read `work/main-truck` and `spike/main-truck`, the part in
 front of the name dimmed.
 
 A row reads `New session`, in a quieter ink than a name, until something
-names it: the harness's title, a name the user gave it, or the first words of
-the first message the user sent it. Claude Code writes the
+names it: the harness's title, a name the user gave it, the name the agent
+gave a session drawn as a conversation, or the first words of the first
+message the user sent it. Claude Code writes the
 session's name into the terminal title, with a status glyph in front and its
 own name around it; both are stripped, and a title that was only ever the
 harness's name is no title. Codex keeps names in its own index, which is
@@ -586,7 +587,25 @@ A slash command is never a name. A row named from its first message passes
 over a message that is a command, a slash and a word with nothing or a
 space after it, and takes the first message that is not one; until then
 it keeps its plain name. A past session's title passes over commands and
-what they printed the same way.
+what they printed the same way. Nor is a line that is only a web address or
+a path: the first words are the message's first line with words, and the
+address or path only when no line has any.
+
+Neither harness titles a session drawn as a conversation by itself, so the
+agent names it. It is told, in a conversation only, to call the workbench's
+`name` tool once, alongside the first other call it makes, with a few
+words like a commit subject. The tool joins the words onto one line, takes
+off quotes and a full stop, and refuses a name with no letters or digits or
+longer than 60 characters. The row takes the name in place of the first
+words of the first message, which stand only until it arrives, and takes
+it once: a later call changes nothing. A name the user gave, the name a
+start gave a session another started, a name kept from before and a title
+the harness set all stay, and a name that reads as another live session's,
+the user's, the workbench's or an agent's is not taken, the first words
+staying. The first words are known as the agent's to replace only while
+the window runs, so after a restart they stay the name. Both Claude Code
+and Codex make the call; a session in a terminal is not told to and is
+named as before.
 
 ## Following the session
 
@@ -761,11 +780,12 @@ a start then with the mode the session begins in, as its answer says.
 A session whose row has gone keeps the name its caller gave it. An agent's
 request to use one of them reads the same way in the dock, as what it would
 do: asks to start a session, to write to one. Another server's tool reads as
-using that server's tool, by the server's own name. Two of the workbench's tools are not
+using that server's tool, by the server's own name. Some of the workbench's tools are not
 drawn at all: wait, which an agent calls to hear from the sessions it
-started, and notify, which leaves a line on its row. Neither has a step, a
+started, notify, which leaves a line on its row, name, which names the
+row, and note and notes. None has a step, a
 count in the line work folds into, or a line at the foot of its own, and
-neither folds anything: what the agent wrote before them stays the last
+none folds anything: what the agent wrote before them stays the last
 thing in its run, in full, and a wait that follows a wake leaves it so as
 well. Thinking that one of the workbench's own calls comes right after,
 with nothing between them but more of those calls and empty thinking, is
