@@ -657,8 +657,6 @@ export async function launch(key: string): Promise<void> {
   settleRun(key);
 }
 
-/** Asks the core to start the agent behind a row, as the row is now and
-    told what it is told, and takes the run up once it is. */
 /** What a session another started as one of its agents tells the core, so
     it joins the starter's run where the starter is in one. */
 function joiningOf(key: string, starting: Session): { joining?: Joining } {
@@ -668,6 +666,8 @@ function joiningOf(key: string, starting: Session): { joining?: Joining } {
   return { joining: { by, agent: agent.title, ...(starting.prompt ? { brief: starting.prompt } : {}) } };
 }
 
+/** Asks the core to start the agent behind a row, as the row is now and
+    told what it is told, and takes the run up once it is. */
 async function begin(key: string, link: Link, starting: Session, told: Told) {
   link.ranOn = { agent: starting.agent, told: toldText(told.instructions, told.startOnly) };
   link.granted = [];
