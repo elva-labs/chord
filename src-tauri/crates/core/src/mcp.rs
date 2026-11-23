@@ -1195,7 +1195,10 @@ fn call(
         "gates" => gates_call(home, session),
         "start" | "send" => match start_held_in_run(home, session, &arguments)? {
             Some(held) => Err(held),
-            None => conduct_call(home, cwd, session, name, &arguments, waits, cancelled),
+            None => match start_outside_run(home, session, name, &arguments)? {
+                Some(outside) => Err(outside),
+                None => conduct_call(home, cwd, session, name, &arguments, waits, cancelled),
+            },
         },
         _ if CONDUCT_TOOLS.contains(&name) => {
             conduct_call(home, cwd, session, name, &arguments, waits, cancelled)
@@ -2084,7 +2087,7 @@ pub fn verdict_tool() -> Value {
                 "on": { "type": "string", "enum": ["plan", "change"], "description": "What the verdict is on." },
                 "plan": { "type": "integer", "description": "On the plan: the version you read." },
                 "tree": { "type": "string", "description": "On the change: the tree you read." },
-                "folder": { "type": "string", "description": "On the change: the folder whose tree you read, when the change is in more than one." },
+                "folder": { "type": "string", "description": "On the change: the folder whose tree you read, when the change is in more than one, or your own folder when you read in it and it has the change of one of them." },
                 "approved": { "type": "boolean", "description": "true to approve, false to ask for changes." },
                 "findings": { "type": "string", "description": "What you found; what must change, when you ask for changes." }
             },
@@ -2147,6 +2150,22 @@ fn start_held_in_run(
     }))
 }
 
+/// Why a start the caller asks for is refused for leaving the team's run
+/// the caller is in. A send goes to a session started already.
+fn start_outside_run(
+    home: &Path,
+    session: Option<&str>,
+    name: &str,
+    arguments: &Value,
+) -> Result<Option<String>, String> {
+    let Some(caller) = session.filter(|_| name == "start") else {
+        return Ok(None);
+    };
+    let text = |key: &str| arguments.get(key).and_then(Value::as_str);
+    crate::run::start_outside(home, caller, text("agent"), text("session"))
+        .map_err(|e| format!("The team's run this session is in cannot be read: {e}"))
+}
+
 fn when_of(arguments: &Value, key: &str) -> Result<crate::team::When, String> {
     match arguments.get(key).and_then(Value::as_str) {
         Some("plan") => Ok(crate::team::When::Plan),
@@ -2171,11 +2190,21 @@ fn strings_of(arguments: &Value, key: &str) -> Result<Option<Vec<String>>, Strin
     }
 }
 
+/// Tells the window the run of the session a token names changed, so it
+/// reads it again. Where that cannot be written, the window reads the run
+/// as it stands the next time it looks.
+fn run_changed(home: &Path, token: &str) {
+    if let Ok(Some(lead)) = crate::run::lead_of(home, token) {
+        let _ = show::append(home, &Request::Run(show::RunChanged { lead }));
+    }
+}
+
 fn plan_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
     let lead = session.ok_or(crate::run::ONLY_THE_LEAD)?;
     let text = arguments.get("text").and_then(Value::as_str).unwrap_or("");
     let paths = strings_of(arguments, "paths")?.unwrap_or_default();
     let plan = crate::run::plan(home, lead, text, &paths)?;
+    run_changed(home, lead);
     Ok(said(format!(
         "Kept as version {} of the plan.\n\n{}",
         plan.version,
@@ -2188,6 +2217,7 @@ fn gate_add_call(home: &Path, session: Option<&str>, arguments: &Value) -> Resul
     let who = arguments.get("who").and_then(Value::as_str).unwrap_or("");
     let when = when_of(arguments, "when")?;
     let gate = crate::run::gate_add(home, lead, who, when, strings_of(arguments, "touches")?)?;
+    run_changed(home, lead);
     Ok(said(format!(
         "Added gate #{}: {} approves {}.\n\n{}",
         gate.id,
@@ -2234,6 +2264,7 @@ fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result
         None => None,
     };
     let gates = crate::run::verdict(home, token, read, approved, findings, version.as_deref())?;
+    run_changed(home, token);
     let stands: Vec<String> = gates.iter().map(gate_line).collect();
     Ok(said(format!("Kept.\n{}", stands.join("\n"))))
 }
@@ -2243,10 +2274,45 @@ fn gates_call(home: &Path, session: Option<&str>) -> Result<Value, String> {
     let Some(token) = session else {
         return Ok(said(none));
     };
-    match crate::run::state_of(home, token)? {
-        Some(state) => Ok(said(run_text(&state))),
-        None => Ok(said(none)),
+    let Some(state) = crate::run::state_of(home, token)? else {
+        return Ok(said(none));
+    };
+    let mut text = run_text(&state);
+    if let Some(line) = own_folder_line(home, token, &state)? {
+        text = format!("{line}\n{text}");
     }
+    Ok(said(text))
+}
+
+/// For a member that reads in a folder of its own, which is no place of
+/// the run's work, what a verdict naming that folder is on.
+fn own_folder_line(
+    home: &Path,
+    token: &str,
+    state: &crate::run::State,
+) -> Result<Option<String>, String> {
+    let Some(member) = crate::run::Runs::existing(home)?
+        .map(|runs| runs.member(token))
+        .transpose()?
+        .flatten()
+    else {
+        return Ok(None);
+    };
+    if state
+        .places
+        .iter()
+        .any(|place| crate::run::same(&place.folder, &member.folder))
+    {
+        return Ok(None);
+    }
+    let own = member.folder.display();
+    Ok(Some(match state.read_in(&member.folder) {
+        Ok(place) => format!(
+            "You read in {own}, which has the change in {}: a verdict naming {own} is on that change.",
+            place.folder.display()
+        ),
+        Err(e) => format!("You read in {own}, so a verdict naming it is refused: {e}"),
+    }))
 }
 
 /// The run's gates as its lead reads them after a change to it.
@@ -4453,6 +4519,36 @@ mod tests {
     }
 
     #[test]
+    fn a_session_in_a_run_starts_only_its_teams_agents_and_members() {
+        let (home, _folder) = in_a_run("run-outside");
+        let outside = |session: Option<&str>, name: &str, arguments: Value| {
+            start_outside_run(&home, session, name, &arguments).unwrap()
+        };
+        let unnamed = outside(Some("lead"), "start", json!({})).unwrap();
+        assert!(
+            unnamed.contains("name one of Researcher, Developer"),
+            "{unnamed}"
+        );
+        let other = outside(Some("dev"), "start", json!({ "agent": "Designer" })).unwrap();
+        assert!(other.starts_with("Designer is not one of"), "{other}");
+        assert!(outside(Some("lead"), "start", json!({ "session": "nobody-12345" })).is_some());
+        assert_eq!(
+            outside(Some("dev"), "start", json!({ "agent": "tester" })),
+            None
+        );
+        assert_eq!(
+            outside(Some("lead"), "start", json!({ "session": "sec-1234" })),
+            None
+        );
+        assert_eq!(
+            outside(Some("lead"), "send", json!({ "session": "x" })),
+            None
+        );
+        assert_eq!(outside(Some("other"), "start", json!({})), None);
+        assert_eq!(outside(None, "start", json!({})), None);
+    }
+
+    #[test]
     fn an_agent_the_user_made_to_change_files_is_held_though_it_ships_reading() {
         let (home, _folder) = in_a_run("run-own");
         let path = crate::settings::settings_path(&home);
@@ -4539,6 +4635,10 @@ mod tests {
         );
         assert!(read.contains("It touches: src/page.rs"), "{read}");
         assert!(read.contains("The plan is at version 1, hash "), "{read}");
+        assert!(
+            !read.contains("You read in"),
+            "a member in the lead's folder reads the change there: {read}"
+        );
         assert!(read.contains(" has tree "), "{read}");
         let approved = called(
             &home,
@@ -4577,5 +4677,18 @@ mod tests {
             json!({ "who": "Tester", "when": "later" }),
         );
         assert_eq!(text_of(&wrong), "when is plan or change.");
+
+        // The plan, the verdict and the gate each told the window the
+        // lead's run changed; the refused calls told it nothing.
+        let log = std::fs::read_to_string(show::requests_path(&home)).unwrap();
+        let told: Vec<_> = log
+            .lines()
+            .filter_map(show::classify)
+            .filter_map(|request| match request {
+                Request::Run(changed) => Some(changed.lead),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(told, ["lead", "lead", "lead"]);
     }
 }

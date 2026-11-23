@@ -224,6 +224,21 @@ export interface IntegratedStartOptions {
   /** The plugin's request the user allowed this session for, as for
       `spawn`. */
   pluginStart?: string;
+  /** The team a lead session is started with, by name: the team's run
+      begins before the first turn and its gates hold from then on. */
+  team?: string;
+  /** For a session another started as one of its agents: the starter's
+      token, the agent's title and the prompt it is started with. Where the
+      starter is in a team's run, the session joins it, and an agent the
+      team lacks is not started. */
+  joining?: Joining;
+}
+
+/** What a session started as an agent tells the core of who asked for it. */
+export interface Joining {
+  by: string;
+  agent: string;
+  brief?: string;
 }
 
 /** What starting an integrated session hands back: the id every other
@@ -1521,6 +1536,156 @@ export interface InstalledAgent {
   path: string;
 }
 
+/** A harness and model a team's member runs on. */
+export interface TeamModel {
+  harness: string;
+  model: string;
+}
+
+/** One of a team's agents, by its title. */
+export interface TeamMember {
+  agent: string;
+  /** The harnesses and models it runs on, in order of choice. */
+  models?: TeamModel[];
+}
+
+/** When a gate's agent approves: the plan before building, or the change
+    before handing over. */
+export type GateWhen = "plan" | "change";
+
+/** A gate of a team: `who`, one of its agents, approves the plan or the
+    change, when the work touches `touches` where given. */
+export interface TeamGate {
+  who: string;
+  when: GateWhen;
+  touches?: string[];
+}
+
+/** A team a lead may be started with. */
+export interface Team {
+  name: string;
+  members: TeamMember[];
+  gates: TeamGate[];
+  /** Whether the lead only reads and calls its members. Missing is on. */
+  startOnly?: boolean;
+}
+
+/** A run as it began, with its lead's token. */
+export interface Run {
+  lead: string;
+  team: Team;
+  folder: string;
+  /** The commit the folder was at; null before its first commit. */
+  base: string | null;
+  /** Seconds since the epoch. */
+  at: number;
+}
+
+/** A gate of a run: one of the team's, or one the lead added. */
+export interface RunGate {
+  /** Its place in the run, from 1: what a waiver names it by. */
+  id: number;
+  who: string;
+  when: GateWhen;
+  touches: string[] | null;
+  /** How many times it may ask for changes before it waits for the user. */
+  rounds: number;
+  added: boolean;
+}
+
+/** One version of a run's plan. */
+export interface RunPlan {
+  version: number;
+  text: string;
+  paths: string[];
+  hash: string;
+  at: number;
+}
+
+/** A verdict a member gave on a gate. */
+export interface RunVerdict {
+  id: number;
+  gate: number;
+  /** The token of the session that gave it. */
+  token: string;
+  agent: string;
+  /** The version of the agent it ran as, where it is one of the user's. */
+  agentVersion: string | null;
+  /** The hash of the plan or the tree it was given on. */
+  on: string;
+  plan: number | null;
+  folder: string | null;
+  brief: string;
+  approved: boolean;
+  findings: string;
+  at: number;
+}
+
+/** The user's waiver of a gate, for its run. */
+export interface RunWaiver {
+  gate: number;
+  reason: string;
+  at: number;
+}
+
+export type GateStanding = "waiting" | "approved" | "outOfDate" | "waived" | "notNeeded";
+
+/** A reading of the core's that may have failed, with why. */
+export type Reading<T> = { ok: T } | { error: string };
+
+/** A folder a run's work is in, as it stands now. */
+export interface RunPlace {
+  folder: string;
+  /** The commit the change there counts from. */
+  base: string | null;
+  /** The tree of the commit the folder's branch is on. */
+  head: string | null;
+  tree: Reading<string>;
+  /** The paths changed there since the base. */
+  changed: Reading<string[]>;
+}
+
+/** A gate as it stands now. */
+export interface RunGateState {
+  gate: RunGate;
+  /** Waiting and out of date hold; the others do not. */
+  standing: GateStanding;
+  /** How many times it asked for changes. */
+  asks: number;
+  /** Whether it asked as many times as its rounds, so it waits for the
+      user, who waives it or sends the lead on. */
+  atLimit: boolean;
+  /** The line that says why it stands as it does. */
+  reason: string;
+  verdict: RunVerdict | null;
+  waiver: RunWaiver | null;
+  /** How a gate on the change stands in each place it is judged in. */
+  folders: { folder: string; standing: GateStanding; reason: string }[];
+}
+
+/** A team's run as the window reads it. */
+export interface RunState {
+  run: Run;
+  plan: RunPlan | null;
+  /** The folders the run's work is in, the lead's first. */
+  places: RunPlace[];
+  /** The folders of members that are gone, left out of the places. */
+  gone: string[];
+  /** The paths the plan names and those changed in every place. */
+  paths: string[];
+  gates: RunGateState[];
+  /** The line above the composer: gates passed of how many, and while one
+      holds, why. */
+  line: string;
+  buildingHeld: string | null;
+  handingOverHeld: string | null;
+  /** Why a push or a pull request is held while an approved change is
+      not all committed. */
+  uncommittedHeld: string | null;
+  /** Whether every open gate waits for the user. */
+  waitsForTheUser: boolean;
+}
+
 /** The user's preferences, one set per machine, kept by the core. */
 export interface Settings {
   appearance: "system" | "light" | "dark";
@@ -1553,6 +1718,12 @@ export interface Settings {
   /** The user's own agents, in the order they are kept. A file from
       before has none. */
   agents?: OwnAgent[];
+  /** The teams the file holds that read, in the order the user keeps
+      them. Missing for a file with no teams, whose leads are given the
+      teams its workflows make. A team that does not read is in
+      `unreadEntries` under the field "teams", at its place in the list,
+      and is written back as it was. */
+  teams?: Team[];
   /** What the file holds and the app does not use, each with the rule it
       breaks: an entry of the keys, the hooks, the accounts or the themes, a
       choice of account that names one, a value of a setting, or a field
@@ -1951,6 +2122,25 @@ export interface Core {
   notesBriefing(project: string, token: string): Promise<string | null>;
   /** Lets go of the notes of these sessions of a project. */
   notesForget(project: string, tokens: string[]): Promise<void>;
+  /** Ends the team's run the session with this token leads, where its
+      project is: its gates hold nothing from then on. True when it led
+      one; a session that leads none ends nothing. */
+  runEnd(project: string, token: string): Promise<boolean>;
+  /** The teams a lead of a project may be started with, as a start finds
+      them where the project is: the settings file's own, or for a file
+      with none, those its workflows give. */
+  teamsInUse(project: string): Promise<Team[]>;
+  /** The team's run the session with this token is in, as its lead or a
+      member, read where its project is; null when it is in none. */
+  runState(project: string, token: string): Promise<RunState | null>;
+  /** The user's waiver of a gate of the run the session with this token
+      is in, for that run, with why. A reason is required; a gate already
+      waived takes the new one. */
+  runWaive(project: string, token: string, gate: number, reason: string): Promise<RunWaiver>;
+  /** Something was written to a team's run that can change how its gates
+      stand, named by its lead's token: read it again with `runState`. A
+      change of the tree is not told; it shows on the next read. */
+  onRunChanged(handler: (changed: { lead: string }) => void): Promise<() => void>;
   /** Adds an entry to a session's usage log, where its project is. With
       `transcript`, for a turn of a Claude Code session in a terminal, the
       core reads the turn's tokens and the context from the conversation's
@@ -2543,6 +2733,14 @@ const tauriCore: Core = {
   notesKept: (project, token, page) => invoke<NotesKept>("notes_kept", { project, token, page }),
   notesBriefing: (project, token) => invoke<string | null>("notes_briefing", { project, token }),
   notesForget: (project, tokens) => invoke<void>("notes_forget", { project, tokens }),
+  runEnd: (project, token) => invoke<boolean>("run_end", { project, token }),
+  teamsInUse: (project) => invoke<Team[]>("teams_in_use", { project }),
+  runState: (project, token) => invoke<RunState | null>("run_state", { project, token }),
+  runWaive: (project, token, gate, reason) =>
+    invoke<RunWaiver>("run_waive", { project, token, gate, reason }),
+  async onRunChanged(handler) {
+    return listen<{ lead: string }>("run_changed", (event) => handler(event.payload));
+  },
   usageLog: (project, token, entry, transcript) =>
     invoke<void>("usage_log", { project, token, entry, transcript: transcript ?? null }),
   goingOn: (options) => invoke<GoingOn>("going_on", { ...options }),
@@ -2955,6 +3153,21 @@ const detachedCore: Core = {
     return null;
   },
   async notesForget() {},
+  async runEnd() {
+    return false;
+  },
+  async teamsInUse() {
+    return [];
+  },
+  async runState() {
+    return null;
+  },
+  async runWaive() {
+    throw new Error("not connected to the workbench core");
+  },
+  async onRunChanged() {
+    return () => {};
+  },
   async usageLog() {},
   async goingOn() {
     return { context: null, idle: null, goesOn: false, briefing: null };

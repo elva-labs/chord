@@ -349,6 +349,8 @@ enum Sent {
     Shell(String),
     /// The interrupt of the turn a command of the user's runs in.
     ShellInterrupt,
+    /// The turn a lead goes on in after the team's run held its stop.
+    Hold,
 }
 
 /// A command of the user's Codex runs, in a turn of its own that is not
@@ -832,6 +834,16 @@ struct AppServer {
     ended: Option<String>,
     interrupt_wanted: bool,
     compact_asked: bool,
+    /// Whether the running turn answers a message, so its end is a stop
+    /// the team's run may hold; one Codex began by itself, such as to
+    /// compact, is not held.
+    answers: bool,
+    /// The end of a lead's turn the team's run held, told once the turn it
+    /// goes on in fails to start; that turn's own end is told in its place.
+    held: Option<Event>,
+    /// Whether the running turn is the one a held stop goes on in, so its
+    /// own end is not held again.
+    going_on: bool,
     /// The command of the user's that runs.
     shell: Option<Shell>,
     /// Why the running turn failed, as the agent said before it ended.
@@ -1468,6 +1480,9 @@ impl AppServer {
             ended: None,
             interrupt_wanted: false,
             compact_asked: false,
+            answers: false,
+            held: None,
+            going_on: false,
             shell: None,
             failure: None,
             told_signed_out: false,
@@ -1893,6 +1908,15 @@ impl AppServer {
             },
             Sent::Interrupt => out.replies.push((id.to_string(), reply)),
             Sent::LateInterrupt | Sent::ShellInterrupt => {}
+            Sent::Hold => {
+                // A turn that does not start leaves the held one ended.
+                if reply.is_err() {
+                    if let Some(end) = self.held.take() {
+                        self.interrupt_wanted = false;
+                        out.events.push(end);
+                    }
+                }
+            }
             Sent::Shell(command) => {
                 if let Err(error) = reply {
                     if let Some(shell) = self.shell.take_if(|shell| shell.command == command) {
@@ -1938,9 +1962,16 @@ impl AppServer {
         }
         self.turn = Some(turn.to_string());
         self.failure = None;
-        self.base = self.total;
-        self.lasts = Tokens::default();
-        out.events.push(Event::TurnStarted { messages });
+        // The turn a held stop goes on in is the same turn to the window,
+        // with the usage of both.
+        if self.held.take().is_some() {
+            self.going_on = true;
+        } else {
+            self.answers = !messages.is_empty();
+            self.base = self.total;
+            self.lasts = Tokens::default();
+            out.events.push(Event::TurnStarted { messages });
+        }
         if std::mem::take(&mut self.interrupt_wanted) {
             if let Some(thread) = self.thread.clone() {
                 let (line, _) = self.request(
@@ -1960,6 +1991,7 @@ impl AppServer {
             // a second start names it, and the core takes it as taken into
             // the turn that runs.
             (Some(turn), Some(running)) if turn == running => {
+                self.answers = true;
                 out.events.push(Event::TurnStarted {
                     messages: vec![message],
                 });
@@ -2095,14 +2127,47 @@ impl AppServer {
         self.calls.clear();
         self.streamed.clear();
         self.compacting.clear();
-        out.events.push(Event::TurnEnded {
+        let end = Event::TurnEnded {
             outcome,
             error,
             total_cost_usd: None,
             duration_ms: turn["durationMs"].as_u64(),
             usage,
-        });
+        };
+        let answers = std::mem::take(&mut self.answers);
+        let went_on = std::mem::take(&mut self.going_on);
+        match self.hold(outcome, answers && !went_on) {
+            Some(line) => {
+                self.held = Some(end);
+                out.writes.push(line);
+            }
+            None => out.events.push(end),
+        }
         self.ask_rate_limits(out);
+    }
+
+    /// The turn a lead goes on in when its turn ended done and the team's
+    /// run it leads holds the hand-over, where something it does can move
+    /// the run on, with why as its input; as Claude Code's Stop hook sends
+    /// a lead back to work. A turn that went on already ends, so a lead
+    /// that stops twice in a row, to ask the user or because it is stuck,
+    /// is not kept going.
+    fn hold(&mut self, outcome: Outcome, holdable: bool) -> Option<String> {
+        if outcome != Outcome::Done || !holdable {
+            return None;
+        }
+        let thread = self.thread.clone()?;
+        let held = self
+            .run
+            .as_ref()
+            .and_then(|(home, token)| crate::run::stop_held(home, token))?;
+        let input = user_input(&held, &[]).ok()?;
+        let (line, _) = self.request(
+            Sent::Hold,
+            "turn/start",
+            json!({ "threadId": thread, "input": input }),
+        );
+        Some(line)
     }
 
     /// The command of the user's that runs, where `item` is it.
@@ -2984,7 +3049,8 @@ impl Driver for AppServer {
                 }
                 _ => {
                     // A turn on its way is stopped once it has an id.
-                    self.interrupt_wanted = self.starting.is_some() || self.awaited.is_some();
+                    self.interrupt_wanted =
+                        self.starting.is_some() || self.awaited.is_some() || self.held.is_some();
                     local(Value::Null, vec![])
                 }
             },

@@ -426,6 +426,29 @@ impl Default for Settings {
     }
 }
 
+impl Settings {
+    /// The teams a lead may be started with: the file's own, or for a file
+    /// without `teams`, and for no file, the ones its workflows give (see
+    /// [`crate::team::from_workflows`]). They are made each time they are
+    /// asked for and never written: the file keeps no `teams` until the
+    /// user changes them, and its `workflows` stay as written, so the
+    /// version before reads it as it did.
+    pub fn teams_in_use(&self) -> Vec<crate::team::Team> {
+        match &self.teams {
+            Some(teams) => teams.clone(),
+            None => crate::team::from_workflows(&self.workflows),
+        }
+    }
+
+    /// The team in use with the name, in any case.
+    pub fn team_named(&self, name: &str) -> Option<crate::team::Team> {
+        let name = name.trim();
+        self.teams_in_use()
+            .into_iter()
+            .find(|team| team.name.trim().eq_ignore_ascii_case(name))
+    }
+}
+
 /// What the settings file holds, as one look at it found it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Found {
@@ -3407,6 +3430,16 @@ mod tests {
         assert!(read.unread_entries[0]
             .reason
             .contains("not one of its agents"));
+        // The window reads it among the unread entries, under its field and
+        // at its place, beside the teams that read.
+        let seen = serde_json::to_value(&read).unwrap();
+        assert_eq!(seen["teams"], json!([good.clone()]));
+        let aside = &seen["unreadEntries"][0];
+        assert_eq!(
+            (&aside["field"], &aside["at"]),
+            (&json!("teams"), &json!(0))
+        );
+        assert_eq!(aside["entry"], broken);
         let written: Value = serde_json::from_str(&render(&read)).unwrap();
         assert_eq!(written["teams"], file["teams"]);
         // A save of the teams that read keeps the other where it stood.
@@ -3425,6 +3458,45 @@ mod tests {
         assert_eq!(whole.teams, Some(Vec::new()));
         let written: Value = serde_json::from_str(&render(&whole)).unwrap();
         assert_eq!(written["teams"], json!({ "Quick fix": {} }));
+    }
+
+    #[test]
+    fn a_file_without_teams_is_given_its_workflows_teams_and_nothing_is_written() {
+        let shipped: Vec<String> = crate::team::shipped()
+            .into_iter()
+            .map(|team| team.name)
+            .collect();
+        let named = |teams: Vec<crate::team::Team>| -> Vec<String> {
+            teams.into_iter().map(|team| team.name).collect()
+        };
+        // No file, and an untouched install: the shipped teams.
+        assert_eq!(named(Settings::default().teams_in_use()), shipped);
+        // A file from before teams: its own workflows first, then the
+        // shipped teams, made on each read and written nowhere.
+        let home = home("teams-in-use");
+        std::fs::create_dir_all(settings_path(&home).parent().unwrap()).unwrap();
+        let file = before_teams();
+        std::fs::write(settings_path(&home), file.to_string()).unwrap();
+        let store = Store::new(&home, Arc::new(Recorder::default()));
+        let read = store.load().settings;
+        let in_use = named(read.teams_in_use());
+        assert_eq!(in_use[0], "Careful");
+        assert!(
+            shipped.iter().all(|name| in_use.contains(name)),
+            "{in_use:?}"
+        );
+        assert_eq!(
+            read.team_named("  careful ").map(|team| team.name),
+            Some("Careful".to_string())
+        );
+        assert_eq!(read.team_named("Odd"), None);
+        let after: Value =
+            serde_json::from_str(&std::fs::read_to_string(settings_path(&home)).unwrap()).unwrap();
+        assert_eq!(after, file);
+        // A file with teams has those and no others, none at all included.
+        let mut own = file.clone();
+        own["teams"] = json!([]);
+        assert!(parse(&own.to_string()).unwrap().teams_in_use().is_empty());
     }
 
     #[test]

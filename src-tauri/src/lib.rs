@@ -201,6 +201,8 @@ async fn integrated_start(
     starter: Option<String>,
     made_worktree: Option<bool>,
     plugin_start: Option<String>,
+    team: Option<String>,
+    joining: Option<chord_core::run::Joining>,
 ) -> Result<Value, String> {
     let core = Arc::clone(&core);
     let remotes = Arc::clone(&remotes);
@@ -228,11 +230,13 @@ async fn integrated_start(
             starter.as_deref(),
             made_worktree.unwrap_or(false),
             plugin_start.as_deref(),
+            team.as_deref(),
+            joining,
         )?),
         Route::Remote { host, rest } => {
             let started = remotes.connection(&host)?.call(
                 "integrated_start",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "readsOnly": reads_only.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "readsOnly": reads_only.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start, "team": team, "joining": joining }),
             )?;
             let id = started["id"].as_str().ok_or("no session id")?;
             let id = with_host_id(&host, id);
@@ -1402,6 +1406,89 @@ async fn notes_briefing(
     .await
 }
 
+/// Ends the run a session of a project leads, where it is.
+#[tauri::command]
+async fn run_end(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    token: String,
+) -> Result<Value, String> {
+    let sent = token.clone();
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "run_end",
+        move |_| json!({ "token": sent }),
+        move |core, _| core.run_end(&token),
+    )
+    .await
+}
+
+/// The teams a lead of a project may be started with, as a start finds
+/// them where the project is.
+#[tauri::command]
+async fn teams_in_use(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+) -> Result<Value, String> {
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "teams_in_use",
+        move |_| json!({}),
+        move |core, _| core.teams_in_use(),
+    )
+    .await
+}
+
+/// The run a session of a project is in, as its lead or a member, where
+/// it is.
+#[tauri::command]
+async fn run_state(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    token: String,
+) -> Result<Value, String> {
+    let sent = token.clone();
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "run_state",
+        move |_| json!({ "token": sent }),
+        move |core, _| core.run_state(&token),
+    )
+    .await
+}
+
+/// The user's waiver of a gate of the run a session of a project is in,
+/// with why, where it is.
+#[tauri::command]
+async fn run_waive(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    token: String,
+    gate: i64,
+    reason: String,
+) -> Result<Value, String> {
+    let (sent, said) = (token.clone(), reason.clone());
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "run_waive",
+        move |_| json!({ "token": sent, "gate": gate, "reason": said }),
+        move |core, _| core.run_waive(&token, gate, &reason),
+    )
+    .await
+}
+
 /// Lets go of the notes of sessions of a project, where it is.
 #[tauri::command]
 async fn notes_forget(
@@ -2502,6 +2589,10 @@ pub fn run() {
             read_document_image,
             notes_kept,
             notes_briefing,
+            run_end,
+            run_state,
+            teams_in_use,
+            run_waive,
             notes_forget,
             usage_log,
             going_on,

@@ -127,20 +127,34 @@ fn a_run_begins_with_its_teams_gates_and_its_folders_commit() {
 }
 
 #[test]
-fn a_lead_begun_again_keeps_its_run() {
+fn a_lead_begun_again_with_its_runs_team_keeps_the_run_and_with_another_begins_anew() {
     let (home, dir) = started("again", QUICK_FIX, &[("dev", "Developer", false)]);
     plan(home.path(), "lead", "Fix it.", &[]).unwrap();
-    let again = begin(home.path(), "lead", &team(SHIP_WITH_CHECKS), &dir).unwrap();
+    waive(home.path(), "lead", 1, "Checked it myself.").unwrap();
+    let again = begin(home.path(), "lead", &team(QUICK_FIX), &dir).unwrap();
     assert_eq!(again.team.name, QUICK_FIX);
-    let state = state(home.path(), "lead").unwrap().unwrap();
-    assert_eq!(state.plan.unwrap().version, 1);
+    let kept = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(kept.plan.unwrap().version, 1);
+    let runs = Runs::open(home.path()).unwrap();
+    assert_eq!(runs.members("lead").unwrap().len(), 1);
     assert_eq!(
-        Runs::open(home.path())
-            .unwrap()
-            .members("lead")
-            .unwrap()
-            .len(),
-        1
+        runs.waivers("lead").unwrap().len(),
+        1,
+        "a run going on keeps its waivers"
+    );
+
+    let anew = begin(home.path(), "lead", &team(SHIP_WITH_CHECKS), &dir).unwrap();
+    assert_eq!(anew.team.name, SHIP_WITH_CHECKS);
+    let fresh = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(fresh.run.team.name, SHIP_WITH_CHECKS);
+    assert_eq!(fresh.gates.len(), 4);
+    assert_eq!(fresh.plan, None);
+    assert!(runs.waivers("lead").unwrap().is_empty());
+    assert!(runs.members("lead").unwrap().is_empty());
+    assert_eq!(
+        runs.lead_of("dev").unwrap(),
+        None,
+        "the old run's member is in no run"
     );
 }
 
@@ -156,7 +170,10 @@ fn reading_a_run_that_is_not_there_makes_nothing() {
 fn only_a_teams_agents_join_its_run_and_a_member_takes_its_id_later() {
     let (home, dir) = started("join", QUICK_FIX, &[]);
     let refused = join(home.path(), "lead", "t", "Tester", &dir, None, false, "").unwrap_err();
-    assert_eq!(refused, "Tester is not one of Quick fix's agents.");
+    assert_eq!(
+        refused,
+        "Tester is not one of Quick fix's agents, as its run names them from when it began."
+    );
     let member = join(
         home.path(),
         "lead",
@@ -960,6 +977,44 @@ fn given_in(home: &Path, folder: Option<&Path>) -> Result<Vec<GateState>, String
 }
 
 #[test]
+fn a_reviewer_reading_in_its_own_folder_approves_the_change_with_its_tree() {
+    let (home, dir) = started("own-folder", QUICK_FIX, &[]);
+    write(&dir, "src/main.rs", "fn main() { fixed() }\n");
+    commit(&dir);
+    let own = worktree(&dir, "review");
+    join(home.path(), "lead", "rev", "Reviewer", &own, None, true, "").unwrap();
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.places.len(), 1, "a folder that only reads is no place");
+    let tree = git::tree_hash(&own).unwrap();
+    assert_eq!(Ok(&tree), now.places[0].tree.as_ref());
+    let read = Read::Change {
+        folder: Some(&own),
+        tree: &tree,
+    };
+    let gates = verdict(home.path(), "rev", read, true, "", None).unwrap();
+    assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert!(
+        same(given[0].folder.as_deref().unwrap(), &dir),
+        "the verdict is on the lead's folder, where the change is"
+    );
+
+    write(&dir, "src/main.rs", "fn main() { fixed_more() }\n");
+    let gate = standing(home.path(), REVIEWER, When::Change);
+    assert_eq!(gate.standing, Standing::OutOfDate, "{}", gate.reason);
+    let read = Read::Change {
+        folder: Some(&own),
+        tree: &tree,
+    };
+    let refused = verdict(home.path(), "rev", read, true, "", None).unwrap_err();
+    assert!(
+        refused.contains("which is the change in none of the run's folders"),
+        "{refused}"
+    );
+    let _ = std::fs::remove_dir_all(&own);
+}
+
+#[test]
 fn a_verdict_on_a_plan_that_was_replaced_is_refused() {
     let (home, _dir) = started(
         "replaced",
@@ -1065,4 +1120,239 @@ fn a_store_kept_by_a_later_build_is_not_read() {
     let refused = Runs::open(home.path()).err().unwrap();
     assert!(refused.contains("kept by a later Chord"), "{refused}");
     assert!(command_held(home.path(), "lead", "git push").is_some());
+}
+
+#[test]
+fn a_session_started_for_one_in_a_run_joins_its_leads_run() {
+    let (home, dir) = started("join-from", SHIP_WITH_CHECKS, &[]);
+    let joining = |by: &str, agent: &str| Joining {
+        by: by.into(),
+        agent: agent.into(),
+        brief: "build it".into(),
+    };
+    let developer = join_from(
+        home.path(),
+        &joining("lead", "developer"),
+        "dev",
+        &dir,
+        None,
+        false,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        (developer.lead.as_str(), developer.agent.as_str()),
+        ("lead", "Developer")
+    );
+    assert_eq!(developer.brief, "build it");
+    // A member's own start is in the lead's run too.
+    let reviewer = join_from(
+        home.path(),
+        &joining("dev", REVIEWER),
+        "rev",
+        &dir,
+        Some("abc"),
+        true,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(reviewer.lead, "lead");
+    assert_eq!(reviewer.session.as_deref(), Some("abc"));
+    assert!(reviewer.reads_only);
+    // The id the harness gives later is taken; the rest stands.
+    let again = join_from(
+        home.path(),
+        &joining("lead", REVIEWER),
+        "dev",
+        &dir,
+        Some("xyz"),
+        true,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(again.session.as_deref(), Some("xyz"));
+    assert_eq!(
+        (again.agent.as_str(), again.reads_only),
+        ("Developer", false)
+    );
+    // An agent the team does not have is refused.
+    let refused = join_from(
+        home.path(),
+        &joining("lead", "Designer"),
+        "t",
+        &dir,
+        None,
+        false,
+    );
+    assert!(refused.unwrap_err().contains("not one of"));
+    // A session in no run starts nothing in one.
+    let outside = join_from(
+        home.path(),
+        &joining("other", "Developer"),
+        "o",
+        &dir,
+        None,
+        false,
+    );
+    assert_eq!(outside.unwrap(), None);
+}
+
+#[test]
+fn a_start_outside_any_run_makes_no_store() {
+    let home = Scratch::new("run-home-join-none");
+    let joining = Joining {
+        by: "lead".into(),
+        agent: "Developer".into(),
+        brief: String::new(),
+    };
+    let none = join_from(home.path(), &joining, "dev", home.path(), None, false).unwrap();
+    assert_eq!(none, None);
+    assert!(!folder(home.path()).join(FILE).exists());
+}
+
+#[test]
+fn an_ended_run_holds_nothing_and_its_lead_started_again_with_the_team_reopens_it() {
+    let (home, dir) = started("end", QUICK_FIX, &[("dev", "Developer", false)]);
+    plan(home.path(), "lead", "Fix it.", &[]).unwrap();
+    assert!(command_held(home.path(), "lead", "git push").is_some());
+    waive(home.path(), "lead", 1, "Checked it myself.").unwrap();
+    // A member's end ends nothing.
+    assert!(!end(home.path(), "dev").unwrap());
+    assert!(end(home.path(), "lead").unwrap());
+    assert!(!end(home.path(), "lead").unwrap());
+    assert_eq!(state(home.path(), "lead").unwrap(), None);
+    assert_eq!(
+        Runs::open(home.path()).unwrap().lead_of("dev").unwrap(),
+        None
+    );
+    assert!(command_held(home.path(), "lead", "git push").is_none());
+    begin(home.path(), "lead", &team(QUICK_FIX), &dir).unwrap();
+    let runs = Runs::open(home.path()).unwrap();
+    assert_eq!(runs.members("lead").unwrap().len(), 1);
+    assert!(runs.latest_plan("lead").unwrap().is_some());
+    assert!(
+        runs.waivers("lead").unwrap().is_empty(),
+        "a reopened run holds again without the waivers it had"
+    );
+    assert!(command_held(home.path(), "lead", "git push").is_some());
+}
+
+#[test]
+fn a_start_as_its_leads_run_ends_joins_no_run() {
+    let (home, dir) = started("join-ended", QUICK_FIX, &[]);
+    assert!(end(home.path(), "lead").unwrap());
+    let joining = Joining {
+        by: "lead".into(),
+        agent: "Developer".into(),
+        brief: String::new(),
+    };
+    let none = join_from(home.path(), &joining, "dev", &dir, None, false).unwrap();
+    assert_eq!(none, None);
+    let runs = Runs::open(home.path()).unwrap();
+    assert!(
+        runs.member("dev").unwrap().is_none(),
+        "nothing is kept of it"
+    );
+}
+
+#[test]
+fn a_brief_longer_than_the_most_is_kept_cut_on_a_character() {
+    let (home, dir) = started("long-brief", QUICK_FIX, &[]);
+    let long = "\u{e9}".repeat(BRIEF_MOST + 10);
+    let joining = Joining {
+        by: "lead".into(),
+        agent: "Developer".into(),
+        brief: long.clone(),
+    };
+    let member = join_from(home.path(), &joining, "dev", &dir, None, false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(member.brief.chars().count(), BRIEF_MOST);
+    assert!(long.starts_with(&member.brief));
+}
+
+#[test]
+fn a_run_ended_long_ago_is_deleted_and_a_recent_one_kept() {
+    let (home, dir) = started("prune", QUICK_FIX, &[("dev", "Developer", false)]);
+    begin(home.path(), "recent", &team(QUICK_FIX), &dir).unwrap();
+    assert!(end(home.path(), "lead").unwrap());
+    assert!(end(home.path(), "recent").unwrap());
+    let long_ago = now() - KEPT_ENDED.as_secs() as i64 - 1;
+    let runs = Runs::open(home.path()).unwrap();
+    runs.conn
+        .execute(
+            "UPDATE ended SET at = ?1 WHERE lead = 'lead'",
+            params![long_ago],
+        )
+        .unwrap();
+    // Any begin or end prunes.
+    assert!(!end(home.path(), "nobody").unwrap());
+    let count = |sql: &str| -> i64 { runs.conn.query_row(sql, [], |row| row.get(0)).unwrap() };
+    assert_eq!(count("SELECT COUNT(*) FROM runs WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM members WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM gates WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM ended WHERE lead = 'lead'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM runs WHERE lead = 'recent'"), 1);
+    assert_eq!(count("SELECT COUNT(*) FROM ended WHERE lead = 'recent'"), 1);
+}
+
+#[test]
+fn ending_with_no_store_makes_none() {
+    let home = Scratch::new("run-home-end-none");
+    assert!(!end(home.path(), "lead").unwrap());
+    assert!(!folder(home.path()).join(FILE).exists());
+}
+
+#[test]
+fn the_window_reads_a_run_in_camel_case_with_its_lines_from_any_of_its_sessions() {
+    let (home, _dir) = started("view", SHIP_WITH_CHECKS, &[("rev", REVIEWER, true)]);
+    assert_eq!(
+        lead_of(home.path(), "rev").unwrap().as_deref(),
+        Some("lead")
+    );
+    assert_eq!(
+        lead_of(home.path(), "lead").unwrap().as_deref(),
+        Some("lead")
+    );
+    assert_eq!(lead_of(home.path(), "stranger").unwrap(), None);
+
+    let state = state_of(home.path(), "rev").unwrap().unwrap();
+    let line = state.line();
+    let value = serde_json::to_value(View::from(state)).unwrap();
+    assert_eq!(value["line"], line);
+    assert_eq!(value["run"]["lead"], "lead");
+    assert!(value["handingOverHeld"].is_string(), "{value}");
+    assert_eq!(value["waitsForTheUser"], false);
+    let gate = &value["gates"][0];
+    assert_eq!(gate["standing"], "waiting");
+    assert_eq!(gate["atLimit"], false);
+    assert!(gate["gate"]["who"].is_string(), "{gate}");
+    let place = &value["places"][0];
+    assert!(place["tree"]["ok"].is_string(), "{place}");
+    assert!(place["changed"]["ok"].is_array(), "{place}");
+}
+
+#[test]
+fn a_place_that_cannot_be_read_says_why_in_its_own_field() {
+    let place = Place {
+        folder: PathBuf::from("/gone"),
+        base: None,
+        head: None,
+        tree: Err("no such folder".into()),
+        changed: Err("no such folder".into()),
+    };
+    let value = serde_json::to_value(&place).unwrap();
+    assert_eq!(
+        value["tree"],
+        serde_json::json!({ "error": "no such folder" })
+    );
+    assert_eq!(value["changed"]["error"], "no such folder");
+}
+
+#[test]
+fn a_lead_reads_no_run_once_it_ended() {
+    let (home, _dir) = started("view-ended", SHIP_WITH_CHECKS, &[("rev", REVIEWER, true)]);
+    assert!(end(home.path(), "lead").unwrap());
+    assert_eq!(lead_of(home.path(), "rev").unwrap(), None);
+    assert_eq!(lead_of(Path::new("/nowhere-at-all"), "lead").unwrap(), None);
 }

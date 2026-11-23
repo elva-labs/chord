@@ -15,7 +15,9 @@
 //! names the plan version or the place and tree its member read, is
 //! refused when that is no longer what stands, and records the hash it was
 //! given on, so a plan or a tree that changed since makes an approval out
-//! of date, and a rebase that keeps the tree keeps it. A gate on the change
+//! of date, and a rebase that keeps the tree keeps it. A member that only
+//! reads makes no place of its folder; reading there, it approves the
+//! change in the place whose tree that folder has. A gate on the change
 //! is judged in each place something changed in, and a push is judged
 //! against them all, since worktrees share their branches.
 //!
@@ -36,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::agents::Agent;
 use crate::git;
@@ -54,6 +56,9 @@ pub const PATHS_MOST: usize = 500;
 pub const FINDINGS_MOST: usize = 8_000;
 pub const BRIEF_MOST: usize = 8_000;
 pub const REASON_MOST: usize = 500;
+
+/// The tables that keep a run, by its lead, the run's own last.
+const RUN_TABLES: [&str; 6] = ["members", "gates", "plans", "verdicts", "waivers", "runs"];
 
 /// How long a write waits for another session's write to finish.
 const BUSY: Duration = Duration::from_secs(5);
@@ -94,11 +99,14 @@ fn make_own(path: &Path) -> std::io::Result<()> {
     }
 }
 
+/// How long an ended run is kept before it is deleted.
+pub const KEPT_ENDED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
 /// The version of the store's tables this build keeps.
 const SCHEMA: i64 = 1;
 
 /// Whether two paths name the same folder, as written or once resolved.
-fn same(a: &Path, b: &Path) -> bool {
+pub(crate) fn same(a: &Path, b: &Path) -> bool {
     a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(a), Ok(b)) if a == b)
 }
 
@@ -145,6 +153,7 @@ pub fn agent_version(own: &[Agent], title: &str) -> Option<String> {
 
 /// A run as it began.
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Run {
     pub lead: String,
     pub team: Team,
@@ -157,6 +166,7 @@ pub struct Run {
 
 /// A session the lead started in the run.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Member {
     pub token: String,
     pub lead: String,
@@ -177,6 +187,7 @@ pub struct Member {
 
 /// A gate of the run: one of the team's, or one the lead added.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct RunGate {
     /// Its place in the run, from 1.
     pub id: i64,
@@ -189,6 +200,7 @@ pub struct RunGate {
 
 /// One version of the plan.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Plan {
     pub version: i64,
     pub text: String,
@@ -199,6 +211,7 @@ pub struct Plan {
 
 /// A verdict given on a gate.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Verdict {
     pub id: i64,
     pub gate: i64,
@@ -221,6 +234,7 @@ pub struct Verdict {
 
 /// The user's waiver of a gate, for this run.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Waiver {
     pub gate: i64,
     pub reason: String,
@@ -292,10 +306,29 @@ pub struct Place {
     /// The tree of the commit the folder's branch is on.
     pub head: Option<String>,
     /// The folder's tree, or why it could not be read.
+    #[serde(serialize_with = "outcome")]
     pub tree: Result<String, String>,
     /// The paths changed there since the base, or why they could not be
     /// read.
+    #[serde(serialize_with = "outcome")]
     pub changed: Result<Vec<String>, String>,
+}
+
+/// A reading that may have failed, as `{"ok": ...}` or `{"error": why}`.
+fn outcome<T: Serialize, S: serde::Serializer>(
+    read: &Result<T, String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    enum Outcome<'a, T> {
+        Ok(&'a T),
+        Error(&'a str),
+    }
+    match read {
+        Ok(value) => Outcome::Ok(value).serialize(serializer),
+        Err(why) => Outcome::<T>::Error(why).serialize(serializer),
+    }
 }
 
 impl Place {
@@ -381,6 +414,45 @@ impl State {
                     list(several)
                 )),
             },
+        }
+    }
+
+    /// The place whose change a member that reads in a folder of its own,
+    /// which is no place of the run's work, reads there: the one place
+    /// whose tree is the tree that folder has now. None has it, or more
+    /// than one does, and the member reads the change where it is and
+    /// names that folder.
+    pub fn read_in(&self, own: &Path) -> Result<&Place, String> {
+        let tree =
+            git::tree_hash(own).map_err(|e| format!("{} cannot be read: {e}", own.display()))?;
+        let with: Vec<&Place> = self
+            .places
+            .iter()
+            .filter(|place| place.tree.as_ref() == Ok(&tree))
+            .collect();
+        match with.as_slice() {
+            [one] => Ok(one),
+            [] => Err(format!(
+                "{} has tree {tree}, which is the change in none of the run's folders: {}. Check the change out there, or read it in the folder it is in and name that folder.",
+                own.display(),
+                self.places
+                    .iter()
+                    .map(|place| match &place.tree {
+                        Ok(tree) => format!("{} has {tree}", place.folder.display()),
+                        Err(_) => format!("{} cannot be read", place.folder.display()),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            several => Err(format!(
+                "{} has the tree of the change in more than one folder, so a verdict names the one it is on: {}.",
+                own.display(),
+                several
+                    .iter()
+                    .map(|place| place.folder.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
         }
     }
 
@@ -547,6 +619,10 @@ impl Runs {
                 reason TEXT NOT NULL,
                 at INTEGER NOT NULL,
                 PRIMARY KEY (lead, gate)
+            );
+            CREATE TABLE IF NOT EXISTS ended (
+                lead TEXT PRIMARY KEY,
+                at INTEGER NOT NULL
             );",
         )
         .map_err(failed)?;
@@ -566,6 +642,38 @@ impl Runs {
         Self::open(home).map(Some)
     }
 
+    /// Deletes the runs that ended more than [`KEPT_ENDED`] ago, with
+    /// everything kept of them.
+    fn prune(&self) -> Result<(), String> {
+        let before = now() - KEPT_ENDED.as_secs() as i64;
+        let old = "(SELECT lead FROM ended WHERE at < ?1)";
+        for table in RUN_TABLES {
+            self.conn
+                .execute(
+                    &format!("DELETE FROM {table} WHERE lead IN {old}"),
+                    params![before],
+                )
+                .map_err(failed)?;
+        }
+        self.conn
+            .execute("DELETE FROM ended WHERE at < ?1", params![before])
+            .map_err(failed)?;
+        Ok(())
+    }
+
+    /// Deletes a lead's run with everything kept of it.
+    fn remove(&self, lead: &str) -> Result<(), String> {
+        for table in RUN_TABLES.iter().chain(&["ended"]) {
+            self.conn
+                .execute(
+                    &format!("DELETE FROM {table} WHERE lead = ?1"),
+                    params![lead],
+                )
+                .map_err(failed)?;
+        }
+        Ok(())
+    }
+
     /// Runs `change` as one write, so another session's tool server sees
     /// all of it or none.
     fn at_once<T>(&self, change: impl FnOnce(&Self) -> Result<T, String>) -> Result<T, String> {
@@ -579,11 +687,14 @@ impl Runs {
         Ok(made)
     }
 
+    /// The run a lead leads, while it has not ended: an ended run holds
+    /// nothing and takes nothing.
     pub fn run(&self, lead: &str) -> Result<Option<Run>, String> {
         let row = self
             .conn
             .query_row(
-                "SELECT team, folder, base, at FROM runs WHERE lead = ?1",
+                "SELECT team, folder, base, at FROM runs
+                 WHERE lead = ?1 AND lead NOT IN (SELECT lead FROM ended)",
                 params![lead],
                 |row| {
                     Ok((
@@ -636,12 +747,16 @@ impl Runs {
         rows.collect::<Result<_, _>>().map_err(failed)
     }
 
-    /// The lead of the run a session is in, as its lead or a member.
+    /// The lead of the run a session is in, as its lead or a member, while
+    /// the run has not ended.
     pub fn lead_of(&self, token: &str) -> Result<Option<String>, String> {
         if self.run(token)?.is_some() {
             return Ok(Some(token.to_string()));
         }
-        Ok(self.member(token)?.map(|member| member.lead))
+        let Some(member) = self.member(token)? else {
+            return Ok(None);
+        };
+        Ok(self.run(&member.lead)?.map(|_| member.lead))
     }
 
     pub fn gates(&self, lead: &str) -> Result<Vec<RunGate>, String> {
@@ -801,8 +916,13 @@ fn plan_from(row: &rusqlite::Row<'_>) -> rusqlite::Result<Plan> {
 }
 
 /// Begins the run of a lead started with a team, in its folder, with the
-/// team's gates. A lead whose run began already keeps it as it is, so a
-/// lead started again goes on with its record.
+/// team's gates. A lead started again with the team its run has goes on
+/// with that run's record, an ended run's too, which holds again from then
+/// on without the waivers the user gave it before it ended: a waiver is
+/// bound to no plan or change, so it could stand for work it never saw. A
+/// lead started with any other team, or the same team since changed, ends
+/// the run it had: its record is removed, its members are in no run, and a
+/// run begins with the team as it is now.
 pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run, String> {
     let lead = lead.trim();
     if lead.is_empty() {
@@ -811,8 +931,22 @@ pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run,
     team::check_team(team)?;
     let runs = Runs::open(home)?;
     runs.at_once(|runs| {
+        runs.prune()?;
+        let ended = runs
+            .conn
+            .execute("DELETE FROM ended WHERE lead = ?1", params![lead])
+            .map_err(failed)?
+            > 0;
         if let Some(run) = runs.run(lead)? {
-            return Ok(run);
+            if run.team == *team {
+                if ended {
+                    runs.conn
+                        .execute("DELETE FROM waivers WHERE lead = ?1", params![lead])
+                        .map_err(failed)?;
+                }
+                return Ok(run);
+            }
+            runs.remove(lead)?;
         }
         let run = Run {
             lead: lead.to_string(),
@@ -835,11 +969,37 @@ pub fn begin(home: &Path, lead: &str, team: &Team, folder: &Path) -> Result<Run,
     })
 }
 
+/// Ends the run a lead leads: its gates hold nothing from then on, its
+/// members are in no run, and it is deleted once [`KEPT_ENDED`] has passed.
+/// True when a run ended; false for a session that leads none, a member's
+/// included, whose end ends nothing. The lead's session is gone once its
+/// row is closed for good, and the user may end a run before that.
+pub fn end(home: &Path, lead: &str) -> Result<bool, String> {
+    let Some(runs) = Runs::existing(home)? else {
+        return Ok(false);
+    };
+    runs.at_once(|runs| {
+        runs.prune()?;
+        if runs.run(lead)?.is_none() {
+            return Ok(false);
+        }
+        runs.conn
+            .execute(
+                "INSERT INTO ended (lead, at) VALUES (?1, ?2) ON CONFLICT (lead) DO NOTHING",
+                params![lead, now()],
+            )
+            .map_err(failed)?;
+        Ok(true)
+    })
+}
+
 /// Records a session the lead started as one of its team's agents, in the
 /// folder it works in, with the brief it was given and, once known, its
 /// harness's id. The change in a folder other than the lead's counts from
 /// the newest commit it shares with the run's. A member recorded already
-/// keeps its agent, brief and folder and takes the id.
+/// keeps its agent, brief and folder and takes the id. A brief is a record
+/// and never holds a start back: one longer than [`BRIEF_MOST`] is kept
+/// cut to that.
 #[allow(clippy::too_many_arguments)]
 pub fn join(
     home: &Path,
@@ -851,19 +1011,39 @@ pub fn join(
     reads_only: bool,
     brief: &str,
 ) -> Result<Member, String> {
-    too_long("brief", brief, BRIEF_MOST)?;
     let runs = Runs::open(home)?;
     runs.at_once(|runs| {
-        let run = runs
-            .run(lead)?
-            .ok_or_else(|| "That lead has no run.".to_string())?;
+        runs.record(lead, token, agent, folder, session, reads_only, brief)?
+            .ok_or_else(|| "That lead has no run.".to_string())
+    })
+}
+
+impl Runs {
+    /// [`join`] within a write the caller holds. None when the lead has
+    /// no run, or its run has ended.
+    #[allow(clippy::too_many_arguments)]
+    fn record(
+        &self,
+        lead: &str,
+        token: &str,
+        agent: &str,
+        folder: &Path,
+        session: Option<&str>,
+        reads_only: bool,
+        brief: &str,
+    ) -> Result<Option<Member>, String> {
+        let runs = self;
+        let Some(run) = runs.run(lead)? else {
+            return Ok(None);
+        };
         let Some(member) = run.team.member(agent.trim()) else {
             return Err(format!(
-                "{} is not one of {}'s agents.",
+                "{} is not one of {}'s agents, as its run names them from when it began.",
                 agent.trim(),
                 run.team.name
             ));
         };
+        let brief: String = brief.chars().take(BRIEF_MOST).collect();
         let session = session.map(str::trim).filter(|id| !id.is_empty());
         let base = if same(folder, &run.folder) {
             run.base.clone()
@@ -891,8 +1071,111 @@ pub fn join(
             )
             .map_err(failed)?;
         runs.member(token)?
+            .map(Some)
             .ok_or_else(|| "The member could not be recorded.".to_string())
+    }
+}
+
+/// What a session started for another says of it: the token of the
+/// session that asked for it, the agent it is and the brief it was given.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Joining {
+    pub by: String,
+    pub agent: String,
+    #[serde(default)]
+    pub brief: String,
+}
+
+/// Records a session as a member of the run the session that asked for it
+/// is in, as its lead or a member, so a member's own start is in its
+/// lead's run as well. None, and nothing kept, when that session is in no
+/// run. The run is found and the member recorded in one write, so a run
+/// that ends as the start lands leaves the session in no run.
+pub fn join_from(
+    home: &Path,
+    joining: &Joining,
+    token: &str,
+    folder: &Path,
+    session: Option<&str>,
+    reads_only: bool,
+) -> Result<Option<Member>, String> {
+    let by = joining.by.trim();
+    if by.is_empty() {
+        return Ok(None);
+    }
+    let Some(runs) = Runs::existing(home)? else {
+        return Ok(None);
+    };
+    let token = token.trim();
+    runs.at_once(|runs| {
+        let Some(lead) = runs.lead_of(by)? else {
+            return Ok(None);
+        };
+        if token.is_empty() {
+            return Err("A session in a team's run needs its token.".into());
+        }
+        runs.record(
+            &lead,
+            token,
+            &joining.agent,
+            folder,
+            session,
+            reads_only,
+            &joining.brief,
+        )
     })
+}
+
+/// Why a start the caller asks for is refused for leaving its run: a
+/// session in a team's run starts only the team's agents, and resumes only
+/// the run's members, so every session it starts is in the run and held as
+/// the run is. `agent` and `resumed` are what the start names. None for a
+/// caller in no run, and for a start the run takes.
+pub fn start_outside(
+    home: &Path,
+    caller: &str,
+    agent: Option<&str>,
+    resumed: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(runs) = Runs::existing(home)? else {
+        return Ok(None);
+    };
+    let Some(lead) = runs.lead_of(caller)? else {
+        return Ok(None);
+    };
+    let Some(run) = runs.run(&lead)? else {
+        return Ok(None);
+    };
+    drop(runs);
+    if let Some(resumed) = resumed.map(str::trim).filter(|id| !id.is_empty()) {
+        return Ok(member_by_session(home, caller, resumed)?
+            .is_none()
+            .then(|| format!("This session is in {}'s run, which resumes only the sessions in it; {resumed} is not one of them.", run.team.name)));
+    }
+    let agents = || {
+        run.team
+            .members
+            .iter()
+            .map(|member| member.agent.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    Ok(
+        match agent.map(str::trim).filter(|agent| !agent.is_empty()) {
+            Some(agent) if run.team.member(agent).is_some() => None,
+            Some(agent) => Some(format!(
+            "{agent} is not one of {}'s agents as the run names them from when it began; this session is in that run, which starts only {}.",
+            run.team.name,
+            agents()
+        )),
+            None => Some(format!(
+                "This session is in {}'s run, which starts only its agents: name one of {}.",
+                run.team.name,
+                agents()
+            )),
+        },
+    )
 }
 
 /// The paths a plan names, each as written in the folder, without a
@@ -1065,6 +1348,43 @@ pub fn state_of(home: &Path, token: &str) -> Result<Option<State>, String> {
     match runs.lead_of(token)? {
         Some(lead) => state(home, &lead),
         None => Ok(None),
+    }
+}
+
+/// The lead of the run the session a token names is in, as its lead or a
+/// member, or none.
+pub fn lead_of(home: &Path, token: &str) -> Result<Option<String>, String> {
+    match Runs::existing(home)? {
+        Some(runs) => runs.lead_of(token),
+        None => Ok(None),
+    }
+}
+
+/// A run as the window reads it: how it stands, with the lines it shows
+/// for it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct View {
+    #[serde(flatten)]
+    pub state: State,
+    /// The line above the composer. See [`State::line`].
+    pub line: String,
+    pub building_held: Option<String>,
+    pub handing_over_held: Option<String>,
+    pub uncommitted_held: Option<String>,
+    pub waits_for_the_user: bool,
+}
+
+impl From<State> for View {
+    fn from(state: State) -> View {
+        View {
+            line: state.line(),
+            building_held: state.building_held(),
+            handing_over_held: state.handing_over_held(),
+            uncommitted_held: state.uncommitted_held(),
+            waits_for_the_user: state.waits_for_the_user(),
+            state,
+        }
     }
 }
 
@@ -1318,7 +1638,10 @@ pub enum Read<'a> {
 
 /// Records the verdict of the session `token` names on what it read, the
 /// plan's version or the change's tree in one place, on each gate of the
-/// run its agent approves then. A verdict on something that no longer
+/// run its agent approves then. A member that reads in a folder of its
+/// own, which is no place of the run's work, and names it, gives its
+/// verdict on the change in the place whose tree that folder has; see
+/// [`State::read_in`]. A verdict on something that no longer
 /// stands is refused, saying what changed. A gate the user waived, or one
 /// that waits for the user, takes none. Asking for changes says what must
 /// change.
@@ -1376,7 +1699,17 @@ pub fn verdict(
             (plan.hash.clone(), Some(plan.version), None)
         }
         Read::Change { folder, tree } => {
-            let place = now_state.place_for(folder)?;
+            let own = folder.filter(|folder| {
+                same(folder, &member.folder)
+                    && !now_state
+                        .places
+                        .iter()
+                        .any(|place| same(&place.folder, folder))
+            });
+            let place = match own {
+                Some(own) => now_state.read_in(own)?,
+                None => now_state.place_for(folder)?,
+            };
             let now = place.tree.clone().map_err(|e| {
                 format!(
                     "The change in {} cannot be read: {e}",

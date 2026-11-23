@@ -76,6 +76,11 @@ const COMPACTED: &str =
 /// Why a Codex conversation cannot go back to before a message alone.
 const TAKEN_INTO: &str = "Codex took this message into a turn that was running, which goes back with the message that began it.";
 
+/// Why a start is refused that names both a team for its run and the run
+/// it is started in: a session is the lead of one run or a member of one.
+const TEAM_AND_JOINING: &str =
+    "A session is started either as the lead of a team's run or into the run it is started from, never both.";
+
 /// Why a session that follows a workflow is not started: it would have no
 /// start tool to hand its work out with.
 pub const NO_TOOLS: &str = "This session follows a workflow, which hands out its work with the workbench's tools, and this machine has no tool server to give it them. Pick an agent to start one alone instead.";
@@ -149,7 +154,23 @@ struct Run {
     made_worktree: bool,
     /// The request of the plugin's start this session is, if it is one.
     plugin_start: Option<String>,
+    /// The team a lead is started with, by name: its run begins with the
+    /// session.
+    team: Option<String>,
+    /// What the session that asked for this one says of it, so it joins
+    /// the run that session is in.
+    joining: Option<crate::run::Joining>,
     undo: Option<Undo>,
+}
+
+/// A session recorded as a member of a team's run as it starts, and what
+/// records it again once its harness gives its id.
+struct Joined {
+    home: PathBuf,
+    joining: crate::run::Joining,
+    token: String,
+    folder: PathBuf,
+    reads_only: bool,
 }
 
 /// Where a Claude Code conversation's transcript is, for the usage log.
@@ -431,6 +452,17 @@ impl Core {
         let store = self.settings()?;
         store.offer_shipped();
         Ok(store.load())
+    }
+
+    /// The teams a lead may be started with on this machine, as a start
+    /// with a team finds them: the file's own, or those its workflows give.
+    /// See [`crate::settings::Settings::teams_in_use`].
+    pub fn teams_in_use(&self) -> Result<Vec<crate::team::Team>, String> {
+        let stored = self.settings()?.load();
+        if stored.unreadable {
+            return Err("The settings cannot be read, so no team is known.".into());
+        }
+        Ok(stored.settings.teams_in_use())
     }
 
     /// The user's own stylesheet, or none and why it is not handed over.
@@ -824,6 +856,12 @@ impl Core {
     /// tools, the same way a terminal session is. With `reads_only` the
     /// harness's own tools that change files are refused from the first
     /// turn. `profile` is the Codex profile, as for [`Core::spawn`].
+    ///
+    /// With `team`, one of the teams in use by name, the session is the
+    /// lead of a team's run that begins before its first turn, so the
+    /// run's holds are on from then. With `joining`, the session is
+    /// recorded in the run the session that asked for it is in, as one of
+    /// the team's agents; one the team does not have is not started.
     #[allow(clippy::too_many_arguments)]
     pub fn integrated_start(
         &self,
@@ -845,6 +883,8 @@ impl Core {
         starter: Option<&str>,
         made_worktree: bool,
         plugin_start: Option<&str>,
+        team: Option<&str>,
+        joining: Option<crate::run::Joining>,
     ) -> Result<crate::integrated::Started, String> {
         let run = Run {
             agent: agent.to_string(),
@@ -867,6 +907,11 @@ impl Core {
                 .map(str::to_string),
             made_worktree,
             plugin_start: plugin_start.map(str::to_string),
+            team: team
+                .map(str::trim)
+                .filter(|team| !team.is_empty())
+                .map(str::to_string),
+            joining,
             undo: None,
         };
         // A conversation held at the point it went back to goes on from
@@ -953,6 +998,7 @@ impl Core {
             &environment.vars,
             project,
         );
+        let joining = self.engage(&run, project, session.as_deref())?;
         let launch = crate::integrated::Launch {
             project,
             env: &environment.vars,
@@ -1003,6 +1049,19 @@ impl Core {
                 runs.lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .insert(started.id.clone(), kept);
+                // The harness's id, once it gives one, names the member
+                // its holds and verdicts are looked up by. The member is
+                // recorded already, so a failure here leaves it without.
+                if let (Some(joined), Some(session)) = (&joining, &started.session_id) {
+                    let _ = crate::run::join_from(
+                        &joined.home,
+                        &joined.joining,
+                        &joined.token,
+                        &joined.folder,
+                        Some(session),
+                        joined.reads_only,
+                    );
+                }
                 if let Some(plugins) = starting {
                     plugins.session_started(
                         &started.id,
@@ -1028,6 +1087,62 @@ impl Core {
                 }
             }),
         )
+    }
+
+    /// Begins the team's run of a lead started with one, and records a
+    /// session started for one in a run as its member, in `folder`, before
+    /// the session's first turn. Answers with what the member is recorded
+    /// by, for its harness's id once that is known.
+    fn engage(
+        &self,
+        run: &Run,
+        folder: &Path,
+        session: Option<&str>,
+    ) -> Result<Option<Joined>, String> {
+        if run.team.is_none() && run.joining.is_none() {
+            return Ok(None);
+        }
+        if run.team.is_some() && run.joining.is_some() {
+            return Err(TEAM_AND_JOINING.into());
+        }
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        let token = run
+            .token
+            .as_deref()
+            .map(str::trim)
+            .filter(|token| !token.is_empty());
+        if let Some(name) = &run.team {
+            let lead = token.ok_or("A lead started with a team needs its token.")?;
+            let stored = self.settings()?.load();
+            if stored.unreadable {
+                return Err(format!(
+                    "The settings cannot be read, so the team {name} is not known."
+                ));
+            }
+            let team = stored
+                .settings
+                .team_named(name)
+                .ok_or_else(|| format!("There is no team named {name}."))?;
+            crate::run::begin(home, lead, &team, folder)?;
+            self.run_changed(lead);
+        }
+        let Some(joining) = &run.joining else {
+            return Ok(None);
+        };
+        let token = token.unwrap_or_default();
+        let joined = crate::run::join_from(home, joining, token, folder, session, run.reads_only)?;
+        if joined.is_some() {
+            if let Ok(Some(lead)) = crate::run::lead_of(home, token) {
+                self.run_changed(&lead);
+            }
+        }
+        Ok(joined.map(|_| Joined {
+            home: home.to_path_buf(),
+            joining: joining.clone(),
+            token: token.to_string(),
+            folder: folder.to_path_buf(),
+            reads_only: run.reads_only,
+        }))
     }
 
     /// Records that the user trusts the folder an integrated session of the
@@ -1571,6 +1686,9 @@ impl Core {
             effort: settings.effort.clone().or_else(|| run.effort.clone()),
             reads_only: settings.reads_only,
             undo: None,
+            // A run begins on the lead's start only, so a run the user
+            // ended stays ended when its lead is started again here.
+            team: None,
             ..run.clone()
         };
         self.start_run(next, at)
@@ -1954,6 +2072,50 @@ impl Core {
     /// given, or none when nothing is kept.
     pub fn notes_briefing(&self, token: &str) -> Result<Option<String>, String> {
         Ok(crate::notes::briefing(self.notes_home()?, token))
+    }
+
+    /// Ends the run the session with this token leads, true when it led
+    /// one. See [`crate::run::end`].
+    pub fn run_end(&self, token: &str) -> Result<bool, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        let ended = crate::run::end(home, token)?;
+        if ended {
+            self.run_changed(token);
+        }
+        Ok(ended)
+    }
+
+    /// The run the session with this token is in, as its lead or a member,
+    /// as the window reads it, or none.
+    pub fn run_state(&self, token: &str) -> Result<Option<crate::run::View>, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        Ok(crate::run::state_of(home, token)?.map(crate::run::View::from))
+    }
+
+    /// The user's waiver of a gate of the run the session with this token
+    /// is in, with why. See [`crate::run::waive`].
+    pub fn run_waive(
+        &self,
+        token: &str,
+        gate: i64,
+        reason: &str,
+    ) -> Result<crate::run::Waiver, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        let lead = crate::run::lead_of(home, token)?.ok_or("That session is in no run.")?;
+        let waiver = crate::run::waive(home, &lead, gate, reason)?;
+        self.run_changed(&lead);
+        Ok(waiver)
+    }
+
+    /// Tells the window a run changed, so it reads it again.
+    fn run_changed(&self, lead: &str) {
+        events::emit(
+            &self.sink,
+            crate::show::RUN_CHANGED,
+            &crate::show::RunChanged {
+                lead: lead.to_string(),
+            },
+        );
     }
 
     /// Lets go of the notes of these sessions.
@@ -2975,6 +3137,8 @@ mod tests {
                     None,
                     false,
                     None,
+                    None,
+                    None,
                 )
                 .unwrap_err();
             assert!(
@@ -3023,6 +3187,8 @@ mod tests {
             starter: None,
             made_worktree: false,
             plugin_start: None,
+            team: None,
+            joining: None,
             undo: None,
         };
         let again = |session: Option<&str>, at: Option<&str>| Again {
@@ -3056,6 +3222,125 @@ mod tests {
     }
 
     #[test]
+    fn a_lead_started_with_a_team_begins_its_run_and_its_starts_join_it() {
+        let home = Scratch::new("api-team-start");
+        let folder = Scratch::new("api-team-start-folder");
+        let core = Core {
+            settings: Some(Arc::new(crate::settings::Store::new(
+                &home,
+                Arc::new(Recorder::default()),
+            ))),
+            ..core_at(&home)
+        };
+        let run = |token: &str, team: Option<&str>, joining: Option<crate::run::Joining>| Run {
+            agent: "claude-code".into(),
+            project: folder.path().to_path_buf(),
+            cwd: None,
+            session: None,
+            token: Some(token.into()),
+            model: None,
+            mode: None,
+            effort: None,
+            config_dir: None,
+            profile: None,
+            instructions: None,
+            start_only: false,
+            afresh: false,
+            compact_at: None,
+            reads_only: false,
+            starter: None,
+            made_worktree: false,
+            plugin_start: None,
+            team: team.map(str::to_string),
+            joining,
+            undo: None,
+        };
+        // The window reads the teams a start finds.
+        let names: Vec<String> = core
+            .teams_in_use()
+            .unwrap()
+            .into_iter()
+            .map(|team| team.name)
+            .collect();
+        assert!(
+            names.iter().any(|name| name == crate::team::QUICK_FIX),
+            "{names:?}"
+        );
+        // A team that is not in use starts nothing.
+        let unknown = core.engage(&run("lead", Some("Nobody"), None), folder.path(), None);
+        assert_eq!(
+            unknown.err().as_deref(),
+            Some("There is no team named Nobody.")
+        );
+        assert!(core
+            .engage(&run("", Some("quick fix"), None), folder.path(), None)
+            .is_err());
+        // With no settings file, the shipped teams are in use.
+        assert!(core
+            .engage(&run("lead", Some("quick fix"), None), folder.path(), None)
+            .unwrap()
+            .is_none());
+        let state = crate::run::state(&home, "lead").unwrap().unwrap();
+        assert_eq!(state.run.team.name, crate::team::QUICK_FIX);
+        let joining = crate::run::Joining {
+            by: "lead".into(),
+            agent: "Developer".into(),
+            brief: "build it".into(),
+        };
+        let joined = core
+            .engage(
+                &run("dev", None, Some(joining.clone())),
+                folder.path(),
+                Some("id"),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(joined.token, "dev");
+        let member = crate::run::Runs::existing(&home)
+            .unwrap()
+            .unwrap()
+            .member("dev")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (member.lead.as_str(), member.session.as_deref()),
+            ("lead", Some("id"))
+        );
+        // A start prompt longer than a brief keeps is kept cut, and starts.
+        let long = crate::run::Joining {
+            agent: "Reviewer".into(),
+            brief: "x".repeat(crate::run::BRIEF_MOST * 2),
+            ..joining.clone()
+        };
+        core.engage(&run("rev", None, Some(long)), folder.path(), None)
+            .unwrap()
+            .unwrap();
+        let member = crate::run::Runs::existing(&home)
+            .unwrap()
+            .unwrap()
+            .member("rev")
+            .unwrap()
+            .unwrap();
+        assert_eq!(member.brief.len(), crate::run::BRIEF_MOST);
+        // An agent the team does not have is not started in its run.
+        let other = crate::run::Joining {
+            agent: "Tester".into(),
+            ..joining.clone()
+        };
+        assert!(core
+            .engage(&run("t", None, Some(other)), folder.path(), None)
+            .is_err());
+        // A session is a lead with a team or one started in a run, never both.
+        let both = core.engage(
+            &run("both", Some("quick fix"), Some(joining)),
+            folder.path(),
+            None,
+        );
+        assert_eq!(both.err().as_deref(), Some(TEAM_AND_JOINING));
+        assert_eq!(crate::run::state(&home, "both").unwrap(), None);
+    }
+
+    #[test]
     fn an_integrated_session_under_a_workflow_is_refused_where_no_tool_server_can_reach_it() {
         let home = Scratch::new("api-integrated-workflow");
         for agent in ["claude-code", "codex"] {
@@ -3077,6 +3362,8 @@ mod tests {
                 false,
                 None,
                 false,
+                None,
+                None,
                 None,
             );
             // Refused before the folder is asked about, since trusting it
@@ -3212,6 +3499,42 @@ mod tests {
             Some(briefing.clone())
         );
         assert!(none.paths.is_empty());
+    }
+
+    #[test]
+    fn the_users_waiver_names_its_run_by_the_token_of_any_session_in_it_and_the_window_hears_it() {
+        // The window waives for the user; the token it sends only picks the
+        // run, here by a member's.
+        let (home, _dir) = crate::run::tests::started(
+            "api-waive",
+            crate::team::SHIP_WITH_CHECKS,
+            &[("rev", crate::team::REVIEWER, true)],
+        );
+        let recorder = Arc::new(Recorder::default());
+        let core = Core::at_home(recorder.clone(), Some(home.to_path_buf()));
+        let gate = core.run_state("rev").unwrap().unwrap().state.gates[0]
+            .gate
+            .id;
+        assert!(core.run_waive("rev", gate, " ").is_err());
+        let waiver = core.run_waive("rev", gate, "Checked it myself.").unwrap();
+        assert_eq!(waiver.reason, "Checked it myself.");
+        let view = core.run_state("lead").unwrap().unwrap();
+        assert_eq!(view.state.gates[0].standing, crate::run::Standing::Waived);
+        assert!(core.run_end("lead").unwrap());
+        assert!(core.run_state("lead").unwrap().is_none());
+        assert!(core.run_waive("lead", gate, "Again.").is_err());
+        let heard: Vec<_> = recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(event, _)| event == crate::show::RUN_CHANGED)
+            .map(|(_, payload)| payload["lead"].clone())
+            .collect();
+        assert_eq!(
+            heard,
+            vec![serde_json::json!("lead"), serde_json::json!("lead")]
+        );
     }
 
     #[cfg(unix)]

@@ -181,6 +181,13 @@ struct IntegratedStartParams {
     /// plugin asked for.
     #[serde(default)]
     plugin_start: Option<String>,
+    /// The team a lead is started with, by name.
+    #[serde(default)]
+    team: Option<String>,
+    /// What the session that asked for this one says of it, for a session
+    /// the start tool starts.
+    #[serde(default)]
+    joining: Option<crate::run::Joining>,
 }
 
 #[derive(Deserialize)]
@@ -370,6 +377,18 @@ struct NotesParams {
     token: String,
     #[serde(default)]
     page: bool,
+}
+
+#[derive(Deserialize)]
+struct RunParams {
+    token: String,
+}
+
+#[derive(Deserialize)]
+struct RunWaiveParams {
+    token: String,
+    gate: i64,
+    reason: String,
 }
 
 #[derive(Deserialize)]
@@ -684,6 +703,8 @@ pub fn dispatch(
                 p.starter.as_deref(),
                 p.made_worktree,
                 p.plugin_start.as_deref(),
+                p.team.as_deref(),
+                p.joining,
             )?)
         }
         "integrated_trust" => {
@@ -1020,6 +1041,19 @@ pub fn dispatch(
             let p: NotesForgetParams = parse(params)?;
             core.notes_forget(&p.tokens)?;
             Ok(Value::Null)
+        }
+        "run_end" => {
+            let p: RunParams = parse(params)?;
+            value(core.run_end(&p.token)?)
+        }
+        "teams_in_use" => value(core.teams_in_use()?),
+        "run_state" => {
+            let p: RunParams = parse(params)?;
+            value(core.run_state(&p.token)?)
+        }
+        "run_waive" => {
+            let p: RunWaiveParams = parse(params)?;
+            value(core.run_waive(&p.token, p.gate, &p.reason)?)
         }
         "usage_log" => {
             let p: UsageLogParams = parse(params)?;
@@ -1599,6 +1633,75 @@ mod tests {
         let start: IntegratedStartParams =
             parse(json!({ "agent": "claude-code", "project": "/p" })).unwrap();
         assert_eq!(start.compact_at, None);
+    }
+
+    #[test]
+    fn a_start_names_its_team_and_what_asked_for_it() {
+        let start: IntegratedStartParams = parse(json!({
+            "agent": "claude-code",
+            "project": "/p",
+            "team": "Quick fix",
+            "joining": { "by": "lead", "agent": "Developer", "brief": "build it" },
+        }))
+        .unwrap();
+        assert_eq!(start.team.as_deref(), Some("Quick fix"));
+        let joining = start.joining.unwrap();
+        assert_eq!(
+            (
+                joining.by.as_str(),
+                joining.agent.as_str(),
+                joining.brief.as_str()
+            ),
+            ("lead", "Developer", "build it")
+        );
+        let start: IntegratedStartParams =
+            parse(json!({ "agent": "claude-code", "project": "/p" })).unwrap();
+        assert_eq!((start.team, start.joining), (None, None));
+    }
+
+    #[test]
+    fn ending_a_run_is_a_method_that_ends_nothing_for_a_session_in_none() {
+        let core = core();
+        let ended = dispatch(&core, "run_end", json!({ "token": "lead" }), no_output).unwrap();
+        assert_eq!(ended, json!(false));
+        let missing = dispatch(&core, "run_end", json!({}), no_output).unwrap_err();
+        assert!(missing.contains("bad parameters"), "{missing}");
+    }
+
+    #[test]
+    fn the_teams_in_use_are_a_method() {
+        let core = core();
+        let teams = dispatch(&core, "teams_in_use", json!({}), no_output).unwrap();
+        let names: Vec<&str> = teams
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|team| team["name"].as_str())
+            .collect();
+        assert!(names.contains(&crate::team::QUICK_FIX), "{names:?}");
+    }
+
+    #[test]
+    fn a_run_is_read_and_waived_by_method_and_a_session_in_none_has_none() {
+        let core = core();
+        let read = dispatch(&core, "run_state", json!({ "token": "lead" }), no_output).unwrap();
+        assert_eq!(read, Value::Null);
+        let waived = dispatch(
+            &core,
+            "run_waive",
+            json!({ "token": "lead", "gate": 1, "reason": "Checked it." }),
+            no_output,
+        )
+        .unwrap_err();
+        assert!(waived.contains("no run"), "{waived}");
+        let missing = dispatch(
+            &core,
+            "run_waive",
+            json!({ "token": "lead", "gate": 1 }),
+            no_output,
+        )
+        .unwrap_err();
+        assert!(missing.contains("bad parameters"), "{missing}");
     }
 
     #[test]

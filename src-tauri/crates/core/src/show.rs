@@ -34,6 +34,7 @@ pub const CONDUCT_REQUEST: &str = "conduct_request";
 pub const CONDUCT_CANCEL: &str = "conduct_cancel";
 pub const BROWSER_REQUEST: &str = "browser_request";
 pub const SETTINGS_REQUEST: &str = "settings_request";
+pub const RUN_CHANGED: &str = "run_changed";
 
 /// The kinds the `present` tool takes, by extension: images, PDFs, and
 /// Markdown, which the window renders. Video is not among them yet.
@@ -316,6 +317,16 @@ pub struct ConductCancel {
     pub cwd: String,
 }
 
+/// Something was written to a team's run that can change how its gates
+/// stand: a plan, a gate, a verdict or a waiver, or the run began or
+/// ended. The window reads the run again with its lead's token.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunChanged {
+    /// The token of the run's lead.
+    pub lead: String,
+}
+
 /// A line of the log, whichever tool wrote it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -330,6 +341,7 @@ pub enum Request {
     ConductCancel(ConductCancel),
     Browser(BrowserRequest),
     Settings(SettingsRequest),
+    Run(RunChanged),
 }
 
 /// What a plugin answered a tool call with: the text for the agent, or
@@ -554,6 +566,12 @@ pub fn classify(line: &str) -> Option<Request> {
             }
             Some(Request::Settings(settings))
         }
+        Request::Run(changed) => {
+            if changed.lead.trim().is_empty() {
+                return None;
+            }
+            Some(Request::Run(changed))
+        }
     }
 }
 
@@ -623,6 +641,9 @@ pub fn watch(
             Request::Settings(settings) => serde_json::to_value(settings)
                 .ok()
                 .map(|value| (SETTINGS_REQUEST.to_string(), value)),
+            Request::Run(changed) => serde_json::to_value(changed)
+                .ok()
+                .map(|value| (RUN_CHANGED.to_string(), value)),
         })
     })
 }
@@ -697,8 +718,18 @@ mod tests {
             | Request::Conduct(_)
             | Request::ConductCancel(_)
             | Request::Browser(_)
-            | Request::Settings(_) => None,
+            | Request::Settings(_)
+            | Request::Run(_) => None,
         }
+    }
+
+    #[test]
+    fn a_change_to_a_run_is_an_event_naming_its_lead() {
+        assert_eq!(
+            classify(r#"{"kind":"run","lead":"tok"}"#),
+            Some(Request::Run(RunChanged { lead: "tok".into() }))
+        );
+        assert_eq!(classify(r#"{"kind":"run","lead":" "}"#), None);
     }
 
     #[test]
