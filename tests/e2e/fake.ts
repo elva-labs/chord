@@ -161,6 +161,23 @@ export async function startWith(page: Page, ...labels: string[]) {
   await expect(page.getByTestId("palette")).toHaveCount(0);
 }
 
+/** Puts the pointer on the conversation, off the composer's chip row. A
+    chip at its default shows only while the pointer or the keyboard is in
+    the row, and a pick by the pointer leaves it where the menu was, above
+    the row: whether the browser has noticed the pointer left with the menu
+    is up to its next hover update, so a test reading a chip at its default
+    after such a pick moves the pointer first. */
+export async function leaveRow(page: Page) {
+  await page.getByRole("log", { name: "The conversation" }).hover();
+}
+
+/** Brings a setting's chip up from behind the composer's plus, by the name
+    the plus lists it under; its menu opens with it. */
+export async function fromPlus(page: Page, name: string) {
+  await page.locator("[data-testid='more-chip']:visible").click();
+  await page.getByTestId("more-option").filter({ hasText: name }).click();
+}
+
 /** How wide the folded sessions column is where the page runs: wider on
     macOS, where it holds the window's buttons, and in each look its own. */
 export async function foldedWidth(page: Page): Promise<number> {

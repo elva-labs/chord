@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { BUILD_AND_REVIEW, PROJECT, SETTINGS_FILE, WITH_WORKFLOW, installFakeCore, sessionRowOf, startNew, startIntegrated, startTerminal } from "./fake";
+import { BUILD_AND_REVIEW, PROJECT, SETTINGS_FILE, WITH_WORKFLOW, installFakeCore, leaveRow, sessionRowOf, startNew, startIntegrated, startTerminal } from "./fake";
 
 // An integrated session as the user meets it: the conversation the agent
 // pane draws in place of a terminal, driven by the fake core's scripted
@@ -3439,12 +3439,18 @@ test("shows a chip while its value is away from the default, and keeps it only w
   await page.getByTestId("mode-option").filter({ hasText: "Accept edits" }).click();
   await expect(mode).toBeVisible();
   // Back to the default: the chip stays while the pointer is in the row.
+  // The pick is by the keyboard, so the pointer stays on the chip.
   await mode.click();
-  await page.getByTestId("mode-option").first().click();
-  await expect(mode).toBeVisible();
+  const modes = page.getByTestId("mode-option");
+  await expect(modes.filter({ hasText: "Accept edits" })).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(modes.first()).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("mode-menu")).toHaveCount(0);
+  await expect(mode).toHaveText("Default");
   // It goes once the pointer and the keyboard have left the row.
-  await page.mouse.move(5, 5);
-  await page.getByTestId("composer-input").focus();
+  await leaveRow(page);
+  await expect(page.getByTestId("composer-input")).toBeFocused();
   await expect(mode).toHaveCount(0);
   // And a mode away from the default comes back to show on its own.
   await agent(page, `f.configure("${H}", { mode: "acceptEdits" });`);
