@@ -35,7 +35,14 @@
   import { folderToRead, load as loadOrchestratorFolder } from "$lib/orchestratorFolder.svelte";
   import { core } from "$lib/core";
   import { ensure as ensureHooks, hearsChanged } from "$lib/hook.svelte";
-  import { diffRequested, notified, showRequested, switched, terminalRequested } from "$lib/show.svelte";
+  import {
+    diffRequested,
+    nameRequested,
+    notified,
+    showRequested,
+    switched,
+    terminalRequested,
+  } from "$lib/show.svelte";
   import { watchSelection } from "$lib/selection.svelte";
   import { watchViewed } from "$lib/viewed.svelte";
   import { sessionShown, unfoldSessions } from "$lib/viewers.svelte";
@@ -255,6 +262,9 @@
       .then((unlisten) => offs.push(unlisten));
     core()
       .onNotifyRequest((request) => notified(request))
+      .then((unlisten) => offs.push(unlisten));
+    core()
+      .onNameRequest((request) => nameRequested(request))
       .then((unlisten) => offs.push(unlisten));
     core()
       .onConductRequest((request) => void conductRequested(request))

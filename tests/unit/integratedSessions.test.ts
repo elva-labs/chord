@@ -34,6 +34,7 @@ import { resetGoingOn, wentOn } from "$lib/goingOn.svelte";
 import { GO_ON, MARGIN, choose as chooseResume, look, resetAutoResume, resumesWords } from "$lib/autoResume.svelte";
 import { stateWord } from "$lib/orchestrator.svelte";
 import {
+  agentNamed,
   byKey,
   close,
   create,
@@ -744,6 +745,67 @@ describe("an integrated session behind its row", () => {
     expect(session.title).toBeNull();
     send(session.key, "/Users/ada/notes.md has the plan");
     expect(session.title).toBe("/Users/ada/notes.md has the plan");
+  });
+
+  it("takes the agent's name once, in place of the first line", async () => {
+    const { session, key } = await started();
+    send(key, "https://example.com/crash.log");
+    expect(label(session)).toBe("https://example.com/crash.log");
+    agentNamed(key, "Read the crash log");
+    expect(label(session)).toBe("Read the crash log");
+    agentNamed(key, "Something else");
+    expect(label(session)).toBe("Read the crash log");
+  });
+
+  it("takes the agent's name before any message names the row, and a first message after it changes nothing", async () => {
+    const { session, key } = await started();
+    agentNamed(key, "Plan the 2.0 release");
+    expect(label(session)).toBe("Plan the 2.0 release");
+    send(key, "What is left?");
+    expect(label(session)).toBe("Plan the 2.0 release");
+  });
+
+  it("keeps a name the user gave over the agent's", async () => {
+    const { session, key } = await started();
+    send(key, "Look at the build");
+    renamed(key, "Build trouble");
+    agentNamed(key, "Fix the release build");
+    expect(label(session)).toBe("Build trouble");
+  });
+
+  it("keeps the name a start gave a session another started over its agent's", async () => {
+    const starter = create(PROJECT, "conversation-0", "claude-code", null, null, null, null, undefined, "terminal");
+    startedTerminal(starter.key, "pty-7", "conversation-0");
+    const { session, key } = await started();
+    conductor.startedBy[key] = byKey(starter.key)!.token;
+    conductor.started[byKey(starter.key)!.token] = [
+      { id: session.id!, project: PROJECT, worktree: null, agent: "claude-code", name: "Flaky test" },
+    ];
+    try {
+      agentNamed(key, "Stabilise the login test");
+      expect(label(session)).toBe("Flaky test");
+    } finally {
+      resetConductor();
+    }
+  });
+
+  it("drops an agent's name that another live session has or that reads as reserved, keeping the first line", async () => {
+    const other = await started();
+    send(other.key, "Fix the login redirect");
+    const { session, key } = await started();
+    send(key, "the login thing again");
+    agentNamed(key, "Fix the login redirect");
+    expect(label(session)).toBe("the login thing again");
+    agentNamed(key, "Claude Code");
+    expect(label(session)).toBe("the login thing again");
+    agentNamed(key, "Login redirect, second look");
+    expect(label(session)).toBe("Login redirect, second look");
+  });
+
+  it("leaves a terminal row's name to its agent's own title", () => {
+    const row = create(PROJECT, "conversation-2", "claude-code", null, null, null, null, undefined, "terminal");
+    agentNamed(row.key, "A name from a call");
+    expect(byKey(row.key)!.title).toBeNull();
   });
 
   it("follows a rename the agent reports, which a later first message does not undo", async () => {

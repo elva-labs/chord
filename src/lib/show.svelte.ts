@@ -21,6 +21,7 @@
 
 import type {
   DiffRequest,
+  NameRequest,
   NotifyRequest,
   ShowRequest,
   TerminalRequest,
@@ -28,7 +29,14 @@ import type {
 import { openFile } from "$lib/editor.svelte";
 import { showDiff, showRange } from "$lib/files.svelte";
 import { focusPane, layout, terminalVisible, toggleTerminal } from "$lib/layout.svelte";
-import { byKey, noted, runningByToken, sessions, type Session } from "$lib/sessions.svelte";
+import {
+  agentNamed,
+  byKey,
+  noted,
+  runningByToken,
+  sessions,
+  type Session,
+} from "$lib/sessions.svelte";
 import { create as createShell, ownerOnScreen as shellOwner } from "$lib/terminals.svelte";
 import { activate, watchRoot, workspace } from "$lib/workspace.svelte";
 
@@ -209,6 +217,15 @@ export function notified(request: NotifyRequest) {
   const session = sessionFor(request);
   if (session === null) return;
   noted(session.key, request.text);
+}
+
+/** Names the agent's row with the name it gave its conversation, where
+    the row takes one. */
+export function nameRequested(request: NameRequest) {
+  if (projectOf(request.cwd) === null) return;
+  const session = sessionFor(request);
+  if (session === null) return;
+  agentNamed(session.key, request.name);
 }
 
 /** A path as the agent reads it, taken against where it runs. */

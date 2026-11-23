@@ -114,6 +114,11 @@ export interface Session {
       rename command, which a title the agent chooses later does not
       replace. */
   ownTitle: boolean;
+  /** The title is only a line of the first message the user sent a
+      conversation, which stands until the agent names the conversation:
+      the one name of the agent's own the row takes. Not kept across a
+      restart, where the line stays the name. */
+  placeholder: boolean;
   /** The directory the process was last seen working in. */
   cwd: string | null;
   /** Where the agent was started when that is not the project: the
@@ -1568,7 +1573,33 @@ export function named(key: string, title: string) {
   const session = byKey(key);
   if (session === null || title === "") return;
   session.title = title;
+  session.placeholder = false;
   if (session.id !== null) rememberName(session.id, title);
+}
+
+/** Names a conversation after a line of the first message the user sent
+    it, until its agent names it. */
+export function namedForNow(key: string, title: string) {
+  const session = byKey(key);
+  if (session === null || title === "") return;
+  named(key, title);
+  session.placeholder = true;
+}
+
+/** The agent named its conversation. The row takes the name once, in
+    place of a line of the first message, and only where nothing else
+    names it: not where the user named it, nor where the session that
+    started it gave it a name, nor where it already has a name of its own.
+    A name that reads as another live session's, the user's, the
+    workbench's or an agent's is not taken. */
+export function agentNamed(key: string, name: string) {
+  const session = byKey(key);
+  const given = name.trim();
+  if (session === null || session.kind !== "integrated" || given === "") return;
+  if (session.ownTitle || givenName(session) !== null) return;
+  if (session.title === null ? knownName(session) !== null : !session.placeholder) return;
+  if (reservedName(given) || nameTaken(given, key)) return;
+  named(key, given);
 }
 
 /** The user named the session through its agent, by the agent's rename
@@ -1580,6 +1611,7 @@ export function renamed(key: string, title: string) {
   const name = title.trim();
   if (session === null || name === "" || reservedName(name) || nameTaken(name, key)) return;
   session.ownTitle = true;
+  session.placeholder = false;
   if (session.id !== null) rememberOwn(session.id);
   if (session.title === name) return;
   session.title = name;
@@ -2132,6 +2164,7 @@ function row(
     // A resumed session keeps the name it had until the agent says otherwise.
     title: kept?.name ?? null,
     ownTitle: kept?.own === true || (resumedFrom !== null && sessions.own[resumedFrom] === true),
+    placeholder: false,
     cwd: null,
     startIn,
     madeTree: false,
