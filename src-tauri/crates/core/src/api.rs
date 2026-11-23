@@ -578,6 +578,12 @@ impl Core {
         }
     }
 
+    /// What this machine has of what the app needs. See the setup module.
+    pub fn setup_checks(&self) -> Result<crate::setup::Setup, String> {
+        let home = self.home.as_deref().ok_or("no home folder")?;
+        Ok(crate::setup::check(home))
+    }
+
     pub fn detect(&self, id: &str) -> Result<DetectReport, String> {
         let adapter = adapter_for(id).ok_or_else(|| format!("no adapter for {id}"))?;
         let environment = env::environment();

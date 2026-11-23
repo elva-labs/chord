@@ -665,6 +665,7 @@ pub fn dispatch(
             let p: AgentParams = parse(params)?;
             value(core.detect(&p.id)?)
         }
+        "setup_checks" => value(core.setup_checks()?),
         "pty_spawn" => {
             let p: SpawnParams = parse(params)?;
             value(core.spawn(
