@@ -1430,13 +1430,22 @@ export async function installFakeCore(
           }
           return problems;
         },
-        runState: async (_project: string, token: string) =>
-          (window as unknown as { __runs?: Record<string, unknown> }).__runs?.[token] ?? null,
+        // A run is read whole each time; `__runReads` counts the reads by
+        // token, for a spec to see how often the window asks.
+        runState: async (_project: string, token: string) => {
+          const w = window as unknown as { __runs?: Record<string, unknown>; __runReads?: Record<string, number> };
+          (w.__runReads ??= {})[token] = (w.__runReads[token] ?? 0) + 1;
+          const run = w.__runs?.[token] as Record<string, unknown> | undefined;
+          return run === undefined ? null : { reasonMost: 500, ...run };
+        },
+        // A run's end fails while a test sets `__runEndFails` to why.
         runEnd: async (project: string, token: string) => {
           const w = window as unknown as {
             __runs?: Record<string, unknown>;
             __runsEnded?: { project: string; token: string }[];
+            __runEndFails?: string;
           };
+          if (w.__runEndFails !== undefined) throw new Error(w.__runEndFails);
           (w.__runsEnded ??= []).push({ project, token });
           const led = w.__runs?.[token] !== undefined;
           if (led) delete w.__runs![token];
@@ -1449,8 +1458,20 @@ export async function installFakeCore(
           };
           if (w.__runs?.[token] === undefined) throw new Error("That session is in no run.");
           if (reason.trim() === "") throw new Error("A waiver says why.");
+          if ([...reason.trim()].length > 500) throw new Error("A waiver's reason is 500 characters at most.");
           (w.__waivers ??= []).push({ token, gate, reason: reason.trim() });
-          return { gate, reason: reason.trim(), at: Math.floor(Date.now() / 1000) };
+          const waiver = { gate, reason: reason.trim(), at: Math.floor(Date.now() / 1000) };
+          // The run stands as the core would have it: the gate waived, and
+          // the line counting it, with the next that holds and why.
+          type Held = { gate: { id: number }; standing: string; reason: string | null; waiver: unknown };
+          const run = w.__runs![token] as { gates: Held[]; line: string };
+          const held = run.gates.find((one) => one.gate.id === gate);
+          if (held !== undefined) Object.assign(held, { standing: "waived", reason: null, waiver });
+          const needed = run.gates.filter((one) => one.standing !== "notNeeded");
+          const open = needed.filter((one) => one.standing === "waiting" || one.standing === "outOfDate");
+          const count = `Gates ${needed.length - open.length} of ${needed.length}`;
+          run.line = open.length === 0 ? count : `${count} · ${open[0].reason}`;
+          return waiver;
         },
         onRunChanged: async (handler: (changed: { lead: string }) => void) => {
           (window as unknown as Record<string, unknown>).__runChanged = handler;

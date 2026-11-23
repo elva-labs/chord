@@ -1684,6 +1684,8 @@ export interface RunState {
   uncommittedHeld: string | null;
   /** Whether every open gate waits for the user. */
   waitsForTheUser: boolean;
+  /** How long the user's reason for a waiver may be, in characters. */
+  reasonMost: number;
 }
 
 /** A problem the core finds with a team being edited. A quiet one is a
