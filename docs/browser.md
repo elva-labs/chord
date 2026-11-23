@@ -19,7 +19,7 @@ row under it shows a tab's title or host, its address with the scheme left
 off and, ahead of the address, the word "agent" for a tab an agent opened,
 and a dot for whether it is loading or failed. A click or Enter on a row
 brings that tab to the front, the row of the tab on show is marked, and a
-hover action closes it. See [layout](layout.md) for how the fold shares
+hover action closes it. See [layout](reference/layout.md#under-the-tree) for how the fold shares
 the column with the others.
 
 The viewer shows the browser the way it shows a file: opening it puts away

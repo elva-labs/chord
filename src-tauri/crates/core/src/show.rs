@@ -252,6 +252,43 @@ pub struct BrowserRequest {
 /// the settings it changes are the ones of the machine the window runs on.
 pub const SETTINGS_TOOLS: &[&str] = &["settings", "settings_change", "theme_save", "styles_write"];
 
+/// The workbench's own tools that change no file of the project and reach
+/// nothing outside the workbench: they read the project or the workbench,
+/// wait, keep the conversation's notes in the workbench's store, or put
+/// something in front of the user. A session that reads only leaves these
+/// to the mode; the workbench's other tools are put to the user, the
+/// browser's readers among them, as they read pages in sites the user is
+/// signed into.
+pub const CONTAINED_TOOLS: &[&str] = &[
+    "show",
+    "diff",
+    "present",
+    "selection",
+    "notify",
+    "note",
+    "notes",
+    "projects",
+    "sessions",
+    "wait",
+    "read",
+    "browser_tabs",
+    "settings",
+];
+
+/// Whether a tool, as the harness names it (`mcp__chord__notes`), is one of
+/// the workbench's [`CONTAINED_TOOLS`]. A built-in's name always means the
+/// built-in, never a plugin's tool of the same name. The name alone says
+/// whose server it is only where the workbench attached its own: a server
+/// the project's configuration names the same is then not loaded, as the
+/// one the session is started with wins, and where none is attached the
+/// name may be the project's.
+pub fn contained_tool(name: &str) -> bool {
+    name.strip_prefix("mcp__")
+        .and_then(|rest| rest.strip_prefix(crate::adapter::SERVER_NAME))
+        .and_then(|rest| rest.strip_prefix("__"))
+        .is_some_and(|tool| CONTAINED_TOOLS.contains(&tool))
+}
+
 /// A call the agent made on one of the settings tools. The window answers
 /// it, and the answer goes where the tool server waits.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

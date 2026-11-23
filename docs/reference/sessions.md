@@ -61,9 +61,6 @@ stays, the list keeps its order, and the project comes forward with the new
 session once it starts, which is when it counts as used. None of the
 project's other sessions is put on screen on the way, so none of them
 starts. Backing out of the palette leaves everything as it was.
-The `orchestrator` folder an earlier version kept sessions in is listed among
-the projects while it holds past sessions, with no button for a new session
-and Close project alone in its menu; see [orchestrator](../orchestrator.md).
 
 A row's own button takes the place of its time while the pointer is on the
 row, so it never covers a word of the name. On a live row it is ×, which
@@ -200,9 +197,7 @@ starter, starts it in its row. One the workbench had put away before the
 quit stays put away, one whose work was over at the quit is put away by
 the same rest as before it, and one the quit cut off at work stays until
 it is woken, closed or stopped; see
-[orchestrator](../orchestrator.md#when-the-work-is-over). A session left open
-in the `orchestrator` folder of an earlier version comes back too, and
-lists that folder again; see [orchestrator](../orchestrator.md).
+[orchestrator](../orchestrator.md#when-the-work-is-over).
 
 A row that was unread when the app quit comes back unread, with the line it
 had under its name, whether it went unread by itself or was marked by hand;
@@ -1029,8 +1024,11 @@ whether the session reads only. The effort chip's title then says the agent
 set it. Its description goes ahead of the next message once, behind a fold
 that reads As, the agent's title and what it set, and the run that answers
 is headed by the title. While the session reads only, the mode chip says
-Reads only with a lock ahead of the mode, which still decides what reading
-only leaves to it, and picking a mode there ends it. The agent each session
+Reads only with a lock ahead of the mode, and its title says that file
+edits are refused, the agent is told to change nothing, and a command it
+runs is left to the mode; picking a mode there ends it. See
+[sessions in Chord](../integrated.md#the-mode-a-session-starts-in) for what
+reading only refuses and what it asks. The agent each session
 works as is kept for the 500 sessions last given one; a session past that
 works as none, and reads only no more, once the app starts again. An agent and a workflow are not both
 chosen: either one takes the other off the plus. The chip waits while the
@@ -1561,7 +1559,7 @@ once for all of them.
 The changes pane learns that the tree moved in one of two ways, chosen per
 open project in the settings.
 
-**Watcher only**, the default: a filesystem watcher on the worktree,
+**Watcher only**: a filesystem watcher on the worktree,
 debounced. It costs nothing, needs no permission, and catches every writer:
 the agent, your editor, a script, a rebase. A write the pane would show
 nothing new for does not refresh it: one in an ignored folder, or one inside
@@ -1569,11 +1567,11 @@ another repository kept in the tree, such as a worktree, which status does
 not look into. A submodule is the exception, since its changes are the
 project's.
 
-**Harness hooks**, opt-in: hooks written into the project's own harness
+**Harness hooks**, on for a fresh install: hooks written into the project's own harness
 configuration, which report each edit the moment a tool finishes and give
-the row its exact state, as above. They are off until asked for, because
-they write into your configuration, and nothing should edit that because you
-opened a folder. They go where the harness keeps local, uncommitted settings,
+the row its exact state, as above. A setup from before the choice existed
+has them off until asked for, since they write into your configuration.
+They go where the harness keeps local, uncommitted settings,
 so they never turn up in a diff, and turning them off removes only what was
 added. A worktree the workbench makes for a session gets them too, as
 [hooks](../hooks.md) describes.

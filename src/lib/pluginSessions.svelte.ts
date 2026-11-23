@@ -165,7 +165,7 @@ async function startFor(asked: PluginStartEvent): Promise<string | null> {
     null,
     pick.agent,
     startIn,
-    terminal ? oneLine(asked.prompt) : `${role === null ? "" : `${agentNote(role.title, role.text)}\n\n`}${asked.prompt}`,
+    terminal ? oneLine(asked.prompt) : `${role === null ? "" : `${agentNote(role.title, role.text, role.readsOnly)}\n\n`}${asked.prompt}`,
     pick.model === OWN_DEFAULT ? null : pick.model,
     account,
     null,

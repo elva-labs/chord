@@ -32,6 +32,7 @@
     loadInstalled,
     newAgent,
     ownAgents,
+    READS_ONLY_ABOUT,
     removeAgent,
     resetShipped,
     saveAgent,
@@ -242,7 +243,7 @@
     </span>
     <span class="dfl">
       {#if agent.readsOnly}
-        <span class="lock" title="Reads only" data-testid="agent-reads-only"><Icon name="lock" size={13} /></span>
+        <span class="lock" title={READS_ONLY_ABOUT} data-testid="agent-reads-only"><Icon name="lock" size={13} /></span>
         <span class="hidden">Reads only</span>
       {/if}
     </span>
@@ -349,6 +350,7 @@
           id="agent-files"
           value={draft.readsOnly ? "reads" : "changes"}
           onchange={(event) => (draft.readsOnly = event.currentTarget.value === "reads")}
+          title={draft.readsOnly ? READS_ONLY_ABOUT : "The agent may change files, as the mode allows."}
           data-testid="agent-files"
         >
           <option value="reads">Reads only</option>

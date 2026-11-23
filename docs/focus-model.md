@@ -20,7 +20,7 @@ default preset:
 
 | Keys                                                                    | Does                                                        |
 | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
-| <kbd>Cmd</kbd><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd> | Focus sessions / agent / changes / terminal; while reviewing, <kbd>Cmd</kbd><kbd>1</kbd> peeks the sessions pane over the agent and puts it back; in [compact mode](layout.md#compact-mode) it slides the pane in and back; while editing, see [the editor](#the-editor) |
+| <kbd>Cmd</kbd><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd> | Focus sessions / agent / changes / terminal; while reviewing, <kbd>Cmd</kbd><kbd>1</kbd> peeks the sessions pane over the agent and puts it back; in [compact mode](reference/layout.md#compact-mode) it slides the pane in and back; while editing, see [the editor](#the-editor) |
 | <kbd>Cmd</kbd><kbd>5</kbd>                                              | The keyboard to the [status bar](#the-status-bar)           |
 | <kbd>Cmd</kbd><kbd>B</kbd>                                              | Show or hide the sessions pane; in compact mode, slide it in or back |
 | <kbd>Cmd</kbd><kbd>\\</kbd>                                             | Show or hide the right pane: the changes, or the agent while editing |
@@ -84,7 +84,7 @@ since on macOS <kbd>Option</kbd> turns a letter into another character.
 
 Two lists share one field over the workbench. What is typed narrows the
 list to the entries holding every word of it, in any order, as
-[the tree's filter](layout.md#the-field-above-the-tree) does.
+[the tree's filter](reference/layout.md#the-field-above-the-tree) does.
 <kbd>Up</kbd> and <kbd>Down</kbd> move the cursor and <kbd>Enter</kbd>
 picks. The cursor starts on the first entry that can be picked, and stays on
 the same entry while sessions change state and move under it.
@@ -99,7 +99,7 @@ sessions the sessions pane draws under it are live, or the time since it was
 last used, the most recently used
 first. <kbd>Enter</kbd> on a session shows it and puts the keyboard in its
 agent, as a click on its row does. On a project it brings the project forward
-and counts it as used, as [sessions](sessions.md#active-and-inactive) orders
+and counts it as used, as [sessions](reference/sessions.md#active-and-inactive) orders
 them, showing a session drawn under it as a click on its header does, with
 the keyboard in that session or, for a project with none, in the sessions
 pane. A sessions pane that is folded opens for that, or peeks over
@@ -123,7 +123,7 @@ project, and Preview file or Show source for the file in the viewer when it
 is Markdown, HTML, Mermaid or SVG (the commands have no shortcut). Picking an
 action does what its shortcut does. The first entry goes to
 the next session that needs you, as <kbd>Cmd</kbd><kbd>.</kbd> does (see
-[sessions](sessions.md)). It shows how many are waiting, and with none it
+[sessions](reference/sessions.md#active-and-inactive)). It shows how many are waiting, and with none it
 cannot be picked.
 
 **A new session** is asked for in the same field. It is the one way a session
@@ -141,9 +141,9 @@ session with that one answer changed, so `cod` and <kbd>Enter</kbd> start
 Codex under the account the line named. With nothing to choose, the line
 takes no text. While a session that another started in a
 different project is on screen, the project on screen is the starter's, as
-[sessions](sessions.md) describes, both here and for the command that starts
+[sessions](reference/sessions.md) describes, both here and for the command that starts
 a session in the project on screen. Change asks the account, when accounts are named in the
-[settings](settings.md#accounts), with the project's own under the cursor;
+[settings](reference/settings.md#accounts), with the project's own under the cursor;
 then how it runs, when there is a workflow or more than one harness to pick
 between: the workflows under one heading, offered once a workflow has been
 turned on for new sessions or for a project, the project's own first and
@@ -332,7 +332,7 @@ control a stop as it is drawn, by one rule for the whole window:
 - **Wherever Tab lands is drawn** in the look's own way: a ring in the
   accent, a list's cursor on its row, a field's caret, and on a divider a
   line in the accent with its grip at the middle while the status bar names
-  the keys it takes, as [dividers](layout.md#dividers) says.
+  the keys it takes, as [dividers](reference/layout.md#dividers) says.
 
 A control added anywhere in the window, the status bar included, follows
 the rule without any work of its own. A list that walks its own items, as
@@ -343,7 +343,7 @@ them.
 
 The agent pane of an in-Chord session is a composer, a thread and, while
 the agent waits on the user, a dock between them; see
-[sessions](sessions.md#sessions-in-chord). Focusing the pane by key, or
+[sessions](reference/sessions.md#sessions-in-chord). Focusing the pane by key, or
 the session coming on screen in it, puts the keyboard in its composer,
 unless another control of that same session has it, or a control of the
 pane's own, such as the workflow tag or a run's chip in its header, as
@@ -574,7 +574,7 @@ the editor or the tab row it came from.
 
 ## The status bar
 
-The allowance in the [status bar](layout.md#the-status-bar) is window
+The allowance in the [status bar](reference/layout.md#the-status-bar) is window
 chrome: a press on it leaves the pane focus where it was. The popover it
 opens takes the keyboard itself and holds it while it is up. <kbd>Escape</kbd>,
 <kbd>Enter</kbd>, <kbd>Space</kbd> or a press elsewhere puts it away, and the
@@ -599,7 +599,7 @@ back to that pane.
 
 The focused pane is marked in the accent, its title with it, and the status
 bar names it when there is room; which part of the pane carries the mark is
-the look's, in [settings](settings.md#theme): in the modern look an edge
+the look's, in [settings](reference/settings.md#theme): in the modern look an edge
 along the top of the pane's card, ending square in its rounded corners, or
 under the sessions pane's header, which has no card, on the same line; in the
 terminal look the box's own border. An unfocused agent pane shows a hollow

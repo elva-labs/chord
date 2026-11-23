@@ -246,16 +246,26 @@ plain words, and once another is chosen it comes back only in a new
 session.
 
 Apart from its mode, a session can read only, as the agent it works as
-sets it. Claude Code is then refused its own tools that change files,
-Edit, Write, MultiEdit and NotebookEdit, whatever the mode allows. Its
-tools that only read, and a subagent, whose own calls are held to the same,
-are left to the mode. Any other tool, a command, a server's tool or the
-workbench's own start and send among them, is put to the user whatever
-the mode or the allow rules say, and the ask says the session reads only
-and that allowing it lets the session change files. Codex runs each turn
-in its read-only sandbox, and its asks to change files are turned down
-without asking the user. Its other asks, a command to run outside the
-sandbox or a server's tool, reach the user saying the same. Reading only can be turned on and off while the session
+sets it. The agent is told it reads only and is to change no files, by
+editing them or by a command it runs, and Claude Code is refused its own
+tools that change files, Edit, Write, MultiEdit and NotebookEdit, whatever
+the mode allows. A command it runs is left to the mode, as are the tools
+that watch, read or stop a command running in the background, its tools
+that only read, a subagent, whose own calls are held to the same, and the
+workbench's own tools that change no file of the project and reach nothing
+outside the workbench, such as notes, note, sessions, read, wait and
+selection. Any other tool, a server's tool or the workbench's own start,
+send and browser tools that read a page among them, is put to the user
+whatever the mode or the allow rules say, and the ask says the session
+reads only and that allowing it lets the session change files. Codex runs
+each turn in its read-only sandbox, in which a command that only reads
+runs as it would, and its asks to change files are turned down without
+asking the user. A command it asks to run outside the sandbox is the
+mode's to answer, as with reading only off, and approving it lets the
+command run outside the sandbox, where it can change files. An ask to
+widen the sandbox, and a server's tool other than the workbench's own that
+change no file and reach nothing outside it, reach the user saying the
+session reads only. Reading only can be turned on and off while the session
 runs, and the window hears which.
 
 ## What a new session starts on
@@ -290,7 +300,7 @@ file, and a start names none, so a file that names one, written by hand,
 by a harness's shell or by a later version, starts nothing in it. Claude
 Code's default model, chosen on the chip, keeps no model, and the settings
 let go of everything kept for a harness, as
-[settings](settings.md#sessions) describes. The choices are kept for the
+[settings](reference/settings.md#sessions) describes. The choices are kept for the
 machine in the settings file, by harness.
 
 They are kept per harness, not per account or per project, so they follow
@@ -982,16 +992,18 @@ hour, or the window reads as used up with no time, the wait ends and the
 conversation says so.
 
 Going on, the run is started again as a fresh conversation from its
-notes, as [sessions](sessions.md#going-on-from-the-notes) describes,
+notes, as [sessions](reference/sessions.md#going-on-from-the-notes) describes,
 whatever its size and however long it rested: the whole conversation is
 never read again for it. Where the core cannot write the briefing, the
 run is left as it is and the conversation says so. The fresh conversation
 is sent one line, as the workbench's own, asking it to go on, and the
 line where the run began says it went on by itself. The line is not sent
 where the user turned the choice off or wrote to the conversation while
-it started: it is theirs to go on with. That turn is the one
-try: where the limit refuses it too, the conversation says so and waits
-for the user.
+it started: it is theirs to go on with. A limit that ends that turn
+later is waited for like any other, so the conversation goes on at every
+reset. Where the limit refuses the turn at once, because the window waited
+for was in fact still shut, the conversation says so and waits for the
+user.
 
 ### Reading the limits with no session
 

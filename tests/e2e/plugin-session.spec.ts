@@ -298,7 +298,7 @@ for (const [appearance, look] of [
     expect(roleBox.x + roleBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
     expect(modelBox.x + modelBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
     // The reviewer reads only, and the card says so with the composer's lock.
-    await expect(ask.getByTestId("conduct-agent-lock")).toHaveAttribute("title", "Reads only");
+    await expect(ask.getByTestId("conduct-agent-lock")).toHaveAttribute("title", /^Reads only: file edits are refused/);
     if (SHOTS !== undefined) await ask.screenshot({ path: `${SHOTS}/start-card-${appearance}-${look}.png` });
 
     // Picked, the long title is cut short inside the select.

@@ -412,7 +412,7 @@ describe("the agent a plugin's start works as", () => {
     card.unmount();
     once();
     const row = byKey((await starting)!)!;
-    expect(row.prompt).toBe(`${agentNote("Reviewer", REVIEWER().text)}\n\nFix issue 12: the cache is stale`);
+    expect(row.prompt).toBe(`${agentNote("Reviewer", REVIEWER().text, true)}\n\nFix issue 12: the cache is stale`);
     expect(row.model).toBe("opus");
     expect(agentOfRow(row.key, null)).toEqual({ key: "chord:Reviewer", title: "Reviewer", readsOnly: true });
     expect(agentStartsAt(row.key)).toBe("high");

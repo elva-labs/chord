@@ -2899,7 +2899,7 @@ async function startFitted(
     null,
     agent,
     startIn,
-    `${role === null ? "" : `${agentNote(role.title, role.text)}\n\n`}${oneLine(prompt)} ${outcomeAsk(agent)}`,
+    `${role === null ? "" : `${agentNote(role.title, role.text, role.readsOnly)}\n\n`}${oneLine(prompt)} ${outcomeAsk(agent)}`,
     model,
     account,
     null,

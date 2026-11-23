@@ -127,7 +127,7 @@ import { instructionLines } from "$lib/workflowInstructions";
 import { BOUNDED, BOUNDED_TYPED, FORGED } from "../forgedName";
 import type { Workflow } from "$lib/core";
 import { pickResume, resume } from "$lib/resume.svelte";
-import { agentNote, OUTCOME_ASK } from "$lib/instructions";
+import { AGENT_READS_ONLY, agentNote, OUTCOME_ASK } from "$lib/instructions";
 import { harnesses } from "$lib/harness.svelte";
 import { resetSessionKinds, sessionKinds } from "$lib/sessionKind.svelte";
 import { agentOfRow, agentStartsAt, forgetAgentRow } from "$lib/sessionAgents.svelte";
@@ -7549,6 +7549,21 @@ describe("a start that names an agent to work as", () => {
     expect(agentOfRow(row.key, null)).toEqual({ key: "chord:Reviewer", title: "Reviewer", readsOnly: true });
     expect(agentStartsAt(row.key)).toBe("high");
     expect(last().content).toContain('It works as the agent "Reviewer", reading only.');
+  });
+
+  it("tells a session started as an agent that reads only to change no files, and no other", async () => {
+    const reading = await startAllowed(
+      call("start", { project: A, prompt: "Check it", agent: "Reviewer" }, { session: "caller-1" }),
+      "pty-1",
+      "sid-new",
+    );
+    expect(reading.prompt).toContain(`\n${AGENT_READS_ONLY}\n`);
+    const changing = await startAllowed(
+      call("start", { project: A, prompt: "Build it", agent: "Developer" }, { session: "caller-1" }),
+      "pty-2",
+      "sid-other",
+    );
+    expect(changing.prompt).not.toContain(AGENT_READS_ONLY);
   });
 
   it("leaves the agent's model and effort where the start names another harness", async () => {

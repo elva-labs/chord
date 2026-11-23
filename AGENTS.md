@@ -39,6 +39,9 @@ When writing or changing one:
   with care, draws them in and links to more. Anything longer, architecture
   and behaviour among it, lives in the docs.
 - Say a thing once and reference it from elsewhere.
+- `docs/reference` holds the full behaviour. The short pages under `docs/`
+  summarise it and must stay in step with it; a link that wants the full
+  behaviour points at the reference.
 
 ## Verifying
 

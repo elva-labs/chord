@@ -78,6 +78,7 @@ test("lists the agents before the first message, narrows them as the user types,
   // The mode chip says the session reads only, with the lock.
   await expect(chip(page, "mode")).toHaveText("Reads only · Default");
   await expect(chip(page, "mode")).toHaveAttribute("data-reads-only", "");
+  await expect(chip(page, "mode")).toHaveAttribute("title", /Set by Reviewer\. Reads only: .* A command it runs is left to Default\.$/);
   // The model chip names the model as the workbench does where the harness
   // offers none by that name.
   await expect(chip(page, "model")).toHaveText("Opus");
@@ -87,6 +88,7 @@ test("lists the agents before the first message, narrows them as the user types,
   const sent = (await calls(page)).find((call) => call.method === "send");
   expect(sent?.text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
   expect(sent?.text?.endsWith("\n\nLook at the cache change")).toBe(true);
+  expect(sent?.text).toContain("\nYou read only: change no files, whether by editing them or by a command you run.\nEnd of the agent's description.");
   await agent(page, `f.turn("${H}", "The cache change holds.");`);
   const mine = page.getByTestId("user-message").last();
   await expect(mine.locator(".bubble")).toHaveText("Look at the cache change");
@@ -98,7 +100,7 @@ test("lists the agents before the first message, narrows them as the user types,
   await expect(page.getByTestId("agent-run-as").last()).toHaveText("Reviewer");
 
   // An ask reading only made says so.
-  await agent(page, `f.ask("${H}", "Bash", { command: "git commit -am x" }, { readsOnly: true });`);
+  await agent(page, `f.ask("${H}", "mcp__github__create_issue", { title: "x" }, { readsOnly: true });`);
   await expect(page.getByTestId("permission-reads-only")).toHaveText(
     "This session reads only. Allowing this lets it change files.",
   );
