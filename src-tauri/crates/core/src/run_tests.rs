@@ -623,12 +623,17 @@ fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
         "caffeinate -t 60 git push",
         "flock /tmp/lock git push",
         "flock -w 5 /tmp/lock -c 'git push'",
-        "parallel -j 2 git push ::: origin backup",
         "watch -n 5 git push",
         "watch 'git push'",
         "coproc git push",
         "coproc pusher { git push; }",
-        "find . -name x -exec git push \\;",
+        "gh pr new --fill",
+        "bash <<'EOF'\ngit push\nEOF",
+        "cat <<EOF\n$(git push)\nEOF",
+        "cat <<EOF\n`git push`\nEOF",
+        "a=($(git push))",
+        "[ -n \"$X\" ] && git push",
+        "git -c alias.p=push -C app p",
         "git --namespace push --dry-run push origin",
         "GIT push",
         "Git push origin main",
@@ -655,9 +660,6 @@ fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
         "echo push | xargs -I{} git {} origin",
         "echo push | xargs -I X git X origin",
         "echo push | xargs --replace git {} origin",
-        "echo push | parallel git",
-        "parallel git :::: subcommands.txt",
-        "parallel -I X git X ::: push",
         "git $cmd origin main",
         "git subtree $sub --prefix d origin main",
         "gh $sub create --fill",
@@ -666,12 +668,7 @@ fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
         "$g $sub",
         "git -c include.path=/tmp/x ship",
         "git -c includeIf.onbranch:main.path=/tmp/x ship",
-        "HOME=/tmp/x git ship",
-        "XDG_CONFIG_HOME=/tmp/x git ship",
-        "GIT_DIR=/tmp/x/.git git ship",
         "echo 'create --fill' | xargs gh pr",
-        "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p",
-        "env GIT_CONFIG_GLOBAL=/tmp/c git p",
         "git --config-env alias.p=SHIP p",
         "git --config-env=alias.p=SHIP p",
         "git -c Alias.p=push p",
@@ -679,10 +676,6 @@ fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
         "gh api graphql --input query.json",
         "gh api -X PATCH repos/owner/app/git/refs/heads/main -f sha=abc",
         "gh api -X PUT repos/owner/app/contents/a.txt -f message=x",
-        "parallel git ::: push",
-        "parallel git {} ::: push",
-        "watch watch watch watch watch ls",
-        "find . -exec find . -exec find . -exec find . -exec find . -exec ls",
     ] {
         assert!(hands_over(command), "{command}");
     }
@@ -727,6 +720,17 @@ fn handing_over_is_a_pull_request_opened_or_merged_or_a_push() {
         "gh api graphql -f query='{ viewer { login } }'",
         "gh api repos/owner/app/contents/a.txt",
         "watch -n 5 git status",
+        "if [ -z \"$X\" ]; then git status; fi",
+        "GIT_DIR=.git git status",
+        "HOME=/tmp/h git status",
+        "GIT_CONFIG_GLOBAL=/dev/null git log",
+        "git grep -c include.h",
+        "git log -c include.c",
+        "flock /tmp/l echo \"git push\"",
+        "a=(git push); echo ok",
+        "cat > notes.md <<'EOF'\n`git push`\n(gh pr create)\ngit push origin main\nEOF",
+        "git commit -F - <<EOF\nWhy git push failed\nEOF",
+        "git commit -F - <<< 'git push origin main'",
     ] {
         assert!(!hands_over(command), "{command}");
     }
@@ -737,8 +741,6 @@ fn a_long_command_of_commands_that_run_others_is_read_quickly() {
     let started = std::time::Instant::now();
     let watches = format!("watch watch watch {}", "x ".repeat(20_000));
     assert!(!hands_over(&watches));
-    let finds = format!("find {}", "-exec find -exec x ".repeat(3));
-    assert!(!hands_over(&format!("{finds}{}", "y ".repeat(20_000))));
     let wrapped = format!("watch {}ls", "env watch ".repeat(200));
     assert!(hands_over(&wrapped));
     assert!(started.elapsed() < std::time::Duration::from_secs(5));

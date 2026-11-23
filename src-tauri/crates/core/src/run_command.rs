@@ -5,22 +5,22 @@
 /// Whether a shell command hands the work over: a pull request opened or
 /// merged with gh or written to with gh api, or a push with git, as a
 /// command the shell runs. That is the first word of a command, after
-/// assignments, redirections and wrappers such as env and sudo, there or
-/// in a command substitution, an `sh -c` string or an eval. A word that
-/// only mentions a push, in a message or a search, is not one, and a dry
-/// run does not count. A git command given an alias or configuration of
-/// its own for the one run, or a home or repository to read it from,
-/// counts as a push, since the alias may be one.
-/// The text of a here-document or a here-string is read as commands too,
-/// since a shell may be what reads it, so one whose lines start with a push
-/// counts, and so is the command find, flock, parallel or watch runs. What
-/// is not known before the command runs counts as a hand-over when it may
-/// be one: a shell reading a pipe, a redirected input or a process
-/// substitution, git or gh given the rest of their words by xargs or
-/// parallel, and a command or subcommand named by an expansion or a
-/// placeholder. A push a script, an alias
-/// set beforehand, another program such as an interpreter, or a command run
-/// on another machine over ssh makes is not seen.
+/// assignments, redirections and the wrappers in `WRAPPERS`, there or in a
+/// command substitution, an `sh -c` string or an eval. A word that only
+/// mentions a push, in a message or a search, is not one, and a dry run
+/// does not count. A git command given an alias or an include with its own
+/// `-c` or `--config-env` counts as a push, since the alias may be one.
+/// The text of a here-document or a here-string is read as commands when a
+/// shell or source on its command reads it, and otherwise only for the
+/// commands an unquoted here-document substitutes. What is not known
+/// before the command runs counts as a hand-over when it may be one: a
+/// shell reading a pipe, a redirected input or a process substitution, git
+/// or gh given the rest of their words by xargs, and a command or
+/// subcommand named by an expansion or a placeholder. This stops mistakes,
+/// not evasion: a push made by a script, by an alias or configuration set
+/// beforehand, by a wrapper not listed, by find, parallel or `env -S`, by
+/// another program such as an interpreter, or on another machine over ssh
+/// is not seen.
 pub fn hands_over(command: &str) -> bool {
     hands_over_in(command, 0)
 }
@@ -30,6 +30,13 @@ pub fn hands_over(command: &str) -> bool {
 const DEEPEST: u32 = 16;
 
 fn hands_over_in(command: &str, depth: u32) -> bool {
+    reads_a_hand_over(command, depth, true)
+}
+
+/// Whether the text hands the work over, read as commands when `whole`, or
+/// else only for the commands it substitutes, as the shell expands an
+/// unquoted here-document.
+fn reads_a_hand_over(command: &str, depth: u32, whole: bool) -> bool {
     if depth > DEEPEST {
         return true;
     }
@@ -42,7 +49,12 @@ fn hands_over_in(command: &str, depth: u32) -> bool {
         depth: 0,
         too_deep: false,
     };
-    lexer.read(None);
+    if whole {
+        lexer.read(None, false);
+    }
+    while lexer.at < lexer.chars.len() {
+        lexer.double_quoted(&mut Words::default());
+    }
     lexer.too_deep
         || lexer.found.iter().enumerate().any(|(at, words)| {
             let words: Vec<&str> = words.iter().map(String::as_str).collect();
@@ -51,23 +63,25 @@ fn hands_over_in(command: &str, depth: u32) -> bool {
         || lexer
             .bodies
             .iter()
-            .any(|body| hands_over_in(body, depth + 1))
+            .any(|(body, whole)| reads_a_hand_over(body, depth + 1, *whole))
 }
 
 /// Reads a command into its simple commands, each as its words with quotes
 /// taken off and redirections left out, those in command substitutions
-/// among them, and the text of its here-documents and here-strings. A
-/// command substitution leaves a `$` in its word, for what it puts there
-/// is not known, and a process substitution leaves `<(` or `>(` as its
-/// word. A command whose input is redirected from a file or a process is
-/// counted as given a pipe's output.
+/// among them, and the text of its here-documents and here-strings that is
+/// read, with whether it is read as commands: when a shell or source on
+/// the same command reads it. A command substitution leaves a `$` in its
+/// word, for what it puts there is not known, and a process substitution
+/// leaves `<(` or `>(` as its word. A command whose input is redirected
+/// from a file or a process is counted as given a pipe's output. An
+/// arithmetic command and an array's words run nothing.
 struct Lexer {
     chars: Vec<char>,
     at: usize,
     found: Vec<Vec<String>>,
     /// Which of the commands found read what a pipe gives them.
     piped: Vec<usize>,
-    bodies: Vec<String>,
+    bodies: Vec<(String, bool)>,
     depth: u32,
     too_deep: bool,
 }
@@ -84,13 +98,23 @@ struct Words {
     /// The next word is a here-document's delimiter, its tabs taken off
     /// when true.
     delimiter: Option<bool>,
-    heredocs: Vec<(String, bool)>,
+    /// The delimiters of the command being read's here-documents, with
+    /// whether their tabs are taken off and whether the delimiter is quoted.
+    heredocs: Vec<(String, bool, bool)>,
+    /// The here-documents whose text comes after the line, with whether
+    /// their tabs are taken off and whether their text is read as commands
+    /// or only for what it substitutes, or not read at all.
+    waiting: Vec<(String, bool, Option<bool>)>,
     /// The next word is a here-string's.
     here_string: bool,
-    /// The here-strings read.
+    /// The here-strings of the command being read.
     strings: Vec<String>,
+    /// The here-strings read as commands.
+    bodies: Vec<(String, bool)>,
     /// The command being read is given a pipe's output.
     piped: bool,
+    /// The words are an array's, which run nothing.
+    list: bool,
 }
 
 impl Words {
@@ -103,7 +127,7 @@ impl Words {
         if self.in_word {
             let word = std::mem::take(&mut self.word);
             if let Some(strip) = self.delimiter.take() {
-                self.heredocs.push((word, strip));
+                self.heredocs.push((word, strip, self.quoted));
             } else if self.here_string {
                 self.here_string = false;
                 self.strings.push(word);
@@ -120,6 +144,22 @@ impl Words {
     fn end_command(&mut self, found: &mut Vec<Vec<String>>, piped: &mut Vec<usize>) {
         self.end_word();
         self.target = false;
+        let shell = self.words.iter().any(|word| {
+            let name = word.rsplit('/').next().unwrap_or(word).to_ascii_lowercase();
+            SHELLS.contains(&name.as_str()) || matches!(name.as_str(), "source" | ".")
+        });
+        for (delimiter, strip, quoted) in std::mem::take(&mut self.heredocs) {
+            let read = (shell || !quoted).then_some(shell);
+            self.waiting.push((delimiter, strip, read));
+        }
+        let strings = std::mem::take(&mut self.strings);
+        if shell {
+            self.bodies
+                .extend(strings.into_iter().map(|text| (text, true)));
+        }
+        if self.list {
+            self.words.clear();
+        }
         if !self.words.is_empty() {
             if std::mem::take(&mut self.piped) {
                 piped.push(found.len());
@@ -140,15 +180,19 @@ impl Lexer {
     }
 
     /// Reads simple commands until `closer`, a `)` or a backtick that ends
-    /// a command substitution, or the end.
-    fn read(&mut self, closer: Option<char>) {
+    /// a command substitution or an array, or the end; an array's when
+    /// `list`.
+    fn read(&mut self, closer: Option<char>, list: bool) {
         self.depth += 1;
         if self.depth > DEEPEST {
             self.too_deep = true;
             self.at = self.chars.len();
             return;
         }
-        let mut words = Words::default();
+        let mut words = Words {
+            list,
+            ..Words::default()
+        };
         let mut parens = 0u32;
         while let Some(c) = self.peek(0) {
             match c {
@@ -167,9 +211,9 @@ impl Lexer {
                 '\n' => {
                     self.at += 1;
                     words.end_command(&mut self.found, &mut self.piped);
-                    for (delimiter, strip) in std::mem::take(&mut words.heredocs) {
+                    for (delimiter, strip, read) in std::mem::take(&mut words.waiting) {
                         let body = self.heredoc(&delimiter, strip);
-                        self.bodies.push(body);
+                        self.bodies.extend(read.map(|whole| (body, whole)));
                     }
                 }
                 '#' if !words.in_word => {
@@ -182,13 +226,32 @@ impl Lexer {
                     words.push(c);
                     words.push('(');
                     self.at += 2;
-                    self.read(Some(')'));
+                    self.read(Some(')'), false);
                 }
                 '<' | '>' => self.redirection(&mut words),
                 '&' if self.peek(1) == Some('>') => {
                     words.end_word();
                     self.at += 1;
                     self.redirection(&mut words);
+                }
+                '(' if self.peek(1) == Some('(') && !words.in_word => {
+                    words.end_command(&mut self.found, &mut self.piped);
+                    self.at += 2;
+                    let mut inner = 0u32;
+                    while let Some(c) = self.peek(0) {
+                        self.at += 1;
+                        match c {
+                            '(' => inner += 1,
+                            ')' if inner == 0 && self.peek(0) == Some(')') => break,
+                            ')' => inner = inner.saturating_sub(1),
+                            _ => {}
+                        }
+                    }
+                    self.at += 1;
+                }
+                '(' if words.word.ends_with('=') && is_assignment(&words.word) => {
+                    self.at += 1;
+                    self.read(Some(')'), true);
                 }
                 ';' | '|' | '&' | '(' | ')' => {
                     let or = c == '|' && self.peek(1) == Some('|');
@@ -234,7 +297,7 @@ impl Lexer {
                 }
                 '$' if self.peek(1) == Some('(') => {
                     self.at += 2;
-                    self.read(Some(')'));
+                    self.read(Some(')'), false);
                     words.push('$');
                 }
                 '$' if self.peek(1) == Some('\'') => {
@@ -257,7 +320,7 @@ impl Lexer {
                 }
                 '`' => {
                     self.at += 1;
-                    self.read(Some('`'));
+                    self.read(Some('`'), false);
                     words.push('$');
                 }
                 c => {
@@ -267,7 +330,7 @@ impl Lexer {
             }
         }
         words.end_command(&mut self.found, &mut self.piped);
-        self.bodies.append(&mut words.strings);
+        self.bodies.append(&mut words.bodies);
         self.depth -= 1;
     }
 
@@ -293,12 +356,12 @@ impl Lexer {
                 }
                 '$' if self.peek(1) == Some('(') => {
                     self.at += 2;
-                    self.read(Some(')'));
+                    self.read(Some(')'), false);
                     words.word.push('$');
                 }
                 '`' => {
                     self.at += 1;
-                    self.read(Some('`'));
+                    self.read(Some('`'), false);
                     words.word.push('$');
                 }
                 c => {
@@ -399,7 +462,7 @@ const KEYWORDS: &[&str] = &[
 ];
 
 /// Commands that run the command after them, with their options that take
-/// the next word as their value.
+/// the next word as their value; a command after any other is not read.
 const WRAPPERS: &[(&str, &[&str])] = &[
     ("env", &["-u", "--unset", "-C", "--chdir"]),
     ("command", &[]),
@@ -439,6 +502,12 @@ const WRAPPERS: &[(&str, &[&str])] = &[
     ("ionice", &["-c", "--class", "-n", "--classdata"]),
     ("setsid", &[]),
     ("caffeinate", &["-t", "-w"]),
+    ("coproc", &[]),
+    (
+        "flock",
+        &["-w", "--wait", "--timeout", "-E", "--conflict-exit-code"],
+    ),
+    ("watch", &["-n", "--interval", "-q", "--equexit"]),
     (
         "xargs",
         &[
@@ -475,7 +544,8 @@ impl Feed<'_> {
     /// Whether a word is not known before the command runs: made by an
     /// expansion, or put in place of the placeholder.
     fn unknown(&self, word: &str) -> bool {
-        word.contains(['$', '*', '?', '['])
+        word.contains(['$', '*', '?'])
+            || (word.contains('[') && word.contains(']'))
             || self
                 .placeholder
                 .is_some_and(|placeholder| word.contains(placeholder))
@@ -497,13 +567,11 @@ fn runs_a_hand_over(words: &[&str], depth: u32, piped: bool) -> bool {
 /// pull request.
 fn runs_fed<'a>(words: &[&'a str], depth: u32, piped: bool, mut feed: Feed<'a>) -> bool {
     let mut at = 0;
-    let mut configured = false;
     loop {
-        while let Some(word) = words
+        while words
             .get(at)
-            .filter(|word| is_assignment(word) || KEYWORDS.contains(word))
+            .is_some_and(|word| is_assignment(word) || KEYWORDS.contains(word))
         {
-            configured |= brings_in_config(word);
             at += 1;
         }
         let Some(first) = words.get(at) else {
@@ -543,25 +611,25 @@ fn runs_fed<'a>(words: &[&'a str], depth: u32, piped: bool, mut feed: Feed<'a>) 
                 if *wrapper == "command" && matches!(word, "-v" | "-V") {
                     return false;
                 }
-                if *wrapper == "env" && (word == "-S" || word == "--split-string") {
-                    let script = words[at..].join(" ");
-                    return hands_over_in(&script, depth + 1);
-                }
-                if let Some(split) = word.strip_prefix("-S").filter(|_| *wrapper == "env") {
-                    let script = [split].into_iter().chain(words[at..].iter().copied());
-                    return hands_over_in(&script.collect::<Vec<_>>().join(" "), depth + 1);
-                }
                 if valued.contains(&word) {
                     at += 1;
                 }
             }
-            if *wrapper == "timeout" {
-                at += 1;
+            match *wrapper {
+                "timeout" | "flock" => at += 1,
+                "coproc" if words.get(at + 1) == Some(&"{") => at += 1,
+                "watch" => return hands_over_in(&words[at..].join(" "), depth + 1),
+                _ => {}
+            }
+            if *wrapper == "flock" && matches!(words.get(at), Some(&("-c" | "--command"))) {
+                return words
+                    .get(at + 1)
+                    .is_some_and(|script| hands_over_in(script, depth + 1));
             }
             continue;
         }
         return match name {
-            "git" => configured || git_hands_over(rest, feed),
+            "git" => git_hands_over(rest, feed),
             "git-push" => !dry_run(rest, true),
             "git-send-pack" => !dry_run(rest, false),
             "gh" => {
@@ -572,7 +640,7 @@ fn runs_fed<'a>(words: &[&'a str], depth: u32, piped: bool, mut feed: Feed<'a>) 
                 match found.as_slice() {
                     [first, ..] if feed.unknown(first) => true,
                     ["pr", second, ..] if feed.unknown(second) => true,
-                    ["pr", "create" | "merge", ..] => true,
+                    ["pr", "create" | "new" | "merge", ..] => true,
                     ["api", path, ..] if feed.unknown(path) => feed.fed || sends(rest),
                     ["api", ..] => feed.fed || writes_a_pull_request(rest),
                     [] | ["pr"] => feed.fed,
@@ -580,23 +648,6 @@ fn runs_fed<'a>(words: &[&'a str], depth: u32, piped: bool, mut feed: Feed<'a>) 
                 }
             }
             "eval" => hands_over_in(&rest.join(" "), depth + 1),
-            "coproc" | "flock" | "watch" => runs_from_any_word(rest, depth, Feed::default()),
-            "parallel" => {
-                let placeholder = rest
-                    .iter()
-                    .enumerate()
-                    .find_map(|(at, word)| placeholder(word, rest.get(at + 1).copied()));
-                let feed = Feed {
-                    fed: true,
-                    placeholder,
-                };
-                let command = rest
-                    .iter()
-                    .position(|word| word.starts_with(":::"))
-                    .map_or(rest, |end| &rest[..end]);
-                runs_from_any_word(command, depth, feed)
-            }
-            "find" => found_execs(rest, depth),
             "source" | "." => rest
                 .first()
                 .is_some_and(|script| script_from_input(script, piped)),
@@ -609,20 +660,7 @@ fn runs_fed<'a>(words: &[&'a str], depth: u32, piped: bool, mut feed: Feed<'a>) 
     }
 }
 
-/// Whether an assignment before a command may give git configuration of
-/// its own, an alias among it: git's configuration variables, or the
-/// home, configuration directory or repository it reads configuration
-/// from.
-fn brings_in_config(word: &str) -> bool {
-    let name = word.split_once('=').map_or(word, |(name, _)| name);
-    (name.starts_with("GIT_CONFIG") && name != "GIT_CONFIG_NOSYSTEM")
-        || matches!(
-            name,
-            "HOME" | "XDG_CONFIG_HOME" | "GIT_DIR" | "GIT_COMMON_DIR"
-        )
-}
-
-/// The string xargs or parallel puts its input in place of, given by the
+/// The string xargs puts its input in place of, given by the
 /// option `word`, `next` the word after it: `-I` and its value, or `-i`
 /// and `--replace`, `{}` unless one is given with it.
 fn placeholder<'a>(word: &'a str, next: Option<&'a str>) -> Option<&'a str> {
@@ -645,48 +683,6 @@ fn script_from_input(script: &str, piped: bool) -> bool {
     script.starts_with("<(")
         || script.starts_with("/dev/fd/")
         || (piped && matches!(script, "-" | "/dev/stdin"))
-}
-
-/// How much deeper a command that runs another counts for than one read
-/// inside another, since what it runs is looked for from each of its
-/// words.
-const RUNS_ANOTHER: u32 = 4;
-
-/// Whether the words, from any one of them on, or any one of them as a
-/// string a shell runs, hand the work over: for a command that runs one
-/// after names, options and values this does not tell apart. The words
-/// parallel puts its arguments in with are left out, and for parallel the
-/// command is the words before its arguments, given the rest by `feed`.
-fn runs_from_any_word<'a>(words: &[&'a str], depth: u32, feed: Feed<'a>) -> bool {
-    let depth = depth + RUNS_ANOTHER;
-    if depth > DEEPEST {
-        return true;
-    }
-    let words: Vec<&str> = words
-        .iter()
-        .copied()
-        .filter(|word| !word.starts_with(":::") && !(word.starts_with('{') && word.ends_with('}')))
-        .collect();
-    (0..words.len())
-        .any(|at| runs_fed(&words[at..], depth, false, feed) || hands_over_in(words[at], depth + 1))
-}
-
-/// Whether a command find runs for what it finds hands the work over.
-fn found_execs(words: &[&str], depth: u32) -> bool {
-    let depth = depth + RUNS_ANOTHER;
-    if depth > DEEPEST {
-        return true;
-    }
-    words.iter().enumerate().any(|(at, word)| {
-        matches!(*word, "-exec" | "-execdir" | "-ok" | "-okdir") && {
-            let run = &words[at + 1..];
-            let end = run
-                .iter()
-                .position(|word| matches!(*word, ";" | "+"))
-                .unwrap_or(run.len());
-            runs_a_hand_over(&run[..end], depth, false)
-        }
-    })
 }
 
 /// A shell's options that take the next word as their value.
@@ -735,10 +731,10 @@ fn shell_string<'a>(words: &[&'a str]) -> Option<&'a str> {
 
 /// Whether git's words hand the work over, given what `feed` says.
 fn git_hands_over(words: &[&str], feed: Feed) -> bool {
-    if gives_an_alias(words) {
+    let at = subcommands(words, GIT_VALUED);
+    if gives_an_alias(&words[..at.first().map_or(words.len(), |&at| at)]) {
         return true;
     }
-    let at = subcommands(words, GIT_VALUED);
     let found: Vec<String> = at
         .iter()
         .map(|&at| words[at].to_ascii_lowercase())
@@ -755,7 +751,7 @@ fn git_hands_over(words: &[&str], feed: Feed) -> bool {
     }
 }
 
-/// Whether git's words give it an alias of their own, with `-c` or
+/// Whether git's own options give it an alias, with `-c` or
 /// `--config-env`, the key in any case, or configuration an alias may be
 /// in, with an include.
 fn gives_an_alias(words: &[&str]) -> bool {
