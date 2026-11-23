@@ -246,16 +246,22 @@ plain words, and once another is chosen it comes back only in a new
 session.
 
 Apart from its mode, a session can read only, as the agent it works as
-sets it. Claude Code is then refused its own tools that change files,
-Edit, Write, MultiEdit and NotebookEdit, whatever the mode allows. Its
-tools that only read, and a subagent, whose own calls are held to the same,
-are left to the mode. Any other tool, a command, a server's tool or the
-workbench's own start and send among them, is put to the user whatever
-the mode or the allow rules say, and the ask says the session reads only
-and that allowing it lets the session change files. Codex runs each turn
-in its read-only sandbox, and its asks to change files are turned down
-without asking the user. Its other asks, a command to run outside the
-sandbox or a server's tool, reach the user saying the same. Reading only can be turned on and off while the session
+sets it. The agent is told it reads only and is to change no files, by
+editing them or by a command it runs, and Claude Code is refused its own
+tools that change files, Edit, Write, MultiEdit and NotebookEdit, whatever
+the mode allows. A command it runs is left to the mode, as are its tools
+that only read, a subagent, whose own calls are held to the same, and the
+workbench's own tools that only read or wait, such as notes, sessions,
+read, wait and selection. Any other tool, a server's tool or the
+workbench's own start, send and note among them, is put to the user
+whatever the mode or the allow rules say, and the ask says the session
+reads only and that allowing it lets the session change files. Codex runs
+each turn in its read-only sandbox, in which a command that only reads
+runs as it would, and its asks to change files are turned down without
+asking the user. A command to run outside the sandbox is asked about as
+the mode asks. An ask to widen the sandbox, and a server's tool other than
+the workbench's own that only read or wait, reach the user saying the
+session reads only. Reading only can be turned on and off while the session
 runs, and the window hears which.
 
 ## What a new session starts on
