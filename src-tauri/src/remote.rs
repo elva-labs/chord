@@ -222,6 +222,7 @@ pub fn homeward(host: &str, event: &str, mut payload: Value) -> Value {
         }
         chord_core::show::TERMINAL_REQUEST
         | chord_core::show::NOTIFY_REQUEST
+        | chord_core::show::NAME_REQUEST
         | chord_core::show::CONDUCT_REQUEST
         | chord_core::show::CONDUCT_CANCEL
         | chord_core::show::BROWSER_REQUEST
