@@ -4145,3 +4145,103 @@ fn a_push_asked_for_in_a_held_run_is_declined_and_the_user_told_why() {
     let asked = read(&mut outside, ask(0, "git push"));
     assert!(asked.writes.is_empty(), "a session in no run pushes");
 }
+
+#[test]
+fn a_lead_whose_run_holds_the_hand_over_goes_on_once_in_a_turn_of_its_own() {
+    let (home, _folder) = crate::run::tests::started(
+        "codex-stop",
+        crate::team::QUICK_FIX,
+        &[("rev", "Reviewer", true)],
+    );
+    let ended = |events: &[Event]| {
+        events
+            .iter()
+            .filter(|event| matches!(event, Event::TurnEnded { .. }))
+            .count()
+    };
+    let mut driver = ready();
+    driver.run = Some((home.to_path_buf(), "lead".into()));
+    turn(&mut driver, M1);
+    let reading = read(&mut driver, completed("completed"));
+    assert_eq!(ended(&reading.events), 0, "{:?}", reading.events);
+    let writes = written(&reading.writes);
+    let going = writes
+        .iter()
+        .find(|line| line["method"] == "turn/start")
+        .expect("the lead goes on");
+    let said = going["params"]["input"][0]["text"].as_str().unwrap();
+    assert!(said.starts_with("Handing over is held: "), "{said}");
+
+    let done = |turn: &str, status: &str| {
+        notification(
+            "turn/completed",
+            json!({"threadId": THREAD, "turn": {"id": turn, "status": status, "items": [],
+                   "durationMs": 10, "error": null}}),
+        )
+    };
+    // A message's turn under an id of its own, as Codex gives each.
+    let begun = |driver: &mut AppServer, turn: &str| {
+        let line: Value = serde_json::from_str(&driver.message(M1, "go", &[]).unwrap()).unwrap();
+        events(
+            driver,
+            &[
+                json!({"id": line["id"], "result": {"turn": {"id": turn, "status": "inProgress", "items": []}}}),
+                notification(
+                    "turn/started",
+                    json!({"threadId": THREAD, "turn": {"id": turn, "status": "inProgress", "items": []}}),
+                ),
+            ],
+        );
+    };
+    let started = events(
+        &mut driver,
+        &[
+            json!({"id": going["id"], "result": {"turn": {"id": "turn-2", "status": "inProgress", "items": []}}}),
+            notification(
+                "turn/started",
+                json!({"threadId": THREAD, "turn": {"id": "turn-2", "status": "inProgress", "items": []}}),
+            ),
+        ],
+    );
+    assert!(
+        !started
+            .iter()
+            .any(|event| matches!(event, Event::TurnStarted { .. })),
+        "the window sees one turn: {started:?}"
+    );
+    let reading = read(&mut driver, done("turn-2", "completed"));
+    assert_eq!(ended(&reading.events), 1, "{:?}", reading.events);
+    assert!(
+        reading.writes.is_empty(),
+        "a lead that stops again is not kept going"
+    );
+
+    begun(&mut driver, "turn-3");
+    let reading = read(&mut driver, done("turn-3", "interrupted"));
+    assert_eq!(ended(&reading.events), 1, "an interrupted turn ends");
+
+    begun(&mut driver, "turn-4");
+    let reading = read(&mut driver, done("turn-4", "completed"));
+    let going = written(&reading.writes)
+        .into_iter()
+        .find(|line| line["method"] == "turn/start")
+        .unwrap();
+    let reading = read(
+        &mut driver,
+        json!({"id": going["id"], "error": {"code": -32600, "message": "busy"}}),
+    );
+    assert_eq!(
+        ended(&reading.events),
+        1,
+        "a turn that does not start leaves the held one ended"
+    );
+
+    crate::run::waive(&home, "lead", 1, "Checked it myself.").unwrap();
+    begun(&mut driver, "turn-5");
+    let reading = read(&mut driver, done("turn-5", "completed"));
+    assert_eq!(ended(&reading.events), 1, "a waived gate holds nothing");
+    assert!(reading
+        .writes
+        .iter()
+        .all(|line| !line.contains("turn/start")));
+}
