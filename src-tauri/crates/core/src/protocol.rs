@@ -385,6 +385,13 @@ struct RunParams {
 }
 
 #[derive(Deserialize)]
+struct RunWaiveParams {
+    token: String,
+    gate: i64,
+    reason: String,
+}
+
+#[derive(Deserialize)]
 struct NotesForgetParams {
     tokens: Vec<String>,
 }
@@ -1039,6 +1046,14 @@ pub fn dispatch(
             let p: RunParams = parse(params)?;
             value(core.run_end(&p.token)?)
         }
+        "run_state" => {
+            let p: RunParams = parse(params)?;
+            value(core.run_state(&p.token)?)
+        }
+        "run_waive" => {
+            let p: RunWaiveParams = parse(params)?;
+            value(core.run_waive(&p.token, p.gate, &p.reason)?)
+        }
         "usage_log" => {
             let p: UsageLogParams = parse(params)?;
             let transcript = p.transcript.as_ref().map(|of| crate::api::UsageTranscript {
@@ -1649,6 +1664,29 @@ mod tests {
         let ended = dispatch(&core, "run_end", json!({ "token": "lead" }), no_output).unwrap();
         assert_eq!(ended, json!(false));
         let missing = dispatch(&core, "run_end", json!({}), no_output).unwrap_err();
+        assert!(missing.contains("bad parameters"), "{missing}");
+    }
+
+    #[test]
+    fn a_run_is_read_and_waived_by_method_and_a_session_in_none_has_none() {
+        let core = core();
+        let read = dispatch(&core, "run_state", json!({ "token": "lead" }), no_output).unwrap();
+        assert_eq!(read, Value::Null);
+        let waived = dispatch(
+            &core,
+            "run_waive",
+            json!({ "token": "lead", "gate": 1, "reason": "Checked it." }),
+            no_output,
+        )
+        .unwrap_err();
+        assert!(waived.contains("no run"), "{waived}");
+        let missing = dispatch(
+            &core,
+            "run_waive",
+            json!({ "token": "lead", "gate": 1 }),
+            no_output,
+        )
+        .unwrap_err();
         assert!(missing.contains("bad parameters"), "{missing}");
     }
 

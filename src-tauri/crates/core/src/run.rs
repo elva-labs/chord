@@ -148,6 +148,7 @@ pub fn agent_version(own: &[Agent], title: &str) -> Option<String> {
 
 /// A run as it began.
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Run {
     pub lead: String,
     pub team: Team,
@@ -160,6 +161,7 @@ pub struct Run {
 
 /// A session the lead started in the run.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Member {
     pub token: String,
     pub lead: String,
@@ -180,6 +182,7 @@ pub struct Member {
 
 /// A gate of the run: one of the team's, or one the lead added.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct RunGate {
     /// Its place in the run, from 1.
     pub id: i64,
@@ -192,6 +195,7 @@ pub struct RunGate {
 
 /// One version of the plan.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Plan {
     pub version: i64,
     pub text: String,
@@ -202,6 +206,7 @@ pub struct Plan {
 
 /// A verdict given on a gate.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Verdict {
     pub id: i64,
     pub gate: i64,
@@ -224,6 +229,7 @@ pub struct Verdict {
 
 /// The user's waiver of a gate, for this run.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Waiver {
     pub gate: i64,
     pub reason: String,
@@ -295,10 +301,29 @@ pub struct Place {
     /// The tree of the commit the folder's branch is on.
     pub head: Option<String>,
     /// The folder's tree, or why it could not be read.
+    #[serde(serialize_with = "outcome")]
     pub tree: Result<String, String>,
     /// The paths changed there since the base, or why they could not be
     /// read.
+    #[serde(serialize_with = "outcome")]
     pub changed: Result<Vec<String>, String>,
+}
+
+/// A reading that may have failed, as `{"ok": ...}` or `{"error": why}`.
+fn outcome<T: Serialize, S: serde::Serializer>(
+    read: &Result<T, String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    enum Outcome<'a, T> {
+        Ok(&'a T),
+        Error(&'a str),
+    }
+    match read {
+        Ok(value) => Outcome::Ok(value).serialize(serializer),
+        Err(why) => Outcome::<T>::Error(why).serialize(serializer),
+    }
 }
 
 impl Place {
@@ -1229,6 +1254,43 @@ pub fn state_of(home: &Path, token: &str) -> Result<Option<State>, String> {
     match runs.lead_of(token)? {
         Some(lead) => state(home, &lead),
         None => Ok(None),
+    }
+}
+
+/// The lead of the run the session a token names is in, as its lead or a
+/// member, or none.
+pub fn lead_of(home: &Path, token: &str) -> Result<Option<String>, String> {
+    match Runs::existing(home)? {
+        Some(runs) => runs.lead_of(token),
+        None => Ok(None),
+    }
+}
+
+/// A run as the window reads it: how it stands, with the lines it shows
+/// for it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct View {
+    #[serde(flatten)]
+    pub state: State,
+    /// The line above the composer. See [`State::line`].
+    pub line: String,
+    pub building_held: Option<String>,
+    pub handing_over_held: Option<String>,
+    pub uncommitted_held: Option<String>,
+    pub waits_for_the_user: bool,
+}
+
+impl From<State> for View {
+    fn from(state: State) -> View {
+        View {
+            line: state.line(),
+            building_held: state.building_held(),
+            handing_over_held: state.handing_over_held(),
+            uncommitted_held: state.uncommitted_held(),
+            waits_for_the_user: state.waits_for_the_user(),
+            state,
+        }
     }
 }
 

@@ -1208,3 +1208,57 @@ fn ending_with_no_store_makes_none() {
     assert!(!end(home.path(), "lead").unwrap());
     assert!(!folder(home.path()).join(FILE).exists());
 }
+
+#[test]
+fn the_window_reads_a_run_in_camel_case_with_its_lines_from_any_of_its_sessions() {
+    let (home, _dir) = started("view", SHIP_WITH_CHECKS, &[("rev", REVIEWER, true)]);
+    assert_eq!(
+        lead_of(home.path(), "rev").unwrap().as_deref(),
+        Some("lead")
+    );
+    assert_eq!(
+        lead_of(home.path(), "lead").unwrap().as_deref(),
+        Some("lead")
+    );
+    assert_eq!(lead_of(home.path(), "stranger").unwrap(), None);
+
+    let state = state_of(home.path(), "rev").unwrap().unwrap();
+    let line = state.line();
+    let value = serde_json::to_value(View::from(state)).unwrap();
+    assert_eq!(value["line"], line);
+    assert_eq!(value["run"]["lead"], "lead");
+    assert!(value["handingOverHeld"].is_string(), "{value}");
+    assert_eq!(value["waitsForTheUser"], false);
+    let gate = &value["gates"][0];
+    assert_eq!(gate["standing"], "waiting");
+    assert_eq!(gate["atLimit"], false);
+    assert!(gate["gate"]["who"].is_string(), "{gate}");
+    let place = &value["places"][0];
+    assert!(place["tree"]["ok"].is_string(), "{place}");
+    assert!(place["changed"]["ok"].is_array(), "{place}");
+}
+
+#[test]
+fn a_place_that_cannot_be_read_says_why_in_its_own_field() {
+    let place = Place {
+        folder: PathBuf::from("/gone"),
+        base: None,
+        head: None,
+        tree: Err("no such folder".into()),
+        changed: Err("no such folder".into()),
+    };
+    let value = serde_json::to_value(&place).unwrap();
+    assert_eq!(
+        value["tree"],
+        serde_json::json!({ "error": "no such folder" })
+    );
+    assert_eq!(value["changed"]["error"], "no such folder");
+}
+
+#[test]
+fn a_lead_reads_no_run_once_it_ended() {
+    let (home, _dir) = started("view-ended", SHIP_WITH_CHECKS, &[("rev", REVIEWER, true)]);
+    assert!(end(home.path(), "lead").unwrap());
+    assert_eq!(lead_of(home.path(), "rev").unwrap(), None);
+    assert_eq!(lead_of(Path::new("/nowhere-at-all"), "lead").unwrap(), None);
+}

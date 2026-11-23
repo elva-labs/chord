@@ -1426,6 +1426,50 @@ async fn run_end(
     .await
 }
 
+/// The run a session of a project is in, as its lead or a member, where
+/// it is.
+#[tauri::command]
+async fn run_state(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    token: String,
+) -> Result<Value, String> {
+    let sent = token.clone();
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "run_state",
+        move |_| json!({ "token": sent }),
+        move |core, _| core.run_state(&token),
+    )
+    .await
+}
+
+/// The user's waiver of a gate of the run a session of a project is in,
+/// with why, where it is.
+#[tauri::command]
+async fn run_waive(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    project: String,
+    token: String,
+    gate: i64,
+    reason: String,
+) -> Result<Value, String> {
+    let (sent, said) = (token.clone(), reason.clone());
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "run_waive",
+        move |_| json!({ "token": sent, "gate": gate, "reason": said }),
+        move |core, _| core.run_waive(&token, gate, &reason),
+    )
+    .await
+}
+
 /// Lets go of the notes of sessions of a project, where it is.
 #[tauri::command]
 async fn notes_forget(
@@ -2527,6 +2571,8 @@ pub fn run() {
             notes_kept,
             notes_briefing,
             run_end,
+            run_state,
+            run_waive,
             notes_forget,
             usage_log,
             going_on,

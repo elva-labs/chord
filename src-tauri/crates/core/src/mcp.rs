@@ -2190,11 +2190,21 @@ fn strings_of(arguments: &Value, key: &str) -> Result<Option<Vec<String>>, Strin
     }
 }
 
+/// Tells the window the run of the session a token names changed, so it
+/// reads it again. Where that cannot be written, the window reads the run
+/// as it stands the next time it looks.
+fn run_changed(home: &Path, token: &str) {
+    if let Ok(Some(lead)) = crate::run::lead_of(home, token) {
+        let _ = show::append(home, &Request::Run(show::RunChanged { lead }));
+    }
+}
+
 fn plan_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
     let lead = session.ok_or(crate::run::ONLY_THE_LEAD)?;
     let text = arguments.get("text").and_then(Value::as_str).unwrap_or("");
     let paths = strings_of(arguments, "paths")?.unwrap_or_default();
     let plan = crate::run::plan(home, lead, text, &paths)?;
+    run_changed(home, lead);
     Ok(said(format!(
         "Kept as version {} of the plan.\n\n{}",
         plan.version,
@@ -2207,6 +2217,7 @@ fn gate_add_call(home: &Path, session: Option<&str>, arguments: &Value) -> Resul
     let who = arguments.get("who").and_then(Value::as_str).unwrap_or("");
     let when = when_of(arguments, "when")?;
     let gate = crate::run::gate_add(home, lead, who, when, strings_of(arguments, "touches")?)?;
+    run_changed(home, lead);
     Ok(said(format!(
         "Added gate #{}: {} approves {}.\n\n{}",
         gate.id,
@@ -2253,6 +2264,7 @@ fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result
         None => None,
     };
     let gates = crate::run::verdict(home, token, read, approved, findings, version.as_deref())?;
+    run_changed(home, token);
     let stands: Vec<String> = gates.iter().map(gate_line).collect();
     Ok(said(format!("Kept.\n{}", stands.join("\n"))))
 }
@@ -4605,5 +4617,18 @@ mod tests {
             json!({ "who": "Tester", "when": "later" }),
         );
         assert_eq!(text_of(&wrong), "when is plan or change.");
+
+        // The plan, the verdict and the gate each told the window the
+        // lead's run changed; the refused calls told it nothing.
+        let log = std::fs::read_to_string(show::requests_path(&home)).unwrap();
+        let told: Vec<_> = log
+            .lines()
+            .filter_map(show::classify)
+            .filter_map(|request| match request {
+                Request::Run(changed) => Some(changed.lead),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(told, ["lead", "lead", "lead"]);
     }
 }

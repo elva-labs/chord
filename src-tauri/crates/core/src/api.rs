@@ -1105,12 +1105,18 @@ impl Core {
                 .team_named(name)
                 .ok_or_else(|| format!("There is no team named {name}."))?;
             crate::run::begin(home, lead, &team, folder)?;
+            self.run_changed(lead);
         }
         let Some(joining) = &run.joining else {
             return Ok(None);
         };
         let token = token.unwrap_or_default();
         let joined = crate::run::join_from(home, joining, token, folder, session, run.reads_only)?;
+        if joined.is_some() {
+            if let Ok(Some(lead)) = crate::run::lead_of(home, token) {
+                self.run_changed(&lead);
+            }
+        }
         Ok(joined.map(|_| Joined {
             home: home.to_path_buf(),
             joining: joining.clone(),
@@ -2053,7 +2059,44 @@ impl Core {
     /// one. See [`crate::run::end`].
     pub fn run_end(&self, token: &str) -> Result<bool, String> {
         let home = self.home.as_deref().ok_or("no home directory")?;
-        crate::run::end(home, token)
+        let ended = crate::run::end(home, token)?;
+        if ended {
+            self.run_changed(token);
+        }
+        Ok(ended)
+    }
+
+    /// The run the session with this token is in, as its lead or a member,
+    /// as the window reads it, or none.
+    pub fn run_state(&self, token: &str) -> Result<Option<crate::run::View>, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        Ok(crate::run::state_of(home, token)?.map(crate::run::View::from))
+    }
+
+    /// The user's waiver of a gate of the run the session with this token
+    /// is in, with why. See [`crate::run::waive`].
+    pub fn run_waive(
+        &self,
+        token: &str,
+        gate: i64,
+        reason: &str,
+    ) -> Result<crate::run::Waiver, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        let lead = crate::run::lead_of(home, token)?.ok_or("That session is in no run.")?;
+        let waiver = crate::run::waive(home, &lead, gate, reason)?;
+        self.run_changed(&lead);
+        Ok(waiver)
+    }
+
+    /// Tells the window a run changed, so it reads it again.
+    fn run_changed(&self, lead: &str) {
+        events::emit(
+            &self.sink,
+            crate::show::RUN_CHANGED,
+            &crate::show::RunChanged {
+                lead: lead.to_string(),
+            },
+        );
     }
 
     /// Lets go of the notes of these sessions.
@@ -3402,6 +3445,40 @@ mod tests {
             Some(briefing.clone())
         );
         assert!(none.paths.is_empty());
+    }
+
+    #[test]
+    fn the_user_waives_a_gate_from_any_session_of_the_run_and_the_window_hears_it() {
+        let (home, _dir) = crate::run::tests::started(
+            "api-waive",
+            crate::team::SHIP_WITH_CHECKS,
+            &[("rev", crate::team::REVIEWER, true)],
+        );
+        let recorder = Arc::new(Recorder::default());
+        let core = Core::at_home(recorder.clone(), Some(home.to_path_buf()));
+        let gate = core.run_state("rev").unwrap().unwrap().state.gates[0]
+            .gate
+            .id;
+        assert!(core.run_waive("rev", gate, " ").is_err());
+        let waiver = core.run_waive("rev", gate, "Checked it myself.").unwrap();
+        assert_eq!(waiver.reason, "Checked it myself.");
+        let view = core.run_state("lead").unwrap().unwrap();
+        assert_eq!(view.state.gates[0].standing, crate::run::Standing::Waived);
+        assert!(core.run_end("lead").unwrap());
+        assert!(core.run_state("lead").unwrap().is_none());
+        assert!(core.run_waive("lead", gate, "Again.").is_err());
+        let heard: Vec<_> = recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(event, _)| event == crate::show::RUN_CHANGED)
+            .map(|(_, payload)| payload["lead"].clone())
+            .collect();
+        assert_eq!(
+            heard,
+            vec![serde_json::json!("lead"), serde_json::json!("lead")]
+        );
     }
 
     #[cfg(unix)]
