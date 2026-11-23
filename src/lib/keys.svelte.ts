@@ -365,18 +365,19 @@ const MODIFIER_NAMES = new Set(["mod", "cmd", "command", "ctrl", "control", "met
  * platform modifier is part of every chord, so writing it is allowed and
  * changes nothing. A sequence is its two steps with a space between, such
  * as `ctrl+x s`: a modifier written on the second step holds it with the
- * first step's, and on macOS `ctrl` on the first step holds that with Ctrl
- * in place of Cmd. Null for text that is not one chord.
+ * first step's. On macOS `ctrl` holds Ctrl in place of Cmd, which only a
+ * sequence's first step may, so `ctrl+x` alone reads as that and binding it
+ * is refused with the reason. Null for text that is not one chord.
  */
 export function parseChord(text: string, mac: boolean = onMac): Chord | null {
   const steps = text.trim().split(/(?<!\+)\s+(?!\+)/);
   const first = parseStep(steps[0]);
   if (first === null) return null;
   const chord: Chord = { key: first.key, shift: first.shift, alt: first.alt };
+  if (mac && first.ctrl) chord.ctrl = true;
   if (steps.length === 1) return chord;
   const second = parseStep(steps[1]);
   if (second === null || steps.length > 2) return null;
-  if (mac && first.ctrl) chord.ctrl = true;
   chord.then = { key: second.key, shift: second.shift, alt: second.alt };
   if (second.modifier) chord.then.modifier = true;
   return chord;

@@ -46,6 +46,12 @@ describe("a sequence under way", () => {
     expect(sequenceKey({ key: "s" }, ctx)).toBeNull();
   });
 
+  it("lets Escape through to a terminal, ending the wait", () => {
+    sequenceKey(ctrlX, ctx);
+    expect(sequenceKey({ key: "Escape" }, { ...ctx, terminal: true })).toBeNull();
+    expect(pendingStep()).toBeNull();
+  });
+
   it("lets a second key that completes nothing through", () => {
     sequenceKey(ctrlX, ctx);
     expect(sequenceKey({ key: "d" }, ctx)).toBeNull();

@@ -531,7 +531,7 @@ describe("sequences", () => {
   const ctrlS: KeyState = { key: "s", ctrlKey: true };
   const s: KeyState = { key: "s" };
   const first = { key: "x", shift: false, alt: false, ctrl: true };
-  const step = (e: KeyState, pending: typeof first | null, ctx: Partial<SequenceContext> = {}) =>
+  const step = (e: KeyState, pending: Parameters<typeof resolveSequence>[1], ctx: Partial<SequenceContext> = {}) =>
     resolveSequence(e, pending, { focus: "agent", reviewing: false, integrated: true, mac: true, ...ctx });
 
   it("begins on Ctrl+X and sends now on S", () => {
@@ -541,8 +541,14 @@ describe("sequences", () => {
 
   it("ends on any other second key, which then goes where it would have gone", () => {
     expect(step({ key: "d" }, first)).toEqual({ type: "end" });
-    expect(step(ctrlS, first)).toEqual({ type: "end" });
     expect(step({ key: "s", metaKey: true }, first)).toEqual({ type: "end" });
+  });
+
+  it("completes with Ctrl held on through the second key, unless a sequence has that key with it", () => {
+    expect(step(ctrlS, first)).toEqual({ type: "complete", action: "send.now" });
+    setBinding("review", { ...first, then: { key: "s", shift: false, alt: false, modifier: true } });
+    expect(step(ctrlS, first)).toEqual({ type: "complete", action: "review" });
+    expect(step(s, first)).toEqual({ type: "complete", action: "send.now" });
   });
 
   it("is cancelled by Escape, and waits past a modifier pressed alone", () => {
@@ -565,12 +571,18 @@ describe("sequences", () => {
     expect(step(ctrlX, null, { mac: false })).toEqual({ type: "begin", first: { key: "x", shift: false, alt: false } });
   });
 
-  it("begins a Cmd prefix on macOS in a terminal too", () => {
+  it("begins a Cmd prefix on macOS in a terminal too, and lets Escape through to it", () => {
     setBinding("send.now", { key: "k", shift: false, alt: false, then: { key: "s", shift: false, alt: false } });
-    expect(step({ key: "k", metaKey: true }, null, { integrated: false })).toEqual({
-      type: "begin",
-      first: { key: "k", shift: false, alt: false },
-    });
+    const cmdK = { key: "k", shift: false, alt: false };
+    expect(step({ key: "k", metaKey: true }, null, { integrated: false })).toEqual({ type: "begin", first: cmdK });
+    expect(step({ key: "Escape" }, cmdK, { integrated: false })).toEqual({ type: "end" });
+    expect(step({ key: "Escape" }, cmdK, { focus: "sessions", terminal: true })).toEqual({ type: "end" });
+  });
+
+  it("takes a key in a terminal's field as in a terminal, whatever the pane in focus", () => {
+    expect(step(ctrlX, null, { focus: "sessions", terminal: true })).toBeNull();
+    resetKeys({ mac: false });
+    expect(step(ctrlX, null, { mac: false, focus: "changes", terminal: true })).toBeNull();
   });
 
   it("lets a text field cut with a selection, and begins without one", () => {

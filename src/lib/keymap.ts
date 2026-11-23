@@ -11,6 +11,7 @@ import {
   secondStepFromEvent,
   type ActionKey,
   type Chord,
+  type SecondStep,
 } from "$lib/keys.svelte";
 import { isMac } from "$lib/platform";
 
@@ -192,11 +193,13 @@ export interface SequenceContext extends KeyContext {
   field?: Field;
   /** Whether that field has text selected. */
   selection?: boolean;
+  /** Whether the key goes to a terminal, whatever the pane in focus. */
+  terminal?: boolean;
 }
 
 /** What a key does to sequences: begins one, completes one with an action,
-    ends one on Escape, ends one and goes on where it would have gone, or
-    has nothing to do with them. */
+    ends one on Escape, ends one and goes on where it would have gone (Escape
+    in a terminal among them), or has nothing to do with them. */
 export type SequenceStep =
   | { type: "begin"; first: Chord }
   | { type: "complete"; action: ActionKey }
@@ -220,6 +223,14 @@ export function editsThere(first: Chord, field: Field, selection: boolean): bool
   return false;
 }
 
+/** The action whose sequence is `first` then `second` exactly, if one is. */
+function completes(table: typeof keys.bindings, first: Chord, second: SecondStep): ActionKey | null {
+  for (const [action, chord] of Object.entries(table) as [ActionKey, Chord][]) {
+    if (chord.then !== undefined && sameChord(chord, { ...first, then: second })) return action;
+  }
+  return null;
+}
+
 /**
  * What a key does to sequences, given the first step pressed before it, if
  * one waits. The caller keeps that first step, and drops it once
@@ -232,14 +243,20 @@ export function resolveSequence(
 ): SequenceStep {
   const mac = ctx.mac ?? isMac();
   const table = keys.bindings;
+  const terminal =
+    ctx.terminal === true || (isTerminal(ctx.focus) && !(ctx.focus === "agent" && ctx.integrated));
   if (pending !== null) {
-    if (e.key === "Escape") return { type: "cancel" };
+    if (e.key === "Escape") return terminal ? { type: "end" } : { type: "cancel" };
     const second = secondStepFromEvent(e, pending, mac);
     if (second === undefined) return null;
     if (second !== null) {
-      for (const [action, chord] of Object.entries(table) as [ActionKey, Chord][]) {
-        if (chord.then === undefined || !sameFirst(chord, pending)) continue;
-        if (sameChord(chord, { ...pending, then: second })) return { type: "complete", action };
+      const action = completes(table, pending, second);
+      if (action !== null) return { type: "complete", action };
+      // The first step's modifier held on through the second key, when no
+      // sequence has that second step with it.
+      if (second.modifier) {
+        const plain = completes(table, pending, { key: second.key, shift: second.shift, alt: second.alt });
+        if (plain !== null) return { type: "complete", action: plain };
       }
     }
     return { type: "end" };
@@ -249,7 +266,6 @@ export function resolveSequence(
   if (!Object.values(table).some((chord) => chord.then !== undefined && sameFirst(chord, first))) {
     return null;
   }
-  const terminal = isTerminal(ctx.focus) && !(ctx.focus === "agent" && ctx.integrated);
   if (terminal && (first.ctrl || !mac)) return null;
   if (editsThere(first, ctx.field ?? null, ctx.selection ?? false)) return null;
   return { type: "begin", first };

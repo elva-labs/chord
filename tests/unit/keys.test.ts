@@ -425,6 +425,14 @@ describe("a shortcut of two steps", () => {
     }
   });
 
+  it("reads Ctrl alone on macOS as Ctrl, which is refused with the reason, not as Cmd", () => {
+    resetKeys({ mac: true });
+    const alone = parseChord("ctrl+g", true)!;
+    expect(alone).toEqual({ key: "g", shift: false, alt: false, ctrl: true });
+    expect(tableProblem({ ...keys.bindings, review: alone })).toMatch(/agent's on macOS/);
+    expect(parseChord("ctrl+g", false)).toEqual({ key: "g", shift: false, alt: false });
+  });
+
   it("spells a second step with the modifier only when it holds it", () => {
     const k = { key: "k", shift: false, alt: false };
     expect(spell({ ...k, then: { ...k, key: "s", modifier: true } }, true)).toBe("⌘K ⌘S");

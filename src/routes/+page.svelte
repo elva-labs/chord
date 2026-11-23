@@ -92,9 +92,9 @@
     type Field,
   } from "$lib/keymap";
   import { endSequence, pendingStep, sequenceKey } from "$lib/sequence";
-  import { sendNow } from "$lib/integrated.svelte";
+  import { sendNow, sendNowBlocked } from "$lib/integrated.svelte";
   import { leaveAsked, watchRunning } from "$lib/leaving.svelte";
-  import { keys } from "$lib/keys.svelte";
+  import { firstStepFromEvent, keys, sameFirst } from "$lib/keys.svelte";
   import { say } from "$lib/flash.svelte";
   import { closeSettings, openSettings, settings } from "$lib/settings.svelte";
   import { cycleTheme, theme } from "$lib/theme.svelte";
@@ -880,7 +880,10 @@
       endSequence();
       return;
     }
-    if (e.repeat && pendingStep() !== null) {
+    // The first step held down repeats; that waits on, as one press.
+    const held = pendingStep();
+    const step = e.repeat && held !== null ? firstStepFromEvent(e) : null;
+    if (held !== null && step !== null && sameFirst(step, held)) {
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -891,6 +894,7 @@
       editing,
       inEditor: editing && editorHasKeyboard(),
       integrated: activeSession()?.kind === "integrated",
+      terminal: e.target instanceof Element && e.target.closest(".xterm") !== null,
       ...fieldOf(e.target),
     });
     if (result === null) return;
@@ -1068,10 +1072,16 @@
         else openCommands();
         break;
       case "sendNow": {
-        // The button's own: what waits goes now, in the order sent, and
-        // with nothing to send it does nothing.
+        // The button's own: what waits goes now, in the order sent. When
+        // nothing can go, the status bar says why.
         const session = activeSession();
-        if (session?.kind === "integrated") void sendNow(session.key);
+        if (session?.kind !== "integrated") {
+          say("Only an in-Chord session sends waiting messages");
+          break;
+        }
+        const reason = sendNowBlocked(session.key);
+        if (reason !== null) say(reason);
+        else void sendNow(session.key);
         break;
       }
       default:

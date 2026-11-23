@@ -124,8 +124,9 @@
   /** The action whose shortcut is being recorded, if any. */
   let recording = $state<ActionKey | null>(null);
   /** The action and first step just recorded, while a second key may
-      still follow to make a sequence of them. */
-  let following = $state<{ action: ActionKey; first: Chord } | null>(null);
+      still follow to make a sequence of them, and what is wrong with the
+      first step alone, shown only if it stays alone. */
+  let following = $state<{ action: ActionKey; first: Chord; problem: string | null } | null>(null);
   let followTimer: ReturnType<typeof setTimeout> | null = null;
   let problem = $state<{ action: ActionKey; text: string } | null>(null);
 
@@ -362,9 +363,23 @@
     following = null;
   }
 
+  /** No second key came: the first step stays alone, with its problem. */
+  function endFollowing() {
+    const ended = following;
+    stopFollowing();
+    if (ended?.problem != null) problem = { action: ended.action, text: ended.problem };
+  }
+
   function bind(action: ActionKey, chord: Chord) {
     const text = setBinding(action, chord);
     problem = text === null ? null : { action, text };
+  }
+
+  /** Keys that are never a second step: they end the recording and do what
+      they always do, move on, close, or open and close the settings. */
+  function endsRecording(e: KeyboardEvent): boolean {
+    if (e.key === "Tab" || e.key === "Escape") return true;
+    return (e.metaKey || e.ctrlKey) && ["w", ","].includes(e.key.toLowerCase());
   }
 
   $effect(() => stopFollowing);
@@ -382,27 +397,29 @@
       if (first === null) return;
       // The chord is bound as it is, and for as long as a sequence waits a
       // second key makes a sequence of it instead.
+      // What is wrong with it alone waits until no second key comes.
       const action = recording;
       recording = null;
-      bind(action, first);
-      following = { action, first };
-      followTimer = setTimeout(stopFollowing, SEQUENCE_TIMEOUT);
+      problem = null;
+      following = { action, first, problem: setBinding(action, first) };
+      followTimer = setTimeout(endFollowing, SEQUENCE_TIMEOUT);
       return;
     }
-    if (following !== null) {
-      // Escape keeps the chord already bound and the settings open.
+    if (following !== null && endsRecording(e)) {
+      endFollowing();
+    } else if (following !== null) {
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === "Escape") {
-        stopFollowing();
-        return;
-      }
       if (e.repeat) return;
       const second = secondStepFromEvent(e, following.first);
       if (second === undefined) return;
       const { action, first } = following;
+      if (second === null) {
+        endFollowing();
+        return;
+      }
       stopFollowing();
-      if (second !== null) bind(action, { ...first, then: second });
+      bind(action, { ...first, then: second });
       return;
     }
     if (e.key === "Escape") {

@@ -176,17 +176,23 @@ describe("the settings", () => {
     expect(screen.getByTestId("preset-custom")).toBeInTheDocument();
   });
 
-  it("says why a chord was refused, and keeps the old one", async () => {
-    await open("keys");
-    await fireEvent.click(screen.getByTestId("chord-review"));
-    await fireEvent.keyDown(screen.getByTestId("settings"), {
-      key: "e",
-      metaKey: true,
-    });
-    expect(screen.getByTestId("chord-problem")).toHaveTextContent(
-      "Diff, whole file or rendered",
-    );
-    expect(chordFor("review")).toEqual({ key: "d", shift: false, alt: false });
+  it("says why a chord was refused once no second key follows, and keeps the old one", async () => {
+    vi.useFakeTimers();
+    try {
+      await open("keys");
+      await fireEvent.click(screen.getByTestId("chord-review"));
+      await fireEvent.keyDown(screen.getByTestId("settings"), {
+        key: "e",
+        metaKey: true,
+      });
+      await vi.advanceTimersByTimeAsync(SEQUENCE_TIMEOUT);
+      expect(screen.getByTestId("chord-problem")).toHaveTextContent(
+        "Diff, whole file or rendered",
+      );
+      expect(chordFor("review")).toEqual({ key: "d", shift: false, alt: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("records a shortcut of two steps from a second key pressed soon after", async () => {
@@ -196,7 +202,8 @@ describe("the settings", () => {
       await fireEvent.click(screen.getByTestId("chord-review"));
       const dialog = screen.getByTestId("settings");
       await fireEvent.keyDown(dialog, { key: "k", ctrlKey: true });
-      expect(screen.getByTestId("chord-problem")).toHaveTextContent("agent's on macOS");
+      // ⌃K alone is the agent's on macOS, but a second key may yet follow.
+      expect(screen.queryByTestId("chord-problem")).toBeNull();
       expect(screen.getByTestId("chord-review")).toHaveTextContent("⌃K, then…");
       await fireEvent.keyDown(dialog, { key: "Control", ctrlKey: true });
       await fireEvent.keyDown(dialog, { key: "d" });
@@ -230,17 +237,42 @@ describe("the settings", () => {
     }
   });
 
-  it("keeps a one-step chord on Escape while a second key may follow, and stays open", async () => {
+  it("says what is wrong with a first step only once no second key followed", async () => {
+    vi.useFakeTimers();
+    try {
+      await open("keys");
+      await fireEvent.click(screen.getByTestId("chord-review"));
+      await fireEvent.keyDown(screen.getByTestId("settings"), { key: "k", ctrlKey: true });
+      expect(screen.queryByTestId("chord-problem")).toBeNull();
+      await vi.advanceTimersByTimeAsync(SEQUENCE_TIMEOUT);
+      expect(screen.getByTestId("chord-problem")).toHaveTextContent("agent's on macOS");
+      expect(chordFor("review")).toEqual({ key: "d", shift: false, alt: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends the recording on Escape while a second key may follow, and closes as usual", async () => {
     await open("keys");
     await fireEvent.click(screen.getByTestId("chord-review"));
     const dialog = screen.getByTestId("settings");
     await fireEvent.keyDown(dialog, { key: "g", metaKey: true });
     await fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(settings.open).toBe(true);
+    expect(settings.open).toBe(false);
     expect(chordFor("review")).toEqual({ key: "g", shift: false, alt: false });
-    expect(screen.getByTestId("chord-review")).toHaveTextContent("⌘G");
-    await fireEvent.keyDown(dialog, { key: "d" });
-    expect(chordFor("review")).toEqual({ key: "g", shift: false, alt: false });
+  });
+
+  it("takes Tab, and Cmd with W or comma, as never a second step", async () => {
+    await open("keys");
+    const dialog = screen.getByTestId("settings");
+    for (const key of [{ key: "Tab" }, { key: "w", metaKey: true }, { key: ",", metaKey: true }]) {
+      await fireEvent.click(screen.getByTestId("chord-review"));
+      await fireEvent.keyDown(dialog, { key: "k", metaKey: true });
+      // Not prevented: the key goes on to do what it always does.
+      expect(await fireEvent.keyDown(dialog, key)).toBe(true);
+      expect(chordFor("review")).toEqual({ key: "k", shift: false, alt: false });
+      expect(screen.getByTestId("chord-review")).toHaveTextContent("⌘K");
+    }
   });
 
   it("gives up recording on Escape, and closes on Escape otherwise", async () => {
