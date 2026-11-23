@@ -456,23 +456,26 @@ describe("closing", () => {
     expect(killed).toEqual([]);
   });
 
-  // Closing one should not throw you into a different project's work.
-  it("falls back to a sibling in the same project", () => {
-    const first = live(A, "pty-1");
+  // The pane shows its empty state; no other row is put on screen.
+  it("leaves nothing selected when the active session is closed", () => {
+    live(A, "pty-1");
     const second = live(A, "pty-2");
     live(B, "pty-3");
 
     select(second.key);
     close(second.key);
-    expect(sessions.active).toBe(first.key);
+    expect(sessions.active).toBeNull();
   });
 
-  it("falls back to another project only when there is no sibling", () => {
-    const only = live(A, "pty-1");
-    const other = live(B, "pty-2");
-    select(only.key);
-    close(only.key);
-    expect(sessions.active).toBe(other.key);
+  it("does not wake or resume a dormant row when the active session is closed", () => {
+    const past = reopened(A, "past-id", "claude-code", null, null, null);
+    const active = live(A, "pty-1");
+    select(active.key);
+    close(active.key);
+    expect(sessions.active).toBeNull();
+    expect(past.status).toBe("dormant");
+    expect(past.ptyId).toBeNull();
+    expect(killed).toEqual(["pty-1"]);
   });
 
   it("leaves nothing active when the last one goes", () => {

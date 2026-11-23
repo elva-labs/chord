@@ -2897,14 +2897,12 @@ export function close(key: string, keepShells = false) {
   if (session.id !== null) loadHistory(session.project);
   ownerGone(key);
 
-  if (sessions.active === key) {
-    // Prefer another session in the same project, so closing one does not
-    // throw you into a different project's work.
-    const sibling = forProject(session.project)[0] ?? sessions.all[0] ?? null;
-    sessions.active = sibling?.key ?? null;
-  }
-  // The shells opened beside the session go with the row, once whoever is
-  // shown next is chosen.
+  // Closing the session on screen selects none: the pane shows its empty
+  // state. Putting another row on screen would wake it if it was left from
+  // a quit, resuming a past session the user did not ask for. Closing any
+  // other row leaves what is on screen as it is.
+  if (sessions.active === key) sessions.active = null;
+  // The shells opened beside the session go with the row.
   if (!keepShells) void closeShells(key);
 }
 
