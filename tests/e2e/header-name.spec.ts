@@ -23,4 +23,15 @@ test.describe("the name in the conversation header", () => {
     await expect.poll(fits).toBe(false);
     expect(await title.evaluate((node) => getComputedStyle(node).textOverflow)).toBe("ellipsis");
   });
+
+  test("hovers the full name on its row and on the header", async ({ page }) => {
+    await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
+    await page.goto("/");
+    await page.getByTestId("start-agent").click();
+    await startNew(page);
+    await page.getByTestId("composer-input").fill(PROMPT);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(`${AGENT} > header .title`)).toHaveAttribute("title", PROMPT);
+    await expect(page.getByTestId("session-row")).toHaveAttribute("title", PROMPT);
+  });
 });

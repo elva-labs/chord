@@ -107,14 +107,14 @@
       {#if titleWidth !== null}
         <div class="cell" data-tauri-drag-region>
           {#if appMenu}{@render menuButton()}{/if}
-          <span class="title" data-tauri-drag-region>{title}</span>
+          <span class="title" data-tauri-drag-region {title}>{title}</span>
           {#if meta}<span class="meta" use:letters={meta} data-tauri-drag-region>{meta}</span>{/if}
           {#if cellEnd}<div class="cell-end">{@render cellEnd()}</div>{/if}
         </div>
         {#if head}<div class="head">{@render head()}</div>{/if}
       {:else}
         {#if appMenu}{@render menuButton()}{/if}
-        <span class="title" data-tauri-drag-region>{title}</span>
+        <span class="title" data-tauri-drag-region {title}>{title}</span>
         {#if head}<div class="head" use:keeps>{@render head()}</div>{/if}
         {#if meta}<span class="meta" use:letters={meta} data-tauri-drag-region>{meta}</span>{/if}
       {/if}

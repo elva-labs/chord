@@ -13,7 +13,7 @@ import { SvelteSet } from "svelte/reactivity";
 import { accountToStart, dirFor, loadPicked, names } from "$lib/accounts.svelte";
 import { loadPickedProfiles } from "$lib/codexProfiles.svelte";
 import { CODEX_DEFAULT } from "$lib/models";
-import { catalogName } from "$lib/modelCatalog.svelte";
+import { catalogName, resolvedModel } from "$lib/modelCatalog.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
 import {
   readWorkflow,
@@ -1229,8 +1229,17 @@ export function sessionModelName(session: {
   project: string;
 }): string | null {
   const model = session.runsOn ?? session.model;
-  if (model === null) return null;
-  return catalogName(session.agent, model, session.account, hostOf(session.project)) ?? modelLabel(model);
+  return model === null ? null : fullModelName(session.agent, model, session.account, session.project);
+}
+
+/** A model's full display name: the agent's own name for it where its
+    models go by them, else, for an alias the agent said what it stands for,
+    that model as `modelLabel` reads it (`fable` as Fable 5.2), else the
+    alias as `modelLabel` reads it (Fable). */
+export function fullModelName(agent: HarnessId, model: string, account: string | null, project: string): string {
+  const host = hostOf(project);
+  const resolved = resolvedModel(agent, model, account, host);
+  return catalogName(agent, model, account, host) ?? modelLabel(resolved ?? model);
 }
 
 /** What a session's row says of its model: the model's name, then the

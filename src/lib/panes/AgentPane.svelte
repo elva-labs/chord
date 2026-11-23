@@ -26,6 +26,7 @@
     refusedAsHeld,
     reopenOtherWay,
     reopeningRow,
+    fullModelName,
     sessionModelName,
     sessions,
     resumeWithout,
@@ -46,7 +47,7 @@
     linkOf,
     unspoken,
   } from "$lib/integrated.svelte";
-  import { heldModel, modelInUse } from "$lib/settingChoices";
+  import { heldModel } from "$lib/settingChoices";
   import { conductor, dismissRefusal, runStanding, workflowTag } from "$lib/conductor.svelte";
   import { pick, projectLabel, workspace } from "$lib/workspace.svelte";
   import { startsIn } from "$lib/orchestratorFolder.svelte";
@@ -87,12 +88,15 @@
         : `Agent · ${harnessLabel(current.agent)}`,
   );
 
-  /** The model the session runs on, by the name the composer's chip uses. */
+  /** The model the session runs on, by its full display name. */
   let model = $derived.by(() => {
     if (current === null || !integrated) return current === null ? null : sessionModelName(current);
     const conversation = conversationOf(current.key);
     if (current.workflow !== null) return heldModel(conversation, current.workflow);
-    return modelInUse(conversation, current.agent) ?? sessionModelName(current);
+    const used = conversation.settings.model;
+    return used === null
+      ? sessionModelName(current)
+      : fullModelName(current.agent, used, current.account, current.project);
   });
 
   /** The workflow the session on screen is part of, and its place in it. */

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
-import { askCodexCatalog, catalogName, catalogOf, heardCatalog, resetCatalogs } from "$lib/modelCatalog.svelte";
+import { askCodexCatalog, catalogName, catalogOf, heardCatalog, resetCatalogs, resolvedModel } from "$lib/modelCatalog.svelte";
 import { modelLabel } from "$lib/models";
-import { sessionModelName } from "$lib/sessions.svelte";
+import { fullModelName, sessionModelName } from "$lib/sessions.svelte";
 
 const SOL = { value: "gpt-6.2-sol", name: "GPT-6.2-Sol" };
 const LUNA = { value: "gpt-6.1-luna", name: "GPT-6.1-Luna (preview)" };
@@ -126,5 +126,21 @@ describe("reading Codex's models where no session has listed them", () => {
     await askCodexCatalog("/w", null);
     expect(asked).toHaveLength(2);
     expect(catalogOf("codex", null, "work")).not.toBeNull();
+  });
+});
+
+describe("what a Claude Code alias is called in full", () => {
+  it("reads the model an alias stands for, as the agent said, and the alias where it has not", () => {
+    const session = { agent: "claude-code" as const, model: "fable", account: null, project: "/w" };
+    expect(sessionModelName(session)).toBe("Fable");
+    heardCatalog("claude-code", null, null, [
+      { value: "fable", name: "Fable", resolved: "claude-fable-5-2" },
+      { value: "haiku", name: "Haiku" },
+    ]);
+    expect(resolvedModel("claude-code", "fable")).toBe("claude-fable-5-2");
+    expect(resolvedModel("claude-code", "haiku")).toBeNull();
+    expect(sessionModelName(session)).toBe("Fable 5.2");
+    expect(fullModelName("claude-code", "haiku", null, "/w")).toBe("Haiku");
+    expect(fullModelName("claude-code", "fable", "work", "/w")).toBe("Fable");
   });
 });

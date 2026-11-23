@@ -1302,7 +1302,8 @@ test.describe("the model and the mode", () => {
     await page.getByTestId("start-agent").click();
     await startNew(page);
     await expect(page.getByTestId("model-chip")).toHaveText("GPT-5-Codex");
-    await expect(page.getByTestId("session-row")).toHaveAttribute("title", "GPT-5-Codex");
+    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveText("GPT-5-Codex");
+    await expect(page.getByTestId("session-row")).toHaveAttribute("title", "New session");
   });
 
   test("show a mode the agent took from its own configuration in plain words, and say it does not come back", async ({ page }) => {
