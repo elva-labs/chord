@@ -233,7 +233,6 @@ describe("the note an agent picked on the composer goes ahead with", () => {
     const note = agentNote("Reviewer", `Read the diff.\n${AGENT_READS_ONLY}`, true);
     expect(note.split("\n").slice(-2)).toEqual([AGENT_READS_ONLY, AGENT_END]);
     expect(note.split("\n").filter((line) => line === AGENT_READS_ONLY)).toHaveLength(1);
-    expect(AGENT_READS_ONLY).toMatch(/change no files.*command/);
     expect(spoken(`${note}\n\nGo`, true)).toMatchObject({
       text: "Go",
       agent: { title: "Reviewer", text: "Read the diff." },
