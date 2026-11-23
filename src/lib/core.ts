@@ -933,6 +933,14 @@ export interface NotifyRequest {
   session: string | null;
 }
 
+/** A name a conversation's agent gave its own row, tidied by the core. */
+export interface NameRequest {
+  name: string;
+  cwd: string;
+  /** The token of the session the agent runs as. */
+  session: string | null;
+}
+
 /** A conductor call the agent gave up on. */
 export interface ConductCancel {
   /** The call, as the request named it. */
@@ -2203,6 +2211,8 @@ export interface Core {
   onNotifyRequest(
     handler: (request: NotifyRequest) => void,
   ): Promise<() => void>;
+  /** A conversation's agent named its own row. */
+  onNameRequest(handler: (request: NameRequest) => void): Promise<() => void>;
   /** A session called one of the conductor's tools. */
   onConductRequest(
     handler: (request: ConductRequest) => void,
@@ -2795,6 +2805,11 @@ const tauriCore: Core = {
       handler(event.payload),
     );
   },
+  async onNameRequest(handler) {
+    return listen<NameRequest>("name_request", (event) =>
+      handler(event.payload),
+    );
+  },
   async onConductRequest(handler) {
     return listen<ConductRequest>("conduct_request", (event) =>
       handler(event.payload),
@@ -3225,6 +3240,9 @@ const detachedCore: Core = {
     return () => {};
   },
   async onNotifyRequest() {
+    return () => {};
+  },
+  async onNameRequest() {
     return () => {};
   },
   async onConductRequest() {

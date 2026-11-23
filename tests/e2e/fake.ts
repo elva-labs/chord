@@ -1250,6 +1250,12 @@ export async function installFakeCore(
           ) => handler(named(request));
           return () => {};
         },
+        onNameRequest: async (handler: (request: unknown) => void) => {
+          (window as unknown as Record<string, unknown>).__nameRequest = (
+            request: { session?: string | null },
+          ) => handler(named(request));
+          return () => {};
+        },
         // The conductor's calls, pushed by a test through the handler, and
         // the window's answers, read back from the list.
         onConductRequest: async (handler: (request: unknown) => void) => {

@@ -66,11 +66,11 @@ export function segments(parts: Part[]): Segment[] {
 }
 
 /** The workbench's own calls the thread does not draw: a wait on the
-    sessions the agent started, a line left on its row, and the notes kept
-    of the conversation and read back. None is work the user reads, so none
-    has a step, a count or a line of its own, and what the agent wrote
-    before them stays the last thing in its run. */
-const UNDRAWN = new Set(["wait", "notify", "note", "notes"]);
+    sessions the agent started, a line or a name left on its row, and the
+    notes kept of the conversation and read back. None is work the user
+    reads, so none has a step, a count or a line of its own, and what the
+    agent wrote before them stays the last thing in its run. */
+const UNDRAWN = new Set(["wait", "notify", "name", "note", "notes"]);
 
 /** The thinking in a run that has something in it, is done, and has one
     of the workbench's own calls after it, with nothing between them but
@@ -405,6 +405,12 @@ function workbenchPhrase(
       return note === null
         ? say("Leaving a note on its row", "Left a note on its row", "leave a note on its row")
         : name("Leaving a note on its row:", "Left a note on its row:", "leave a note on its row:", note);
+    }
+    case "name": {
+      const given = firstLine(field(input, "name"));
+      return given === null
+        ? say("Naming its row", "Named its row", "name its row")
+        : name("Naming its row:", "Named its row:", "name its row:", given);
     }
     case "note":
       return say("Keeping a note", "Kept a note", "keep a note");

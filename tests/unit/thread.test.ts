@@ -267,9 +267,9 @@ describe("the workbench's wait and notify in a run", () => {
     expect(shape(done)).toEqual(["text"]);
   });
 
-  it("leave a message followed by any mix of wait, notify, note and notes in full", () => {
+  it("leave a message followed by any mix of wait, notify, name, note and notes in full", () => {
     const answer = text({ text: "The whole answer." });
-    const mixed: Part[] = ["note", "notify", "notes", "wait"].map((tool) => call({ name: `mcp__chord__${tool}`, tool: "mcp" }));
+    const mixed: Part[] = ["note", "notify", "name", "notes", "wait"].map((tool) => call({ name: `mcp__chord__${tool}`, tool: "mcp" }));
     expect(shape([answer, ...mixed])).toEqual(["text"]);
     expect(shape([answer, call({ name: "mcp__chord__note", tool: "mcp" }), call({ name: WAIT, tool: "mcp", done: false })])).toEqual(["text"]);
   });
@@ -1006,6 +1006,7 @@ describe("the workbench's own tools in a step's title", () => {
     expect(own("sessions", {})).toBe("Listed the sessions it started");
     expect(own("projects", {})).toBe("Listed the open projects");
     expect(own("notify", { text: "Tests green" }, { done: false })).toBe("Leaving a note on its row: “Tests green”");
+    expect(own("name", { name: "Plan the release" })).toBe("Named its row: “Plan the release”");
     expect(own("show", { path: "/a/b.ts" })).toBe("Showed /a/b.ts");
     expect(own("diff", { path: "/a/b.ts" }, { done: false })).toBe("Showing the changes in /a/b.ts");
     expect(own("present", { files: ["/a/one.png", "/a/two.pdf"] })).toBe("Presented /a/one.png and 1 more");

@@ -118,6 +118,9 @@ The entry lets some of the server's own tools run without asking, each by
 a line of its own, `tools.notify.approval_mode = "approve"`:
 
 - `notify`, which puts one line of text on the session's row;
+- `name`, which a session drawn as a conversation calls once to name its
+  row, offered to such a session only (see
+  [names](reference/sessions.md#names));
 - `note` and `notes`, which keep and read the session's own notes;
 - `selection`, which says what the user has open in the viewer and which
   lines are highlighted;

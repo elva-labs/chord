@@ -68,7 +68,8 @@ import {
   loadHistory,
   knownName,
   keepName,
-  named,
+  nameLine,
+  namedForNow,
   renamed,
   newTurnLine,
   lineComing,
@@ -1352,19 +1353,19 @@ export function send(
   newTurnLine(session);
   if (from !== null) sentBy(id, from);
   sentAt(id, Date.now());
-  // Named by its first line, without the workbench's sentence after a
-  // started session's prompt. The workbench's own message names nothing,
-  // and nor does a slash command: the row waits for a message that is not.
+  // Named for now by its first line with words, without the workbench's
+  // sentence after a started session's prompt, until the agent names it.
+  // The workbench's own message names nothing, and nor does a slash
+  // command: the row waits for a message that is not.
   if (session.title === null && knownName(session) === null && from !== WORKBENCH) {
-    const line = unsent(spoken(text, from === null).text, mentions)
-      .draft.split("\n")
-      .find((candidate) => candidate.trim() !== "")
-      ?.trim();
-    // A first line that reads as another live session's name, or as "You",
+    const draft = unsent(spoken(text, from === null).text, mentions).draft;
+    const first = draft.split("\n").find((candidate) => candidate.trim() !== "");
+    const line = first === undefined || readsAsCommand(first) ? null : nameLine(draft);
+    // A line that reads as another live session's name, or as "You",
     // names nothing.
     const title =
-      line === undefined || readsAsCommand(line) ? null : line.length > NAME_LENGTH ? `${line.slice(0, NAME_LENGTH - 1)}…` : line;
-    if (title !== null && !nameTaken(title, key) && !reservedName(title)) named(key, title);
+      line === null ? null : line.length > NAME_LENGTH ? `${line.slice(0, NAME_LENGTH - 1)}…` : line;
+    if (title !== null && !nameTaken(title, key) && !reservedName(title)) namedForNow(key, title);
   }
   core()
     .integratedSend(link.handle, id, text, images)

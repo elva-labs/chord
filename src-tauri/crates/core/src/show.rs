@@ -30,6 +30,7 @@ pub const PRESENT_REQUEST: &str = "present_request";
 pub const DIFF_REQUEST: &str = "diff_request";
 pub const TERMINAL_REQUEST: &str = "terminal_request";
 pub const NOTIFY_REQUEST: &str = "notify_request";
+pub const NAME_REQUEST: &str = "name_request";
 pub const CONDUCT_REQUEST: &str = "conduct_request";
 pub const CONDUCT_CANCEL: &str = "conduct_cancel";
 pub const BROWSER_REQUEST: &str = "browser_request";
@@ -161,6 +162,18 @@ pub struct NotifyRequest {
     pub session: Option<String>,
 }
 
+/// A name a conversation gives itself, for its row in the sessions list,
+/// already tidied by the tool server. The window takes it only where the
+/// row has no name of its own yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NameRequest {
+    pub name: String,
+    pub cwd: String,
+    #[serde(default)]
+    pub session: Option<String>,
+}
+
 /// A call the agent made on a plugin's tool. The core hands it to the
 /// plugin's process and writes the answer where the tool server waits.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -265,6 +278,7 @@ pub const CONTAINED_TOOLS: &[&str] = &[
     "present",
     "selection",
     "notify",
+    "name",
     "note",
     "notes",
     "projects",
@@ -336,6 +350,7 @@ pub enum Request {
     Diff(DiffRequest),
     Terminal(TerminalRequest),
     Notify(NotifyRequest),
+    Name(NameRequest),
     Tool(ToolRequest),
     Conduct(ConductRequest),
     ConductCancel(ConductCancel),
@@ -522,6 +537,12 @@ pub fn classify(line: &str) -> Option<Request> {
             }
             Some(Request::Notify(notify))
         }
+        Request::Name(name) => {
+            if name.name.trim().is_empty() {
+                return None;
+            }
+            Some(Request::Name(name))
+        }
         Request::Tool(tool) => {
             if !valid_id(&tool.id)
                 || tool.source.is_empty()
@@ -623,6 +644,9 @@ pub fn watch(
             Request::Notify(notify) => serde_json::to_value(notify)
                 .ok()
                 .map(|value| (NOTIFY_REQUEST.to_string(), value)),
+            Request::Name(name) => serde_json::to_value(name)
+                .ok()
+                .map(|value| (NAME_REQUEST.to_string(), value)),
             Request::Tool(tool) => {
                 on_tool(tool);
                 None
@@ -714,6 +738,7 @@ mod tests {
             | Request::Diff(_)
             | Request::Terminal(_)
             | Request::Notify(_)
+            | Request::Name(_)
             | Request::Tool(_)
             | Request::Conduct(_)
             | Request::ConductCancel(_)
@@ -721,6 +746,19 @@ mod tests {
             | Request::Settings(_)
             | Request::Run(_) => None,
         }
+    }
+
+    #[test]
+    fn a_name_is_an_event_for_the_caller_s_row_and_an_empty_one_is_dropped() {
+        assert_eq!(
+            classify(r#"{"kind":"name","name":"Fix the login","cwd":"/p","session":"s-1"}"#),
+            Some(Request::Name(NameRequest {
+                name: "Fix the login".into(),
+                cwd: "/p".into(),
+                session: Some("s-1".into()),
+            }))
+        );
+        assert_eq!(classify(r#"{"kind":"name","name":" ","cwd":"/p"}"#), None);
     }
 
     #[test]

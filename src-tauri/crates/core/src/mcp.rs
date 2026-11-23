@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use crate::plugins::{self, PublishedTool};
 use crate::show::{
-    self, resolve, Answer, BrowserRequest, ConductCancel, ConductRequest, DiffRequest,
+    self, resolve, Answer, BrowserRequest, ConductCancel, ConductRequest, DiffRequest, NameRequest,
     NotifyRequest, PresentRequest, Request, SettingsRequest, ShowRequest, TerminalRequest,
     ToolRequest, BROWSER_TOOLS, CONDUCT_TOOLS, MEDIA_EXTENSIONS, SETTINGS_TOOLS,
 };
@@ -48,10 +48,12 @@ macro_rules! turn_in_a_terminal {
 
 /// How a turn ends in the workbench's conversation, which draws an agent's
 /// text whole and its thinking only as a summary, and which sees each turn
-/// end, so the row's line comes from the final message without a call.
+/// end, so the row's line comes from the final message without a call. A
+/// conversation names its own row once, alongside a call it makes anyway
+/// or, where its first turn makes none, with a call of its own.
 macro_rules! turn_in_a_conversation {
     () => {
-        "The workbench sees each of your turns end: it puts the first line of the turn's final message on this session's row, where the user reads it from another session. So open that message with the line that matters, what is done, why you stopped or what you need; there is no call to make for it. Your thinking is never shown to the user, so whatever they should read goes in a message's text. Write an answer whole in the turn's final message, after the work it reports, never above more work with a line below pointing at it, and with no call after it or just before it: the answer follows your thinking straight away. "
+        "Name this conversation once with the name tool, alongside your first call or alone if the first turn makes none. The workbench sees each of your turns end: it puts the first line of the turn's final message on this session's row. So open that message with the line that matters, what is done, why you stopped or what you need; there is no call to make for it. Your thinking is never shown to the user, so whatever they should read goes in a message's text. Write an answer whole in the turn's final message, after the work it reports, never above more work with a line below pointing at it, and with no call after it or just before it: the answer follows your thinking straight away. "
     };
 }
 
@@ -232,6 +234,9 @@ pub fn tools() -> Vec<Value> {
         note_tool(),
         notes_tool(),
     ];
+    if conversation_here() {
+        listed.push(name_tool());
+    }
     listed.extend(browser_tools());
     listed.extend(settings_tools());
     listed
@@ -247,6 +252,9 @@ pub fn tools() -> Vec<Value> {
 pub const RUN_UNASKED: &[&str] = &[
     // Puts one line of text on the caller's row in the sessions list.
     "notify",
+    // Names the caller's row in the sessions list, where it has no name
+    // yet.
+    "name",
     // Keep and read the caller's own notes, in the workbench's store.
     "note",
     "notes",
@@ -483,6 +491,29 @@ pub fn notify_tool_for(conversation: bool) -> Value {
                 "text": { "type": "string", "description": "A few words, under 60 characters." }
             },
             "required": ["text"]
+        }
+    })
+}
+
+/// The most characters a name the agent gives its conversation keeps:
+/// about what the row shows, and as long as a commit subject.
+pub const NAME_MOST: usize = 60;
+
+/// The name tool, which only a conversation is offered: a terminal's row
+/// is named by the title its agent sets. Claude Code loads it with the
+/// conversation's other tools rather than behind its tool search, so the
+/// call can go alongside the first one the agent makes.
+pub fn name_tool() -> Value {
+    json!({
+        "name": "name",
+        "description": "Names this conversation on its row in the user's sessions list, in place of the first line of the user's first message. Call it once per conversation and never again: in the first turn, alongside the first other call you make, or on its own before you answer when that turn makes no other call. Only the conversation's own agent calls it, never a subagent. A few words saying what the conversation is about, like a commit subject: 'Fix the login redirect', 'Plan the 2.0 release'. A name the user gave stays, as does one another session started this one with.",
+        "_meta": { "anthropic/alwaysLoad": true },
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string", "description": format!("A few words, at most {NAME_MOST} characters, without quotes or a full stop.") }
+            },
+            "required": ["name"]
         }
     })
 }
@@ -1187,6 +1218,7 @@ fn call(
         "selection" => selection_call(home, cwd),
         "terminal" => terminal_call(home, cwd, session, &arguments),
         "notify" => notify_call(home, cwd, session, &arguments),
+        "name" => name_call(home, cwd, session, conversation_here(), &arguments),
         "note" => note_call(home, session, &arguments),
         "notes" => notes_call(home, session, &arguments),
         "plan" => plan_call(home, session, &arguments),
@@ -1762,6 +1794,82 @@ fn notify_call(
         }),
     )?;
     Ok(json!({ "content": [{ "type": "text", "text": "Left on the session's row." }] }))
+}
+
+/// A name for the caller's row, tidied: on one line, without the quotes,
+/// backticks or stars around it or the stop after it. Only a conversation
+/// names its row this way. The window takes it only where the row has no
+/// name of its own and no other session's row has it, so the reply says
+/// it was given, not taken.
+fn name_call(
+    home: &Path,
+    cwd: &Path,
+    session: Option<&str>,
+    conversation: bool,
+    arguments: &Value,
+) -> Result<Value, String> {
+    if !conversation {
+        return Err(
+            "Only a conversation in the workbench names its row; this session's row is named by its own title.".to_string(),
+        );
+    }
+    let given = arguments
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or("name needs a name")?;
+    let name = tidy_name(given);
+    if !name.chars().any(char::is_alphanumeric) {
+        return Err("A name needs a few words.".to_string());
+    }
+    if name.chars().count() > NAME_MOST {
+        return Err(format!(
+            "A name is a few words, at most {NAME_MOST} characters: say what the conversation is about, not all of it."
+        ));
+    }
+    show::append(
+        home,
+        &Request::Name(NameRequest {
+            name,
+            cwd: cwd.to_string_lossy().to_string(),
+            session: session.map(str::to_string),
+        }),
+    )?;
+    Ok(said(
+        "Given to the workbench, which names the row with it unless the row already has a name. A conversation is named once; do not call it again.",
+    ))
+}
+
+/// A name as the row shows it: the words on one line, without what wraps
+/// it whole, a pair of quotes, backticks or stars, and without a stop at
+/// its end. A pair wraps the name whole only where its closing mark is not
+/// also inside it, so quotes around one word of several stay.
+fn tidy_name(given: &str) -> String {
+    const WRAPS: &[(&str, &str)] = &[
+        ("**", "**"),
+        ("\"", "\""),
+        ("'", "'"),
+        ("`", "`"),
+        ("*", "*"),
+        ("\u{201c}", "\u{201d}"),
+        ("\u{2018}", "\u{2019}"),
+    ];
+    const ENDS: &[char] = &['.', ':', ';', ','];
+    let mut name = given.split_whitespace().collect::<Vec<_>>().join(" ");
+    loop {
+        let mut trimmed = name.trim_end_matches(ENDS).trim();
+        if let Some(inside) = WRAPS.iter().find_map(|(open, close)| {
+            trimmed
+                .strip_prefix(open)
+                .and_then(|rest| rest.strip_suffix(close))
+                .filter(|inside| !inside.contains(close))
+        }) {
+            trimmed = inside.trim();
+        }
+        if trimmed == name {
+            return name;
+        }
+        name = trimmed.to_string();
+    }
 }
 
 /// The session the notes are kept for: the token the workbench started
@@ -2425,6 +2533,7 @@ mod tests {
     fn every_tool_of_the_server_runs_unasked_or_asks_on_purpose() {
         let own: Vec<String> = all_tools(&home("lists"), None)
             .into_iter()
+            .chain([name_tool()])
             .chain(run_tools())
             .map(|tool| tool["name"].as_str().unwrap().to_string())
             .collect();
@@ -2853,6 +2962,7 @@ mod tests {
     #[test]
     fn each_tool_left_to_the_mode_while_reading_only_is_one_the_server_offers() {
         let mut offered = tools();
+        offered.push(name_tool());
         offered.extend(conductor_tools());
         let names: Vec<&str> = offered
             .iter()
@@ -3135,12 +3245,13 @@ mod tests {
 
     /// Claude Code keeps the first 4096 UTF-16 code units of a server's
     /// instructions and cuts the rest, unless the user raises the limit
-    /// with CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH, so every variant stays
-    /// well inside it, with room for a rule or two more.
+    /// with CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH. That is the real limit;
+    /// ROOM is a margin of this test's own, so every variant stays inside
+    /// it with room for a rule or two more.
     #[test]
     fn every_variant_of_the_instructions_fits_what_claude_code_keeps() {
         const KEPT: usize = 4096;
-        const ROOM: usize = 512;
+        const ROOM: usize = 384;
         for role in [None, Some(crate::adapter::ORCHESTRATOR_ROLE)] {
             for view in [None, Some(crate::adapter::CONVERSATION_VIEW)] {
                 for wake in [None, Some(crate::adapter::WAKES)] {
@@ -3476,6 +3587,84 @@ mod tests {
         assert_eq!(request.session.as_deref(), Some("s-9"));
         let empty = handle(&home, &cwd, None, r#"{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"notify","arguments":{"text":"  "}}}"#).unwrap();
         assert_eq!(empty["result"]["isError"], true);
+    }
+
+    /// A conversation names its row once, alongside a call it makes anyway;
+    /// a terminal is neither told to nor offered the tool, as its row takes
+    /// the title its agent sets.
+    #[test]
+    fn only_a_conversation_is_told_to_name_itself() {
+        for told in [
+            CONVERSATION_INSTRUCTIONS,
+            ORCHESTRATOR_CONVERSATION_INSTRUCTIONS,
+        ] {
+            assert!(told.contains("Name this conversation once with the name tool"));
+            assert!(
+                told.contains("alongside your first call or alone if the first turn makes none")
+            );
+            assert!(told.contains("there is no call to make for it"));
+        }
+        for told in [
+            INSTRUCTIONS,
+            WOKEN_INSTRUCTIONS,
+            ORCHESTRATOR_INSTRUCTIONS,
+            ORCHESTRATOR_WOKEN_INSTRUCTIONS,
+        ] {
+            assert!(!told.contains("name tool"), "{told}");
+        }
+        // The tests run outside a conversation.
+        assert!(!tools().iter().any(|tool| tool["name"] == "name"));
+        let tool = name_tool();
+        let described = tool["description"].as_str().unwrap().to_string();
+        assert!(described.contains("Call it once per conversation and never again"));
+        assert!(
+            described.contains("on its own before you answer when that turn makes no other call")
+        );
+        assert!(described.contains("never a subagent"));
+        assert!(described.contains("A name the user gave stays"));
+        // Claude Code would otherwise defer it behind its tool search.
+        assert_eq!(tool["_meta"]["anthropic/alwaysLoad"], true);
+        assert!(RUN_UNASKED.contains(&"name"));
+        assert!(show::contained_tool("mcp__chord__name"));
+    }
+
+    #[test]
+    fn a_name_lands_in_the_log_tidied_and_a_wrong_one_is_refused() {
+        let home = home("workbench-mcp-name");
+        let cwd = home.join("project");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let call = |name: &str| name_call(&home, &cwd, Some("s-7"), true, &json!({ "name": name }));
+        let named = call(" \"**Fix the  login\nredirect.**\" ").unwrap();
+        let reply = named["content"][0]["text"].as_str().unwrap();
+        assert!(reply.contains("unless the row already has a name"));
+        assert!(reply.contains("do not call it again"));
+        let Request::Name(request) = first(&home) else {
+            panic!("not a name request");
+        };
+        assert_eq!(request.name, "Fix the login redirect");
+        assert_eq!(request.session.as_deref(), Some("s-7"));
+        assert_eq!(tidy_name("`Plan the 2.0 release`:"), "Plan the 2.0 release");
+        assert_eq!(tidy_name("\u{201c}Port it to v2\u{201d}"), "Port it to v2");
+        assert_eq!(
+            tidy_name("Fix __init__ in the loader"),
+            "Fix __init__ in the loader"
+        );
+        assert_eq!(tidy_name("\"Fix\" the bug"), "\"Fix\" the bug");
+        assert_eq!(tidy_name("\"Fix\" the \"bug\""), "\"Fix\" the \"bug\"");
+        assert_eq!(tidy_name("`ls` is slow`"), "`ls` is slow`");
+        for wrong in ["", "   ", "\"\"", "...", "**"] {
+            assert!(call(wrong).is_err(), "{wrong:?}");
+        }
+        let long = "word ".repeat(NAME_MOST / 4);
+        assert!(call(&long).is_err());
+        assert!(name_call(&home, &cwd, None, true, &json!({})).is_err());
+        // The tests run outside a conversation, where a call is refused.
+        let outside = handle(&home, &cwd, Some("s-7"), r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"name","arguments":{"name":"Plan the release"}}}"#).unwrap();
+        assert_eq!(outside["result"]["isError"], true);
+        assert!(outside["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Only a conversation"));
     }
 
     /// An agent reads notes as data, since anything holding the token can

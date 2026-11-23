@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  nameRequested,
   notified,
   projectFor,
   mentionOpener,
@@ -354,6 +355,18 @@ describe("a call from a session the user is not looking at", () => {
     await Promise.resolve();
     expect(shown).toHaveLength(1);
     expect(diffed).toHaveLength(1);
+  });
+
+  it("names the calling conversation's row by its token, and no row for a call from none or outside every project", () => {
+    workspace.open.push(repo("/one"));
+    workspace.active = "/one";
+    const a = create("/one", null, "claude-code", null, null, null, null, undefined, "integrated");
+    const b = create("/one", null, "claude-code", null, null, null, null, undefined, "integrated");
+    nameRequested({ name: "Plan the release", cwd: "/elsewhere", session: a.token });
+    nameRequested({ name: "Plan the release", cwd: "/one", session: null });
+    expect(sessions.all.map((session) => session.title)).toEqual([null, null]);
+    nameRequested({ name: "Plan the release", cwd: "/one", session: b.token });
+    expect(sessions.all.map((session) => session.title)).toEqual([null, "Plan the release"]);
   });
 
   it("places a call from a session that has stopped on no session, and opens it at once", async () => {
