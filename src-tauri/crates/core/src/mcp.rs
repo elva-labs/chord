@@ -481,11 +481,22 @@ fn all_tools(home: &Path, session: Option<&str>) -> Vec<Value> {
     listed
 }
 
-/// The tools as the settings offer them: no note tools while notes are
-/// switched off, and a start that names no agent while agents are.
+/// What the start tool says of a session resumed from its notes, which
+/// none is while notes are switched off.
+const FROM_NOTES: &str =
+    ", or when that is cold and large, as a fresh one from its notes and last exchanges";
+
+/// The tools as the settings offer them: no note tools and a start that
+/// resumes a session whole while notes are switched off, and a start that
+/// names no agent while agents are.
 fn switched(listed: &mut Vec<Value>, notes_on: bool, agents_on: bool) {
     if !notes_on {
         listed.retain(|tool| !matches!(tool["name"].as_str(), Some("note" | "notes")));
+        for tool in listed.iter_mut().filter(|tool| tool["name"] == "start") {
+            if let Some(description) = tool["description"].as_str() {
+                tool["description"] = json!(description.replacen(FROM_NOTES, "", 1));
+            }
+        }
     }
     if !agents_on {
         for tool in listed.iter_mut().filter(|tool| tool["name"] == "start") {
@@ -3222,8 +3233,16 @@ mod tests {
                 .map(|start| !start["inputSchema"]["properties"]["agent"].is_null())
                 .unwrap()
         };
+        let from_notes = |home: &Path| {
+            all_tools(home, None)
+                .iter()
+                .find(|tool| tool["name"] == "start")
+                .map(|start| start["description"].as_str().unwrap().contains(FROM_NOTES))
+                .unwrap()
+        };
         let note = json!({ "agent": "Reviewer", "prompt": "p", "project": "/p" });
         assert!(names(&home).contains(&"note".to_string()) && agent(&home));
+        assert!(from_notes(&home));
         assert_eq!(switched_off(&home, "note", &json!({})), None);
         assert_eq!(switched_off(&home, "start", &note), None);
         switch(&home, false, false);
@@ -3231,6 +3250,14 @@ mod tests {
             .iter()
             .any(|name| name == "note" || name == "notes"));
         assert!(!agent(&home));
+        let start = all_tools(&home, None)
+            .into_iter()
+            .find(|tool| tool["name"] == "start")
+            .unwrap();
+        assert!(start["description"]
+            .as_str()
+            .unwrap()
+            .contains("with its conversation, and the prompt is what it goes on with"));
         for name in ["note", "notes", "plan", "gate_add", "verdict", "gates"] {
             assert!(switched_off(&home, name, &json!({})).is_some(), "{name}");
         }
