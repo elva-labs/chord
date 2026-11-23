@@ -15,8 +15,9 @@ is under [a session in Chord](#a-session-in-chord).
 
 ## What the app claims
 
-Only <kbd>Cmd</kbd> shortcuts (<kbd>Ctrl</kbd> on Windows and Linux). The
-default preset:
+Only <kbd>Cmd</kbd> shortcuts (<kbd>Ctrl</kbd> on Windows and Linux), and
+the first step of a [shortcut of two steps](#shortcuts-of-two-steps), which
+may hold <kbd>Ctrl</kbd> on macOS too. The default preset:
 
 | Keys                                                                    | Does                                                        |
 | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -29,6 +30,7 @@ default preset:
 | <kbd>Cmd</kbd><kbd>T</kbd>                                              | A new shell in the terminal panel, opening it, with the keyboard in it |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>↓</kbd> / <kbd>↑</kbd>               | Next or previous session, or shell when the panel has focus |
 | <kbd>Cmd</kbd><kbd>.</kbd>                                              | Go to the next session that needs you                       |
+| <kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>S</kbd>                           | Send every message waiting in an in-Chord session now, in the order they were written; nothing while none waits |
 | <kbd>Cmd</kbd><kbd>D</kbd>                                              | Open or close the file viewer, in agent mode                |
 | <kbd>Cmd</kbd><kbd>E</kbd>                                              | Diff, whole file or rendered; in the editor, Edit, Diff or Preview |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>A</kbd>                              | Changed files or all files                                  |
@@ -65,7 +67,9 @@ that does not move is the modifier: every shortcut carries <kbd>Cmd</kbd>
 (<kbd>Ctrl</kbd> elsewhere), because the keys without it belong to whatever
 terminal has focus, and <kbd>Ctrl+C</kbd> and <kbd>Ctrl+R</kbd> are refused
 outright since on Windows and Linux they are the agent's. A shortcut another
-action holds is refused with the name of that action.
+action holds is refused with the name of that action. The first step of a
+shortcut of two steps may hold <kbd>Ctrl</kbd> in place of <kbd>Cmd</kbd> on
+macOS, because it never begins in a terminal, as the next section says.
 
 The **Vim** preset lays movement between panes on <kbd>h</kbd>, <kbd>j</kbd>,
 <kbd>k</kbd> and <kbd>l</kbd>, as the panes lie: sessions to the left,
@@ -79,6 +83,44 @@ close, a new shell's and the status bar's are the default's.
 
 A shortcut with <kbd>Alt</kbd> is read from the key's place on the keyboard,
 since on macOS <kbd>Option</kbd> turns a letter into another character.
+
+## Shortcuts of two steps
+
+A shortcut may have a second step: a key pressed after the first, with or
+without the modifier, such as <kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>S</kbd>.
+The first step waits a second and a half for the second, and the status bar
+says so meanwhile, as in "Ctrl+X, then…" (⌃X on macOS). A second step that
+completes a shortcut does its action and types nothing. Any other key ends
+the wait and goes where it would have gone, and so does the wait running
+out. <kbd>Esc</kbd> ends it and goes no further. <kbd>Shift</kbd>,
+<kbd>Ctrl</kbd>, <kbd>Alt</kbd> or <kbd>Cmd</kbd> pressed alone keep it
+waiting, so <kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>Shift</kbd><kbd>S</kbd> is
+a step of its own. The second step must match whole:
+<kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>Ctrl</kbd><kbd>S</kbd> is not
+<kbd>Ctrl</kbd><kbd>X</kbd> then <kbd>S</kbd>.
+
+A first step that means something where it is pressed keeps that meaning
+and begins nothing:
+
+- **In a terminal**, the agent's or a shell in the panel, a first step with
+  <kbd>Ctrl</kbd> is the process's, which is every first step on Windows
+  and Linux. A first step with <kbd>Cmd</kbd> on macOS begins anywhere. An
+  in-Chord session's pane is no terminal, and its composer is a text field.
+- **In a text field or the editor**, select all, paste, undo and redo, and
+  keys that are not characters stay the field's. Cut and copy stay the
+  field's while something is selected, and always in the editor, so
+  <kbd>Ctrl</kbd><kbd>X</kbd> on Windows and Linux cuts a selection and
+  begins a shortcut with none. On macOS the field keeps <kbd>Ctrl</kbd> with
+  the keys the system's text fields answer, such as <kbd>Ctrl</kbd><kbd>A</kbd>
+  and <kbd>Ctrl</kbd><kbd>K</kbd>, and <kbd>Ctrl</kbd><kbd>X</kbd> is not
+  among them.
+- **In a page of the browser or the native menu** no shortcut of two steps
+  begins. A dialog, or a palette opening, ends one waiting.
+
+A shortcut of one step that is the first step of another is refused, as two
+equal shortcuts of two steps are, with the name of the action that holds
+it. How the settings record one is in
+[keys](reference/settings.md#keys).
 
 ## The palettes
 
@@ -254,7 +296,9 @@ a terminal keeps <kbd>Ctrl</kbd><kbd>W</kbd> and
   modifier is <kbd>Cmd</kbd>. On Windows and Linux the modifier is
   <kbd>Ctrl</kbd>, so the bound shortcuts are taken from the terminal there,
   and <kbd>Ctrl+C</kbd> and <kbd>Ctrl+R</kbd> are never among them, nor
-  <kbd>Ctrl+W</kbd>, which closes only outside a terminal.
+  <kbd>Ctrl+W</kbd>, which closes only outside a terminal. A first step of two
+  is never taken from a terminal, as
+  [shortcuts of two steps](#shortcuts-of-two-steps) says.
 - **<kbd>Esc</kbd> belongs to whichever terminal has focus.** The agent needs
   it, and so does a shell in the panel, and the editor keeps its own. An
   in-Chord session's composer takes it to stop a running turn. A pane that

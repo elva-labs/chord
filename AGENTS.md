@@ -10,7 +10,10 @@ built and why. Read the doc for the area you are changing before changing it.
   and hooks live in the Rust core. The frontend renders and dispatches.
   Anything that needs no window goes in the core crate, not the app.
 - **The agent owns the keyboard.** The app claims only modifier chords, and
-  never Ctrl+C, Ctrl+R, Tab or Esc from a terminal. See the focus doc.
+  never Ctrl+C, Ctrl+R, Tab or Esc from a terminal. The first step of a
+  shortcut of two steps may hold Ctrl on every platform because a Ctrl first
+  step never begins in a terminal, nor where a text field uses it. See the
+  focus doc.
 - **Comments describe the present state.** What is true now, never what
   changed or why the diff exists. That belongs in the commit message.
 - **Every change is verified before it is pushed.** Run the tiers that cover

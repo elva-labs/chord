@@ -68,7 +68,7 @@ Sources of plugins, with a switch for each plugin. Every plugin is off to begin 
 
 ## Keys
 
-The whole table of shortcuts, with two presets and room for your own. A shortcut changed from its preset shows Reset, and Reset all shortcuts puts the preset back. See [focus](focus-model.md).
+The whole table of shortcuts, with two presets and room for your own. A shortcut may take two steps, as Ctrl+X then S sends the messages waiting in a session now. A shortcut changed from its preset shows Reset, and Reset all shortcuts puts the preset back. See [focus](focus-model.md).
 
 ## Notifications
 

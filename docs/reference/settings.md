@@ -660,6 +660,15 @@ that differs from its preset shows Reset beside it, and Reset all shortcuts at
 the end of the tab puts the default preset back. What the app may claim and why
 is in [focus](../focus-model.md).
 
+A shortcut of two steps reads as both, Ctrl+X S, or ⌃X S on macOS. Clicking
+a shortcut and pressing a chord binds it at once; a second key pressed
+within a second and a half makes the two one shortcut, and Escape before it
+keeps the single chord. Meanwhile the shortcut reads as its first step,
+then…. Which shortcuts are refused, how one waits and where it begins is in
+[focus](../focus-model.md#shortcuts-of-two-steps).
+A table kept by an earlier version reads as it did, with Send waiting
+messages now on its default.
+
 ## Notifications
 
 Two switches for a session that starts waiting for you, or a question that
@@ -678,7 +687,8 @@ when the user asks the agent for a change to the workbench itself, a darker
 appearance or a shortcut of their own, and the agent is told so.
 
 Reading answers at once, with every setting, what it takes, and the shortcut
-of every action. A change names only what should change, and the agent may
+of every action. A shortcut of two steps is written with a space between
+them, its first step naming its modifier, as `ctrl+x s`. A change names only what should change, and the agent may
 give a reason in the user's terms. It is checked whole before the user
 sees it: a value a setting does not take, an action that does not exist, a
 shortcut two actions would share or one the agent's terminal needs, and the
