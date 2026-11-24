@@ -372,6 +372,34 @@ fn finds_the_session_under_its_project_or_a_folder_under_it() {
 }
 
 #[test]
+fn finds_a_long_project_under_the_name_claude_code_shortens_it_to() {
+    let home = Scratch::new("claude-history-long");
+    let long = format!("/projects/{}", "deep/".repeat(45));
+    let project = Path::new(&long);
+    let projects = home.path().join("projects");
+    std::fs::create_dir_all(&projects).unwrap();
+    // Nothing under the shortened name yet: the form cannot be confirmed.
+    assert!(locate(&home, project, None, SESSION).is_err());
+    let folder = projects.join(crate::transcripts::folder_name(project));
+    std::fs::create_dir_all(&folder).unwrap();
+    assert_eq!(locate(&home, project, None, SESSION).unwrap(), None);
+    std::fs::write(folder.join(format!("{SESSION}.jsonl")), REWOUND).unwrap();
+    assert_eq!(
+        locate(&home, project, None, SESSION).unwrap(),
+        Some(folder.join(format!("{SESSION}.jsonl")))
+    );
+    // A start folder under it is shortened to the same head and found too.
+    let worktree = project.join("tidy");
+    let other = projects.join(crate::transcripts::folder_name(&worktree));
+    std::fs::rename(&folder, &other).unwrap();
+    std::fs::create_dir_all(&folder).unwrap();
+    assert_eq!(
+        locate(&home, project, Some(&worktree), SESSION).unwrap(),
+        Some(other.join(format!("{SESSION}.jsonl")))
+    );
+}
+
+#[test]
 fn skips_an_entry_whose_time_cannot_be_read_and_reads_the_rest() {
     let body = concat!(
         r#"{"type":"user","uuid":"u-1","parentUuid":null,"timestamp":"2026-03-04T10:00:00Z","message":{"role":"user","content":"One"}}"#,

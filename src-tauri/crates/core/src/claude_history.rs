@@ -30,7 +30,7 @@ use crate::integrated::{
     CommandState, CompactReason, Event, History, Image, LimitKind, MessageState, Outcome, Said,
     ToolKind,
 };
-use crate::transcripts::mangle;
+use crate::transcripts::{mangle, FOLDER_MOST};
 
 /// A line longer than this is passed over.
 #[cfg(not(test))]
@@ -78,8 +78,9 @@ pub fn find(
 /// found none from one that could not be made: Ok(None) only where the
 /// account's projects folder and each folder the session could be filed
 /// under were read and none holds it. An error where the project has no
-/// path, the id is not one Claude Code writes, or a folder could not be
-/// read, which says nothing either way.
+/// path, the id is not one Claude Code writes, a folder could not be
+/// read, or a path whose folder name Claude Code shortens has no folder
+/// under that name, which says nothing either way.
 pub fn locate(
     claude_dir: &Path,
     project: &Path,
@@ -94,15 +95,32 @@ pub fn locate(
     {
         return Err(std::io::ErrorKind::InvalidInput.into());
     }
-    let own = mangle(project);
-    let under = format!("{own}-");
-    let ran = cwd.map(mangle);
+    let under = format!("{}-", mangle(project));
+    let named: Vec<String> = std::iter::once(project)
+        .chain(cwd)
+        .map(crate::transcripts::folder_name)
+        .collect();
+    // A shortened name ends in a hash, so a folder of the project or of a
+    // path under it is taken by the head it shares with it.
+    let heads: Vec<String> = named
+        .iter()
+        .filter(|name| name.len() > FOLDER_MOST)
+        .map(|name| name[..=FOLDER_MOST].to_string())
+        .collect();
+    let mut shortened: Vec<&String> = named
+        .iter()
+        .filter(|name| name.len() > FOLDER_MOST)
+        .collect();
     let file = format!("{session}.jsonl");
     let mut newest: Option<(Option<std::time::SystemTime>, PathBuf)> = None;
     for entry in std::fs::read_dir(claude_dir.join("projects"))? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if !(name == own || name.starts_with(&under) || ran.as_ref() == Some(&name)) {
+        shortened.retain(|short| **short != name);
+        if !(named.contains(&name)
+            || name.starts_with(&under)
+            || heads.iter().any(|head| name.starts_with(head)))
+        {
             continue;
         }
         let path = entry.path().join(&file);
@@ -125,6 +143,13 @@ pub fn locate(
         if newest.as_ref().is_none_or(|(newer, _)| modified >= *newer) {
             newest = Some((modified, path));
         }
+    }
+    // A shortened name is Claude Code's own form, read from it rather than
+    // promised, so a look that never met the folder it names says nothing.
+    if newest.is_none() && !shortened.is_empty() {
+        return Err(std::io::Error::other(
+            "no folder under the name Claude Code shortens the path to",
+        ));
     }
     Ok(newest.map(|(_, path)| path))
 }
