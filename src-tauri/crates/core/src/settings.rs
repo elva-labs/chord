@@ -478,6 +478,10 @@ pub struct Settings {
     /// which reads as off.
     #[serde(default)]
     pub auto_resume: bool,
+    /// Whether the editor wraps a long line at its edge rather than letting
+    /// it run on past it. A file from before has none, which reads as off.
+    #[serde(default)]
+    pub word_wrap: bool,
     /// The model, the effort and the permission mode the user last chose
     /// for each harness's sessions, by the harness's id, which a new session
     /// on that harness starts on. A file from before has none.
@@ -523,6 +527,7 @@ impl Default for Settings {
             agents_on: true,
             compact: false,
             auto_resume: false,
+            word_wrap: false,
             last_chosen: BTreeMap::new(),
             unread_entries: Vec::new(),
         }
@@ -1430,6 +1435,7 @@ fn set_field(settings: &mut Settings, field: &str, value: &Value) -> Result<(), 
         "autoResume" => {
             settings.auto_resume = value.as_bool().ok_or("autoResume is true or false")?;
         }
+        "wordWrap" => settings.word_wrap = value.as_bool().ok_or("wordWrap is true or false")?,
         "lastChosen" => settings.last_chosen = last_chosen(value)?,
         "terminalFont" => settings.terminal_font = one_of(field, value, TERMINAL_FONTS)?,
         "interfaceFont" => settings.interface_font = one_of(field, value, INTERFACE_FONTS)?,
@@ -3451,6 +3457,20 @@ mod tests {
         let next = apply(&Settings::default(), &json!({ "userStyles": true })).unwrap();
         assert!(next.user_styles);
         assert!(apply(&next, &json!({ "userStyles": "yes" })).is_err());
+    }
+
+    #[test]
+    fn word_wrap_is_off_until_turned_on() {
+        let defaults = Settings::default();
+        assert!(!defaults.word_wrap);
+        let next = apply(&defaults, &json!({ "wordWrap": true })).unwrap();
+        assert!(next.word_wrap);
+        assert!(apply(&next, &json!({ "wordWrap": "yes" })).is_err());
+        assert!(parse(r#"{ "wordWrap": true }"#).unwrap().word_wrap);
+        assert!(!parse(r#"{ "chime": true }"#).unwrap().word_wrap);
+        let odd = parse(r#"{ "wordWrap": 1 }"#).unwrap();
+        assert!(!odd.word_wrap);
+        assert_eq!(odd.unread_entries[0].field, "wordWrap");
     }
 
     #[test]
