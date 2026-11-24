@@ -14,20 +14,26 @@
  * its row draws the old conversation's messages above its own after a
  * restart too, and what the window keeps by the old id follows it.
  */
-import { dirFor } from "$lib/accounts.svelte";
-import { core } from "$lib/core";
+import { dirFor, known } from "$lib/accounts.svelte";
+import { core, type GoingOn } from "$lib/core";
 import { logUsage } from "$lib/usageLog";
 import type { Session } from "$lib/sessions.svelte";
 
 /** A row's run that went on from notes: the conversation it went on from,
     that conversation's context in tokens when its transcript said, the
     briefing until the first message takes it, and whether anything has
-    been said to the fresh run beyond the briefing. */
+    been said to the fresh run beyond the briefing. `lost` marks a run
+    whose `from` holds nothing stored: there is nothing to resume whole,
+    and the fresh run is not kept as going on from it. `alone` marks one
+    whose row went on from nothing before it, so nothing kept by `from`
+    moves to the fresh run. */
 export interface Went {
   from: string;
   context: number | null;
   briefing: string | null;
   spoken: boolean;
+  lost?: boolean;
+  alone?: boolean;
 }
 
 const LINEAGE_KEY = "chord.wentOn";
@@ -73,39 +79,153 @@ function save() {
   }
 }
 
+/** What a row's start found where nothing was stored under the id it
+    took up: that id, and the earlier conversation of its chain it went on
+    with, or null where none of the chain was stored and it went on fresh.
+    `earlier` is whether the chain held conversations before the id, and
+    `notes` whether the fresh run is briefed from the session's notes. */
+export interface Lost {
+  id: string;
+  to: string | null;
+  earlier: boolean;
+  notes: boolean;
+}
+
+/** What each row's latest start found missing, by row key, until read. */
+const lost: Record<string, Lost> = {};
+
+/** How a conversation is taken up. `always` goes on from the notes
+    whatever its size and rest. `running` is a row whose run is up on the
+    id, which is never taken as holding nothing. */
+export interface TakingUp {
+  always?: boolean;
+  running?: boolean;
+}
+
 /**
  * Decides how a row about to start takes its conversation up again, and
- * answers the agent's id to resume, or null to start a fresh conversation
- * that goes on from the notes. A judgement that fails resumes whole. With
- * `always` the conversation goes on from its notes whatever its size and
- * rest, and the id comes back only where it cannot.
+ * answers the agent's id to resume, or null to start a fresh conversation,
+ * which goes on from the notes where `wentOn` holds a run. A judgement that
+ * fails resumes whole. With `always` the conversation goes on from its
+ * notes whatever its size and rest, and the id comes back only where it
+ * cannot.
+ *
+ * Where the core looked and nothing is stored under the id, the row goes
+ * on with the newest conversation of its chain that is stored, judged as
+ * its own would be, and the id that held nothing leaves the chain. A
+ * judgement of an earlier one that fails resumes that one whole. Where
+ * none is stored, the ids that held nothing leave the chain and the row
+ * goes on fresh under a new id, from the notes where there are any.
+ * Either way `lostAt` says so once, except for a row with no notes that
+ * went on from nothing before the id, which lost nothing and starts
+ * fresh. The id of a running row is resumed whole, and so is that of a
+ * row under an account the window does not know.
  */
-export async function takeUp(session: Session, always = false): Promise<string | null> {
+export async function takeUp(session: Session, how: TakingUp = {}): Promise<string | null> {
   const from = session.resumedFrom;
+  const always = how.always === true;
   delete going.runs[session.key];
+  delete lost[session.key];
   if (from === null) return null;
   if (!always && whole.delete(session.key)) {
     logUsage(session, "resume", { from, whole: true, asked: true });
     return from;
   }
   try {
-    const judged = await core().goingOn({
-      agent: session.agent,
-      project: session.project,
-      cwd: session.startIn ?? undefined,
-      session: from,
-      configDir: dirFor(session.account, session.agent),
-      token: session.token,
-      ...(always ? { always: true } : {}),
-    });
-    const goes = judged.goesOn && judged.briefing !== null;
-    logUsage(session, "resume", { from, whole: !goes, context: judged.context, idle: judged.idle, ...(always ? { afterLimit: true } : {}) });
-    if (!goes) return from;
-    going.runs[session.key] = { from, context: judged.context, briefing: judged.briefing, spoken: false };
-    return null;
+    const judged = await judge(session, from, always);
+    if (judged.missing !== true) return took(session, from, judged, always);
+    // Under an account the window does not know, the core looked in the
+    // agent's own folder, which says nothing of the account's.
+    if (how.running !== true && known(session.account)) return await takeUpStored(session, from, judged, always);
+    logUsage(session, "resume", { from, whole: true, missing: true, ...(always ? { afterLimit: true } : {}) });
+    return from;
   } catch {
     return from;
   }
+}
+
+function judge(session: Session, id: string, always: boolean) {
+  return core().goingOn({
+    agent: session.agent,
+    project: session.project,
+    cwd: session.startIn ?? undefined,
+    session: id,
+    configDir: dirFor(session.account, session.agent),
+    token: session.token,
+    ...(always ? { always: true } : {}),
+  });
+}
+
+/** Acts on the judgement of a conversation that is stored. */
+function took(session: Session, from: string, judged: GoingOn, always: boolean, extra: Record<string, unknown> = {}) {
+  const goes = judged.goesOn && judged.briefing !== null;
+  logUsage(session, "resume", {
+    from,
+    whole: !goes,
+    context: judged.context,
+    idle: judged.idle,
+    ...(always ? { afterLimit: true } : {}),
+    ...extra,
+  });
+  if (!goes) return from;
+  going.runs[session.key] = { from, context: judged.context, briefing: judged.briefing, spoken: false };
+  return null;
+}
+
+/** Takes up the newest stored conversation of the chain `missing` ends,
+    or goes on fresh, from the notes `judged` holds, where none is. */
+async function takeUpStored(session: Session, missing: string, judged: GoingOn, always: boolean) {
+  const chain = lineageOf(missing);
+  const dead = [missing];
+  for (const id of chain.slice(0, -1).reverse()) {
+    let earlier: GoingOn | null;
+    try {
+      earlier = await judge(session, id, always);
+    } catch {
+      earlier = null;
+    }
+    if (earlier !== null && earlier.missing === true) {
+      dead.push(id);
+      continue;
+    }
+    // The ids that held nothing leave the chain, so the stored one is
+    // what went on, once, and what is kept by the id follows it back.
+    for (const gone of dead) delete going.lineage[gone];
+    save();
+    movedOn(missing, id, session.key);
+    lost[session.key] = { id: missing, to: id, earlier: true, notes: false };
+    // One that could not be judged is resumed whole.
+    if (earlier === null) {
+      logUsage(session, "resume", { from: id, whole: true, lost: missing, ...(always ? { afterLimit: true } : {}) });
+      return id;
+    }
+    return took(session, id, earlier, always, { lost: missing });
+  }
+  // None of the chain holds anything: none of it stays in the lineage, so
+  // dead ids never stack up behind the row.
+  for (const gone of dead) if (dead.includes(going.lineage[gone] ?? "")) delete going.lineage[gone];
+  save();
+  const notes = judged.briefing !== null;
+  const earlier = chain.length > 1;
+  logUsage(session, "resume", { from: missing, whole: false, lost: missing, ...(always ? { afterLimit: true } : {}) });
+  if (!notes && !earlier) return null;
+  lost[session.key] = { id: missing, to: null, earlier, notes };
+  going.runs[session.key] = {
+    from: missing,
+    context: null,
+    briefing: judged.briefing,
+    spoken: false,
+    lost: true,
+    ...(earlier ? {} : { alone: true }),
+  };
+  return null;
+}
+
+/** What the row's latest start found missing, said once. */
+export function lostAt(key: string): Lost | null {
+  const found = lost[key] ?? null;
+  delete lost[key];
+  return found;
 }
 
 /** The row's run went on from notes, and from what. */
@@ -117,10 +237,10 @@ export function wentOn(key: string): Went | null {
     this window, with the context it had, until anything is said to the
     fresh run. Resumed whole after that, the old conversation would not
     hold what was said since, while the row still drew it. None for a row
-    whose run went on from none. */
+    whose run went on from none, or from one that holds nothing. */
 export function wholeOf(session: { key: string }): Went | null {
   const went = going.runs[session.key];
-  return went === undefined || went.spoken ? null : went;
+  return went === undefined || went.spoken || went.lost === true ? null : went;
 }
 
 /** The briefing to send ahead of the run's first message, given once.
@@ -154,12 +274,14 @@ export function spoke(key: string) {
 
 /** The conversations the rows with these keys went on from, while their
     runs last: the rows go on with them, and the list does not offer them
-    again, whether the fresh runs' ids are known yet or not. */
+    again, whether the fresh runs' ids are known yet or not. One the core
+    found nothing under is not theirs, so the list still offers it where
+    it turns up. */
 export function leftBy(keys: readonly string[]): Set<string> {
   const left = new Set<string>();
   for (const key of keys) {
     const went = going.runs[key];
-    if (went !== undefined) left.add(went.from);
+    if (went !== undefined && went.lost !== true) left.add(went.from);
   }
   return left;
 }
@@ -173,14 +295,17 @@ export function onWentOn(handler: ((from: string, to: string, key: string) => vo
 }
 
 /** The fresh run's own id is known: it is kept as going on from the old
-    conversation. */
+    conversation, unless that one holds nothing, and what is kept by the
+    old id follows it, unless the row went on from nothing before it. */
 export function identified(key: string, id: string) {
   const went = going.runs[key];
   if (went === undefined || id === went.from) return;
-  load();
-  going.lineage[id] = went.from;
-  save();
-  movedOn(went.from, id, key);
+  if (went.lost !== true) {
+    load();
+    going.lineage[id] = went.from;
+    save();
+  }
+  if (went.alone !== true) movedOn(went.from, id, key);
 }
 
 /** Whether another conversation went on from this one. */
@@ -267,5 +392,6 @@ export function resetGoingOn() {
   for (const key of Object.keys(going.runs)) delete going.runs[key];
   for (const id of Object.keys(going.lineage)) delete going.lineage[id];
   whole.clear();
+  for (const key of Object.keys(lost)) delete lost[key];
   loaded = false;
 }

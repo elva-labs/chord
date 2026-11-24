@@ -1302,7 +1302,9 @@ A conversation too long to hold whole leaves out its start and says so.
 Earlier messages that cannot be read leave the session able to be written
 to, with a line at the top of the thread saying they could not be read
 and why, such as that Codex does not have the conversation, or that
-Claude Code has no transcript of it in the account's directory. A record
+Claude Code has no transcript of it in the account's directory. A
+conversation that went on from another draws what can be read of the
+ones it went on through even where its own holds nothing. A record
 that holds no message of a session that was spoken to is said to be so in
 the same way. The line stays above whatever the session says after it.
 A session nothing was said in, resumed after it ended, has nothing to
@@ -1400,7 +1402,7 @@ file is its path in the text.
 Every session keeps notes of its own conversation, so that it can go on
 later from them rather than from the whole conversation read again. Notes
 can be switched off in the settings, and then none are kept or read, and a
-conversation is always resumed whole, as
+stored conversation is always resumed whole, as
 [keep notes](settings.md#keep-notes) describes. A
 session has one brief, what is being built, kept current, and notes, each
 with a title, a one-line summary, a few lines of body and the day it was
@@ -1534,7 +1536,45 @@ from each conversation the row went on through, the line where the run
 began says it went on from its notes, and the briefing is folded under
 the first message. The old conversation is no longer listed among the
 earlier sessions from the moment the row goes on: the row goes on with
-it.
+it. An id that held nothing is not the row's to go on with, and stays
+listed wherever it turns up.
+
+A fresh conversation is stored by its harness only once something is
+said to it, so a row closed or started again before then holds an id
+nothing is kept under, and so does one whose transcript or Codex thread
+was deleted. The core says nothing is stored only where it looked and
+found nothing: no transcript in the account's folders for the project,
+or for Codex, no thread in its index and no rollout under `sessions/` or
+`archived_sessions/`. Claude Code names a project's folder after its
+path, and where that name runs past 200 characters, by its first 200, a
+dash and a short hash of the path; the core looks under both, and
+where the shortened folder is not there it cannot tell it looked in the
+right place, so it says nothing. A folder it could not read says nothing
+either way, and the conversation is resumed whole as before, so the
+failure shows and the next start can find it.
+
+Where nothing is stored under the id, the row goes on with the newest
+conversation it went on through that is stored, judged as its own would
+be. The ids that held nothing are no longer counted as going on from
+anything. A conversation in that walk that cannot be judged is resumed
+whole. Where none is stored, the row goes on as a fresh conversation
+under a new id, briefed from its notes where it has any, the briefing
+saying no transcript was found, and Resume whole is not offered. With
+notes switched off the core still looks, and the row goes on the same
+way with no briefing. The id of a row whose run is up is resumed whole
+however it reads, and so is that of a row under an account the window
+has not adopted, as when the settings could not be read: the core would
+have looked in the agent's own folders, not the account's.
+
+A conversation row's thread says what happened in a line under the
+earlier messages, such as that the last run kept no record and the row
+goes on from the conversation before it, or goes on as a fresh
+conversation from its notes. The line names the id that held nothing by
+its first eight characters, which the earlier sessions' filter finds it
+by should it be stored where the core did not look. A row that held only that id and has no
+notes lost nothing, and starts fresh without a line. A terminal row goes
+on the same way with no line. The session can be written to at once. A
+core too old to say is taken as finding the conversation.
 
 What can be lost is what the old conversation held and the notes did
 not: files read, results seen, reasoning not written down. The agent is
@@ -1581,7 +1621,10 @@ read off the lines around it. The events are:
   by their lifetime, the output, the number of requests, and the context
   the last one left. A compaction within the turn counts as part of it.
 - **resume**: a conversation was taken up again, whole or from its notes,
-  with its context and how long it had rested where its transcript says.
+  with its context and how long it had rested where its transcript says,
+  the id that held nothing where it went on with an earlier one or fresh
+  for that reason, and whether nothing was stored where it was resumed
+  whole anyway.
 - **wake**: the workbench woke a starter, with how many reports went in
   the message and how many sessions were still at work.
 - **start**: a session another session started came up, with its

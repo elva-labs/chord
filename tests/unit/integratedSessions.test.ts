@@ -19,6 +19,7 @@ import {
   reply,
   resetIntegrated,
   resume,
+  resumeWhole,
   run,
   send,
   sendNow,
@@ -31,7 +32,7 @@ import {
   unspoken,
   workAs,
 } from "$lib/integrated.svelte";
-import { resetGoingOn, wentOn } from "$lib/goingOn.svelte";
+import { going, lineage, resetGoingOn, wentOn, wholeOf } from "$lib/goingOn.svelte";
 import {
   GO_ON,
   MARGIN,
@@ -86,7 +87,7 @@ import {
   wake,
   sessionModelName,
 } from "$lib/sessions.svelte";
-import { modeOf, resetModes } from "$lib/sessionModes";
+import { keepMode, modeOf, resetModes } from "$lib/sessionModes";
 import { adoptLastChosen, anyChosen, chosenFor, lastChosen, resetLastChosen } from "$lib/lastChosen.svelte";
 import { choose } from "$lib/settingChoices";
 import { create as createShell, forOwner, reset as resetShells } from "$lib/terminals.svelte";
@@ -354,6 +355,155 @@ describe("a row at rest whose conversation went cold and large", () => {
     const back = reopened(PROJECT, after, "claude-code", null, null, null, "integrated");
     expect(label(back)).toBe("Login fix");
     expect(back.ownTitle).toBe(true);
+  });
+
+  /** A core that judges each conversation by `judge`, and says of one
+      it has no transcript of that it is missing, as the core does: a
+      fresh run's id is stored under nothing until a message is sent. */
+  function storedOnly(judge: (session: string) => unknown, notes: string | null = null) {
+    const core = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    const judged: string[] = [];
+    core.goingOn = async (options: { session: string }) => {
+      judged.push(options.session);
+      if (kept.has(options.session)) return judge(options.session);
+      return { context: null, idle: null, goesOn: false, briefing: notes, missing: true };
+    };
+    const kept = new Set<string>();
+    return { judged, kept };
+  }
+
+  it("goes on from the conversation it went on from where the fresh run's id was never stored, after a restart", async () => {
+    fake.transcript("old-conversation", written(1_000_000, "Count the files", "There are 12."));
+    let cold = true;
+    const { kept } = storedOnly(() => (cold ? COLD : WARM));
+    kept.add("old-conversation");
+    const { key } = await started({ resumedFrom: "old-conversation" });
+    // It went on fresh, and its id is the fresh run's, which nothing was
+    // said to.
+    const fresh = byKey(key)!.id!;
+    expect(fresh).not.toBe("old-conversation");
+    expect(wentOn(key)).toMatchObject({ from: "old-conversation" });
+
+    // The app quits and comes back: the row is reopened by the fresh id.
+    stopListening();
+    resetSessions();
+    resetIntegrated();
+    resetGoingOn();
+    stopListening = await listenIntegrated();
+    cold = false;
+    const row = reopened(PROJECT, fresh, "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    // It resumes the conversation that is stored, never the fresh id.
+    const starts = fake.calls.filter((call) => call.method === "start");
+    expect(starts.at(-1)).toMatchObject({ options: { session: "old-conversation" } });
+    expect(byKey(row.key)!.status).not.toBe("exited");
+    // The thread says so, and draws what the stored one said.
+    const conversation = conversationOf(row.key);
+    expect(conversation.entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []))).toEqual([
+      `Claude Code kept no record of this session's last run, ${fresh.slice(0, 8)}, so it goes on from the conversation before it. History finds it by ${fresh.slice(0, 8)} if it is stored elsewhere.`,
+    ]);
+    await vi.waitFor(() => expect(conversation.earlier).toBe("read"));
+    expect(agentTexts(conversation)).toEqual(["There are 12."]);
+  });
+
+  it("keeps the name and mode of the conversation it went on from, walked back to", async () => {
+    let cold = true;
+    const { kept } = storedOnly(() => (cold ? COLD : WARM));
+    kept.add("old-conversation");
+    keepMode("old-conversation", "plan", true);
+    const { key } = await started({ resumedFrom: "old-conversation" });
+    renamed(key, "Login fix");
+    const fresh = byKey(key)!.id!;
+    stopListening();
+    resetSessions();
+    resetIntegrated();
+    resetGoingOn();
+    stopListening = await listenIntegrated();
+    loadRemembered();
+    cold = true;
+    const row = reopened(PROJECT, fresh, "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    // Cold and large, the stored one goes on from its notes, and the row
+    // follows it.
+    expect(wentOn(row.key)).toMatchObject({ from: "old-conversation" });
+    const starting = byKey(row.key)!;
+    expect(starting.resumedFrom).toBe("old-conversation");
+    expect(label(starting)).toBe("Login fix");
+    expect(startMode(starting, linkFor(row.key))).toBe("plan");
+  });
+
+  it("starts a row brought back after a restart fresh where its only id holds nothing", async () => {
+    const { judged } = storedOnly(() => WARM);
+    const row = reopened(PROJECT, "never-stored", "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    // A brand-new row closed before its first message lost nothing: it
+    // starts under a new id, says nothing and keeps no dead id.
+    const starts = fake.calls.filter((call) => call.method === "start");
+    expect(starts.at(-1)).toMatchObject({ options: { session: undefined } });
+    expect(judged).toEqual(["never-stored"]);
+    expect(byKey(row.key)!.status).toBe("running");
+    expect(byKey(row.key)!.id).not.toBe("never-stored");
+    expect(wentOn(row.key)).toBeNull();
+    expect(conversationOf(row.key).entries.filter((entry) => entry.kind === "note")).toEqual([]);
+    expect(lineage()).toEqual({});
+  });
+
+  it("goes on fresh from its notes where nothing of its chain is stored, says so, and offers nothing whole", async () => {
+    storedOnly(() => WARM, "NOTES ALONE");
+    going.lineage["never-stored"] = "gone-too";
+    const row = reopened(PROJECT, "never-stored", "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    const starts = fake.calls.filter((call) => call.method === "start");
+    expect(starts.at(-1)).toMatchObject({ options: { session: undefined } });
+    expect(wentOn(row.key)).toMatchObject({ from: "never-stored", lost: true });
+    const conversation = conversationOf(row.key);
+    expect(conversation.entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []))).toEqual([
+      "Claude Code kept no record of this session's last run, never-st, nor of the conversations before it, so it goes on as a fresh conversation from its notes. History finds it by never-st if it is stored elsewhere.",
+    ]);
+    // There is nothing whole to resume, and the dead ids leave the chain.
+    expect(wholeOf(byKey(row.key)!)).toBeNull();
+    expect(await resumeWhole(row.key)).toBe(false);
+    // The user gets on: what they send reaches the fresh run, with the
+    // notes ahead of it, and the fresh run goes on from no dead id.
+    send(row.key, "Where are we?");
+    fake.turn(handleOf(row.key)!, "Here.");
+    expect(agentTexts(conversation)).toContain("Here.");
+    expect(lineage()).toEqual({});
+  });
+
+  it("starts a brand-new row nothing was said in afresh, saying nothing, where its id holds nothing", async () => {
+    const { session, handle } = await started();
+    const first = byKey(session.key)!.id!;
+    fake.end(handle, false);
+    storedOnly(() => WARM);
+    await resume(session.key);
+    const starts = fake.calls.filter((call) => call.method === "start");
+    expect(starts.at(-1)).toMatchObject({ options: { session: undefined } });
+    expect(byKey(session.key)!.status).toBe("running");
+    expect(byKey(session.key)!.id).not.toBe(first);
+    expect(wentOn(session.key)).toBeNull();
+    const notes = conversationOf(session.key).entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []));
+    expect(notes).toEqual(["claude ended with code 1"]);
+    expect(lineage()).toEqual({});
+  });
+
+  it("leaves a running row as it is when its id reads as holding nothing", async () => {
+    const { key, handle } = await large();
+    const id = byKey(key)!.id!;
+    going.lineage[id] = "earlier";
+    const { judged, kept } = storedOnly(() => COLD);
+    kept.add("earlier");
+    expect(await goOnIfCold(key, Date.now(), true)).toBe(false);
+    expect(await goOnAfterLimit(key, Date.now())).toBe(false);
+    expect(judged).toEqual([id, id]);
+    expect(handleOf(key)).toBe(handle);
+    expect(byKey(key)!.id).toBe(id);
+    expect(wentOn(key)).toBeNull();
+    expect(lineage()).toEqual({ [id]: "earlier" });
   });
 
   async function large() {

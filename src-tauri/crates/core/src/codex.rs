@@ -146,6 +146,66 @@ pub fn rollout_path(codex_home: &Path, id: &str) -> Option<PathBuf> {
         .ok()
 }
 
+/// Whether no conversation is stored under the id: Codex's index holds no
+/// such thread or the rollout it names is not on disk, and no rollout of
+/// it lies in the account's sessions folder, which Codex itself looks
+/// through where its index falls behind, or in its archived sessions
+/// folder. False where the index or either folder cannot be read, which
+/// says nothing either way; an archive folder Codex has not made yet holds
+/// nothing.
+pub fn thread_missing(codex_home: &Path, id: &str) -> bool {
+    let Some(db) = open(codex_home) else {
+        return false;
+    };
+    let indexed = match db.query_row(
+        "SELECT rollout_path FROM threads WHERE id = ?1",
+        [id],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(path) => Path::new(&path).is_file(),
+        Err(rusqlite::Error::QueryReturnedNoRows) => false,
+        Err(_) => return false,
+    };
+    if indexed {
+        return false;
+    }
+    // Codex makes the archive folder only once a thread is archived.
+    let archived = match stored_rollout(&codex_home.join("archived_sessions"), id, 0) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        archived => archived,
+    };
+    matches!(archived, Ok(false))
+        && matches!(
+            stored_rollout(&codex_home.join("sessions"), id, 0),
+            Ok(false)
+        )
+}
+
+/// How deep the sessions folder nests rollouts: year, month and day.
+const SESSIONS_DEPTH: usize = 3;
+
+/// Whether a rollout of the thread lies in the folder or one nested under
+/// it as Codex files them. An error where a folder could not be read.
+fn stored_rollout(dir: &Path, id: &str, depth: usize) -> std::io::Result<bool> {
+    let ending = format!("-{id}.jsonl");
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if kind.is_dir() {
+            if depth < SESSIONS_DEPTH && stored_rollout(&entry.path(), id, depth + 1)? {
+                return Ok(true);
+            }
+            continue;
+        }
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("rollout-") && name.ends_with(&ending) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Reads complete turn events, retaining the byte offset across polls.
 /// A resumed conversation starts at its current end, without replaying history.
 pub struct Activity {

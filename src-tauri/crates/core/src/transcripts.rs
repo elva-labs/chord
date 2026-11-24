@@ -56,6 +56,49 @@ pub fn mangle(project: &Path) -> String {
         .collect()
 }
 
+/// The longest folder name Claude Code files transcripts under in full.
+pub const FOLDER_MOST: usize = 200;
+
+/// Claude Code's folder name for a working directory: its mangled path,
+/// or where that is longer than `FOLDER_MOST`, the first `FOLDER_MOST`
+/// characters of it, a dash and a hash of the path. The hash is the 32-bit
+/// string hash of the path's UTF-16 code units, unsigned, in base 36.
+pub fn folder_name(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    let mangled: String = text
+        .encode_utf16()
+        .map(|unit| match char::from_u32(u32::from(unit)) {
+            Some(c) if c.is_ascii_alphanumeric() => c,
+            _ => '-',
+        })
+        .collect();
+    if mangled.len() <= FOLDER_MOST {
+        return mangled;
+    }
+    let hash = text.encode_utf16().fold(0i32, |hash, unit| {
+        hash.wrapping_shl(5)
+            .wrapping_sub(hash)
+            .wrapping_add(i32::from(unit))
+    });
+    format!(
+        "{}-{}",
+        &mangled[..FOLDER_MOST],
+        base36(hash.unsigned_abs())
+    )
+}
+
+fn base36(mut value: u32) -> String {
+    let mut digits = Vec::new();
+    loop {
+        digits.push(char::from_digit(value % 36, 36).unwrap_or('0'));
+        value /= 36;
+        if value == 0 {
+            break;
+        }
+    }
+    digits.iter().rev().collect()
+}
+
 /// Where Claude Code files a project's transcripts, under the directory it
 /// keeps its configuration in: `.claude` under the home for the agent's
 /// own account, or the account's own directory.
@@ -580,6 +623,20 @@ mod tests {
             mangle(Path::new("/home/ada/dev/demo")),
             "-home-ada-dev-demo"
         );
+    }
+
+    #[test]
+    fn names_a_long_folder_the_way_claude_code_shortens_it() {
+        let short = Path::new("/home/ada/dev/demo");
+        assert_eq!(folder_name(short), mangle(short));
+        let long = format!("/home/ada/{}", "a".repeat(200));
+        let name = folder_name(Path::new(&long));
+        assert_eq!(
+            &name[..FOLDER_MOST],
+            &mangle(Path::new(&long))[..FOLDER_MOST]
+        );
+        // The hash Claude Code's own shortening gives for this path.
+        assert_eq!(&name[FOLDER_MOST..], "-rvxyuq");
     }
 
     #[test]

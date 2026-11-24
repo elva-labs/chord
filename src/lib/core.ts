@@ -1881,12 +1881,16 @@ export interface GoingOnOptions {
 
 /** How a conversation is taken up again: its context in tokens and the
     seconds since its last request, where its transcript says, and whether
-    it goes on fresh, cold and large as it is, from the briefing. */
+    it goes on fresh, cold and large as it is, from the briefing. `missing`
+    says nothing is stored under its id, no transcript or rollout, and the
+    briefing then holds the notes alone; a core that does not say is taken
+    as finding it. */
 export interface GoingOn {
   context: number | null;
   idle: number | null;
   goesOn: boolean;
   briefing: string | null;
+  missing?: boolean;
 }
 
 /** What a session keeps in its notes: how many notes stand, whether it
@@ -3289,7 +3293,7 @@ const detachedCore: Core = {
   },
   async usageLog() {},
   async goingOn() {
-    return { context: null, idle: null, goesOn: false, briefing: null };
+    return { context: null, idle: null, goesOn: false, briefing: null, missing: false };
   },
   async readMedia() {
     throw new Error("no core");

@@ -1509,8 +1509,12 @@ impl Core {
     /// Claude Code or Codex conversation that is cold and large, as a
     /// fresh one from the briefing this answers with. With `always` it
     /// goes on from the briefing whatever its size and however long it
-    /// rested. Whole for any other agent, while notes are switched off,
-    /// and where no transcript or rollout of it is found.
+    /// rested. Whole for any other agent, for a stored conversation while
+    /// notes are switched off, and for a Codex conversation whose index
+    /// cannot be read. Missing only where the folders it would be stored in
+    /// were read and hold nothing of it, with its notes alone as the
+    /// briefing while notes are on and none while they are off; whole
+    /// where they could not be read.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1527,18 +1531,29 @@ impl Core {
             idle: None,
             goes_on: false,
             briefing: None,
+            missing: false,
         };
         let Some(home) = self.home.as_ref() else {
             return Ok(whole);
         };
-        if !self.switched_on(|settings| settings.notes_on) {
-            return Ok(whole);
-        }
+        // With notes switched off a conversation is still looked for, so one
+        // nothing is stored under is missing, with no briefing.
+        let notes_on = self.switched_on(|settings| settings.notes_on);
+        let notes = |since| {
+            notes_on
+                .then(|| crate::notes::briefing_since(home, token, since))
+                .flatten()
+        };
         let environment = env::environment();
-        let notes = |since| crate::notes::briefing_since(home, token, since);
         let now = crate::notes::now() as u64 * 1000;
         if agent == "codex" {
             let codex_home = account::codex_home(home, config_dir, &environment.vars);
+            if crate::codex::thread_missing(&codex_home, session) {
+                return Ok(crate::going_on::missing(notes));
+            }
+            if !notes_on {
+                return Ok(whole);
+            }
             let Some(rollout) = crate::codex::rollout_path(&codex_home, session) else {
                 return Ok(whole);
             };
@@ -1548,9 +1563,14 @@ impl Core {
             return Ok(whole);
         }
         let dir = account::claude_dir(home, config_dir, &environment.vars);
-        let Some(path) = crate::claude_history::find(&dir, project, cwd, session) else {
-            return Ok(whole);
+        let path = match crate::claude_history::locate(&dir, project, cwd, session) {
+            Ok(Some(path)) => path,
+            Ok(None) => return Ok(crate::going_on::missing(notes)),
+            Err(_) => return Ok(whole),
         };
+        if !notes_on {
+            return Ok(whole);
+        }
         // A conversation held at a point it went back to is judged and
         // briefed as it stands there.
         let leaf = crate::claude_history::leaf(&path);
@@ -2842,6 +2862,7 @@ mod tests {
     fn a_codex_conversation_is_taken_up_from_its_rollout() {
         let home = Scratch::new("api-codex-taken-up");
         let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
+        std::fs::create_dir_all(codex.join("sessions")).unwrap();
         let core = core_at(&home);
         let dir = codex.to_str();
         let judged = core
@@ -2858,6 +2879,8 @@ mod tests {
             .unwrap();
         assert!(!unknown.goes_on);
         assert_eq!(unknown.context, None);
+        assert!(unknown.missing);
+        assert!(!judged_missing(&core, "thread", dir));
         let settings = crate::settings::settings_path(home.path());
         std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
         std::fs::write(&settings, r#"{ "notesOn": false }"#).unwrap();
@@ -2872,6 +2895,204 @@ mod tests {
                 .unwrap()
                 .goes_on
         );
+    }
+
+    fn judged_missing(core: &Core, session: &str, dir: Option<&str>) -> bool {
+        core.taken_up("codex", Path::new("/p"), None, session, dir, "token", false)
+            .unwrap()
+            .missing
+    }
+
+    /// A Codex thread the index holds whose rollout is not on disk yet is
+    /// missing, its notes the briefing to go on with.
+    #[test]
+    fn a_codex_thread_with_no_rollout_on_disk_is_missing() {
+        let home = Scratch::new("api-codex-no-rollout");
+        let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
+        std::fs::remove_file(&rollout).unwrap();
+        std::fs::create_dir_all(codex.join("sessions").join("2026")).unwrap();
+        let core = core_at(&home);
+        crate::notes::Notes::open(home.path())
+            .unwrap()
+            .add(
+                "token",
+                &crate::notes::NewNote {
+                    title: "Importer",
+                    summary: "Half built.",
+                    body: "",
+                    replaces: None,
+                },
+                0,
+            )
+            .unwrap();
+        let judged = core
+            .taken_up(
+                "codex",
+                home.path(),
+                None,
+                "thread",
+                codex.to_str(),
+                "token",
+                false,
+            )
+            .unwrap();
+        assert!(judged.missing);
+        assert!(!judged.goes_on);
+        let briefing = judged.briefing.unwrap();
+        assert!(briefing.contains("Half built."));
+        assert!(briefing.contains("No transcript of the earlier conversation was found"));
+        assert!(!briefing.contains("rollout-thread.jsonl"));
+    }
+
+    /// With notes switched off a conversation is still looked for: one with
+    /// nothing stored is missing, with no briefing though it has notes, and
+    /// one that is stored is resumed whole.
+    #[test]
+    fn with_notes_off_a_conversation_with_nothing_stored_is_still_missing() {
+        let home = Scratch::new("api-notes-off-missing");
+        let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
+        std::fs::create_dir_all(home.path().join(".claude").join("projects")).unwrap();
+        let core = core_at(&home);
+        crate::notes::Notes::open(home.path())
+            .unwrap()
+            .add(
+                "token",
+                &crate::notes::NewNote {
+                    title: "Importer",
+                    summary: "Half built.",
+                    body: "",
+                    replaces: None,
+                },
+                0,
+            )
+            .unwrap();
+        let settings = crate::settings::settings_path(home.path());
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(&settings, r#"{ "notesOn": false }"#).unwrap();
+        let judged = |agent: &str, session: &str, dir: Option<&str>| {
+            core.taken_up(agent, home.path(), None, session, dir, "token", false)
+                .unwrap()
+        };
+        let stored = judged("codex", "thread", codex.to_str());
+        assert!(!stored.missing && !stored.goes_on);
+        std::fs::remove_file(&rollout).unwrap();
+        std::fs::create_dir_all(codex.join("sessions").join("2026")).unwrap();
+        for gone in [
+            judged("codex", "thread", codex.to_str()),
+            judged("claude-code", "never-written", None),
+        ] {
+            assert!(gone.missing);
+            assert!(!gone.goes_on);
+            assert_eq!(gone.briefing, None);
+        }
+    }
+
+    /// A Codex thread the index does not hold yet, or names a rollout of
+    /// that is not where it says, is not missing while its rollout lies in
+    /// the sessions folder; with no sessions folder to look in it is not
+    /// missing either.
+    #[test]
+    fn a_codex_thread_is_missing_only_where_the_sessions_folder_holds_no_rollout_of_it() {
+        let home = Scratch::new("api-codex-scanned");
+        let (codex, _) = codex_account(
+            &home,
+            Some(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+                 INSERT INTO threads VALUES ('moved', '/elsewhere/rollout-moved.jsonl');",
+            ),
+        );
+        let core = core_at(&home);
+        let dir = codex.to_str();
+        assert!(!judged_missing(&core, "unindexed", dir));
+        let day = codex.join("sessions").join("2026").join("01").join("02");
+        std::fs::create_dir_all(&day).unwrap();
+        std::fs::write(day.join("rollout-2026-01-02T08-00-00-unindexed.jsonl"), "").unwrap();
+        std::fs::write(day.join("rollout-2026-01-02T09-00-00-moved.jsonl"), "").unwrap();
+        assert!(!judged_missing(&core, "unindexed", dir));
+        assert!(!judged_missing(&core, "moved", dir));
+        assert!(judged_missing(&core, "never-written", dir));
+    }
+
+    /// A Codex thread the index does not hold is not missing while its
+    /// rollout lies in the archive folder.
+    #[test]
+    fn a_codex_thread_whose_rollout_is_archived_is_not_missing() {
+        let home = Scratch::new("api-codex-archived");
+        let (codex, _) = codex_account(
+            &home,
+            Some("CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL);"),
+        );
+        std::fs::create_dir_all(codex.join("sessions").join("2026")).unwrap();
+        let core = core_at(&home);
+        let dir = codex.to_str();
+        assert!(judged_missing(&core, "archived", dir));
+        let archive = codex.join("archived_sessions");
+        std::fs::create_dir_all(&archive).unwrap();
+        std::fs::write(
+            archive.join("rollout-2026-01-02T08-00-00-archived.jsonl"),
+            "",
+        )
+        .unwrap();
+        assert!(!judged_missing(&core, "archived", dir));
+        assert!(judged_missing(&core, "never-written", dir));
+    }
+
+    /// A Claude Code conversation is not missing where the account's
+    /// projects folder is not there or cannot be read: it is resumed whole.
+    #[test]
+    fn a_claude_code_conversation_is_not_missing_where_its_folder_cannot_be_read() {
+        let home = Scratch::new("api-claude-unread");
+        let core = core_at(&home);
+        let judge = |core: &Core| {
+            core.taken_up(
+                "claude-code",
+                home.path(),
+                None,
+                "written",
+                None,
+                "token",
+                false,
+            )
+            .unwrap()
+        };
+        let absent = judge(&core);
+        assert!(!absent.missing);
+        assert!(!absent.goes_on);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let projects = home.path().join(".claude").join("projects");
+            std::fs::create_dir_all(&projects).unwrap();
+            std::fs::set_permissions(&projects, std::fs::Permissions::from_mode(0o000)).unwrap();
+            let readable = std::fs::read_dir(&projects).is_ok();
+            let unread = judge(&core);
+            std::fs::set_permissions(&projects, std::fs::Permissions::from_mode(0o755)).unwrap();
+            if !readable {
+                assert!(!unread.missing);
+            }
+        }
+    }
+
+    /// A Claude Code conversation with no transcript is missing, with no
+    /// briefing where it kept no notes.
+    #[test]
+    fn a_claude_code_conversation_with_no_transcript_is_missing() {
+        let home = Scratch::new("api-claude-missing");
+        std::fs::create_dir_all(home.path().join(".claude").join("projects")).unwrap();
+        let judged = core_at(&home)
+            .taken_up(
+                "claude-code",
+                home.path(),
+                None,
+                "never-written",
+                None,
+                "token",
+                false,
+            )
+            .unwrap();
+        assert!(judged.missing);
+        assert!(!judged.goes_on);
+        assert_eq!(judged.briefing, None);
     }
 
     /// A cold and large Codex conversation whose rollout the account's
@@ -2893,6 +3114,7 @@ mod tests {
         assert!(!judged.goes_on);
         assert_eq!(judged.context, None);
         assert_eq!(judged.briefing, None);
+        assert!(!judged.missing);
     }
 
     #[test]

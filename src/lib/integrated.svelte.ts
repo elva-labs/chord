@@ -26,7 +26,7 @@ import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
 import { heardOffers } from "$lib/lastChosen.svelte";
 import { limitEnded, runOver, setHands, settle as settleAutoResume, turnMoved } from "$lib/autoResume.svelte";
 import { modelLabel } from "$lib/models";
-import { harnessProfile } from "$lib/harness.svelte";
+import { harnessLabel, harnessProfile } from "$lib/harness.svelte";
 import { heardCatalog } from "$lib/modelCatalog.svelte";
 import { readsAsCommand } from "$lib/slash";
 import { offeredModel, thoughtAnswers } from "$lib/thread";
@@ -51,8 +51,10 @@ import {
   briefingFor,
   forgetWent,
   identified,
+  lostAt,
   takeUp,
   wentOn,
+  type Lost,
   wholeOf,
 } from "$lib/goingOn.svelte";
 import { clock as timeOfDay } from "$lib/thread";
@@ -651,9 +653,16 @@ export async function launch(key: string): Promise<void> {
     // A cold and large conversation goes on fresh from its notes, under
     // its earlier messages, which are still drawn from the old one.
     if (starting.resumedFrom !== null) {
-      await takeUp(starting);
+      const resume = await takeUp(starting);
+      // The row follows the conversation it goes on with or from, and a row
+      // with nothing to go on from follows none.
+      starting.resumedFrom = resume ?? wentOn(key)?.from ?? null;
       link.conversation.wentOn = wentOn(key) !== null;
       link.conversation.afterLimit = null;
+      // A row whose id held nothing goes on with what is stored, and says so.
+      const lost = lostAt(key);
+      if (lost !== null)
+        link.conversation.apply({ type: "notice", level: "info", message: lostText(starting.agent, lost) });
       // The row keeps the name it showed, which its old conversation gave.
       if (link.conversation.wentOn) starting.title ??= knownName(starting);
     }
@@ -662,6 +671,19 @@ export async function launch(key: string): Promise<void> {
     startFailed(key, link, error);
   }
   settleRun(key);
+}
+
+/** What the view says of a start that found nothing stored under the id
+    the row took up. It names the id by its start, which History finds the
+    conversation by should it be stored where the agent did not look. */
+function lostText(agent: HarnessId, lost: Lost): string {
+  const short = lost.id.slice(0, 8);
+  const kept = `${harnessLabel(agent)} kept no record of this session's last run, ${short}`;
+  const found = ` History finds it by ${short} if it is stored elsewhere.`;
+  if (lost.to !== null) return `${kept}, so it goes on from the conversation before it.${found}`;
+  const before = lost.earlier ? ", nor of the conversations before it" : "";
+  const notes = lost.notes ? " from its notes" : "";
+  return `${kept}${before}, so it goes on as a fresh conversation${notes}.${found}`;
 }
 
 /** What a session another started as one of its agents tells the core, so
@@ -1597,7 +1619,7 @@ export async function goOnIfCold(key: string, now = Date.now(), sending = false)
   link.restarting = true;
   let resume: string | null;
   try {
-    resume = await takeUp({ ...session, resumedFrom: id });
+    resume = await takeUp({ ...session, resumedFrom: id }, { running: true });
   } catch {
     resume = id;
   }
@@ -1684,7 +1706,7 @@ export async function goOnAfterLimit(key: string, resetAt: number): Promise<bool
   link.restarting = true;
   let resume: string | null;
   try {
-    resume = await takeUp({ ...session, resumedFrom: id }, true);
+    resume = await takeUp({ ...session, resumedFrom: id }, { always: true, running: true });
   } catch {
     resume = id;
   }
