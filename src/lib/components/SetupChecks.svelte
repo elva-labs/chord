@@ -160,6 +160,33 @@
     border-top: 1px solid var(--divider);
   }
 
+  /* In the settings the groups stand on the grid the other tabs use. */
+  :global(.s-dialog) .label {
+    align-items: center;
+    min-height: 22px;
+    font-size: var(--heading-size);
+    font-weight: var(--heading-weight);
+    color: var(--heading-color);
+  }
+
+  :global(.s-dialog) .group:first-child .label {
+    margin-top: 6px;
+  }
+
+  :global(.s-dialog) .label span {
+    font-size: var(--label-size);
+    color: var(--ground-quiet);
+  }
+
+  :global(.s-dialog) .card {
+    margin-bottom: 22px;
+  }
+
+  :global(.s-dialog) .row {
+    padding: 7px 14px;
+    min-height: 42px;
+  }
+
   .name {
     font-size: var(--row-size);
     font-weight: 500;
