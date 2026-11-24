@@ -25,6 +25,7 @@
   import StatusBar from "$lib/components/StatusBar.svelte";
   import CompactEdge from "$lib/components/CompactEdge.svelte";
   import { compact } from "$lib/compact.svelte";
+  import { toggleWrap } from "$lib/wrap.svelte";
   import {
     cancelled as conductCancelled,
     conductor,
@@ -62,6 +63,7 @@
     save,
     toggleRight,
     walkView,
+    wrapApplies,
     zoomEditor,
   } from "$lib/editor.svelte";
   import { watchProcesses } from "$lib/processes.svelte";
@@ -993,6 +995,9 @@
         break;
       case "save":
         if (editing) void save();
+        break;
+      case "toggleWrap":
+        if (wrapApplies()) toggleWrap();
         break;
       case "close":
         void closeInFront();

@@ -20,6 +20,7 @@
     lastChosen: "choices new sessions start on",
     autoResume: "choice on going on after a usage limit",
     compact: "compact mode choice",
+    wordWrap: "choice on wrapping lines in the editor",
   };
 
   /** What an entry is called to the user. */

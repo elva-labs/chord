@@ -1,4 +1,4 @@
-import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, Prec, type Extension, type TransactionSpec } from "@codemirror/state";
 import {
   EditorView,
   drawSelection,
@@ -352,6 +352,22 @@ class FindPanel implements Panel {
     for a file in no language the editor colours. */
 export const language = new Compartment();
 
+/** Whether a long line breaks at the editor's edge. */
+export const wrapping = new Compartment();
+
+/** What wrapping holds: lines broken at the edge, or none. */
+export function wrapExtension(on: boolean): Extension {
+  return on ? EditorView.lineWrapping : plain;
+}
+
+/** The change that sets the state's wrapping, or null when it is already
+    so. Every file's state carries its own, so one shown after the choice
+    was made is brought to it. */
+export function wrapChange(state: EditorState, on: boolean): TransactionSpec | null {
+  const want = wrapExtension(on);
+  return wrapping.get(state) === want ? null : { effects: wrapping.reconfigure(want) };
+}
+
 /** What the language holds for a file drawn plain. */
 export const plain: Extension = [];
 
@@ -374,6 +390,7 @@ export const extensions: Extension[] = [
   ]),
   theme,
   language.of(plain),
+  wrapping.of(plain),
   // Enter gives a new line the indentation of the line it leaves, in every
   // language: the language's own rules count in a unit the file may not use.
   Prec.highest(indentService.of(() => null)),

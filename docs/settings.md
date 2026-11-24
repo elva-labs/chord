@@ -6,7 +6,7 @@
 
 ## Appearance
 
-Mode is system, light or dark. System follows the desktop. The Appearance tab also holds the look, the colour, compact mode and the two fonts, then the background image, which opens in place, and custom styles.
+Mode is system, light or dark. System follows the desktop. The Appearance tab also holds the look, the colour, compact mode, wrapping of long lines in the editor and the two fonts, then the background image, which opens in place, and custom styles.
 
 ## Theme
 

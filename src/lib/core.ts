@@ -1867,6 +1867,9 @@ export interface Settings {
       that cut it short resets: the user's last choice on a conversation.
       A file from before has none, which reads as off. */
   autoResume?: boolean;
+  /** Whether the editor wraps a long line at its edge. A file from
+      before has none, which reads as off. */
+  wordWrap?: boolean;
 }
 
 /** The conversation a session is about to take up again. */

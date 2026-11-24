@@ -42,6 +42,7 @@ import {
   zoomEditor,
   loadEditorSize,
   moved,
+  wrapApplies,
 } from "$lib/editor.svelte";
 import { language, plain } from "$lib/codeEditor";
 import { colouringOf } from "$lib/languages";
@@ -185,6 +186,20 @@ beforeEach(async () => {
   await refresh();
   await setScope("all");
   document.body.innerHTML = "";
+});
+
+describe("wrapping applies", () => {
+  it("to a text file shown as text in editor mode, and to nothing else", async () => {
+    expect(wrapApplies()).toBe(false);
+    await openFile("docs/a.md");
+    expect(wrapApplies()).toBe(true);
+    setTabView("diff");
+    expect(wrapApplies()).toBe(false);
+    setTabView("edit");
+    expect(wrapApplies()).toBe(true);
+    layout.mode = "working";
+    expect(wrapApplies()).toBe(false);
+  });
 });
 
 describe("opening files", () => {

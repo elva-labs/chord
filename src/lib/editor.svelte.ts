@@ -284,6 +284,14 @@ export function canSaveInFront(): boolean {
   return buffer !== null && !buffer.loading && buffer.error === null && !otherKindShown();
 }
 
+/** Whether the editor draws a text file in front, the one wrapping acts on:
+    editor mode, a file read in, shown as its text and not as a diff or a
+    rendering. */
+export function wrapApplies(): boolean {
+  const tab = activeTab();
+  return layout.mode === "editing" && tab !== null && tab.view === "edit" && canSaveInFront();
+}
+
 /** Whether any open file has edits not yet written. */
 export function anyUnsaved(): boolean {
   return Object.values(editor.buffers).some((buffer) => buffer.dirty);

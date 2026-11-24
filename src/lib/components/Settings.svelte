@@ -87,6 +87,7 @@
   import { DEFAULTS } from "$lib/customThemes";
   import { setUserStyles, userStyles } from "$lib/userStyles.svelte";
   import { compact, setCompact } from "$lib/compact.svelte";
+  import { wrap, setWrap } from "$lib/wrap.svelte";
   import { notify, setChime, setNotifications } from "$lib/notify.svelte";
   import { setAskEveryStart, startAsk } from "$lib/startAsk.svelte";
   import { setAgentsOn, setNotesOn, switches } from "$lib/switches.svelte";
@@ -562,7 +563,7 @@
         <div class="col">
           {#if tab === "appearance"}
             <div class="s-grp">
-              <UnreadEntries field={["appearance", "look", "compact", "themes", "palette"]} />
+              <UnreadEntries field={["appearance", "look", "compact", "wordWrap", "themes", "palette"]} />
               <div class="s-card">
                 <div class="s-row">
                   <span class="s-name">Mode</span>
@@ -648,6 +649,12 @@
                   <span class="s-name" id="compact-label">Compact</span>
                   <div class="s-ctl">
                     <Switch on={compact.on} onchange={setCompact} labelledby="compact-label" testid="compact" />
+                  </div>
+                </div>
+                <div class="s-row">
+                  <span class="s-name" id="wrap-label">Wrap long lines in the editor</span>
+                  <div class="s-ctl">
+                    <Switch on={wrap.on} onchange={setWrap} labelledby="wrap-label" testid="wrap" />
                   </div>
                 </div>
               </div>

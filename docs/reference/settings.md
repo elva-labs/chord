@@ -5,7 +5,7 @@ Settings open from the native menu, or with <kbd>Cmd</kbd><kbd>,</kbd>
 at once.
 
 The settings are in eight tabs down the left. Appearance carries the
-appearance, theme, compact mode, font, colour, background and custom styles sections; sessions,
+appearance, theme, compact mode, word wrap, font, colour, background and custom styles sections; sessions,
 agents, setup, accounts, plugins, keys and notifications each carry
 the section of that name, sessions carries live updates too, and agents
 carries the teams. Opening the settings again lands on the tab last used, for as long as
@@ -34,7 +34,7 @@ or <kbd>Esc</kbd>, closes the dialog.
 
 ## Appearance
 
-The tab shows mode, theme, colour, compact mode and the two fonts, then
+The tab shows mode, theme, colour, compact mode, Wrap long lines in the editor and the two fonts, then
 Background image and Custom styles. Background image is a row that opens
 the picker under it, says On or None at its end, and is open from the start
 while the colour in use has a background.
@@ -64,6 +64,14 @@ the layout and slides in over the other panes from the window's left
 edge, when the pointer reaches it or the shortcut that goes to the pane is
 pressed; [layout](layout.md#compact-mode) describes it. The section names
 that shortcut as it is bound.
+
+## Word wrap
+
+On or off, off to begin with, one choice for every file. On, the editor
+breaks a long line at its edge instead of scrolling sideways; [the
+editor](../editor.md#long-lines) describes it. The same choice is made from
+the command palette and by a shortcut, and the row, the command and the
+shortcut always show the one value.
 
 ## Font
 
@@ -869,7 +877,7 @@ on, whichever machine the agent runs on.
 
 ## Where they are kept
 
-The appearance, the look, compact mode, the palette, the fonts, the shortcuts, the answer
+The appearance, the look, compact mode, word wrap, the palette, the fonts, the shortcuts, the answer
 on hooks, the accounts, your own agents, the workflows and the projects' choices among them, the teams,
 how long past sessions stay listed, how long a project stays active, what
 new sessions start on, the notes and agents switches, the notifications, your own themes, the backgrounds and the cards' shares are kept for the machine, in `settings.json` under `~/.chord`, and every
