@@ -267,7 +267,8 @@ test.describe("mentioning a file with @", () => {
     await page.keyboard.press("Enter");
     await expect.poll(() => sent(page)).toBe("Add the `@Override` and `@types/node`, see `@src/cache/store.rs` ");
     const message = page.getByTestId("user-message");
-    await expect(message.locator(".bubble p")).toHaveText("Add the `@Override` and `@types/node`, see @src/cache/store.rs");
+    await expect(message.locator(".bubble p")).toHaveText("Add the @Override and @types/node, see @src/cache/store.rs");
+    await expect(message.locator(".bubble code")).toHaveText(["@Override", "@types/node"]);
     await expect(message.getByTestId("message-mention")).toHaveCount(1);
     await expect(message.getByTestId("message-mention")).toHaveText("@src/cache/store.rs");
     // Its row is named by the words as typed.
