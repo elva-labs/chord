@@ -463,10 +463,12 @@ mod tests {
     use super::*;
     use crate::scratch::Scratch;
 
+    #[cfg(unix)]
     fn no_keychain() -> bool {
         false
     }
 
+    #[cfg(unix)]
     fn vars(path: &Path) -> HashMap<String, String> {
         HashMap::from([("PATH".to_string(), path.to_string_lossy().to_string())])
     }
@@ -479,6 +481,7 @@ mod tests {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    #[cfg(unix)]
     fn by_id<'a>(setup: &'a Setup, id: &str) -> &'a Check {
         setup.checks.iter().find(|check| check.id == id).unwrap()
     }
