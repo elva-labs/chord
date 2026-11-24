@@ -79,6 +79,8 @@ export type Action =
   | { type: "newUntitled" }
   /** The file in front in the editor written to disk. */
   | { type: "save" }
+  /** Long lines in the editor broken at its edge, or not. */
+  | { type: "toggleWrap" }
   /** What is in front closed: see `closeTarget`. */
   | { type: "close" }
   /** A new shell in the terminal panel, with the keyboard in it. */
@@ -168,6 +170,7 @@ const ACTION_OF: Record<ActionKey, Action> = {
   "file.new": { type: "newFile" },
   "file.untitled": { type: "newUntitled" },
   "file.save": { type: "save" },
+  "editor.wrap": { type: "toggleWrap" },
   "file.close": { type: "close" },
   "terminal.new": { type: "newShell" },
   theme: { type: "cycleTheme" },
@@ -334,6 +337,8 @@ export function resolveAction(e: KeyState, ctx: KeyContext = DEFAULT_CONTEXT): A
   const terminal = isTerminal(ctx.focus) && !(ctx.focus === "agent" && ctx.integrated);
   if (action === "file.save" && (!ctx.editing || terminal)) return null;
   if (action === "file.close" && !mac && terminal) return null;
+  // Wrapping is the editor's: it has no meaning outside editor mode.
+  if (action === "editor.wrap" && !ctx.editing) return null;
   // A new untitled file is the app's in either mode. On Windows and Linux
   // a terminal keeps Ctrl+N, its next line of history; on macOS Cmd is
   // never the terminal's.

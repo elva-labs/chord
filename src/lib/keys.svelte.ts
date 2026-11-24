@@ -39,6 +39,7 @@ export type ActionKey =
   | "file.new"
   | "file.untitled"
   | "file.save"
+  | "editor.wrap"
   | "file.close"
   | "terminal.new"
   | "zoom.in"
@@ -104,6 +105,7 @@ export const ACTIONS: ActionInfo[] = [
   { key: "file.new", label: "New file in the tree", group: "Editor" },
   { key: "file.untitled", label: "New untitled file", group: "Editor" },
   { key: "file.save", label: "Save", group: "Editor" },
+  { key: "editor.wrap", label: "Wrap long lines or not", group: "Editor" },
   { key: "terminal.new", label: "New shell", group: "Terminal" },
   { key: "zoom.in", label: "Zoom the terminal in", group: "Terminal" },
   { key: "zoom.out", label: "Zoom the terminal out", group: "Terminal" },
@@ -151,6 +153,7 @@ const MACOS: Record<PresetName, Keymap> = {
     "file.new": withAlt("n"),
     "file.untitled": plain("n"),
     "file.save": plain("s"),
+    "editor.wrap": withAlt("z"),
     "file.close": plain("w"),
     "terminal.new": plain("t"),
     "zoom.in": plain("="),
@@ -185,6 +188,7 @@ const MACOS: Record<PresetName, Keymap> = {
     "file.new": withAlt("n"),
     "file.untitled": plain("n"),
     "file.save": plain("s"),
+    "editor.wrap": withAlt("z"),
     "file.close": plain("w"),
     "terminal.new": plain("t"),
     "zoom.in": plain("="),

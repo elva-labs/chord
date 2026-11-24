@@ -39,6 +39,8 @@ import { catalogName } from "$lib/modelCatalog.svelte";
 import { chosenFor, defaultModelOf, modelToStart } from "$lib/lastChosen.svelte";
 import { core, type HarnessId } from "$lib/core";
 import { openSetup } from "$lib/settings.svelte";
+import { wrapApplies } from "$lib/editor.svelte";
+import { toggleWrap, wrap } from "$lib/wrap.svelte";
 import {
   overrideOf,
   workflowGist,
@@ -107,6 +109,7 @@ export type CommandId =
   | "goBack"
   | "preview"
   | "source"
+  | "wrap"
   | "setup"
   | "welcome";
 
@@ -374,6 +377,20 @@ function viewCommand(): PaletteItem | null {
   };
 }
 
+/** The command that turns wrapping of long lines in the editor on or off,
+    named for what it does. Offered with a text file in the editor's front. */
+function wrapCommand(): PaletteItem | null {
+  if (!wrapApplies()) return null;
+  return {
+    kind: "command",
+    id: "command:wrap",
+    label: wrap.on ? "Turn word wrap off" : "Turn word wrap on",
+    group: null,
+    command: "wrap",
+    chord: describe(chordFor("editor.wrap")),
+  };
+}
+
 /** The sessions and the projects a query leaves, in that order, then the
     command for the file in the viewer when something is typed that it
     matches, first when the text is the start of its name: go to lists no
@@ -457,6 +474,7 @@ export function commandItems(query: string): PaletteItem[] {
   const here = startsIn(onScreen()) ? onScreen() : null;
   const other = here === null ? null : otherWay(here);
   const view = viewCommand();
+  const wrapping = wrapCommand();
   const commands: PaletteItem[] = [
     ...(workspace.open.length === 0 ? [] : [command("new", "New session")]),
     ...(here === null
@@ -479,13 +497,15 @@ export function commandItems(query: string): PaletteItem[] {
       ? [command("goBack", "Go back to an earlier message")]
       : []),
     ...(view === null ? [] : [view]),
+    ...(wrapping === null ? [] : [wrapping]),
     command("open", "Open project"),
     command("remote", "Open remote project"),
     command("setup", "Check setup"),
     command("welcome", "Show welcome"),
   ];
   const actions = ACTIONS.filter(
-    ({ key }) => key !== "palette" && key !== "session.attention",
+    ({ key }) =>
+      key !== "palette" && key !== "session.attention" && key !== "editor.wrap",
   ).map(({ key, label }): PaletteItem => ({
     kind: "action",
     id: `action:${key}`,
@@ -1107,6 +1127,8 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
           return { type: "close", then: () => setView("rendered") };
         case "source":
           return { type: "close", then: () => setView("content") };
+        case "wrap":
+          return wrapApplies() ? { type: "close", then: toggleWrap } : { type: "stay" };
         case "setup":
           return { type: "close", then: openSetup };
         case "welcome":
