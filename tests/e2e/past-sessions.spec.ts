@@ -317,3 +317,47 @@ test("names a row left from the last quit by the conversation it went on from, a
   await expect(labels.filter({ hasText: /^New session$/ })).toBeVisible();
   await expect(page.locator("[data-testid='session-row']").filter({ hasText: /aaaa1111|bbbb2222|cccc3333/ })).toHaveCount(0);
 });
+
+// A quiet row that waits on the user stands with the rows in view however
+// old it is, counts toward the two that stand, and folds like the rest once
+// it is read.
+test("keeps an unread quiet row out of the fold until it is read", async ({ page }) => {
+  const now = Math.floor(Date.now() / 1000);
+  const HOUR = 60 * 60;
+  const own = ["in-front", "left-1", "left-2", "left-3", "left-4"];
+  await installFakeCore(page, {
+    open: [PROJECT],
+    transcripts: own.map((id, hours) => ({ id, modified: now - hours * HOUR, size: 100, title: id })),
+  });
+  await page.addInitScript(
+    ({ project, ids }) => {
+      if (localStorage.getItem("chord.open") !== null) return;
+      localStorage.setItem("chord.mine", JSON.stringify({ [project]: ids }));
+      localStorage.setItem(
+        "chord.open",
+        JSON.stringify({
+          open: ids.map((id: string) => ({ project, id, agent: "claude-code", startIn: null, model: null })),
+          active: "in-front",
+          waiting: true,
+        }),
+      );
+      localStorage.setItem(
+        "chord.waiting",
+        JSON.stringify({ "left-4": { unread: true, note: null, notice: null, at: Date.now() - 9 * 24 * 3600 * 1000 } }),
+      );
+    },
+    { project: PROJECT, ids: own },
+  );
+  await page.goto("/");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-state", "running");
+
+  const names = () => page.locator("[data-row^='session:'] .label").allTextContents().then((all) => all.map((name) => name.trim()));
+  const fold = page.getByTestId("earlier-fold");
+  await expect(fold).toHaveText("Earlier · 2");
+  expect(await names()).toEqual(["in-front", "left-1", "left-4"]);
+
+  await page.locator("[data-row^='session:']", { hasText: "left-4" }).click({ button: "right" });
+  await page.getByTestId("session-menu-read").click();
+  await expect.poll(names).toEqual(["in-front", "left-1", "left-2"]);
+  await expect(fold).toHaveText("Earlier · 2");
+});

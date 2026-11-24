@@ -737,6 +737,11 @@
     return entry.kind === "session" && entry.session.status !== "dormant";
   }
 
+  /** Whether an entry is a session waiting to be read. */
+  function isUnread(entry: Entry): boolean {
+    return entry.kind === "session" && entry.session.unread;
+  }
+
   /** How many quiet rows a project shows before the rest fold into one
       row that counts them. */
   const QUIET_SHOWN = 2;
@@ -747,8 +752,9 @@
       all of them its past sessions, latest first, however lately those
       changed. Once there are more than a few quiet rows, the tail of them
       stands behind a fold that counts them, and is drawn under it while
-      it is open. Past sessions are listed under the project on screen
-      alone. */
+      it is open. A quiet row that is unread never goes behind the fold:
+      it stands, and counts toward the quiet rows that stand. Past
+      sessions are listed under the project on screen alone. */
   function bodyOf(path: string): { entries: Entry[]; tail: Entry[] } {
     const own = byChange(ownFor(path)).map(
       (session): Entry => ({ kind: "session", id: `session:${session.key}`, session, at: lastChanged(session) }),
@@ -764,11 +770,15 @@
     const folds = quiet.length > QUIET_SHOWN + 1;
     const entries: Entry[] = [];
     const tail: Entry[] = [];
+    // The unread quiet rows stand first and take their places among the
+    // quiet rows that stand, so the read ones fill what they leave.
+    const unread = quiet.filter(isUnread).length;
+    const readShown = Math.max(0, QUIET_SHOWN - unread);
     let shown = 0;
     for (const id of order) {
       const entry = byId.get(id)!;
-      if (running(entry)) entries.push(entry);
-      else if (!folds || shown < QUIET_SHOWN) {
+      if (running(entry) || isUnread(entry)) entries.push(entry);
+      else if (!folds || shown < readShown) {
         entries.push(entry);
         shown += 1;
       } else tail.push(entry);

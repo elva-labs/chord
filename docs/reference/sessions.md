@@ -265,7 +265,9 @@ came back unread with a line, as [after a restart](#after-a-restart)
 says. Those rows come after the running
 ones, and the project's past sessions after them. Once a project has more
 than three rows with nothing running, the first two stand and the rest fold
-away. One quiet line at the end of the project's list counts what is out of
+away. A row that is unread never folds away, however old it is: it stands
+and counts as one of the two until it is read, and with more than two
+unread, all of them stand. One quiet line at the end of the project's list counts what is out of
 sight, such as `Earlier · 8`, with a chevron like every other fold: the
 rows folded away and, under the project on screen, the
 [sessions not listed](#past-sessions) as well. Its chevron stands under the
