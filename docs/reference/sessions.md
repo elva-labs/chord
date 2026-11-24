@@ -768,6 +768,39 @@ its foot while new content comes, and where the user scrolled to otherwise,
 with a button back down; only the user's own scrolling stops it following,
 and sending a message takes it to its foot.
 
+The user's own message is drawn with the little Markdown a message uses: a
+quote of lines that start with `>`, lists of lines that start with `*`, `-`
+or a number and a dot, code in backticks and fenced code, bold, italic and
+links to the web. Whatever is not plainly meant as one of these shows as
+typed. Bold and italic are made only with `*`, and only where the opening
+`*` stands at the start of a line or after a space, before a word, and the
+closing one stands after a word, before a space, the end, or a mark other
+than `/`. So `src/*.ts and lib/*.js` and `__init__.py` read as typed. A
+backslash, a character reference such as `&copy;`, an indented line,
+headings, rules, tables, struck text and HTML show as typed too.
+
+A quote or a list ends at the first line that does not start as one, so the
+words typed under a quote stand under it. Every line break and every blank
+line typed is kept. Each list item shows the marker it was typed with, its
+number as typed or a bullet, and items typed on adjacent lines make one
+list whatever their markers.
+
+A link is drawn only when it points to an `http` or `https` address, and it
+opens in the browser. Any other link, an email address among them, shows as
+typed. A link's title holds the address it goes to, after the title its
+Markdown gave it, and a link whose words name another address shows the
+real one after it in brackets. A reply's links carry the address in the
+same two ways. An image is never fetched: one with a web address shows as a
+link to it, and any other as typed. A mention inside a link is its plain
+`@` word.
+
+A fenced block keeps its lines and scrolls sideways. A message with none of
+this reads exactly as typed. Anything unseen in a message, inside code and
+in a link's address too, shows as its marker. A message waiting to be sent,
+one read back after a rewind or a restart, draws the same way; a command
+run with `!`, what another session sent and what the workbench sends of its
+own show as typed.
+
 A conversation of any length opens and scrolls as a short one does. The
 thread draws only the messages and runs in and near the view, a screen's
 worth either side, and keeps the space of the rest at the height each was
@@ -822,8 +855,8 @@ way to open it.
 Five things in the thread can be copied whole, each with a quiet Copy that
 shows while the pointer is over it or the keyboard is on the Copy: the
 user's message, a reply as Markdown, a code block, a command and a
-command's output. A message is copied as its words, without what the
-workbench added to it. A reply is everything the agent said in that run,
+command's output. A message is copied as its words, as typed rather than as
+drawn, without what the workbench added to it. A reply is everything the agent said in that run,
 its text joined, without its work or the sessions it started. A code block,
 at the top or in a list or a quote, is its code without the fences, and a
 command is the command alone, from a Copy drawn over the end of its step's
@@ -845,8 +878,9 @@ block in any other language, and scrolls sideways, since wrapped code
 misleads.
 
 The conversation can be searched with find, which looks in all of it
-whether the thread draws it yet or not: the messages, what the agent wrote
-as it reads rendered rather than as its Markdown, plans, questions and
+whether the thread draws it yet or not: the messages, the user's own as
+they read once drawn, what the agent wrote as it reads rendered rather than as
+its Markdown, plans, questions and
 notes, earlier messages read from the transcript, and inside folded work
 each step's command, input, changed lines and output, a subagent's run,
 and what the user told the agent when refusing a call. The labels around

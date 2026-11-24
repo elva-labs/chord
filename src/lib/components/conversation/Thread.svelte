@@ -17,6 +17,7 @@
   import Icon from "./Icon.svelte";
   import Parts from "./Parts.svelte";
   import Plain from "./Plain.svelte";
+  import Sent from "./Sent.svelte";
   import Started from "./Started.svelte";
 
   /**
@@ -1435,7 +1436,7 @@
           {/each}
         </div>
       {/if}
-      {#if words.text !== ""}<p data-find={said.id}
+      {#if words.text !== "" && from === null}<Sent text={words.text} mentions={mentionsOf(said.id)} find={said.id} {opener} />{:else if words.text !== ""}<p data-find={said.id}
           >{#each sentParts(words.text, mentionsOf(said.id)) as part, at (at)}{#if part.path === undefined}<Plain text={part.text} />{:else}{@const open =
                 opener?.(part.path) ?? null}{#if open === null}<span class="mention" data-testid="message-mention"
                   ><Plain text={part.text} /></span

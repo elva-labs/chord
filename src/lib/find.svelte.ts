@@ -1,5 +1,6 @@
 import type { Conversation } from "$lib/conversation.svelte";
-import { saidBlocks } from "$lib/media.svelte";
+import { saidBlocks, sentHtml } from "$lib/media.svelte";
+import { sentParts, type Sent } from "$lib/mention";
 import { endedWith, entryPrint, heldIn, heldWaiting, type Held, type HeldOptions } from "$lib/thread";
 
 /**
@@ -159,6 +160,18 @@ export function saidText(markdown: string): string {
   if (markdown === "") return "";
   const made = document.createElement("template");
   made.innerHTML = saidBlocks(markdown).join("");
+  return readOut([made.content]).text;
+}
+
+/** A message the user typed as the thread shows it, read as find reads
+    it: its words as typed when it is plain text, and as drawn when its
+    Markdown is. */
+export function sentText(text: string, mentions: readonly Sent[]): string {
+  const parts = sentParts(text, mentions);
+  const html = sentHtml(parts);
+  if (html === null) return parts.map((part) => part.text).join("");
+  const made = document.createElement("template");
+  made.innerHTML = html;
   return readOut([made.content]).text;
 }
 
