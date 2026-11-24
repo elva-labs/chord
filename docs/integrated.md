@@ -1209,7 +1209,11 @@ the harness files a session by the folder it ran in. A session resumed in
 another folder is written there again under the same id, and the copy
 written last is read. Only a plain file is opened, and a request that names
 no project names no transcript. A session with no transcript there is an
-error that names the directory looked in. The account's directory is the
+error that names the directory looked in, and a session taken up again
+with none goes on with an earlier stored conversation of its row, or
+fresh from its notes, as
+[going on from the notes](reference/sessions.md#going-on-from-the-notes)
+describes. The account's directory is the
 settings' word, so a session the window starts before it has the settings,
 as one brought back at a start can be, is read once it has them, as its
 harness is started.

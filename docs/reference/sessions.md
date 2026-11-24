@@ -1300,7 +1300,9 @@ A conversation too long to hold whole leaves out its start and says so.
 Earlier messages that cannot be read leave the session able to be written
 to, with a line at the top of the thread saying they could not be read
 and why, such as that Codex does not have the conversation, or that
-Claude Code has no transcript of it in the account's directory. A record
+Claude Code has no transcript of it in the account's directory. A
+conversation that went on from another draws what can be read of the
+ones it went on through even where its own holds nothing. A record
 that holds no message of a session that was spoken to is said to be so in
 the same way. The line stays above whatever the session says after it.
 A session nothing was said in, resumed after it ended, has nothing to
@@ -1534,6 +1536,19 @@ the first message. The old conversation is no longer listed among the
 earlier sessions from the moment the row goes on: the row goes on with
 it.
 
+A fresh conversation is stored by its harness only once something is
+said to it, so a row closed or started again before then holds an id
+nothing is kept under, and so does one whose transcript or Codex thread
+was deleted. The core says so when it judges the conversation, and the
+row goes on with the newest conversation it went on through that is
+stored, judged as its own would be; the id that held nothing is no longer
+counted as going on from it. Where none is stored, the row goes on as a
+fresh conversation from its notes alone, the briefing saying no
+transcript was found. Either way a conversation row's thread says which
+in a line under the earlier messages, and the session can be written to
+at once. A core
+too old to say is taken as finding the conversation.
+
 What can be lost is what the old conversation held and the notes did
 not: files read, results seen, reasoning not written down. The agent is
 told to read the matching notes, then search the old transcript, before
@@ -1579,7 +1594,9 @@ read off the lines around it. The events are:
   by their lifetime, the output, the number of requests, and the context
   the last one left. A compaction within the turn counts as part of it.
 - **resume**: a conversation was taken up again, whole or from its notes,
-  with its context and how long it had rested where its transcript says.
+  with its context and how long it had rested where its transcript says,
+  and the id that held nothing where it went on with an earlier one or
+  fresh from its notes for that reason.
 - **wake**: the workbench woke a starter, with how many reports went in
   the message and how many sessions were still at work.
 - **start**: a session another session started came up, with its
