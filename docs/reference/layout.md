@@ -670,7 +670,11 @@ stay marked once the keyboard has moved on, to the agent above all, so they
 are still the answer to "this" while the question is typed; a click in the
 viewer lets them go, and the line numbers are never part of a selection.
 What the agent presented opens in the same place, every file of the call
-down the viewer. The embedded browser takes the same place again, in place
+down the viewer. An image the user sent opens there too, at full size under
+the name "Sent image", or "Sent image 2 of 3" among several, from its
+thumbnail in the message; it is a view of the picture as it was sent, not a
+file, and it is not kept when the user switches to another session. The
+embedded browser takes the same place again, in place
 of a file or what was presented; [browser](../browser.md) has what it shows
 there.
 

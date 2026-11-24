@@ -739,7 +739,13 @@ with a margin that grows a little with the pane and narrows in a narrow
 one. Code, diffs, what a command printed and tables use the whole width;
 words wrap at about 140 characters, so a line still reads in a wide pane.
 The user's words sit to the right in a
-tinted bubble under You, and nothing else does. What another session sent,
+tinted bubble under You, and nothing else does. The images sent with a message
+stand above its words as small thumbnails. Each is a button in the thread's
+own walk, named "Open image 2 of 3" and opened with a click, <kbd>Enter</kbd>
+or <kbd>Space</kbd>, which shows it at full size in the viewer without moving
+the thread; each opens on its own, and the viewer has no step from one to the
+next. An image whose data is gone is said to be no longer available and is not
+a button. What another session sent,
 the prompt it started the session with or a message it sent later, stands
 on the left with everything not the user's, as a notice rather than a
 message: no bubble, lined up with the agent's text, in the quieter ink of
