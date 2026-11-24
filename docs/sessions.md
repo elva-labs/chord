@@ -44,7 +44,7 @@ The changes pane follows the session on screen. When the agent moves into a git 
 
 A session runs either in a terminal, with the harness's own interface, or in Chord, as a conversation the window draws itself. Which one is a setting for each harness, [sessions](settings.md#sessions), in a terminal to begin with. Either way the harness's own login, settings, skills and MCP servers apply, and the conversation is the same one: a session started one way resumes the other.
 
-In Chord, the agent's questions dock over the composer. A permission offers Allow once, Allow for this session and Don't allow, each answered by its number key, with more behind More. Its slash commands work, and images and files can go with a message. A turn stopped at the usage limit says when the limit resets, and a Claude Code conversation can Continue when it resets. The [reference](reference/sessions.md#sessions-in-chord) has the detail, and [sessions in Chord](integrated.md) how the harnesses are driven. The + on the composer picks an [agent](settings.md#agents) for the session to work as.
+In Chord, the agent's questions dock over the composer. A permission offers Allow once, Allow for this session and Don't allow, each answered by its number key, with more behind More. Its slash commands work, and images and files can go with a message. A turn stopped at the usage limit says when the limit resets, and a Claude Code conversation can Continue when it resets. When it goes on, by itself or because you wrote to it, the agent is given the message the limit cut short and the messages you sent after it that went unanswered, word for word and in order, with their images, also once the app was quit and opened again. Codex conversations are not carried for, since Codex does not say a limit ended its turn. The [reference](reference/sessions.md#sessions-in-chord) has the detail, and [sessions in Chord](integrated.md) how the harnesses are driven. The + on the composer picks an [agent](settings.md#agents) for the session to work as.
 
 ### When the setting is switched
 
@@ -68,7 +68,7 @@ Each session keeps short notes of its conversation through the app: a brief of w
 
 ### Going on from the notes
 
-A Claude Code conversation that is large and has gone cold, past its prompt cache, goes on from its notes in a fresh conversation rather than being read again whole. Resume whole, in the row's menu, reads it all again instead. See [going on from the notes](reference/sessions.md#going-on-from-the-notes).
+A Claude Code conversation that is large and has gone cold, past its prompt cache, goes on from its notes in a fresh conversation rather than being read again whole. Resume whole, in the row's menu, reads it all again instead, and with notes switched off in the settings every conversation is resumed whole. See [going on from the notes](reference/sessions.md#going-on-from-the-notes).
 
 ## Dropping files
 

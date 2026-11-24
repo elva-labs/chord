@@ -25,11 +25,12 @@ import {
   worktreeName,
 } from "$lib/conductor.svelte";
 import { say } from "$lib/flash.svelte";
-import { agentNote, holdsAgentNote } from "$lib/instructions";
+import { agentNote, holdsAgentNote, holdsUnansweredNote } from "$lib/instructions";
 import { wentOnFrom } from "$lib/goingOn.svelte";
 import { handleOf, send as sendIntegrated } from "$lib/integrated.svelte";
 import { choose, modelToStart } from "$lib/lastChosen.svelte";
 import { startsIn } from "$lib/orchestratorFolder.svelte";
+import { switches } from "$lib/switches.svelte";
 import { pluginMark, pluginStarted, rowOfRequest } from "$lib/pluginStarts.svelte";
 import { keepLastAgent, lastPick, startAs } from "$lib/sessionAgents.svelte";
 import { kindFor } from "$lib/sessionKind.svelte";
@@ -79,6 +80,7 @@ export function startRefusal(asked: PluginStartEvent): string | null {
   if (slashLed(line) || slashLed(asked.prompt)) return "its prompt begins with a slash";
   if (runsShell(line) || runsShell(asked.prompt)) return "its prompt begins with !";
   if (holdsAgentNote(asked.prompt)) return "its prompt holds a line of the workbench's agent note";
+  if (holdsUnansweredNote(asked.prompt)) return "its prompt holds a line of the workbench's note on the user's unanswered messages";
   return null;
 }
 
@@ -120,6 +122,7 @@ export function takeDownCardsOf(plugin: PluginStateEvent) {
     for reviews, none included, while it is still there; else the one the
     plugin suggests, by its title, or none for a title no agent has. */
 function roleToStart(asked: PluginStartEvent): Agent | null {
+  if (!switches.agents) return null;
   if (asked.purpose === "review") {
     const last = lastPick("review");
     if (last === null) return null;
@@ -142,7 +145,7 @@ async function startFor(asked: PluginStartEvent): Promise<string | null> {
   if (choice === "no") return null;
   // The project may have closed while the card waited.
   if (!startable(asked.project)) return null;
-  if (asked.purpose === "review") keepLastAgent("review", pick.role);
+  if (asked.purpose === "review" && switches.agents) keepLastAgent("review", pick.role);
 
   const terminal = kindFor(pick.agent) === "terminal";
   // A terminal is never told an agent's description.
@@ -241,7 +244,7 @@ async function deliver(event: PluginSendEvent): Promise<PluginSentOutcome> {
   const line = oneLine(event.text);
   if (line === "" || bytes(event.text) > TEXT_MOST) return "refused";
   if (commandLed(line) || commandLed(event.text)) return "refused";
-  if (holdsAgentNote(event.text)) return "refused";
+  if (holdsAgentNote(event.text) || holdsUnansweredNote(event.text)) return "refused";
   const row = rowFor(event);
   if (row === null) return "gone";
   const from = pluginMark(event.source, event.plugin);

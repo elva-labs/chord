@@ -89,6 +89,7 @@
   import { compact, setCompact } from "$lib/compact.svelte";
   import { notify, setChime, setNotifications } from "$lib/notify.svelte";
   import { setAskEveryStart, startAsk } from "$lib/startAsk.svelte";
+  import { setAgentsOn, setNotesOn, switches } from "$lib/switches.svelte";
   import { anyChosen, chosenFor, forget as forgetChosen } from "$lib/lastChosen.svelte";
   import { modelLabel } from "$lib/models";
   import { modeName } from "$lib/modeFit";
@@ -113,7 +114,7 @@
 
   const PRESET_NAMES = Object.keys(PRESETS) as PresetName[];
 
-  const TABS: { name: Tab; label: string }[] = [
+  const ALL_TABS: { name: Tab; label: string }[] = [
     { name: "appearance", label: "Appearance" },
     { name: "sessions", label: "Sessions" },
     { name: "agents", label: "Agents" },
@@ -123,6 +124,9 @@
     { name: "keys", label: "Keys" },
     { name: "notifications", label: "Notifications" },
   ];
+
+  /** The tabs shown: the Agents tab only while agents are switched on. */
+  const TABS = $derived(ALL_TABS.filter((item) => item.name !== "agents" || switches.agents));
 
   let dialog: HTMLElement;
   /** The action whose shortcut is being recorded, if any. */
@@ -135,7 +139,18 @@
   let problem = $state<{ action: ActionKey; text: string } | null>(null);
 
   let tabs: HTMLElement;
-  let tab = $state<Tab>(settings.setup ? "setup" : settings.newAgent ? "agents" : remembered);
+  let tab = $state<Tab>(landing(settings.setup ? "setup" : settings.newAgent ? "agents" : remembered));
+
+  /** The tab to land on for the one wanted: Sessions for the Agents tab
+      while agents are switched off. */
+  function landing(wanted: Tab): Tab {
+    return wanted === "agents" && !switches.agents ? "sessions" : wanted;
+  }
+
+  // Agents switched off from elsewhere while the Agents tab is shown.
+  $effect(() => {
+    if (tab !== landing(tab)) tab = landing(tab);
+  });
 
   let agentsTab: AgentsTab | undefined = $state();
 
@@ -178,6 +193,7 @@
   onMount(() => {
     if (!settings.newAgent) return;
     settings.newAgent = false;
+    if (!switches.agents) return;
     remembered = "agents";
     agentsTab?.create();
   });
@@ -783,6 +799,34 @@
               {#if hook.error}
                 <p class="error" data-testid="hook-error">{hook.error}</p>
               {/if}
+            </div>
+            <UnreadEntries field={["notesOn", "agentsOn"]} />
+            <div class="row" data-testid="notes-on-row">
+              <span class="name"
+                ><span id="notes-label">Keep notes</span
+                ><small id="notes-hint">Sessions keep notes, and a long conversation goes on from them.</small></span
+              >
+              <Switch
+                on={switches.notes}
+                onchange={setNotesOn}
+                labelledby="notes-label"
+                describedby="notes-hint"
+                testid="notes-on"
+              />
+            </div>
+            <div class="row" data-testid="agents-on-row">
+              <span class="name"
+                ><span id="agents-label">Agents and teams</span
+                ><small id="agents-hint">Sessions can work as an agent, and teams hold a change to their gates.</small
+                ></span
+              >
+              <Switch
+                on={switches.agents}
+                onchange={setAgentsOn}
+                labelledby="agents-label"
+                describedby="agents-hint"
+                testid="agents-on"
+              />
             </div>
 
             <h3>New sessions</h3>

@@ -423,7 +423,7 @@ test.describe("a narrow window", () => {
     await page.keyboard.press("ControlOrMeta+=");
     await expect(page.getByTestId("flash-readout")).not.toHaveText("");
     const seen: string[] = [];
-    for (let width = 1440; width >= 380; width -= 20) {
+    for (let width = 1440; width >= 300; width -= 20) {
       await settled(page, width);
       const fit = (await bar(page).getAttribute("data-fit")) ?? "";
       const taken = fit.split(" ").filter(Boolean);
@@ -680,4 +680,35 @@ test.describe("what the bar opens", () => {
     await page.getByTestId("model-chip").click();
     await expect(page.getByTestId("model-menu")).toHaveCount(0);
   });
+});
+
+test.describe("the usage readout", () => {
+  const ROSE = {
+    dots: [
+      { hue: 20, chroma: 0.85 },
+      { hue: 40, chroma: 0.85 },
+      { hue: 0, chroma: 0.85 },
+    ],
+    harmony: "analogous",
+    strength: 0.881,
+    grain: 0.25,
+  };
+  const SETTINGS: Record<string, Record<string, unknown>> = {
+    "no background": {},
+    "a background": { palette: "rose", backgrounds: { rose: ROSE } },
+    "a background and see-through cards": { palette: "rose", backgrounds: { rose: ROSE }, cards: { rose: 0.11 } },
+  };
+  for (const look of ["modern", "terminal"])
+    for (const appearance of ["light", "dark"])
+      for (const [name, extra] of Object.entries(SETTINGS))
+        test(`sits on the bar's ground with no fill or border at rest, ${name}, ${look} ${appearance}`, async ({ page }) => {
+          await open(page, { accounts: WORK, look, appearance, ...extra });
+          await report(page, THREE);
+          const readout = page.getByTestId("account-group");
+          await expect(readout).toBeVisible();
+          await page.mouse.move(2, 2);
+          expect(await style(readout, "background-color")).toBe("rgba(0, 0, 0, 0)");
+          expect(await style(readout, "background-image")).toBe("none");
+          expect(await style(readout, "border-top-width")).toBe("0px");
+        });
 });

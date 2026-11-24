@@ -41,6 +41,9 @@
  * at every reset. Where the limit refuses the turn sent at once, the window
  * waited for being in fact still shut, the conversation says so and waits
  * for the user.
+ *
+ * While notes are switched off the run is not started again: it is sent
+ * the line as it is and goes on with the whole of its conversation.
  */
 
 import { dirFor } from "$lib/accounts.svelte";
@@ -49,6 +52,7 @@ import { clock, heardLimits, limitsOf, toneOf } from "$lib/limits.svelte";
 import { persist } from "$lib/persist";
 import { hostOf } from "$lib/remote.svelte";
 import { byKey, type Session } from "$lib/sessions.svelte";
+import { switches } from "$lib/switches.svelte";
 
 /** A turn the session window's limit cut short, and the wait for it. */
 export interface Stopped {
@@ -72,6 +76,11 @@ export const GIVE_UP_AFTER = 15 * 60_000;
 /** The line the agent is sent to go on. */
 export const GO_ON = "The usage limit that stopped you has reset. Go on from where you stopped.";
 
+/** What the conversation says where it could not go on from its notes. */
+const NOT_FROM_NOTES = "Did not go on by itself: the conversation could not be started again from its notes.";
+/** What it says where, with notes switched off, its run was not at rest. */
+const NOT_AT_REST = "Did not go on by itself: the session was not at rest when the limit reset.";
+
 export const autoResume = $state({
   /** The user's last choice, which a conversation takes as it starts. */
   next: false,
@@ -90,7 +99,8 @@ const tried = new Map<string, number>();
 
 /** What the store needs of the integrated sessions, set by them. */
 export interface Hands {
-  /** Starts the row's run again as a fresh conversation from its notes;
+  /** Starts the row's run again as a fresh conversation from its notes,
+      or with notes switched off leaves the run at rest to go on whole;
       false where it could not, with nothing changed. */
   goOn(key: string, at: number): Promise<boolean>;
   /** Sends the row's agent a line as the workbench's own; `lost` runs
@@ -339,10 +349,10 @@ async function goOn(session: Session, stopped: Stopped, now: number) {
   const went = (await hands?.goOn(key, stopped.resetsAt)) ?? false;
   if (autoResume.stopped[key] === stopped) forget(key);
   if (!went) {
-    hands?.say(key, "Did not go on by itself: the conversation could not be started again from its notes.", true);
+    hands?.say(key, switches.notes ? NOT_FROM_NOTES : NOT_AT_REST, true);
     return;
   }
-  // The run is up as a fresh conversation. It is the user's where they
+  // The run is up to be sent the line. It is the user's where they
   // turned the choice off or wrote to it meanwhile: nothing more is sent.
   const up = byKey(key);
   if (up === null || !isOn(up) || hands?.written(key) === true) return;

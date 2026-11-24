@@ -49,6 +49,7 @@
   import Plain from "./Plain.svelte";
   import { tick, untrack } from "svelte";
   import { agentHeld, layout, overlayHoldsKeyboard } from "$lib/layout.svelte";
+  import { switches } from "$lib/switches.svelte";
 
   /**
    * What the agent pane draws for an integrated session in place of a
@@ -449,7 +450,7 @@
         </div>
       {:else}
         <LimitNotice sessionKey={session.key} {conversation} />
-        <GateLine sessionKey={session.key} {conversation} {active} />
+        {#if switches.agents}<GateLine sessionKey={session.key} {conversation} {active} />{/if}
         <Dock bind:this={dock} sessionKey={session.key} agent={name} {active} onAnswered={answered} />
         <Composer
           sessionKey={session.key}

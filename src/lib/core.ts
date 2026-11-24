@@ -1849,6 +1849,12 @@ export interface Settings {
       starts, one in the starter's own project included. A file from
       before has none, which reads as off. */
   askEveryStart: boolean;
+  /** Whether sessions keep notes and a cold, large conversation goes on
+      from them. A file from before has none, which reads as on. */
+  notesOn: boolean;
+  /** Whether agents, teams and their gates are offered at all. A file
+      from before has none, which reads as on. */
+  agentsOn: boolean;
   /** Whether the sessions pane leaves the layout and slides in over the
       panes from the window's left edge. A file from before has none,
       which reads as off. */

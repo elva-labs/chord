@@ -157,6 +157,8 @@ describe("plan", () => {
     expect(() => plan({ notifications: false })).toThrow(/user's to change/);
     expect(() => plan({ chime: true })).toThrow(/user's to change/);
     expect(() => plan({ askEveryStart: false })).toThrow(/user's to change/);
+    expect(() => plan({ notesOn: false })).toThrow(/user's to change/);
+    expect(() => plan({ agentsOn: false })).toThrow(/user's to change/);
     expect(() => plan({ agents: [] })).toThrow(/user's to change/);
   });
 

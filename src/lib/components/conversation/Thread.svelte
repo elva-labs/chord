@@ -2,10 +2,10 @@
   import { tick, untrack } from "svelte";
   import type { Command, Conversation, Entry, Message } from "$lib/conversation.svelte";
   import { clock, commandEnd, drawnPart, lineCount, notRead, nowDoing, replyMarkdown, speaker, startedIds, timeBreaks, tokens, toHear, exactTime, dayName } from "$lib/thread";
-  import { agentAt, reportsShown, spoken, wakeShown } from "$lib/instructions";
+  import { ahead, agentAt, ownImages, reportsShown, spoken, wakeShown } from "$lib/instructions";
   import { sentParts, unsent } from "$lib/mention";
   import { mentionsOf } from "$lib/mentioned.svelte";
-  import { sessionName, timeOf, type Sender } from "$lib/senders.svelte";
+  import { leftOutOf, sessionName, timeOf, type Sender } from "$lib/senders.svelte";
   import { focusPane } from "$lib/layout.svelte";
   import { shareFolds } from "$lib/folds";
   import { shareAsking } from "$lib/stepAsking";
@@ -205,7 +205,7 @@
         const said = conversation.messages[id];
         const from = said === undefined ? null : (sender?.(said) ?? null);
         if (said === undefined || from?.workbench) continue;
-        const agent = from?.plugin ? agentAt(said.text)?.agent : spoken(said.text, from === null).agent;
+        const agent = from?.plugin ? agentAt(ahead(said.text).rest)?.agent : spoken(said.text, from === null).agent;
         title = agent?.title ?? title;
       }
       if (title !== null) titles.set(turn.id, title);
@@ -213,16 +213,19 @@
     return titles;
   });
 
-  /** A plugin's words as they were sent, after the agent note the
-      workbench put ahead of its start prompt where it has one. */
+  /** A plugin's words as they were sent, after what the workbench put
+      ahead of them: a briefing, the user's unanswered messages it carried,
+      and the agent note ahead of its start prompt, each where it has one. */
   function pluginWords(text: string) {
-    const led = agentAt(text);
+    const before = ahead(text);
+    const led = agentAt(before.rest);
     return {
-      text: led?.rest ?? text,
+      text: led?.rest ?? before.rest,
       instructions: null,
       reports: null,
       filesBack: null,
-      briefing: undefined,
+      briefing: before.briefing,
+      carried: before.carried,
       agent: led?.agent,
     };
   }
@@ -1381,11 +1384,13 @@
         reports: null,
         filesBack: null,
         briefing: spoken(said.text).briefing,
+        carried: spoken(said.text).carried,
       }
     : from?.plugin
       ? pluginWords(said.text)
       : spoken(said.text, from === null)}
   {@const putBack = from?.workbench ? undefined : onPutBack}
+  {@const images = ownImages(said.text, said.images)}
   <article
     class="msg you"
     class:from={from !== null}
@@ -1424,9 +1429,9 @@
       {/if}
     </header>
     <div class="bubble">
-      {#if said.images.length > 0}
+      {#if images.length > 0}
         <div class="images">
-          {#each said.images as image, at (at)}
+          {#each images as image, at (at)}
             <img src="data:{image.mediaType};base64,{image.data}" alt="Attached image {at + 1}" />
           {/each}
         </div>
@@ -1490,6 +1495,21 @@
       {#if unfolded[shown]}<p class="state briefing" data-testid="workbench-briefing-text"
           ><Plain text={words.briefing} /></p
         >{/if}
+    {/if}
+    {#if words.carried !== undefined}
+      <p class="state" data-testid="workbench-carried">
+        {words.carried.messages === 1
+          ? "Your message the usage limit left unanswered went with it"
+          : `Your ${words.carried.messages} messages the usage limit left unanswered went with it`}
+      </p>
+    {/if}
+    {#if leftOutOf(said.id) !== null}
+      {@const lost = leftOutOf(said.id) ?? 0}
+      <p class="state" data-testid="workbench-uncarried">
+        {lost === 1
+          ? "1 earlier message the usage limit left unanswered could not go with it, since the workbench could not tell it was yours: send it again"
+          : `${lost} earlier messages the usage limit left unanswered could not go with it, since the workbench could not tell they were yours: send them again`}
+      </p>
     {/if}
     {#if words.reports !== null}
       {@const shown = `${said.id}:reports`}

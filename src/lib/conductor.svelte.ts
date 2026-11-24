@@ -126,7 +126,7 @@ import { lastRun, nameSessionsBy } from "$lib/thread";
 import { logUsage } from "$lib/usageLog";
 import { defaultModelOf } from "$lib/lastChosen.svelte";
 import { failureOnScreen, type Failure } from "$lib/turnFailure";
-import { agentNote, atWorkLine, holdsAgentNote, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
+import { agentNote, atWorkLine, holdsAgentNote, holdsUnansweredNote, OUTCOME_ASK, OUTCOME_ASK_TERMINAL, REPORTS_HEAD, stillOutLine } from "$lib/instructions";
 import { agentByKey, agentByTitle, allAgents, loadInstalled, type Agent } from "$lib/agents.svelte";
 import { startAs } from "$lib/sessionAgents.svelte";
 import { nameKeptBy, outsideCaller, outsideFolder, senderOf, startersFrom } from "$lib/senders.svelte";
@@ -138,6 +138,7 @@ import { projectLabel, workspace } from "$lib/workspace.svelte";
 import { startsIn } from "$lib/orchestratorFolder.svelte";
 import { kindFor } from "$lib/sessionKind.svelte";
 import { startAsk } from "$lib/startAsk.svelte";
+import { switches } from "$lib/switches.svelte";
 import { fitMode, modeName, narrowerOf } from "$lib/modeFit";
 
 /** How many sessions one caller may have running at a time. */
@@ -2739,6 +2740,7 @@ async function startSession(request: Placed): Promise<Answered> {
   if (prompt === null)
     return refused("Starting a session needs a prompt to give it.");
   if (holdsAgentNote(prompt)) return refused(AGENT_NOTE_HELD);
+  if (holdsUnansweredNote(prompt)) return refused(UNANSWERED_NOTE_HELD);
   // A model's name means something to one harness only, so the harness is
   // named with it rather than taken from the project's last one.
   if (text(request, "model") !== null && harnessText(request) === null)
@@ -2749,6 +2751,8 @@ async function startSession(request: Placed): Promise<Answered> {
     return refused(`No project at ${project} is open in the workbench.`);
   const wanted = wantedAccount(request);
   if ("refusal" in wanted) return refused(wanted.refusal);
+  if (!switches.agents && roleTitle(request) !== null)
+    return refused("Agents are switched off in the settings. Leave the agent out.");
   // An agent the window has read is found at once, so the start goes on
   // without a pause; only another title waits on the installed ones.
   const role = roleTitle(request) === null ? null : (roleNamed(request, project) ?? (await roleFor(request, project)));
@@ -3483,6 +3487,7 @@ async function resumeSession(
 
   const prompt = text(request, "prompt");
   if (prompt !== null && holdsAgentNote(prompt)) return refused(AGENT_NOTE_HELD);
+  if (prompt !== null && holdsUnansweredNote(prompt)) return refused(UNANSWERED_NOTE_HELD);
   if (prompt !== null && kindFor(agent) === "terminal" && runsShell(oneLine(prompt)))
     return refused(SHELL_PROMPT);
   if (prompt !== null && entry.unasked === true && mayChangeModel(oneLine(prompt)))
@@ -3695,12 +3700,19 @@ export function worktreeName(prompt: string): string {
 const AGENT_NOTE_HELD =
   "The workbench writes the note that tells a session which agent it works as, and passes on no words that hold a line of one. Leave that line out; to start a session as an agent, name it with agent.";
 
+/** Why words that open or close the note on the user's unanswered
+    messages are refused: only the workbench writes it, and what is in it
+    reads as the user's own. */
+const UNANSWERED_NOTE_HELD =
+  "The workbench writes the note that carries the user's unanswered messages, and passes on no words that hold its first or last line. Leave that line out.";
+
 async function sendText(request: Placed): Promise<Answered> {
   const id = text(request, "session");
   const line = text(request, "text");
   if (id === null) return refused("Sending needs a session to send to.");
   if (line === null) return refused("Sending needs the text to send.");
   if (holdsAgentNote(line)) return refused(AGENT_NOTE_HELD);
+  if (holdsUnansweredNote(line)) return refused(UNANSWERED_NOTE_HELD);
   // A line that comes while another line brings the session back goes
   // once it is up, as a line to a running session does.
   const coming = comingBack.get(id);
@@ -4618,10 +4630,11 @@ function roleTitle(request: ConductRequest): string | null {
   return title === null || title === "claude-code" || title === "codex" ? null : title;
 }
 
-/** The agent a start names, among those the window has read. */
+/** The agent a start names, among those the window has read; none while
+    agents are switched off. */
 function roleNamed(request: ConductRequest, project: string): Agent | null {
   const title = roleTitle(request);
-  return title === null ? null : (agentByTitle(title, project) ?? null);
+  return title === null || !switches.agents ? null : (agentByTitle(title, project) ?? null);
 }
 
 /** The agent a start names to work as, reading the project's installed

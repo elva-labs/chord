@@ -1,10 +1,11 @@
 import { tick } from "svelte";
 import { withoutArrowControls } from "$lib/strayKeys";
 import { dirFor } from "$lib/accounts.svelte";
-import { filesBackNote, spoken } from "$lib/instructions";
+import { carriedBy, carries, filesBackNote, ownImages, spoken, typedWords, unansweredNote } from "$lib/instructions";
 import {
   agentAhead,
   agentAheadBack,
+  agentWaits,
   agentIdentified,
   agentOfRow,
   agentReadsOnly,
@@ -18,7 +19,7 @@ import { unsent, type Sent } from "$lib/mention";
 import { mentionedIn, mentionsOf } from "$lib/mentioned.svelte";
 import { reservedName, shown } from "$lib/unseen";
 import { failureOf } from "$lib/turnFailure";
-import { senderOf, sentAt, sentBy, starterOf, WORKBENCH } from "$lib/senders.svelte";
+import { leftOut, leftOutOf, senderOf, sentAt, sentBy, starterOf, typedAs, typedOf, WORKBENCH } from "$lib/senders.svelte";
 import { pluginMarkFor } from "$lib/pluginStarts.svelte";
 import { keepMode, modeOf } from "$lib/sessionModes";
 import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
@@ -99,6 +100,7 @@ import {
 import { orchestratorPrompt, startsOnly } from "$lib/workflowInstructions";
 import { workflowNamed } from "$lib/workflows.svelte";
 import type { HarnessId } from "$lib/core";
+import { onAgentsSwitched, switches } from "$lib/switches.svelte";
 
 /**
  * The integrated sessions behind their rows.
@@ -211,6 +213,9 @@ export class Link {
   /** A change of model, mode or effort to make on the run starting again
       once it is up. */
   after: Change | null = null;
+  /** What the agent picked on the composer set the run to, and the model
+      and effort the run was on before any pick. */
+  picked: { change: Change; before: { model: string | null; effort: string | null } } | null = null;
   /** The changes asked of the run behind the row and not answered yet. */
   unanswered = new Set<Change>();
   /** The user chose the mode the session runs in. */
@@ -670,15 +675,23 @@ function joiningOf(key: string, starting: Session): { joining?: Joining } {
 
 /** What a start tells the core of the run it is in: the team it leads on
     the run's first start, which the core holds for the run from there by
-    the lead's token, else the run it joins as another's agent. Never both. */
+    the lead's token, else the run it joins as another's agent. Never both,
+    and no team while agents are switched off. */
 function runOfStart(key: string, link: Link, starting: Session): { team?: string; joining?: Joining } {
   if (starting.team === null) return joiningOf(key, starting);
+  if (!switches.agents) return {};
   return starting.resumedFrom === null && link.conversation.untouched ? { team: starting.team } : {};
 }
 
 /** Asks the core to start the agent behind a row, as the row is now and
     told what it is told, and takes the run up once it is. */
 async function begin(key: string, link: Link, starting: Session, told: Told) {
+  if (starting.team !== null && !switches.agents && starting.resumedFrom === null && link.conversation.untouched)
+    link.conversation.apply({
+      type: "notice",
+      level: "info",
+      message: `Started without the team ${starting.team}: agents and teams are switched off.`,
+    });
   link.ranOn = { agent: starting.agent, told: toldText(told.instructions, told.startOnly), team: starting.team };
   link.granted = [];
   settleAutoResume(key);
@@ -686,7 +699,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
   starting.modeNamed = mode ?? null;
   // A session started as an agent starts at the agent's effort, which is
   // lowered as a carried one is where its model does not take it.
-  const startsAt = agentStartsAt(key);
+  const startsAt = switches.agents ? agentStartsAt(key) : null;
   const carried =
     carriedFor(starting) ?? (startsAt === null ? null : { model: null, effort: startsAt, mode: null });
   const effort = startEffort(starting, link, carried);
@@ -704,7 +717,7 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     mode,
     effort,
     configDir: dirFor(starting.account, starting.agent),
-    readsOnly: agentOfRow(key, starting.id)?.readsOnly === true ? true : undefined,
+    readsOnly: switches.agents && agentOfRow(key, starting.id)?.readsOnly === true ? true : undefined,
     profile: starting.profile ?? undefined,
     ...told,
     ...originOf(starting),
@@ -1326,12 +1339,45 @@ export function send(
   // whoever sends it, the workbench's own wake among them.
   const briefing = briefingFor(key);
   // The agent picked on the composer is told ahead of the user's own next
-  // message, once.
-  const agent = from === null ? agentAhead(key) : null;
-  const text = [briefing, agent, told, note?.text ?? null, words].filter((part) => part !== null).join("\n\n");
+  // message, once. While agents are switched off the message goes plain
+  // and the pick is let go: the conversation has begun without it.
+  if (from === null && !switches.agents && agentWaits(key)) {
+    pickAgent(key, session.id, null);
+    link.picked = null;
+  }
+  const agent = from === null && switches.agents ? agentAhead(key) : null;
+  // The user's messages a usage limit left unanswered go with the next
+  // message, whoever sends it, word for word with their images: what a
+  // message that carried them held, and what the user typed of each. Only
+  // what the window kept as the user's typing goes, never a note the
+  // workbench joined to it or another's words. A message it can show to
+  // be neither the user's typing nor another's is left out, and the
+  // thread tells the user under this message to send it again. A message
+  // that left some out stands for them as one that carried them does.
+  const backlog = link.conversation.unanswered((said) => carries(said.text) || leftOutOf(said.id) !== null);
+  let lost = 0;
+  const went: string[] = [];
+  const carried = backlog.flatMap((said) => {
+    const held = carriedBy(said.text, said.images);
+    const own = typedWords(said.text, said.images, typedOf(said.id));
+    if (own === null && senderOf(said) === null) lost += 1;
+    if (own !== null || held.length > 0) went.push(said.id);
+    return [...held, ...(own === null ? [] : [own])];
+  });
+  const unanswered =
+    carried.length === 0
+      ? null
+      : unansweredNote(carried.map((said) => ({ text: said.text, images: said.images.length })));
+  const text = [briefing, unanswered, agent, told, note?.text ?? null, words]
+    .filter((part) => part !== null)
+    .join("\n\n");
+  const sent = [...carried.flatMap((said) => said.images), ...images];
   const id = crypto.randomUUID();
   mentionedIn(id, mentions);
-  link.conversation.sending(id, text, images);
+  if (from === null) typedAs(id, words.length, images.length);
+  if (lost > 0) leftOut(id, lost);
+  link.conversation.sending(id, text, sent);
+  for (const said of went) link.conversation.wentWith(said);
   link.backSaid = null;
   link.filesBack = from === null ? [] : link.filesBack;
   if (note !== null || files.length > 0)
@@ -1368,7 +1414,7 @@ export function send(
     if (title !== null && !nameTaken(title, key) && !reservedName(title)) namedForNow(key, title);
   }
   core()
-    .integratedSend(link.handle, id, text, images)
+    .integratedSend(link.handle, id, text, sent)
     .catch((error) => {
       link.conversation.sendFailed(id, message(error));
       settleNotes(key, link);
@@ -1624,11 +1670,13 @@ function atRest(key: string): { session: Session; link: Link } | null {
  * fresh conversation from its notes, under the same row, whatever its
  * size and however long it rested, so the whole of it is never read
  * again. Only at rest, and only where the core wrote the briefing; false,
- * with the run left as it is, otherwise.
+ * with the run left as it is, otherwise. While notes are switched off the
+ * run at rest goes on as it is, on the whole of its conversation.
  */
 export async function goOnAfterLimit(key: string, resetAt: number): Promise<boolean> {
   const found = atRest(key);
   if (found === null || found.link.restarting) return false;
+  if (!switches.notes) return true;
   const { session, link } = found;
   const id = session.id;
   const handle = link.handle;
@@ -1826,9 +1874,10 @@ export function restore(key: string, said: Message, caret: "start" | "end" | nul
   const link = links.get(key);
   if (link === undefined) return;
   const back = unsent(spoken(said.text, senderOf(said) === null).text, mentionsOf(said.id));
+  const images = ownImages(said.text, said.images);
   const chain = link.upChain;
   if (chain !== null && chain.ids.includes(said.id) && link.draft === chain.draft) {
-    chain.back[said.id] = { draft: back.draft, mentions: back.picked, images: [...said.images] };
+    chain.back[said.id] = { draft: back.draft, mentions: back.picked, images };
     const kept = chain.ids.flatMap((id) => chain.back[id] ?? []);
     link.draft = kept.map((one) => one.draft).join("\n");
     link.mentions = [...new Set(kept.flatMap((one) => one.mentions))];
@@ -1839,7 +1888,7 @@ export function restore(key: string, said: Message, caret: "start" | "end" | nul
     if (chain !== null && link.draft !== chain.draft) link.upChain = null;
     link.draft = link.draft.trim() === "" ? back.draft : `${back.draft}\n\n${link.draft}`;
     link.mentions = [...new Set([...link.mentions, ...back.picked])];
-    link.images = [...said.images, ...link.images];
+    link.images = [...images, ...link.images];
   }
   if (!said.placed) link.conversation.forget(said.id);
   void tick().then(() => {
@@ -2251,7 +2300,8 @@ export function agentEffort(conversation: Conversation, agent: Agent, harness: H
     on the agent's model where that is on the session's harness, at its
     effort where the session offers it, and reading only or not as the
     agent does. Leaving an agent for none leaves the model and the effort
-    as they are. The pick is the composer's last. */
+    as they are. The pick is the composer's last. What a pick set is taken
+    back while agents are switched off, and set again once they are on. */
 export function workAs(key: string, agent: Agent | null) {
   const link = links.get(key);
   const session = byKey(key);
@@ -2264,8 +2314,30 @@ export function workAs(key: string, agent: Agent | null) {
   if (agent?.model != null && agent.model.harness === session.agent) change.model = agent.model.model;
   const effort = agent === null ? null : agentEffort(link.conversation, agent, session.agent);
   if (effort !== null) change.effort = effort;
+  const { model: modelBefore, effort: effortBefore } = link.conversation.settings;
+  link.picked =
+    agent === null ? null : { change, before: link.picked?.before ?? { model: modelBefore, effort: effortBefore } };
   void configure(key, change, false);
 }
+
+/** Agents are switched off or on: a pick still to be told sets nothing
+    while they are off, the run back on the model and effort it had before
+    and reading only no longer, and sets the run again once they are on. A
+    session already told of its agent is left as it is. */
+onAgentsSwitched((on) => {
+  for (const [key, link] of links) {
+    const picked = link.picked;
+    if (picked === null || !agentWaits(key)) continue;
+    if (on) {
+      void configure(key, picked.change, false);
+      continue;
+    }
+    const back: Change = { readsOnly: false };
+    if (picked.change.model !== undefined && picked.before.model !== null) back.model = picked.before.model;
+    if (picked.change.effort !== undefined && picked.before.effort !== null) back.effort = picked.before.effort;
+    void configure(key, back, false);
+  }
+});
 
 /** The row is closed: its agent is stopped, and its last words let go. */
 function stop(session: Session) {

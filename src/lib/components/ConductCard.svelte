@@ -15,6 +15,7 @@
   import type { HarnessId } from "$lib/core";
   import { HARNESS_LABELS, modelFromKey, modelKey, offeredHarnesses, offeredModels } from "$lib/models";
   import { kindFor } from "$lib/sessionKind.svelte";
+  import { switches } from "$lib/switches.svelte";
   import AskCard from "$lib/components/AskCard.svelte";
   import AskChoices, { type AskChoice } from "$lib/components/AskChoices.svelte";
   import Plain from "$lib/components/conversation/Plain.svelte";
@@ -168,7 +169,7 @@
   {/if}
   {#if pick !== null}
     <div class="runs">
-      <label>
+      {#if switches.agents}<label>
         <span>As</span>
         <select
           value={roleless ? "" : (pick.role ?? "")}
@@ -186,7 +187,7 @@
         {#if readsOnly}<span class="lock" title={READS_ONLY_ABOUT} data-testid="conduct-agent-lock"
             ><Icon name="lock" size={11} /></span
           >{/if}
-      </label>
+      </label>{/if}
       <label>
         <span>Runs on</span>
         <select value={modelKey(pick)} onchange={picked} data-testid="conduct-model">

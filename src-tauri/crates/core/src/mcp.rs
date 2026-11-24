@@ -214,12 +214,36 @@ fn conversation_here() -> bool {
 }
 
 /// Read when the agent asks rather than when the server starts, so what a
-/// session is told follows the environment it was started in.
-fn instructions() -> &'static str {
+/// session is told follows the environment it was started in and the
+/// settings as they are then.
+fn instructions(home: &Path) -> String {
     let role = std::env::var(crate::adapter::ROLE_VAR).ok();
     let view = std::env::var(crate::adapter::VIEW_VAR).ok();
     let wake = std::env::var(crate::adapter::WAKE_VAR).ok();
-    instructions_for(role.as_deref(), view.as_deref(), wake.as_deref())
+    told(
+        instructions_for(role.as_deref(), view.as_deref(), wake.as_deref()),
+        crate::settings::notes_on(home),
+    )
+}
+
+/// The sentences of the instructions that tell a session to keep notes and
+/// read them, which it is not told while notes are switched off.
+const NOTE_SENTENCES: [&str; 2] = [
+    "Keep notes with the note tool as you work, never a key, token, password or personal data: a brief of what is being built, a note whenever something settles, and an open item for each thing owed and not done this turn (a design agreed but not built, a fix asked for but not started, a question you put to the user, a session you started); close it by its number once done or dropped. ",
+    "Read the open items before telling the user where things stand, and the matching notes before asking about something you have no context for. ",
+];
+
+/// The instructions as a session is told them: without the note sentences
+/// while notes are switched off.
+fn told(instructions: &str, notes_on: bool) -> String {
+    if notes_on {
+        return instructions.to_string();
+    }
+    NOTE_SENTENCES
+        .iter()
+        .fold(instructions.to_string(), |told, sentence| {
+            told.replacen(sentence, "", 1)
+        })
 }
 
 /// The app's own tools, as the agent sees them.
@@ -440,9 +464,13 @@ fn plugin_tools(home: &Path) -> Vec<PublishedTool> {
 /// next, those of the team's run the session is in, and the plugins'
 /// after.
 fn all_tools(home: &Path, session: Option<&str>) -> Vec<Value> {
+    let settings = crate::settings::read_from(home);
     let mut listed = tools();
     listed.extend(conductor_tools());
-    listed.extend(run_tools_for(home, session));
+    if settings.agents_on {
+        listed.extend(run_tools_for(home, session));
+    }
+    switched(&mut listed, settings.notes_on, settings.agents_on);
     for tool in plugin_tools(home) {
         listed.push(json!({
             "name": tool.name,
@@ -451,6 +479,57 @@ fn all_tools(home: &Path, session: Option<&str>) -> Vec<Value> {
         }));
     }
     listed
+}
+
+/// What the start tool says of a session resumed from its notes, which
+/// none is while notes are switched off.
+const FROM_NOTES: &str =
+    ", or when that is cold and large, as a fresh one from its notes and last exchanges";
+
+/// The tools as the settings offer them: no note tools and a start that
+/// resumes a session whole while notes are switched off, and a start that
+/// names no agent while agents are.
+fn switched(listed: &mut Vec<Value>, notes_on: bool, agents_on: bool) {
+    if !notes_on {
+        listed.retain(|tool| !matches!(tool["name"].as_str(), Some("note" | "notes")));
+        for tool in listed.iter_mut().filter(|tool| tool["name"] == "start") {
+            if let Some(description) = tool["description"].as_str() {
+                tool["description"] = json!(description.replacen(FROM_NOTES, "", 1));
+            }
+        }
+    }
+    if !agents_on {
+        for tool in listed.iter_mut().filter(|tool| tool["name"] == "start") {
+            if let Some(properties) = tool["inputSchema"]["properties"].as_object_mut() {
+                properties.remove("agent");
+            }
+        }
+    }
+}
+
+/// Why a call is refused for what the settings switch off: the note tools
+/// while notes are off, and a run's tools or a start as an agent while
+/// agents are.
+fn switched_off(home: &Path, name: &str, arguments: &Value) -> Option<&'static str> {
+    let settings = crate::settings::read_from(home);
+    let named_agent = || {
+        arguments
+            .get("agent")
+            .and_then(Value::as_str)
+            .is_some_and(|agent| !matches!(agent.trim(), "" | "claude-code" | "codex"))
+    };
+    match name {
+        "note" | "notes" if !settings.notes_on => {
+            Some("Notes are switched off in the workbench's settings, so none are kept or read.")
+        }
+        "plan" | "gate_add" | "verdict" | "gates" if !settings.agents_on => {
+            Some("Agents and teams are switched off in the workbench's settings, so no run holds or reads gates until they are on again.")
+        }
+        "start" if !settings.agents_on && named_agent() => {
+            Some("Agents are switched off in the workbench's settings. Leave the agent out.")
+        }
+        _ => None,
+    }
 }
 
 /// The terminal tool as the agent sees it.
@@ -1174,7 +1253,7 @@ pub fn handle_with(
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "chord", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": instructions(),
+            "instructions": instructions(home),
         })),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({ "tools": all_tools(home, session) })),
@@ -1211,6 +1290,9 @@ fn call(
 ) -> Result<Value, String> {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+    if let Some(off) = switched_off(home, name, &arguments) {
+        return Err(off.to_string());
+    }
     match name {
         "show" => show_call(home, cwd, session, &arguments),
         "diff" => diff_call(home, cwd, session, &arguments),
@@ -3107,6 +3189,95 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("no such tool"));
+    }
+
+    fn switch(home: &Path, notes_on: bool, agents_on: bool) {
+        let path = crate::settings::settings_path(home);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            path,
+            format!(r#"{{ "notesOn": {notes_on}, "agentsOn": {agents_on} }}"#),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_switches_take_the_note_tools_and_the_agent_out_and_put_them_back() {
+        for told_now in [
+            INSTRUCTIONS,
+            WOKEN_INSTRUCTIONS,
+            CONVERSATION_INSTRUCTIONS,
+            ORCHESTRATOR_INSTRUCTIONS,
+            ORCHESTRATOR_WOKEN_INSTRUCTIONS,
+            ORCHESTRATOR_CONVERSATION_INSTRUCTIONS,
+        ] {
+            for sentence in NOTE_SENTENCES {
+                assert!(told_now.contains(sentence));
+            }
+            assert_eq!(told(told_now, true), told_now);
+            let off = told(told_now, false);
+            assert!(!off.contains("note tool") && !off.contains("matching notes"));
+            assert!(off.contains("show tool") && off.contains("browser_open"));
+        }
+        let home = home("switches");
+        let names = |home: &Path| {
+            all_tools(home, None)
+                .iter()
+                .map(|tool| tool["name"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        let agent = |home: &Path| {
+            all_tools(home, None)
+                .iter()
+                .find(|tool| tool["name"] == "start")
+                .map(|start| !start["inputSchema"]["properties"]["agent"].is_null())
+                .unwrap()
+        };
+        let from_notes = |home: &Path| {
+            all_tools(home, None)
+                .iter()
+                .find(|tool| tool["name"] == "start")
+                .map(|start| start["description"].as_str().unwrap().contains(FROM_NOTES))
+                .unwrap()
+        };
+        let note = json!({ "agent": "Reviewer", "prompt": "p", "project": "/p" });
+        assert!(names(&home).contains(&"note".to_string()) && agent(&home));
+        assert!(from_notes(&home));
+        assert_eq!(switched_off(&home, "note", &json!({})), None);
+        assert_eq!(switched_off(&home, "start", &note), None);
+        switch(&home, false, false);
+        assert!(!names(&home)
+            .iter()
+            .any(|name| name == "note" || name == "notes"));
+        assert!(!agent(&home));
+        let start = all_tools(&home, None)
+            .into_iter()
+            .find(|tool| tool["name"] == "start")
+            .unwrap();
+        assert!(start["description"]
+            .as_str()
+            .unwrap()
+            .contains("with its conversation, and the prompt is what it goes on with"));
+        for name in ["note", "notes", "plan", "gate_add", "verdict", "gates"] {
+            assert!(switched_off(&home, name, &json!({})).is_some(), "{name}");
+        }
+        assert!(switched_off(&home, "start", &note)
+            .unwrap()
+            .contains("Leave the agent out"));
+        assert_eq!(
+            switched_off(&home, "start", &json!({ "prompt": "p" })),
+            None
+        );
+        assert_eq!(switched_off(&home, "start", &json!({ "agent": " " })), None);
+        assert_eq!(
+            switched_off(&home, "start", &json!({ "agent": "codex" })),
+            None
+        );
+        let refused = handle(&home, Path::new("/p"), None, r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"notes","arguments":{}}}"#).unwrap();
+        assert_eq!(refused["result"]["isError"], true);
+        switch(&home, true, true);
+        assert!(names(&home).contains(&"notes".to_string()) && agent(&home));
+        assert_eq!(switched_off(&home, "start", &note), None);
     }
 
     #[test]

@@ -22,6 +22,7 @@ import { adoptInactiveAfter, inactiveAfterSettings } from "$lib/projects.svelte"
 import { adoptKeys, keysSettings } from "$lib/keys.svelte";
 import { adoptNotify, notifySettings } from "$lib/notify.svelte";
 import { adoptStartAsk, startAskSettings } from "$lib/startAsk.svelte";
+import { adoptSwitches, switchesSettings } from "$lib/switches.svelte";
 import { adoptCompact, compactSettings } from "$lib/compact.svelte";
 import { adoptLastChosen, lastChosenSettings } from "$lib/lastChosen.svelte";
 import { adoptAutoResume, autoResumeSettings } from "$lib/autoResume.svelte";
@@ -48,6 +49,7 @@ export function currentSettings(): Settings {
     userStyles: userStyles.on,
     ...notifySettings(),
     ...startAskSettings(),
+    ...switchesSettings(),
     ...compactSettings(),
     ...lastChosenSettings(),
     ...autoResumeSettings(),
@@ -69,6 +71,7 @@ export function adopt(settings: Settings) {
   adoptUserStylesSetting(settings.userStyles);
   adoptNotify(settings);
   adoptStartAsk(settings.askEveryStart);
+  adoptSwitches(settings.notesOn, settings.agentsOn);
   adoptCompact(settings.compact);
   adoptLastChosen(settings.lastChosen);
   adoptAutoResume(settings.autoResume);
