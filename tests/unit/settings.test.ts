@@ -109,7 +109,7 @@ describe("the settings", () => {
     await open("sessions");
     const overrides = screen.getByTestId("hooks-overrides");
     expect(overrides).toHaveAttribute("aria-expanded", "true");
-    expect(overrides).toHaveTextContent("(1)");
+    expect(overrides).toHaveTextContent(/By project\s*1/);
     expect(
       within(screen.getByTestId("hooks-row")).getByTestId("hooks-off"),
     ).toHaveAttribute("aria-checked", "true");

@@ -27,6 +27,23 @@ test("opens on the chord and from the menu, and closes on Escape", async ({
   await expect(page.getByTestId("settings")).toBeHidden();
 });
 
+// What a control is for reaches the keyboard and a screen reader in
+// words on the page, not only under the pointer.
+test("says in words what a font, the custom styles and a fold's number are", async ({ page }) => {
+  await page.keyboard.press(`${MOD}+,`);
+  await page.getByTestId("settings-tab-appearance").click();
+  for (const kind of ["mono", "sans"]) {
+    await expect(page.getByTestId(`${kind}-hint`)).toHaveText("System is what the machine has.");
+    await expect(page.getByTestId(`${kind}-system`)).toHaveAccessibleDescription("System is what the machine has.");
+    await expect(page.getByTestId(`${kind}-system`)).not.toHaveAttribute("title");
+  }
+  const note = (await page.getByTestId("styles-note").innerText()).trim();
+  expect(note).not.toBe("");
+  await expect(page.getByTestId("styles")).toHaveAccessibleName(new RegExp(`^Custom styles\\s*${note.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  await page.getByTestId("settings-tab-sessions").click();
+  await expect(page.getByTestId("hooks-overrides-count")).toHaveText("0 of their own");
+});
+
 // Tabs down the left, one section's worth of settings beside them.
 test.describe("the tabs", () => {
   test("show one section at a time", async ({ page }) => {
@@ -61,6 +78,66 @@ test.describe("the tabs", () => {
       await page.getByTestId(`settings-tab-${tab}`).click();
       expect(await dialog.boundingBox(), tab).toEqual(first);
       expect(await page.getByTestId("settings-tab-appearance").boundingBox(), tab).toEqual(tabs);
+    }
+  });
+
+  // "Settings" over the tabs and the tab's name over its panel are one
+  // line of the window, as far from its top as the words are from its
+  // sides, and the panel's rows keep the edges its name sets.
+  test("draw both titles on one line, the gutter above them and beside them", async ({ page }) => {
+    await page.keyboard.press(`${MOD}+,`);
+    const dialog = page.getByTestId("settings");
+    const measure = () =>
+      dialog.evaluate((el) => {
+        const part = (id: string) => el.querySelector<HTMLElement>(`[data-testid='${id}']`)!;
+        // Where a title's words stand: their left edge, the line they are
+        // written on and the top of their capitals.
+        const words = (title: HTMLElement) => {
+          const range = document.createRange();
+          range.selectNodeContents(title);
+          const mark = document.createElement("span");
+          mark.style.cssText = "display:inline-block;width:0;height:0";
+          title.appendChild(mark);
+          const line = mark.getBoundingClientRect().bottom;
+          mark.remove();
+          const style = getComputedStyle(title);
+          const pen = document.createElement("canvas").getContext("2d")!;
+          pen.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const shown = style.textTransform === "uppercase" ? title.innerText.toUpperCase() : title.innerText;
+          return { left: range.getBoundingClientRect().left, line, top: line - pen.measureText(shown).actualBoundingBoxAscent };
+        };
+        const box = el.getBoundingClientRect();
+        const nav = el.querySelector("nav")!.getBoundingClientRect();
+        const card = part("settings-scroll").querySelector(".s-card")!.getBoundingClientRect();
+        const title = words(part("settings-title"));
+        const heading = words(part("settings-heading"));
+        return {
+          lines: [title.line, heading.line],
+          above: title.top - box.top,
+          beside: [title.left - box.left, heading.left - nav.right],
+          card: [card.left - nav.right, box.right - card.right],
+          close: box.right - part("settings-close").getBoundingClientRect().right,
+        };
+      });
+    for (const look of ["modern", "terminal"]) {
+      await page.getByTestId("settings-tab-appearance").click();
+      await page.getByTestId(`look-${look}`).click();
+      for (const size of [
+        { width: 1440, height: 900 },
+        { width: 900, height: 620 },
+      ]) {
+        await page.setViewportSize(size);
+        for (const tab of ["appearance", "plugins", "keys"]) {
+          await page.getByTestId(`settings-tab-${tab}`).click();
+          await expect(page.getByTestId("settings-heading")).toBeInViewport({ ratio: 1 });
+          const at = await measure();
+          const where = `${look}, ${size.width} wide, ${tab}`;
+          expect(Math.abs(at.lines[0] - at.lines[1]), where).toBeLessThan(0.5);
+          for (const gutter of [...at.beside, ...at.card]) expect(Math.abs(gutter - 28), where).toBeLessThanOrEqual(0.5);
+          expect(Math.abs(at.close - 28), where).toBeLessThanOrEqual(8);
+          expect(Math.abs(at.above - 28), where).toBeLessThanOrEqual(1);
+        }
+      }
     }
   });
 

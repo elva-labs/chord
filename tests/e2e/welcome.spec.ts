@@ -162,13 +162,13 @@ test("Check setup in the palette opens the Setup tab, which reads the machine ag
   await expect(tab.locator('[data-check="codex"]')).toContainText("0.118.0");
   const reads = () => page.evaluate(() => (window as unknown as { __setupReads: number }).__setupReads);
   expect(await reads()).toBe(1);
-  await tab.getByTestId("setup-check").click();
+  await page.getByTestId("setup-check").click();
   await expect.poll(reads).toBe(2);
   expect(await page.evaluate(() => (window as unknown as { __setupFresh: boolean[] }).__setupFresh)).toEqual([
     false,
     true,
   ]);
 
-  await tab.getByTestId("setup-welcome").click();
+  await page.getByTestId("setup-welcome").click();
   expect(await commands(page)).toEqual(["welcome_show"]);
 });

@@ -139,6 +139,13 @@ test("records a shortcut of two steps in the settings", async ({ page }) => {
   await page.getByTestId("chord-review").click();
   await page.keyboard.press("Control+k");
   await expect(page.getByTestId("chord-problem")).toHaveText(/Ctrl\+K begins Ctrl\+K D, which is Send waiting messages now/);
+  // The action it was refused for is named in the problem's colour.
+  const colour = (testid: string, inner: string) =>
+    page.getByTestId(testid).evaluate((el, inner) => {
+      const node = inner === "" ? el : el.closest(".s-row")!.querySelector(inner)!;
+      return getComputedStyle(node).color;
+    }, inner);
+  expect(await colour("chord-review", ".s-name")).toBe(await colour("chord-problem", ""));
 });
 
 test("shows no problem while a second key may follow, and ends the recording on Tab or Ctrl+W", async ({ page }) => {

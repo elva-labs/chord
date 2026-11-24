@@ -71,10 +71,8 @@ test("lays the sheet over the app's only while it is on", async ({ page }) => {
   await expect.poll(() => spacing(page)).not.toBe("7px");
 });
 
-/** The custom styles switch, behind More until the sheet is in use. */
+/** The custom styles switch, a row of its own on the appearance tab. */
 async function stylesSwitch(page: Page) {
-  const more = page.getByTestId("appearance-more");
-  if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
   return page.getByTestId("styles");
 }
 

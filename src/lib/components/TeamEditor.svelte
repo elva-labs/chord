@@ -790,7 +790,7 @@
     padding: 0 5px 0 8px;
     border: 0;
     border-radius: var(--radius);
-    background: var(--surface);
+    background: var(--clear-surface);
     box-shadow: inset 0 0 0 1px var(--divider, var(--rule));
     font-family: var(--chrome);
     font-size: 13px;

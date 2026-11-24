@@ -286,11 +286,6 @@
 <section class="agents" data-testid="settings-agents" bind:this={section}>
   {#if view.kind === "list"}
     <h3>Teams</h3>
-    {#if teams.inUse.length === 0}
-      <p class="note teams-none" data-testid="team-none">
-        A team is the agents a lead may call and the gates their work passes.
-      </p>
-    {/if}
     <div class="alist" data-testid="team-list">
       {#each teams.inUse as team (team.name)}
         <button
@@ -315,6 +310,11 @@
         <span></span>
       </button>
     </div>
+    {#if teams.inUse.length === 0}
+      <p class="note teams-none" data-testid="team-none">
+        A team is the agents a lead may call and the gates their work passes.
+      </p>
+    {/if}
     <UnreadEntries field="teams" />
     {#if teams.refused !== null}
       <p class="error" role="alert" data-testid="team-refused">{teams.refused}</p>
@@ -502,18 +502,20 @@
 </section>
 
 <style>
-  /* The width the other tabs read at, centred in the panel. */
+  /* The column the other tabs read on, edge to edge. */
   .agents {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    max-width: 640px;
-    margin-inline: auto;
     padding-bottom: 4px;
   }
 
+  /* A section's name: 22px under the card above it, 6px over its own. */
   h3 {
-    margin: 6px 0 -4px;
+    display: flex;
+    align-items: center;
+    min-height: 22px;
+    margin: 10px 2px -6px;
     font-family: var(--chrome);
     font-size: var(--heading-size);
     letter-spacing: var(--label-track);
@@ -523,15 +525,16 @@
   }
 
   h3:first-child {
-    margin-top: 0;
+    margin-top: 6px;
   }
 
-  /* Rounder than a field where the look rounds, square where it does not. */
   .alist {
     display: flex;
     flex-direction: column;
-    border-radius: calc(var(--radius) * 1.43);
-    box-shadow: inset 0 0 0 1px var(--divider, var(--rule));
+    background: var(--s-card-fill, var(--clear-surface));
+    border: 1px solid var(--s-card-edge, var(--rule));
+    border-radius: var(--card-radius);
+    box-shadow: var(--s-card-shadow, none);
     overflow: hidden;
   }
 
@@ -541,11 +544,12 @@
     column-gap: 10px;
     align-items: center;
     width: 100%;
-    padding: 7px 12px 7px 10px;
+    min-height: 42px;
+    padding: 7px 14px;
     border: 0;
     background: none;
     font-family: var(--chrome);
-    font-size: 13px;
+    font-size: var(--s-row-label, 13px);
     text-align: left;
     color: var(--ink);
     cursor: pointer;
@@ -596,7 +600,7 @@
   }
 
   .arow.on .av {
-    background: var(--surface);
+    background: var(--paint-surface);
     color: var(--accent);
   }
 
@@ -851,8 +855,12 @@
     color: var(--ink-3);
   }
 
+  /* A note on the section, under its card. */
   .teams-none {
-    margin-bottom: 8px;
+    margin: -5px 2px 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--ground-quiet);
   }
 
   .note code {

@@ -72,7 +72,7 @@ test("swaps the terminals' renderer as the share is kept, not while it is picked
 
   await page.keyboard.press(`${MOD}+,`);
   {
-    const more = page.getByTestId("appearance-more");
+    const more = page.getByTestId("background-fold");
     if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
   }
   await expect(page.getByTestId("background-picker")).toBeVisible();
