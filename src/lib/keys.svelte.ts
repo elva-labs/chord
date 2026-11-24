@@ -105,7 +105,7 @@ export const ACTIONS: ActionInfo[] = [
   { key: "file.new", label: "New file in the tree", group: "Editor" },
   { key: "file.untitled", label: "New untitled file", group: "Editor" },
   { key: "file.save", label: "Save", group: "Editor" },
-  { key: "editor.wrap", label: "Wrap long lines or not", group: "Editor" },
+  { key: "editor.wrap", label: "Turn word wrap on or off", group: "Editor" },
   { key: "terminal.new", label: "New shell", group: "Terminal" },
   { key: "zoom.in", label: "Zoom the terminal in", group: "Terminal" },
   { key: "zoom.out", label: "Zoom the terminal out", group: "Terminal" },
