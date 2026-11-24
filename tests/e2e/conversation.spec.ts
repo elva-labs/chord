@@ -1308,7 +1308,7 @@ test.describe("the model and the mode", () => {
     await page.getByTestId("start-agent").click();
     await startNew(page);
     await expect(page.getByTestId("model-chip")).toHaveText("GPT-5-Codex");
-    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveText("GPT-5-Codex");
+    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveCount(0);
     await expect(page.getByTestId("session-row")).toHaveAttribute("title", "New session");
   });
 

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore, startNew } from "./fake";
+import { PROJECT, beginTurn, installFakeCore, startNew } from "./fake";
 
 // Close closes what is in front, wherever the keyboard is: the dialog or
 // the palette, the shell in front with the keyboard in the terminal panel,
@@ -76,6 +76,14 @@ async function startSession(page: Page) {
   await startNew(page);
   await expect.poll(() => holder(page)).toBe("Terminal input");
   return typeInto(page, "x");
+}
+
+/** Starts a session and has it at work on a turn, which is what the
+    window's question counts; its pty. */
+async function startWorking(page: Page) {
+  const pty = await startSession(page);
+  await beginTurn(page);
+  return pty;
 }
 
 /** Opens the panel with one shell, the keyboard in it; its pty. */
@@ -247,11 +255,11 @@ test.describe("the window", () => {
   for (const platform of PLATFORMS) {
     test(`asks before it closes while a session runs, and Cancel keeps everything, on ${platform.name}`, async ({ page }) => {
       await open(page, platform);
-      const agent = await startSession(page);
+      const agent = await startWorking(page);
       await expect.poll(() => closeName(page)).toBe("Close Window");
       await page.keyboard.press(platform.inTerminal);
       const ask = page.getByTestId("close-window");
-      await expect(ask).toContainText("Close the window with 1 session running?");
+      await expect(ask).toContainText("Close the window with 1 session working?");
       await expect(ask).toContainText("Closing the window quits the app");
       await expect(page.getByTestId("close-window-cancel")).toBeFocused();
       await expect(page.getByTestId("close-window-confirm")).toHaveText("Close window");
@@ -318,17 +326,26 @@ test.describe("the window", () => {
     await expect(page.getByTestId("close-window")).toHaveCount(0);
   });
 
-  test("asks the same on the window's own close, and on quit", async ({ page }) => {
+  test("closes at once with a session open at rest", async ({ page }) => {
     await open(page, MAC);
     await startSession(page);
+    await page.locator(TREE).focus();
+    await page.keyboard.press("Meta+w");
+    await expect.poll(() => controls(page)).toEqual(["close"]);
+    await expect(page.getByTestId("close-window")).toHaveCount(0);
+  });
+
+  test("asks the same on the window's own close, and on quit", async ({ page }) => {
+    await open(page, MAC);
+    await startWorking(page);
     await page.evaluate(() =>
       (window as unknown as { __CHORD_CORE__: { windowControl: (a: string) => Promise<void> } }).__CHORD_CORE__.windowControl("close"),
     );
-    await expect(page.getByTestId("close-window")).toContainText("Close the window with 1 session running?");
+    await expect(page.getByTestId("close-window")).toContainText("Close the window with 1 session working?");
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("close-window")).toHaveCount(0);
     await page.evaluate(() => (window as unknown as { __quit: () => void }).__quit());
-    await expect(page.getByTestId("close-window")).toContainText("Quit with 1 session running?");
+    await expect(page.getByTestId("close-window")).toContainText("Quit with 1 session working?");
     await page.getByTestId("close-window-confirm").click();
     await expect.poll(() => controls(page)).toEqual(["quit"]);
   });

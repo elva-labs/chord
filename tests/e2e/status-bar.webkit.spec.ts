@@ -216,6 +216,9 @@ test("says so when the bar has nothing to reach", async ({ page }) => {
 
 test("leaves the keyboard on the window's question on its chord", async ({ page }) => {
   await open(page);
+  // A turn under way is what the window's question is asked for.
+  await agent(page, `f.send("${H}", crypto.randomUUID(), "Keep going"); f.startTurn("${H}");`);
+  await expect(page.locator(".session .dot.working")).toHaveCount(1);
   await page.keyboard.press(`${MOD}+w`);
   const cancel = page.getByTestId("close-window-cancel");
   await expect(cancel).toBeFocused();

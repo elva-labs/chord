@@ -22,7 +22,7 @@
 //! Window, in both.
 //!
 //! Quit and Close Window are the app's own items rather than the system's,
-//! so they can ask first while sessions run or the editor holds unsaved
+//! so they can ask first while a session works or the editor holds unsaved
 //! edits; see [`crate::leaving`]. Close Window is on Shift+Cmd+W, since
 //! Cmd+W closes what is in front.
 //!

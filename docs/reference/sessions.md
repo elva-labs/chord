@@ -248,7 +248,7 @@ the composer names it: Claude's as they are said, `opus-4-1` as Opus 4.1,
 and Codex's by the names Codex's own list gives them for the account,
 `gpt-6.2-sol` as GPT-6.2-Sol, or by its id where no list this window has
 heard names it. The row's tooltip, the rows of the sessions it started,
-the agent pane's header, the settings and the start tool's reply name a model the
+a terminal session's header, the settings and the start tool's reply name a model the
 same way; what an agent is told, and the model the start tool is given,
 stay ids. A Claude Code session's model is the one it was started on,
 when the app knows it. A Codex session's is the one Codex says it runs on
@@ -709,7 +709,7 @@ does not hold, so a terminal never starts looser than the mode last chosen
 on the chip. Bypassing permissions, or a mode a session cannot switch to,
 is never passed on; the harness's settings decide then.
 
-The agent pane's header names the session and the model it runs on. The
+The agent pane's header names the session; a terminal session's header names the model it runs on as well, where a conversation says it on its composer. The
 status bar names the branch the folder has checked out; what the session is
 doing, working, idle, asking the user or waiting for a permission, is said
 by its row and carried by the bar for a screen reader, as

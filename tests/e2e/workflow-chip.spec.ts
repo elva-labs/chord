@@ -176,8 +176,8 @@ test("picking a workflow makes the session its orchestrator, as New session unde
   await expect(model).toHaveAttribute("aria-disabled", "true");
   await expect(model).toHaveAttribute("title", "Set by Build and review");
   await expect(model).toHaveAccessibleName("Model Fable, set by Build and review");
-  // The header names it as the composer does.
-  await expect(page.locator(`${AGENT} > header .meta`)).toHaveText("Fable");
+  // The header leaves the model to the composer.
+  await expect(page.locator(`${AGENT} > header .meta`)).toHaveCount(0);
   // A press on it opens nothing.
   await model.dispatchEvent("click");
   await expect(page.getByTestId("model-menu")).toHaveCount(0);

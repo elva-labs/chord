@@ -1,7 +1,7 @@
 //! Leaving with work under way.
 //!
-//! While the editor holds edits not yet written, sessions are running or
-//! shells are open, the window's close (its button, Close Window, Close in
+//! While the editor holds edits not yet written, a session is working on a
+//! turn or shells are open, the window's close (its button, Close Window, Close in
 //! the File menu, the controls the app draws) and the app's quit (Quit in
 //! the menus, Cmd+Q) are held back, and the window is asked: it puts the
 //! question up, or lets the window go at once when no shell has anything
@@ -28,8 +28,8 @@ pub const LEAVE_REQUESTED: &str = "leave_requested";
 /// the quit goes through without it.
 const HEARD_WITHIN: Duration = Duration::from_secs(3);
 
-/// What the window last said about unsaved edits and running sessions and
-/// shells, and where the questions stand.
+/// What the window last said about unsaved edits, sessions working on a turn
+/// and open shells, and where the questions stand.
 #[derive(Default)]
 pub struct Leaving {
     unsaved: AtomicBool,
@@ -146,8 +146,9 @@ pub fn leave_unsaved(leaving: State<'_, Arc<Leaving>>, unsaved: bool) {
     leaving.unsaved.store(unsaved, Ordering::SeqCst);
 }
 
-/// Whether sessions are running or shells are open, as the window says
-/// each time that changes.
+/// Whether a session is working on a turn or a shell is open, as the window
+/// says each time that changes. A session open at rest loses nothing, so it
+/// does not count.
 #[tauri::command]
 pub fn leave_running(leaving: State<'_, Arc<Leaving>>, running: bool) {
     leaving.running.store(running, Ordering::SeqCst);

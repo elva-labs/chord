@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore, startNew } from "./fake";
+import { PROJECT, beginTurn, installFakeCore, startNew } from "./fake";
 
 // A new shell in the terminal panel by one chord, from anywhere in the
 // window: Cmd+T on macOS, Ctrl+Shift+T elsewhere, where Ctrl+T is the
@@ -188,6 +188,7 @@ test("makes no shell under the settings, which keep the keyboard", async ({ page
 test("makes no shell while the window's question holds the keyboard, and Return still cancels", async ({ page }) => {
   await open(page, PLATFORMS[0]);
   await startSession(page);
+  await beginTurn(page);
   await page.keyboard.press("Meta+w");
   const cancel = page.getByTestId("close-window-cancel");
   await expect(cancel).toBeFocused();
