@@ -18,6 +18,7 @@
   import Parts from "./Parts.svelte";
   import Plain from "./Plain.svelte";
   import Sent from "./Sent.svelte";
+  import SentImages from "./SentImages.svelte";
   import Started from "./Started.svelte";
 
   /**
@@ -60,6 +61,9 @@
     /** What opens a file a message mentions, or null for one the viewer
         does not show. */
     opener?: (path: string) => (() => void) | null;
+    /** Opens an image the user sent in the viewer, by its source and the
+        name to show it under. Absent where a thread has no viewer. */
+    onImage?: (picture: { src: string; caption: string }) => void;
     /** Room kept at the top for what stands over it, such as the find
         bar, in pixels. */
     room?: number;
@@ -117,6 +121,7 @@
     onPutBack,
     sender,
     opener,
+    onImage,
     room = 0,
     waiting,
     marked = null,
@@ -1429,13 +1434,7 @@
       {/if}
     </header>
     <div class="bubble">
-      {#if images.length > 0}
-        <div class="images">
-          {#each images as image, at (at)}
-            <img src="data:{image.mediaType};base64,{image.data}" alt="Attached image {at + 1}" />
-          {/each}
-        </div>
-      {/if}
+      {#if images.length > 0}<SentImages {images} onOpen={from === null ? onImage : undefined} />{/if}
       {#if words.text !== "" && from === null}<Sent text={words.text} mentions={mentionsOf(said.id)} find={said.id} {opener} />{:else if words.text !== ""}<p data-find={said.id}
           >{#each sentParts(words.text, mentionsOf(said.id)) as part, at (at)}{#if part.path === undefined}<Plain text={part.text} />{:else}{@const open =
                 opener?.(part.path) ?? null}{#if open === null}<span class="mention" data-testid="message-mention"
@@ -1836,20 +1835,6 @@
   .link-file:hover {
     text-decoration: underline;
     text-underline-offset: 2px;
-  }
-
-  .images {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 6px;
-  }
-
-  .images img {
-    max-width: 160px;
-    max-height: 120px;
-    border-radius: var(--radius-sm);
-    object-fit: cover;
   }
 
   /* What the workbench or another session sent stands on the left, with

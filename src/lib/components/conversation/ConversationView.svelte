@@ -33,6 +33,7 @@
   import { notRead } from "$lib/thread";
   import { projectLabel, sessionRoot } from "$lib/workspace.svelte";
   import { mentionOpener } from "$lib/show.svelte";
+  import { showPicture } from "$lib/files.svelte";
   import { unsent } from "$lib/mention";
   import { mentionsOf } from "$lib/mentioned.svelte";
   import { answerable, dockedFor } from "$lib/docked.svelte";
@@ -409,6 +410,7 @@
       {waiting}
       sender={(message) => senderOf(message)}
       opener={(path) => mentionOpener(session.key, path)}
+      onImage={showPicture}
       {marked}
       onGoBack={backable ? goBackHere : null}
       onUndo={() => void undoGoBack(session.key)}

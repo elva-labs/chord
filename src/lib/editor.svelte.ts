@@ -1508,7 +1508,7 @@ export function focusFiles(target: "editor" | "tree") {
     presented, a plugin's page or the browser. In editor mode these take
     the editor's place. */
 export function otherKindShown(): boolean {
-  return files.media !== null || files.pluginView !== null || browser.showing;
+  return files.media !== null || files.picture !== null || files.pluginView !== null || browser.showing;
 }
 
 /** The tree's scope in agent mode, given back on leaving editor mode. */

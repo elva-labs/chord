@@ -65,6 +65,9 @@ export const files = $state({
   /** What the agent presented, when the viewer holds that rather than a
       file: every file of one call, down the viewer. */
   media: null as MediaItem | null,
+  /** An image the user sent, when the viewer holds that: its source as a
+      data URL and the name it is shown under. */
+  picture: null as { src: string; caption: string } | null,
   /** A plugin's own page, when the viewer holds that: the page as the
       plugin last sent it, and how much room it asks for. */
   pluginView: null as {
@@ -642,6 +645,7 @@ export function shownChanged() {
     only one is ever showing. */
 function leaveOtherKinds() {
   files.media = null;
+  files.picture = null;
   files.pluginView = null;
   if (browser.showing) hideBrowser();
 }
@@ -689,6 +693,13 @@ export function pick(range: { from: number; to: number } | null) {
 export function showMedia(item: MediaItem) {
   deselect();
   files.media = item;
+  enterReview();
+}
+
+/** Shows an image the user sent in the viewer, in place of any file. */
+export function showPicture(picture: NonNullable<typeof files.picture>) {
+  deselect();
+  files.picture = picture;
   enterReview();
 }
 
@@ -849,6 +860,7 @@ export function clear() {
   files.hitsTruncated = false;
   files.searching = false;
   files.target = null;
+  files.picture = null;
   files.pluginView = null;
   loadFolds();
 }
