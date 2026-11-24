@@ -24,13 +24,16 @@ import type { Session } from "$lib/sessions.svelte";
     briefing until the first message takes it, and whether anything has
     been said to the fresh run beyond the briefing. `lost` marks a run
     whose `from` holds nothing stored: there is nothing to resume whole,
-    and the fresh run is not kept as going on from it. */
+    and the fresh run is not kept as going on from it. `alone` marks one
+    whose row went on from nothing before it, so nothing kept by `from`
+    moves to the fresh run. */
 export interface Went {
   from: string;
   context: number | null;
   briefing: string | null;
   spoken: boolean;
   lost?: boolean;
+  alone?: boolean;
 }
 
 const LINEAGE_KEY = "chord.wentOn";
@@ -92,12 +95,10 @@ export interface Lost {
 const lost: Record<string, Lost> = {};
 
 /** How a conversation is taken up. `always` goes on from the notes
-    whatever its size and rest. `unspoken` is a row whose conversation
-    was never spoken to in this window. `running` is a row whose run is up
-    on the id, which is never taken as holding nothing. */
+    whatever its size and rest. `running` is a row whose run is up on the
+    id, which is never taken as holding nothing. */
 export interface TakingUp {
   always?: boolean;
-  unspoken?: boolean;
   running?: boolean;
 }
 
@@ -109,16 +110,15 @@ export interface TakingUp {
  * notes whatever its size and rest, and the id comes back only where it
  * cannot.
  *
- * Where nothing is stored under the id and the id is a fresh run of the
- * row, one that went on from another or was never spoken to, the row goes
+ * Where the core looked and nothing is stored under the id, the row goes
  * on with the newest conversation of its chain that is stored, judged as
  * its own would be, and the id that held nothing leaves the chain. A
  * judgement of an earlier one that fails resumes that one whole. Where
  * none is stored, the ids that held nothing leave the chain and the row
- * goes on fresh, from the notes where there are any. Either way `lostAt`
- * says so once, except for a row that held only that id and has no notes,
- * which lost nothing and starts fresh. Any other id that holds nothing,
- * and any for a running row, is resumed whole.
+ * goes on fresh under a new id, from the notes where there are any.
+ * Either way `lostAt` says so once, except for a row with no notes that
+ * went on from nothing before the id, which lost nothing and starts
+ * fresh. The id of a running row is resumed whole.
  */
 export async function takeUp(session: Session, how: TakingUp = {}): Promise<string | null> {
   const from = session.resumedFrom;
@@ -133,9 +133,7 @@ export async function takeUp(session: Session, how: TakingUp = {}): Promise<stri
   try {
     const judged = await judge(session, from, always);
     if (judged.missing !== true) return took(session, from, judged, always);
-    load();
-    if (how.running !== true && (going.lineage[from] !== undefined || how.unspoken === true))
-      return await takeUpStored(session, from, judged, always);
+    if (how.running !== true) return await takeUpStored(session, from, judged, always);
     logUsage(session, "resume", { from, whole: true, missing: true, ...(always ? { afterLimit: true } : {}) });
     return from;
   } catch {
@@ -209,7 +207,14 @@ async function takeUpStored(session: Session, missing: string, judged: GoingOn, 
   logUsage(session, "resume", { from: missing, whole: false, lost: missing, ...(always ? { afterLimit: true } : {}) });
   if (!notes && !earlier) return null;
   lost[session.key] = { id: missing, to: null, earlier, notes };
-  going.runs[session.key] = { from: missing, context: null, briefing: judged.briefing, spoken: false, lost: true };
+  going.runs[session.key] = {
+    from: missing,
+    context: null,
+    briefing: judged.briefing,
+    spoken: false,
+    lost: true,
+    ...(earlier ? {} : { alone: true }),
+  };
   return null;
 }
 
@@ -286,7 +291,7 @@ export function onWentOn(handler: ((from: string, to: string, key: string) => vo
 
 /** The fresh run's own id is known: it is kept as going on from the old
     conversation, unless that one holds nothing, and what is kept by the
-    old id follows it. */
+    old id follows it, unless the row went on from nothing before it. */
 export function identified(key: string, id: string) {
   const went = going.runs[key];
   if (went === undefined || id === went.from) return;
@@ -295,7 +300,7 @@ export function identified(key: string, id: string) {
     going.lineage[id] = went.from;
     save();
   }
-  movedOn(went.from, id, key);
+  if (went.alone !== true) movedOn(went.from, id, key);
 }
 
 /** Whether another conversation went on from this one. */

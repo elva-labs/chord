@@ -653,7 +653,7 @@ export async function launch(key: string): Promise<void> {
     // A cold and large conversation goes on fresh from its notes, under
     // its earlier messages, which are still drawn from the old one.
     if (starting.resumedFrom !== null) {
-      const resume = await takeUp(starting, { unspoken: link.unspoken });
+      const resume = await takeUp(starting);
       // The row follows the conversation it goes on with or from, and a row
       // with nothing to go on from follows none.
       starting.resumedFrom = resume ?? wentOn(key)?.from ?? null;

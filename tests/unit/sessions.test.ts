@@ -1121,11 +1121,13 @@ describe("a terminal row whose conversation holds nothing", () => {
     expect(lineageOf("dead-1")).toEqual(["dead-1"]);
   });
 
-  it("resumes whole an id that holds nothing where it never went on to it", async () => {
+  it("starts fresh with no prompt where its only id holds nothing and there are no notes", async () => {
     takenUp["dead-1"] = NOTHING;
     const session = create(A, "dead-1");
     await launch(session.key, 80, 24, () => {});
-    expect(spawned.at(-1)).toMatchObject({ session: "dead-1" });
+    expect(spawned.at(-1)?.session).toBeUndefined();
+    expect(spawned.at(-1)?.prompt).toBeUndefined();
+    expect(lineageOf("dead-1")).toEqual(["dead-1"]);
   });
 });
 

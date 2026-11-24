@@ -218,24 +218,27 @@ describe("taking a conversation up again", () => {
     expect(lostAt("row-1")).toEqual({ id: "new-id", to: "old-id", earlier: true, notes: false });
   });
 
-  it("walks back or goes fresh only from a fresh run of the row, and resumes any other id that holds nothing whole", async () => {
+  it("starts a row fresh whose only id holds nothing, and says so only where there are notes", async () => {
+    const moved: [string, string][] = [];
+    onWentOn((from, to) => moved.push([from, to]));
     const nothing = { context: null, idle: null, goesOn: false, briefing: null, missing: true };
     answers["lonely"] = nothing;
-    // A conversation it never went on to, which it was spoken to in: whole.
-    expect(await takeUp(row({ resumedFrom: "lonely" }))).toBe("lonely");
-    expect(wentOn("row-1")).toBeNull();
-    expect(lostAt("row-1")).toBeNull();
-    // A brand-new row never spoken to lost nothing: it starts fresh, says
-    // nothing and is kept as going on from nothing.
-    expect(await takeUp(row({ resumedFrom: "lonely" }), { unspoken: true })).toBeNull();
+    // A brand-new row closed before its first message, brought back after
+    // a restart, lost nothing: it starts fresh and says nothing.
+    expect(await takeUp(row({ resumedFrom: "lonely" }))).toBeNull();
     expect(wentOn("row-1")).toBeNull();
     expect(lostAt("row-1")).toBeNull();
     expect(lineage()).toEqual({});
-    // With notes, it goes on from them, and says so.
+    // With notes, it goes on from them and says so, and the dead id stays
+    // out of the chain with nothing kept under it moved.
     answers["lonely"] = { ...nothing, briefing: "NOTES ALONE" };
-    expect(await takeUp(row({ resumedFrom: "lonely" }), { unspoken: true })).toBeNull();
-    expect(wentOn("row-1")).toMatchObject({ from: "lonely", briefing: "NOTES ALONE", lost: true });
+    expect(await takeUp(row({ resumedFrom: "lonely" }))).toBeNull();
+    expect(wentOn("row-1")).toMatchObject({ from: "lonely", briefing: "NOTES ALONE", lost: true, alone: true });
+    expect(wholeOf({ key: "row-1" })).toBeNull();
     expect(lostAt("row-1")).toEqual({ id: "lonely", to: null, earlier: false, notes: true });
+    identified("row-1", "fresh-id");
+    expect(lineage()).toEqual({});
+    expect(moved).toEqual([]);
   });
 
   it("never takes a running row's id as holding nothing", async () => {

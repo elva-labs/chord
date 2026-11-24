@@ -434,18 +434,21 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(startMode(starting, linkFor(row.key))).toBe("plan");
   });
 
-  it("resumes whole an id that holds nothing where the row never went on to it", async () => {
+  it("starts a row brought back after a restart fresh where its only id holds nothing", async () => {
     const { judged } = storedOnly(() => WARM);
     const row = reopened(PROJECT, "never-stored", "claude-code", null, null, null, "integrated");
     wake(row.key);
     await launch(row.key);
-    // The start fails as it did, where the user sees it, and nothing the
-    // row is kept by changes.
+    // A brand-new row closed before its first message lost nothing: it
+    // starts under a new id, says nothing and keeps no dead id.
     const starts = fake.calls.filter((call) => call.method === "start");
-    expect(starts.at(-1)).toMatchObject({ options: { session: "never-stored" } });
+    expect(starts.at(-1)).toMatchObject({ options: { session: undefined } });
     expect(judged).toEqual(["never-stored"]);
+    expect(byKey(row.key)!.status).toBe("running");
+    expect(byKey(row.key)!.id).not.toBe("never-stored");
     expect(wentOn(row.key)).toBeNull();
     expect(conversationOf(row.key).entries.filter((entry) => entry.kind === "note")).toEqual([]);
+    expect(lineage()).toEqual({});
   });
 
   it("goes on fresh from its notes where nothing of its chain is stored, says so, and offers nothing whole", async () => {
