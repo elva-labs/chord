@@ -10,8 +10,18 @@ agents, setup, accounts, plugins, keys and notifications each carry
 the section of that name, sessions carries live updates too, and agents
 carries the teams. Opening the settings again lands on the tab last used, for as long as
 the window is open. The dialog follows the look the panes are drawn in. It
-has one size for every tab, so nothing moves when the tab changes, and the
-content of each sits in a column at the width it reads at, in the middle.
+has one size for every tab, so nothing moves when the tab changes.
+
+Settings is written over the tabs and the open tab's name over its panel,
+on one line, as far from the top of the dialog as from its sides. The
+tab's own buttons, such as Check for updates on Plugins and Show welcome
+and Check again on Setup, stand on that line beside the close button, and
+the line stays while the tab scrolls under it. A tab that needs a word of
+introduction opens with it under its name. Below that a tab is sections:
+a name over a card of rows that fills the panel's width, with a note on
+the section under its card. A list that folds, such as By project, and a
+form that adds, such as Add account, are rows of the card they belong to
+and open in place; a fold shows how many entries it holds at its end.
 
 Every setting is its name, its control and at most one short line; what a
 setting does is described here. Every choice between on and off is a
@@ -23,9 +33,10 @@ or <kbd>Esc</kbd>, closes the dialog.
 
 ## Appearance
 
-The tab shows mode, theme, colour, compact mode and the two fonts. The
-background and custom styles sit behind More, which opens by itself when
-either is in use.
+The tab shows mode, theme, colour, compact mode and the two fonts, then
+Background image and Custom styles. Background image is a row that opens
+the picker under it, says On or None at its end, and is open from the start
+once a colour has a background.
 
 System, light or dark. System follows the desktop and changes with it.
 
@@ -93,7 +104,7 @@ for editing by hand.
 A colour or a gradient of up to three colours of your own behind the
 window's chrome. It colours the chrome: in the modern look the window's
 ground, with the sessions pane, the pane headers and the status bar on it,
-and the settings' title row and tab column. The cards, with the terminal,
+and the settings' tab column. The cards, with the terminal,
 the conversation, the diff, the editor and the viewer in them, stay solid
 unless [Cards](#cards) lets a little of the background through them. In
 dark the ground under the colour is the chrome's darkest tone, so the
@@ -687,7 +698,8 @@ can name the harnesses' own login by it (see
 [orchestrator](../orchestrator.md#the-tools)).
 
 The tab lists the accounts, Default first, each with where it keeps each
-harness. Add an account… opens a form: a name, and under it the two
+harness. With none of your own yet, the card says so. Add account, the
+card's last row, opens a form in its place: a name, and under it the two
 directories the name suggests, `~/.claude-work` and `~/.codex-work` for an
 account called Work, shown as they will be. A pencil beside either opens
 it for editing, and a directory opened that way keeps what is typed into
@@ -727,7 +739,8 @@ the plugins each names, what each plugin is for and how it is faring, and a
 switch per plugin. Check for updates, at the top, asks every fetched source at
 once. The sources the workbench knows are listed from the first launch with
 every plugin off, and turning one on fetches its source first. A source of
-your own goes in behind Add a source, under them. What adding, enabling,
+your own goes in behind Add a source, in a card under them; with no
+sources at all, that card says so. What adding, enabling,
 checking and updating do is in [plugins](../plugins.md).
 
 ## Keys

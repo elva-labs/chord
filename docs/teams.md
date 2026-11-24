@@ -117,7 +117,7 @@ composer's agent list, under Teams, before the first message. Its chip
 names the team, and the session keeps it for the run once something is
 said, after the window opens again too. A session picked that way leads
 the team's run and never joins another as a member. With no teams in use,
-the Agents tab says what a team is in their place.
+the Agents tab says what a team is under New team.
 
 A session in a run, its lead or a member, shows one line above the
 composer: how many of the gates needed stand, and why the next one holds.
