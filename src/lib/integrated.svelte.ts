@@ -674,13 +674,16 @@ export async function launch(key: string): Promise<void> {
 }
 
 /** What the view says of a start that found nothing stored under the id
-    the row took up. */
+    the row took up. It names the id by its start, which History finds the
+    conversation by should it be stored where the agent did not look. */
 function lostText(agent: HarnessId, lost: Lost): string {
-  const kept = `${harnessLabel(agent)} kept no record of this session's last run`;
-  if (lost.to !== null) return `${kept}, so it goes on from the conversation before it.`;
+  const short = lost.id.slice(0, 8);
+  const kept = `${harnessLabel(agent)} kept no record of this session's last run, ${short}`;
+  const found = ` History finds it by ${short} if it is stored elsewhere.`;
+  if (lost.to !== null) return `${kept}, so it goes on from the conversation before it.${found}`;
   const before = lost.earlier ? ", nor of the conversations before it" : "";
   const notes = lost.notes ? " from its notes" : "";
-  return `${kept}${before}, so it goes on as a fresh conversation${notes}.`;
+  return `${kept}${before}, so it goes on as a fresh conversation${notes}.${found}`;
 }
 
 /** What a session another started as one of its agents tells the core, so

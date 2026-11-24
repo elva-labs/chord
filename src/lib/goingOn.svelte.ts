@@ -274,12 +274,14 @@ export function spoke(key: string) {
 
 /** The conversations the rows with these keys went on from, while their
     runs last: the rows go on with them, and the list does not offer them
-    again, whether the fresh runs' ids are known yet or not. */
+    again, whether the fresh runs' ids are known yet or not. One the core
+    found nothing under is not theirs, so the list still offers it where
+    it turns up. */
 export function leftBy(keys: readonly string[]): Set<string> {
   const left = new Set<string>();
   for (const key of keys) {
     const went = going.runs[key];
-    if (went !== undefined) left.add(went.from);
+    if (went !== undefined && went.lost !== true) left.add(went.from);
   }
   return left;
 }

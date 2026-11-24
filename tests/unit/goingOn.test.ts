@@ -318,6 +318,18 @@ describe("taking a conversation up again", () => {
     expect(leftBy(["row-2"]).size).toBe(0);
   });
 
+  it("keeps offering an id that held nothing while the fresh run that dropped it lasts", async () => {
+    going.lineage["new-id"] = "old-id";
+    answers["new-id"] = { context: null, idle: null, goesOn: false, briefing: "NOTES", missing: true };
+    answers["old-id"] = { context: null, idle: null, goesOn: false, briefing: null, missing: true };
+    expect(await takeUp(row({ resumedFrom: "new-id" }))).toBeNull();
+    // The run still names what it dropped, and the list offers it should
+    // it turn up where the core did not look.
+    expect(wentOn("row-1")).toMatchObject({ from: "new-id", lost: true });
+    expect(lostAt("row-1")).toMatchObject({ id: "new-id", to: null });
+    expect(leftBy(["row-1"]).size).toBe(0);
+  });
+
   it("says a context in tokens as the menu does", () => {
     expect(tokensText(412_345)).toBe("412k tokens");
     expect(tokensText(1_000_000)).toBe("1M tokens");

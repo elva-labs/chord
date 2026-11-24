@@ -401,7 +401,7 @@ describe("a row at rest whose conversation went cold and large", () => {
     // The thread says so, and draws what the stored one said.
     const conversation = conversationOf(row.key);
     expect(conversation.entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []))).toEqual([
-      "Claude Code kept no record of this session's last run, so it goes on from the conversation before it.",
+      `Claude Code kept no record of this session's last run, ${fresh.slice(0, 8)}, so it goes on from the conversation before it. History finds it by ${fresh.slice(0, 8)} if it is stored elsewhere.`,
     ]);
     await vi.waitFor(() => expect(conversation.earlier).toBe("read"));
     expect(agentTexts(conversation)).toEqual(["There are 12."]);
@@ -462,7 +462,7 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(wentOn(row.key)).toMatchObject({ from: "never-stored", lost: true });
     const conversation = conversationOf(row.key);
     expect(conversation.entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []))).toEqual([
-      "Claude Code kept no record of this session's last run, nor of the conversations before it, so it goes on as a fresh conversation from its notes.",
+      "Claude Code kept no record of this session's last run, never-st, nor of the conversations before it, so it goes on as a fresh conversation from its notes. History finds it by never-st if it is stored elsewhere.",
     ]);
     // There is nothing whole to resume, and the dead ids leave the chain.
     expect(wholeOf(byKey(row.key)!)).toBeNull();
