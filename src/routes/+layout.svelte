@@ -32,6 +32,7 @@
   import { loadUserStyles } from "$lib/userStyles.svelte";
   import { loadLayout } from "$lib/layout.svelte";
   import { loadCompact } from "$lib/compact.svelte";
+  import { loadWrap } from "$lib/wrap.svelte";
   import { loadStarted, watchStops } from "$lib/conductor.svelte";
   import { followSetting } from "$lib/sessionMoves.svelte";
   import { followWaiting, loadRemembered } from "$lib/sessions.svelte";
@@ -62,6 +63,7 @@
     loadUserStyles();
     loadLayout();
     loadCompact();
+    loadWrap();
     loadRemembered();
     // What waits on the user is kept as it changes, so it comes back after
     // a quit or a crash.

@@ -25,6 +25,7 @@ import { adoptStartAsk, startAskSettings } from "$lib/startAsk.svelte";
 import { adoptSwitches, switchesSettings } from "$lib/switches.svelte";
 import { adoptCompact, compactSettings } from "$lib/compact.svelte";
 import { adoptLastChosen, lastChosenSettings } from "$lib/lastChosen.svelte";
+import { adoptWrap, wrapSettings } from "$lib/wrap.svelte";
 import { adoptAutoResume, autoResumeSettings } from "$lib/autoResume.svelte";
 import { flush, holdUntil, onRefused, onSettled, sending } from "$lib/persist";
 import { showRefusal } from "$lib/refusal.svelte";
@@ -53,6 +54,7 @@ export function currentSettings(): Settings {
     ...compactSettings(),
     ...lastChosenSettings(),
     ...autoResumeSettings(),
+    ...wrapSettings(),
   };
 }
 
@@ -75,6 +77,7 @@ export function adopt(settings: Settings) {
   adoptCompact(settings.compact);
   adoptLastChosen(settings.lastChosen);
   adoptAutoResume(settings.autoResume);
+  adoptWrap(settings.wordWrap);
   adoptPastSessions(settings.pastSessions);
   adoptSessionKinds(settings.integrated);
   adoptInactiveAfter(settings.inactiveAfter);

@@ -7,7 +7,7 @@
   import { onMount, untrack } from "svelte";
   import { EditorSelection } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { stateFor } from "$lib/codeEditor";
+  import { stateFor, wrapChange } from "$lib/codeEditor";
   import {
     attachView,
     editor,
@@ -16,6 +16,7 @@
     stateOf,
   } from "$lib/editor.svelte";
   import { layout, overlayHoldsKeyboard } from "$lib/layout.svelte";
+  import { wrap } from "$lib/wrap.svelte";
 
   interface Props {
     /** The buffer to show. */
@@ -52,6 +53,7 @@
     editorShows(key, showing === null ? undefined : place());
     showing = key;
     view.setState(state);
+    applyWrap();
     const scroll = scrollOf(key);
     if (scroll !== null) {
       // Laid out first, so the scroll has somewhere to go.
@@ -63,6 +65,20 @@
     }
     revealIfAsked();
   }
+
+  /** Brings the file in front to the wrapping the user chose. Wrapping
+      moves no text and no selection; the view keeps the line the caret is
+      on and the top of what is shown. */
+  function applyWrap() {
+    if (view === null) return;
+    const change = wrapChange(view.state, wrap.on);
+    if (change !== null) view.dispatch(change);
+  }
+
+  $effect(() => {
+    wrap.on;
+    untrack(applyWrap);
+  });
 
   $effect(() => {
     const key = buffer;
