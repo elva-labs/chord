@@ -2476,8 +2476,10 @@ export async function launch(
     // nothing else to go on with. A conversation held at a point it went
     // back to is resumed as it is.
     const resume = session.resumedFrom === null || back ? session.resumedFrom : await takeUpAgain(session);
-    const briefing =
-      resume === null && session.resumedFrom !== null ? briefingFor(key, session.prompt !== null) : null;
+    // The row follows the conversation it goes on with or from, and a row
+    // with nothing to go on from follows none.
+    if (!back && session.resumedFrom !== null) session.resumedFrom = resume ?? wentOn(key)?.from ?? null;
+    const briefing = resume === null && session.resumedFrom !== null ? briefingFor(key, session.prompt !== null) : null;
     // The row keeps the name it showed, which its old conversation gave.
     if (briefing !== null) session.title ??= knownName(session);
     const prompt =

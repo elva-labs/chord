@@ -137,9 +137,16 @@ let givenNames: Record<string, string> = {};
 /** The agent whose history directory cannot be read, if any. */
 let unreadable: string | null = null;
 const spawned: SpawnOptions[] = [];
+/** How the core judges taking each conversation up again; one it is not
+    given fails, which resumes whole. */
+const takenUp: Record<string, unknown> = {};
 vi.mock("$lib/core", () => ({
   isHeld: () => false,
   core: () => ({
+    goingOn: async (options: { session: string }) => {
+      if (!(options.session in takenUp)) throw new Error("not judged here");
+      return takenUp[options.session];
+    },
     spawn: async (options: SpawnOptions) => {
       spawned.push(options);
       if (options.profile === "gone") throw new Error('there is no Codex profile "gone" in /home/.codex');
@@ -197,6 +204,7 @@ beforeEach(() => {
   // A session follows no workflow here unless a test gives it one.
   resetWorkflows();
   spawned.length = 0;
+  for (const id of Object.keys(takenUp)) delete takenUp[id];
   reset();
   resetShells();
   resetAttention();
@@ -1085,6 +1093,39 @@ describe("an agent that mints its own id", () => {
   it("falls back to an installed agent when the preferred one is gone", () => {
     create(A, null, "codex");
     expect(defaultAgent(A)).toBe("claude-code");
+  });
+});
+
+describe("a terminal row whose conversation holds nothing", () => {
+  const NOTHING = { context: null, idle: null, goesOn: false, briefing: null, missing: true };
+
+  it("goes on with the newest stored conversation of its chain, and follows it", async () => {
+    going.lineage["dead-1"] = "stored-1";
+    takenUp["dead-1"] = NOTHING;
+    takenUp["stored-1"] = { context: 40_000, idle: 60, goesOn: false, briefing: null };
+    const session = create(A, "dead-1");
+    await launch(session.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ session: "stored-1" });
+    expect(byKey(session.key)!.resumedFrom).toBe("stored-1");
+    expect(lineageOf("dead-1")).toEqual(["dead-1"]);
+  });
+
+  it("starts fresh, briefed from its notes, where nothing of its chain is stored", async () => {
+    going.lineage["dead-1"] = "dead-0";
+    takenUp["dead-1"] = { ...NOTHING, briefing: "NOTES ALONE" };
+    takenUp["dead-0"] = NOTHING;
+    const session = create(A, "dead-1");
+    await launch(session.key, 80, 24, () => {});
+    expect(spawned.at(-1)?.session).toBeUndefined();
+    expect(spawned.at(-1)?.prompt).toMatch(/^NOTES ALONE\n\n/);
+    expect(lineageOf("dead-1")).toEqual(["dead-1"]);
+  });
+
+  it("resumes whole an id that holds nothing where it never went on to it", async () => {
+    takenUp["dead-1"] = NOTHING;
+    const session = create(A, "dead-1");
+    await launch(session.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ session: "dead-1" });
   });
 });
 

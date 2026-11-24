@@ -653,8 +653,10 @@ export async function launch(key: string): Promise<void> {
     // A cold and large conversation goes on fresh from its notes, under
     // its earlier messages, which are still drawn from the old one.
     if (starting.resumedFrom !== null) {
-      const resume = await takeUp(starting);
-      if (resume !== null) starting.resumedFrom = resume;
+      const resume = await takeUp(starting, { unspoken: link.unspoken });
+      // The row follows the conversation it goes on with or from, and a row
+      // with nothing to go on from follows none.
+      starting.resumedFrom = resume ?? wentOn(key)?.from ?? null;
       link.conversation.wentOn = wentOn(key) !== null;
       link.conversation.afterLimit = null;
       // A row whose id held nothing goes on with what is stored, and says so.
@@ -675,9 +677,10 @@ export async function launch(key: string): Promise<void> {
     the row took up. */
 function lostText(agent: HarnessId, lost: Lost): string {
   const kept = `${harnessLabel(agent)} kept no record of this session's last run`;
-  return lost.to === null
-    ? `${kept}, nor of the conversations before it, so it goes on as a fresh conversation from its notes.`
-    : `${kept}, so it goes on from the conversation before it.`;
+  if (lost.to !== null) return `${kept}, so it goes on from the conversation before it.`;
+  const before = lost.earlier ? ", nor of the conversations before it" : "";
+  const notes = lost.notes ? " from its notes" : "";
+  return `${kept}${before}, so it goes on as a fresh conversation${notes}.`;
 }
 
 /** What a session another started as one of its agents tells the core, so
@@ -1613,7 +1616,7 @@ export async function goOnIfCold(key: string, now = Date.now(), sending = false)
   link.restarting = true;
   let resume: string | null;
   try {
-    resume = await takeUp({ ...session, resumedFrom: id });
+    resume = await takeUp({ ...session, resumedFrom: id }, { running: true });
   } catch {
     resume = id;
   }
@@ -1700,7 +1703,7 @@ export async function goOnAfterLimit(key: string, resetAt: number): Promise<bool
   link.restarting = true;
   let resume: string | null;
   try {
-    resume = await takeUp({ ...session, resumedFrom: id }, true);
+    resume = await takeUp({ ...session, resumedFrom: id }, { always: true, running: true });
   } catch {
     resume = id;
   }
