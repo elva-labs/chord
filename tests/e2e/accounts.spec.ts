@@ -122,7 +122,7 @@ test.describe("the accounts tab", () => {
     await expect
       .poll(async () => (await file(page)).accounts.overrides)
       .toEqual({ [PROJECT]: "Work" });
-    await expect(page.getByTestId("account-overrides")).toContainText("(1)");
+    await expect(page.getByTestId("account-overrides")).toHaveText(/By project\s*1/);
     await row.getByTestId("account-project-default").click();
     await expect.poll(async () => (await file(page)).accounts.overrides).toEqual({});
   });

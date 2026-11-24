@@ -270,18 +270,19 @@ test("walks the settings, every section and its controls, and never leaves them"
   await page.keyboard.press(`${MOD}+,`);
   await expect(page.getByTestId("settings")).toBeVisible();
   const appearance = [
-    "settings-close",
     "settings-tab-appearance",
+    "settings-close",
     "theme-system",
     "look-modern",
     "palette-teal",
     "compact",
     "mono-system",
     "sans-system",
-    "appearance-more",
+    "background-fold",
+    "styles",
   ];
-  expect(await walk(page, "Tab", appearance.length + 1)).toEqual([...appearance, "settings-close"]);
-  expect(await walk(page, "Shift+Tab", 2)).toEqual(["appearance-more", "sans-system"]);
+  expect(await walk(page, "Tab", appearance.length + 1)).toEqual([...appearance, "settings-tab-appearance"]);
+  expect(await walk(page, "Shift+Tab", 2)).toEqual(["styles", "background-fold"]);
 
   // A radio group is one stop: the arrows walk it, and Space picks.
   await page.getByTestId("theme-system").focus();
@@ -295,18 +296,19 @@ test("walks the settings, every section and its controls, and never leaves them"
   // The tabs are one stop, on the one shown; the arrows show the next.
   await page.getByTestId("settings-tab-appearance").focus();
   expect(await walk(page, "ArrowDown", 1)).toEqual(["settings-tab-sessions"]);
-  for (const [tab, first] of [
-    ["sessions", "session-kind-terminal"],
-    ["accounts", "account-add-open"],
-    ["plugins", "plugin"],
-    ["keys", "preset-default"],
-    ["notifications", "notifications"],
+  // After the tabs come the header's own buttons, then the tab's controls.
+  for (const [tab, stops] of [
+    ["sessions", ["settings-close", "session-kind-terminal"]],
+    ["accounts", ["settings-close", "account-add-open"]],
+    ["plugins", ["settings-close", "plugin"]],
+    ["keys", ["settings-close", "preset-default"]],
+    ["notifications", ["settings-close", "notifications"]],
   ] as const) {
     await page.getByTestId(`settings-tab-${tab}`).focus();
     await page.keyboard.press("Enter");
-    expect(await walk(page, "Tab", 1), tab).toEqual([first]);
+    expect(await walk(page, "Tab", stops.length), tab).toEqual([...stops]);
   }
-  expect(await walk(page, "Tab", 2)).toEqual(["chime", "settings-close"]);
+  expect(await walk(page, "Tab", 3)).toEqual(["chime", "settings-tab-notifications", "settings-close"]);
   // Enter on a button presses it.
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("settings")).toHaveCount(0);

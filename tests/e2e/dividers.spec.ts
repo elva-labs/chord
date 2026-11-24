@@ -512,7 +512,7 @@ test("the background picker's small window draws the ground with a card standing
   await open(page);
   await page.keyboard.press(`${MOD}+,`);
   {
-    const more = page.getByTestId("appearance-more");
+    const more = page.getByTestId("background-fold");
     if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
   }
   await expect(page.getByTestId("background-picker")).toBeVisible();

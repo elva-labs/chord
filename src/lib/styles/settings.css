@@ -1,0 +1,608 @@
+/* The grid every tab of the settings is drawn on: a section is a line of
+   words over a card of rows, a row is a name and its control, and every
+   control is one height. The classes are shared by the components the
+   tabs are made of, so they carry a prefix rather than a scope. */
+
+.s-dialog {
+  --s-ground: var(--bg);
+  --s-page-title: 11px;
+  --s-page-title-color: var(--accent);
+  --s-row-label: 12.5px;
+  --s-card-edge: var(--rule);
+  --s-card-shadow: none;
+  --s-quiet-size: 10.5px;
+}
+
+:root[data-look="modern"] .s-dialog {
+  --s-page-title: 15px;
+  --s-page-title-color: var(--ink);
+  --s-row-label: 13px;
+  --s-card-edge: var(--card-edge);
+  --s-card-shadow: var(--card-shadow);
+  --s-quiet-size: 12px;
+}
+
+/* While the cards let a background through, the settings are one of
+   them, and their ground is the card's paint. */
+:root[data-background][data-cards] .s-dialog {
+  --s-ground: var(--paint-surface);
+}
+
+/* The line a tab opens with, under its name. */
+.s-lede {
+  margin: 0 2px 2px;
+  max-width: 84ch;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* A section: 22px from the one above, less under the opening line and
+   least at the top of the column. */
+.s-grp {
+  margin-top: 22px;
+}
+
+.s-lede + .s-grp {
+  margin-top: 18px;
+}
+
+.s-grp:first-child {
+  margin-top: 6px;
+}
+
+.s-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  margin: 0 2px 6px;
+}
+
+.s-title {
+  margin: 0;
+  font-family: var(--chrome);
+  font-size: var(--heading-size);
+  font-weight: var(--heading-weight);
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-case);
+  color: var(--heading-color);
+}
+
+.s-meta {
+  font: 11.5px var(--mono);
+  color: var(--ground-quiet);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.s-hint {
+  margin-left: auto;
+  font-size: var(--label-size);
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-case);
+  color: var(--ground-quiet);
+}
+
+.s-tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+  margin-right: -7px;
+}
+
+/* A note on a section, under its card. */
+.s-after {
+  margin: 7px 2px 0;
+  max-width: 84ch;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ground-quiet);
+}
+
+.s-after.bad {
+  color: var(--del);
+}
+
+.s-card {
+  background: var(--surface);
+  border: 1px solid var(--s-card-edge);
+  border-radius: var(--card-radius);
+  box-shadow: var(--s-card-shadow);
+  overflow: hidden;
+}
+
+/* A row: its name on the left, with at most one short line under it, and
+   its control on the right. Lines run between rows, never over the first. */
+.s-row {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 42px;
+  margin: 0;
+  padding: 7px 14px;
+  border: 0;
+  background: none;
+  font-family: var(--chrome);
+  font-size: var(--s-row-label);
+  text-align: left;
+  color: var(--ink);
+}
+
+.s-card > * + .s-row,
+.s-card > * + .s-subs,
+.s-card > * + .s-inset,
+.s-card > * + .s-wrap,
+.s-wrap > * + .s-row,
+.s-wrap > * + .s-subs,
+.s-subs > * + .s-row {
+  border-top: 1px solid var(--divider, var(--rule));
+}
+
+/* A run of rows that stays one block for what reads it, laid out as if
+   its rows were the card's own. */
+.s-wrap {
+  display: block;
+}
+
+.s-name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.s-name small {
+  max-width: 72ch;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+.s-ctl {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 8px;
+  max-width: 70%;
+}
+
+.s-value {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.s-mono {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.s-card.dense .s-row {
+  min-height: 36px;
+  padding-block: 4px;
+}
+
+.s-row.top {
+  align-items: flex-start;
+}
+
+.s-row.top > .s-ctl {
+  padding-top: 2px;
+}
+
+/* What is wrong with the row above it, as part of that row. */
+.s-problem {
+  margin: -4px 0 0;
+  padding: 0 14px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--del);
+}
+
+/* A choice of a few, one of them taken. */
+.s-seg {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--field-bg);
+}
+
+.s-seg button {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  font-family: var(--chrome);
+  font-size: var(--btn-size);
+  font-weight: var(--btn-weight);
+  letter-spacing: var(--label-track-tight);
+  text-transform: var(--label-case);
+  white-space: nowrap;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.s-seg button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.s-seg button.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.s-seg button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The answer of a row that has no choice to make. */
+.s-fixed {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.s-sel {
+  height: 26px;
+  padding: 0 7px 0 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  font-family: var(--chrome);
+  font-size: var(--field-size);
+  color: var(--ink);
+}
+
+/* The button, and its two other weights: lifted off the ground where it
+   stands outside a card, and filled where it is the thing to do. */
+.s-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  font-family: var(--chrome);
+  font-size: var(--btn-size);
+  font-weight: var(--btn-weight);
+  letter-spacing: var(--label-track-tight);
+  text-transform: var(--label-case);
+  white-space: nowrap;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.s-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--field-bg) 86%, var(--ink));
+}
+
+.s-btn.ground {
+  background: var(--surface);
+  box-shadow:
+    var(--s-card-shadow),
+    inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.s-btn.ground:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface) 94%, var(--ink));
+}
+
+.s-btn.pri,
+.s-btn.pri:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent, var(--surface));
+}
+
+.s-btn.pri:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.s-btn:disabled,
+.s-quiet:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A button of words alone, for what is done now and then. */
+.s-quiet {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-family: var(--chrome);
+  font-size: var(--s-quiet-size);
+  font-weight: var(--btn-weight);
+  letter-spacing: var(--label-track-tight);
+  text-transform: var(--label-case);
+  white-space: nowrap;
+  color: var(--ground-quiet);
+  cursor: pointer;
+}
+
+.s-quiet:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
+
+.s-quiet.accent {
+  margin-right: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.s-quiet.danger {
+  color: var(--del);
+}
+
+/* One of a set, named, with its mark before it where it has one. */
+.s-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.s-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--field-bg);
+  font-family: var(--chrome);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.s-chip.plain {
+  padding-left: 10px;
+}
+
+.s-chip:hover {
+  color: var(--ink);
+}
+
+.s-chip.on {
+  border-color: transparent;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+
+.s-chip .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* A chip that can be deleted holds the button for it. */
+.s-own {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--field-bg);
+}
+
+.s-own.on {
+  border-color: transparent;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.s-own .s-chip,
+.s-own .s-chip.on {
+  height: 24px;
+  padding-right: 4px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.s-own .del {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  margin-right: 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.s-own .del:hover {
+  color: var(--del);
+}
+
+/* A shortcut, and the same button while it listens for a new one. */
+.s-kbd {
+  min-width: 68px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  font: 12px var(--mono);
+  text-align: center;
+  white-space: nowrap;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.s-kbd:hover {
+  background: color-mix(in srgb, var(--field-bg) 86%, var(--ink));
+}
+
+.s-kbd.rec {
+  border-color: transparent;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  font-family: var(--chrome);
+  color: var(--accent);
+}
+
+.s-field {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  font-family: var(--chrome);
+  font-size: var(--field-size);
+  color: var(--ink);
+}
+
+.s-field::placeholder {
+  color: var(--ink-3);
+}
+
+/* A row that opens what is under it, and a row that adds one more. */
+.s-fold,
+.s-add {
+  cursor: pointer;
+}
+
+.s-fold > .s-name,
+.s-add > .s-name {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.s-add {
+  color: var(--ink-2);
+}
+
+.s-add:hover,
+.s-fold:hover {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  color: var(--ink);
+}
+
+.s-chev,
+.s-plus {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-3);
+}
+
+.s-chev {
+  transition: transform 0.12s;
+}
+
+.s-chev.rot {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .s-chev {
+    transition: none;
+  }
+}
+
+.s-subs > .s-row {
+  padding-left: 34px;
+}
+
+/* What a row opened: a question in the accent's tint, or a form on the
+   card's own ground. */
+.s-inset {
+  margin: 0;
+  padding: 12px 14px 14px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.s-inset.form {
+  background: none;
+}
+
+.s-inset p {
+  margin: 0 0 10px;
+  max-width: 84ch;
+}
+
+.s-inset code {
+  font: 11.5px var(--mono);
+}
+
+.s-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.s-fgrid {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  color: var(--ink-2);
+}
+
+.s-empty {
+  padding: 30px 14px 28px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.s-empty b {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.s-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.s-row:focus-visible,
+.s-seg button:focus-visible,
+.s-sel:focus-visible,
+.s-btn:focus-visible,
+.s-quiet:focus-visible,
+.s-chip:focus-visible,
+.s-own .del:focus-visible,
+.s-kbd:focus-visible,
+.s-field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.s-row:focus-visible {
+  outline-offset: -2px;
+}

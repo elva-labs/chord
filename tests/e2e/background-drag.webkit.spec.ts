@@ -380,7 +380,7 @@ test("a dot dragged on the pad, in a workspace the size of a day's work", async 
 
   await page.keyboard.press(`${MOD}+,`);
   {
-    const more = page.getByTestId("appearance-more");
+    const more = page.getByTestId("background-fold");
     if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
   }
   await expect(page.getByTestId("background-picker")).toBeVisible();

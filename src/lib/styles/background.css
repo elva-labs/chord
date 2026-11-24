@@ -10,7 +10,7 @@
  *                     each tinted part's own ground, let through by the
  *                     strength: the modern look's ground, which the sessions
  *                     pane, the pane headers and the settings' tab column lie
- *                     on, the settings' title row, the status bar, and the
+ *                     on, a row laid over a surface, the status bar, and the
  *                     terminal look's ground between its boxes;
  *   --tint-line, --tint-line-strong
  *                     the ink at the one amount every line in the window
@@ -32,7 +32,7 @@
  *
  * A tinted part lays its ground over the backdrop. In the modern look that
  * is the window's ground, with the sessions pane, the pane headers and the
- * status bar on it, and the settings' title row and tab column; in the
+ * status bar on it, and the settings' tab column; in the
  * terminal look, the ground between the boxes and the status bar. The
  * cards and the boxes keep their own lightness. A menu or a popover on a
  * tinted part stands on its own surface, so it keeps the palette's text.
@@ -87,7 +87,6 @@
   :is(
     [data-pane="sessions"],
     section[data-pane] > header,
-    [data-testid="settings"] > header,
     [data-testid="settings"] nav
   ),
 :root[data-background] [data-testid="status-bar"] {
@@ -114,7 +113,6 @@
   :is(
     [data-pane="sessions"],
     section[data-pane] > header,
-    [data-testid="settings"] > header,
     [data-testid="settings"] nav
   ) {
   --title-color: var(--tint-ink);
@@ -129,7 +127,6 @@
   :is(
     [data-pane="sessions"],
     section[data-pane] > header,
-    [data-testid="settings"] > header,
     [data-testid="settings"] nav
   )
   [data-card],
@@ -162,10 +159,6 @@
 :root[data-background][data-look="modern"] [data-pane="sessions"],
 :root[data-background][data-look="modern"] [data-testid="settings"] nav {
   background: linear-gradient(var(--tint-side), var(--tint-side)), var(--tint-backdrop);
-}
-
-:root[data-background][data-look="modern"] [data-testid="settings"] > header {
-  background: linear-gradient(var(--tint-surf), var(--tint-surf)), var(--tint-backdrop);
 }
 
 /* The status bar, in either look. */
