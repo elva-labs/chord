@@ -1240,13 +1240,15 @@ test.describe("how sessions run, in the settings", () => {
     await expect(codex.getByTestId("session-kind-only")).toHaveAttribute("title", "Runs only in a terminal");
     await claude.getByTestId("session-kind-integrated").click();
     await expect(claude.getByTestId("session-kind-integrated")).toHaveAttribute("aria-checked", "true");
-    // Under the choice, in so many words: when it applies.
+    // Each harness's name is starred, and the section ends with what the
+    // star stands for: when a change applies.
+    await expect(claude.locator(".s-star")).toHaveText("*");
+    await expect(codex.locator(".s-star")).toHaveText("*");
     const when = page.getByTestId("session-kind-when");
-    await expect(when).toContainText("A change moves the sessions already open too");
-    await expect(when).toContainText("Reopen, from a right click on it, moves it now.");
-    const last = (await codex.getByTestId("session-kind-only").boundingBox())!;
-    expect((await when.boundingBox())!.y).toBeGreaterThanOrEqual(last.y + last.height);
-    expect(await when.evaluate((el) => el.parentElement?.dataset.testid)).toBe("session-kinds");
+    await expect(when).toContainText("* A change also moves that harness's open sessions");
+    await expect(when).toContainText("right-click it and choose Reopen.");
+    const live = (await page.getByTestId("settings-live").boundingBox())!;
+    expect((await when.boundingBox())!.y).toBeGreaterThanOrEqual(live.y + live.height);
   });
 
   test("offers it for any agent the core says it can drive", async ({ page }) => {

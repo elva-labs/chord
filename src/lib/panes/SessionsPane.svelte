@@ -2405,7 +2405,7 @@
       data-testid="new-session"><svg class="glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg></button
     >
   </div>
-  <div class="tree">
+  <div class="tree no-select">
       {#each split.active as project (project.path)}
         <section class="proj" data-testid="project-section">
           {@render projectRow(project)}

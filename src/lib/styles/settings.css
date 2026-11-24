@@ -219,14 +219,14 @@
   color: var(--del);
 }
 
-/* A line of words on the row above it, as part of that row. */
-.s-rownote {
-  margin: -4px 0 0;
-  padding: 0 14px 9px;
-  max-width: 72ch;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--ink-3);
+/* A name with a mark that a note at the section's end is about it. */
+.s-name.s-starred {
+  flex-direction: row;
+  gap: 2px;
+}
+
+.s-star {
+  color: var(--ground-quiet);
 }
 
 /* A choice of a few, one of them taken. */
