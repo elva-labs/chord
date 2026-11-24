@@ -21,7 +21,8 @@ introduction opens with it under its name. Below that a tab is sections:
 a name over a card of rows that fills the panel's width, with a note on
 the section under its card. A list that folds, such as By project, and a
 form that adds, such as Add account, are rows of the card they belong to
-and open in place; a fold shows how many entries it holds at its end.
+and open in place; By project says at its end how many projects have an
+answer of their own.
 
 Every setting is its name, its control and at most one short line; what a
 setting does is described here. Every choice between on and off is a
@@ -36,7 +37,7 @@ or <kbd>Esc</kbd>, closes the dialog.
 The tab shows mode, theme, colour, compact mode and the two fonts, then
 Background image and Custom styles. Background image is a row that opens
 the picker under it, says On or None at its end, and is open from the start
-once a colour has a background.
+while the colour in use has a background.
 
 System, light or dark. System follows the desktop and changes with it.
 
@@ -70,7 +71,7 @@ Two families, chosen apart: the one the terminal and the editor draw in and
 the one the rest of the app is set in. Each starts on the machine's own, the monospace
 and the sans the system draws with; the terminal can have IBM Plex Mono or
 JetBrains Mono instead, and the interface IBM Plex Sans or Inter, all four
-shipped with the app. Each name is shown in its own face. A change reaches
+shipped with the app. Each name is shown in its own face, and the row says under its name that System is what the machine has. A change reaches
 every open terminal at once, which measures its grid again and tells the
 process the size it now has, so there is nothing to restart, and the editor
 with them.

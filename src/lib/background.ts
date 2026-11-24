@@ -776,8 +776,8 @@ export function grainPixels(size: number, grain: number): Uint8ClampedArray {
 /* ---------------------------------------------------------------------- */
 
 /** The tinted parts: the modern look's ground, which the sessions pane,
-    the pane headers and the settings' tab column lie on (side), the
-    settings' title row (surf), the status bar (status), and the terminal
+    the pane headers and the settings' tab column lie on (side), a
+    row laid over a surface (surf), the status bar (status), and the terminal
     look's ground between its boxes (frame). */
 export type Part = "side" | "surf" | "status" | "frame";
 
