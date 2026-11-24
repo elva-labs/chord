@@ -361,7 +361,7 @@ Whether sessions keep [notes](sessions.md#notes) and go on from them, on
 to begin with, kept as `notesOn`. Off, a session is not told to keep
 notes, and its note and notes tools are neither listed nor answered: a
 call says notes are switched off. The start tool no longer says a session
-resumed may go on from its notes. A conversation taken up again is
+resumed may go on from its notes. A stored conversation taken up again is
 resumed whole, however large and cold, where it would otherwise
 [go on from its notes](sessions.md#going-on-from-the-notes). One going on
 by itself once a usage limit resets is not started again: the session at

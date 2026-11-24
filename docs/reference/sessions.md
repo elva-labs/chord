@@ -1400,7 +1400,7 @@ file is its path in the text.
 Every session keeps notes of its own conversation, so that it can go on
 later from them rather than from the whole conversation read again. Notes
 can be switched off in the settings, and then none are kept or read, and a
-conversation is always resumed whole, as
+stored conversation is always resumed whole, as
 [keep notes](settings.md#keep-notes) describes. A
 session has one brief, what is being built, kept current, and notes, each
 with a title, a one-line summary, a few lines of body and the day it was
@@ -1546,16 +1546,16 @@ folder it could not read says nothing either way, and the conversation
 is resumed whole as before, so the failure shows and the next start can
 find it.
 
-Where nothing is stored and the id is a fresh run of the row, one that
-went on from another or that nothing was said to in this window, the row
-goes on with the newest conversation it went on through that is stored,
-judged as its own would be. The ids that held nothing are no longer
-counted as going on from anything. A conversation in that walk that
-cannot be judged is resumed whole. Where none is stored, the row goes on
-as a fresh conversation, briefed from its notes where it has any, the
-briefing saying no transcript was found, and Resume whole is not
-offered. Any other id that holds nothing, and the id of a row whose run
-is up, is resumed whole.
+Where nothing is stored under the id, the row goes on with the newest
+conversation it went on through that is stored, judged as its own would
+be. The ids that held nothing are no longer counted as going on from
+anything. A conversation in that walk that cannot be judged is resumed
+whole. Where none is stored, the row goes on as a fresh conversation
+under a new id, briefed from its notes where it has any, the briefing
+saying no transcript was found, and Resume whole is not offered. With
+notes switched off the core still looks, and the row goes on the same
+way with no briefing. Only the id of a row whose run is up is resumed
+whole however it reads.
 
 A conversation row's thread says what happened in a line under the
 earlier messages, such as that the last run kept no record and the row
