@@ -779,7 +779,7 @@ test.describe("the orchestrator folder", () => {
     await page.getByTestId("settings-tab-sessions").click();
     await page.getByTestId("hooks-overrides").click();
     const own = page.locator(`[data-testid='hooks-row'][data-project='${ORCHESTRATOR_FOLDER}']`);
-    await expect(own.locator(".name")).toHaveText("orchestrator");
+    await expect(own.locator(".s-name")).toHaveText("orchestrator");
     await own.getByTestId("hooks-on").click();
     await expect(own.getByTestId("hooks-on")).toHaveAttribute("aria-checked", "true");
     await expect
