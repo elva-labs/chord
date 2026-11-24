@@ -5,7 +5,7 @@
   import { ahead, agentAt, ownImages, reportsShown, spoken, wakeShown } from "$lib/instructions";
   import { sentParts, unsent } from "$lib/mention";
   import { mentionsOf } from "$lib/mentioned.svelte";
-  import { sessionName, timeOf, type Sender } from "$lib/senders.svelte";
+  import { leftOutOf, sessionName, timeOf, type Sender } from "$lib/senders.svelte";
   import { focusPane } from "$lib/layout.svelte";
   import { shareFolds } from "$lib/folds";
   import { shareAsking } from "$lib/stepAsking";
@@ -1500,6 +1500,14 @@
         {words.carried.messages === 1
           ? "Your message the usage limit left unanswered went with it"
           : `Your ${words.carried.messages} messages the usage limit left unanswered went with it`}
+      </p>
+    {/if}
+    {#if leftOutOf(said.id) !== null}
+      {@const lost = leftOutOf(said.id) ?? 0}
+      <p class="state" data-testid="workbench-uncarried">
+        {lost === 1
+          ? "1 earlier message the usage limit left unanswered could not go with it, since the workbench could not tell it was yours: send it again"
+          : `${lost} earlier messages the usage limit left unanswered could not go with it, since the workbench could not tell they were yours: send them again`}
       </p>
     {/if}
     {#if words.reports !== null}

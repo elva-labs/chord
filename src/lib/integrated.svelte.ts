@@ -18,7 +18,7 @@ import { unsent, type Sent } from "$lib/mention";
 import { mentionedIn, mentionsOf } from "$lib/mentioned.svelte";
 import { reservedName, shown } from "$lib/unseen";
 import { failureOf } from "$lib/turnFailure";
-import { senderOf, sentAt, sentBy, starterOf, typedAs, typedOf, WORKBENCH } from "$lib/senders.svelte";
+import { leftOut, leftOutOf, senderOf, sentAt, sentBy, starterOf, typedAs, typedOf, WORKBENCH } from "$lib/senders.svelte";
 import { pluginMarkFor } from "$lib/pluginStarts.svelte";
 import { keepMode, modeOf } from "$lib/sessionModes";
 import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
@@ -1331,12 +1331,20 @@ export function send(
   // The user's messages a usage limit left unanswered go with the next
   // message, whoever sends it, word for word with their images: what a
   // message that carried them held, and what the user typed of each. Only
-  // what is told to be the user's typing goes, never a note the workbench
-  // joined to it or another's words.
-  const backlog = link.conversation.unanswered((said) => carries(said.text));
+  // what the window kept as the user's typing goes, never a note the
+  // workbench joined to it or another's words. A message it can show to
+  // be neither the user's typing nor another's is left out, and the
+  // thread tells the user under this message to send it again. A message
+  // that left some out stands for them as one that carried them does.
+  const backlog = link.conversation.unanswered((said) => carries(said.text) || leftOutOf(said.id) !== null);
+  let lost = 0;
+  const went: string[] = [];
   const carried = backlog.flatMap((said) => {
-    const own = typedWords(said.text, said.images, typedOf(said.id), senderOf(said) === null);
-    return [...carriedBy(said.text, said.images), ...(own === null ? [] : [own])];
+    const held = carriedBy(said.text, said.images);
+    const own = typedWords(said.text, said.images, typedOf(said.id));
+    if (own === null && senderOf(said) === null) lost += 1;
+    if (own !== null || held.length > 0) went.push(said.id);
+    return [...held, ...(own === null ? [] : [own])];
   });
   const unanswered =
     carried.length === 0
@@ -1349,8 +1357,9 @@ export function send(
   const id = crypto.randomUUID();
   mentionedIn(id, mentions);
   if (from === null) typedAs(id, words.length, images.length);
+  if (lost > 0) leftOut(id, lost);
   link.conversation.sending(id, text, sent);
-  for (const said of backlog) link.conversation.wentWith(said.id);
+  for (const said of went) link.conversation.wentWith(said);
   link.backSaid = null;
   link.filesBack = from === null ? [] : link.filesBack;
   if (note !== null || files.length > 0)

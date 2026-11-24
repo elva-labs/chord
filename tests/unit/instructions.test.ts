@@ -312,16 +312,15 @@ describe("the user's messages a usage limit left unanswered", () => {
     expect(carries(sent)).toBe(true);
     expect(carries("Go on.")).toBe(false);
     // As the window kept it when it sent it.
-    expect(typedWords(sent, ["a", "b"], ["Go on.".length, 1], true)).toEqual({ text: "Go on.", images: ["b"] });
-    // Kept wrong for this text: read for its words.
-    expect(typedWords("Go on.", [], [99, 0], true)).toEqual({ text: "Go on.", images: [] });
-    expect(typedWords(`ab\nGo on.`, [], ["Go on.".length, 0], true)).toEqual({ text: "ab\nGo on.", images: [] });
-    // Nothing kept: the notes taken out, the later news too.
-    expect(typedWords(sent, ["a", "b"], null, true)).toEqual({ text: "Go on.", images: ["b"] });
-    // A note line left over after the strip: nothing in it is told to be theirs.
-    expect(typedWords(`Hi\n${REPORTS_HEAD}\nGo on.`, [], null, true)).toBeNull();
-    // Another's message is never the user's.
-    expect(typedWords("Go on.", [], null, false)).toBeNull();
+    expect(typedWords(sent, ["a", "b"], ["Go on.".length, 1])).toEqual({ text: "Go on.", images: ["b"] });
+    expect(typedWords("Go on.", [], ["Go on.".length, 0])).toEqual({ text: "Go on.", images: [] });
+    // Kept wrong for this text, or not kept: nothing in it is shown to be theirs.
+    expect(typedWords("Go on.", [], [99, 0])).toBeNull();
+    expect(typedWords(`ab\nGo on.`, [], ["Go on.".length, 0])).toBeNull();
+    expect(typedWords("Go on.", [], ["Go on.".length, 1])).toBeNull();
+    expect(typedWords(sent, ["a", "b"], null)).toBeNull();
+    // The thread still shows the words alone, the later news taken out.
+    expect(spoken(sent, true).text).toBe("Go on.");
   });
 
   it("are marked as the core reads them", async () => {

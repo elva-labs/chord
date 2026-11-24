@@ -145,35 +145,26 @@ export function carries(text: string): boolean {
 /** What the user typed of a message they sent, with its images: `typed`
     is how many characters end its text and how many images end its
     images, as the window kept them when it sent it, the workbench's notes
-    going ahead of them a blank line apart. Where nothing was kept, a
-    message of the user's (`user`) is read for its words with its notes
-    taken out, and where a line that begins one of the workbench's notes
-    is still there after, which no note read whole leaves, nothing in it
-    is told to be theirs: null, as for a message of another's. */
+    going ahead of them a blank line apart. Null where nothing was kept or
+    what was kept does not fit the message: then nothing in it is shown to
+    be the user's typing, whoever sent it. */
 export function typedWords<T>(
   text: string,
   images: readonly T[],
   typed: readonly [number, number] | null,
-  user: boolean,
 ): { text: string; images: T[] } | null {
-  if (typed !== null) {
-    const [length, count] = typed;
-    const start = text.length - length;
-    if (
-      length >= 0 &&
-      start >= 0 &&
-      count >= 0 &&
-      count <= images.length &&
-      (start === 0 || text.slice(start - 2, start) === "\n\n")
-    )
-      return { text: text.slice(start), images: images.slice(images.length - count) };
-  }
-  if (!user) return null;
-  const words = spoken(text, true).text;
-  const leftIn = (line: string) =>
-    line.trimStart().startsWith(NOTE_HEAD) || line === GOING_ON_END || line === UNANSWERED_END;
-  if (words.split("\n").some(leftIn)) return null;
-  return { text: words, images: ownImages(text, images) };
+  if (typed === null) return null;
+  const [length, count] = typed;
+  const start = text.length - length;
+  if (
+    length < 0 ||
+    start < 0 ||
+    count < 0 ||
+    count > images.length ||
+    (start !== 0 && text.slice(start - 2, start) !== "\n\n")
+  )
+    return null;
+  return { text: text.slice(start), images: images.slice(images.length - count) };
 }
 
 /** The note an agent picked on the composer goes ahead of the user's next

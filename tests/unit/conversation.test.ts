@@ -1170,7 +1170,7 @@ describe("the messages a usage limit left unanswered", () => {
     expect(next.map((said) => said.id)).toEqual([M2]);
     const words = next.flatMap((said) => [
       ...carriedBy(said.text, said.images),
-      typedWords(said.text, said.images, ["Go on.".length, 0], true)!,
+      typedWords(said.text, said.images, ["Go on.".length, 0])!,
     ]);
     expect(words.map((said) => said.text)).toEqual(["Build it.", "Go on."]);
     const M4 = "44444444-4444-4444-8444-444444444444";

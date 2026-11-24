@@ -153,10 +153,12 @@ export function resetSenders() {
   senders.byMessage = {};
   times.at = {};
   typed.of = {};
+  uncarried.of = {};
   loaded = false;
   load();
   loadTimes();
   loadTyped();
+  loadUncarried();
 }
 
 const TIMES_KEY = "chord.sent-at";
@@ -240,4 +242,47 @@ export function typedAs(message: string, length: number, images: number) {
 /** How much of a message the user typed, where the window kept it. */
 export function typedOf(message: string): [number, number] | null {
   return typed.of[message] ?? null;
+}
+
+const UNCARRIED_KEY = "chord.uncarried";
+
+/** How many of the messages a usage limit left unanswered could not go
+    with each message that went on after them, by its id, kept between
+    runs: messages the window can show neither to be the user's typing
+    nor to be another's, which the user is told to send again. */
+const uncarried = $state({ of: {} as Record<string, number> });
+
+function loadUncarried() {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(UNCARRIED_KEY) ?? "{}");
+    if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return;
+    const of: Record<string, number> = {};
+    for (const [message, count] of Object.entries(stored))
+      if (Number.isSafeInteger(count) && (count as number) > 0) of[message] = count as number;
+    uncarried.of = of;
+  } catch {
+    // Nothing remembered, then: the thread says nothing under the message.
+  }
+}
+
+// Read when the module loads, as the senders are.
+loadUncarried();
+
+/** `count` messages the limit left unanswered could not go with the
+    message with this id. */
+export function leftOut(message: string, count: number) {
+  uncarried.of[message] = count;
+  const kept = Object.entries(uncarried.of);
+  if (kept.length > KEEP) uncarried.of = Object.fromEntries(kept.slice(-KEEP));
+  try {
+    localStorage.setItem(UNCARRIED_KEY, JSON.stringify(uncarried.of));
+  } catch {
+    // Non-fatal: it is known until the window closes.
+  }
+}
+
+/** How many unanswered messages could not go with a message, where any
+    could not. */
+export function leftOutOf(message: string): number | null {
+  return uncarried.of[message] ?? null;
 }

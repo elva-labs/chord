@@ -51,7 +51,7 @@ import {
   typedWords,
   unansweredNote,
 } from "$lib/instructions";
-import { typedOf } from "$lib/senders.svelte";
+import { leftOutOf, resetSenders, typedOf } from "$lib/senders.svelte";
 import type { IntegratedImage } from "$lib/core";
 import { stateWord } from "$lib/orchestrator.svelte";
 import {
@@ -635,6 +635,30 @@ describe("a session the usage limit cut short", () => {
     expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
   });
 
+  it("leaves out a message whose sender the window lost, and tells the user once to send it again", async () => {
+    const before = await started();
+    refused(before.key, before.handle);
+    refusedToo(before.key, before.handle, "Check the build.", [], "Starter");
+    // The window's record of who sent what is lost across a restart.
+    localStorage.removeItem("chord.senders");
+    resetSessions();
+    resetIntegrated();
+    resetSenders();
+    stopListening();
+    stopListening = await listenIntegrated();
+    const row = reopened(PROJECT, "integrated-session-1", "claude-code", null, null, null, "integrated");
+    expect(await reattach(row.key, before.handle)).toBe("up");
+    send(row.key, "Go on.");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
+    const going = userTexts(row.key).find((said) => said.text === sends().at(-1)!.text)!;
+    expect(leftOutOf(going.id)).toBe(1);
+    // Told once: a message sent behind it neither carries nor counts it.
+    send(row.key, "And quickly.");
+    const quickly = userTexts(row.key).at(-1)!;
+    expect(sends().at(-1)!.text).toBe("And quickly.");
+    expect(leftOutOf(quickly.id)).toBeNull();
+  });
+
   it("carries them on past a turn after the limit that was stopped, with its own message", async () => {
     const { key, handle } = await started();
     refused(key, handle);
@@ -667,7 +691,7 @@ describe("a session the usage limit cut short", () => {
     expect(backlog.map((said) => spokenText(said.text))).toEqual(["Go on."]);
     const carried = backlog.flatMap((said) => [
       ...carriedBy(said.text, said.images),
-      typedWords(said.text, said.images, typedOf(said.id), true)!,
+      typedWords(said.text, said.images, typedOf(said.id))!,
     ]);
     expect(carried.map((said) => said.text)).toEqual(["Build it.", "Go on."]);
   });
