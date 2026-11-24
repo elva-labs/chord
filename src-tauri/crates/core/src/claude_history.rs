@@ -71,32 +71,62 @@ pub fn find(
     cwd: Option<&Path>,
     session: &str,
 ) -> Option<PathBuf> {
+    locate(claude_dir, project, cwd, session).ok().flatten()
+}
+
+/// The transcript of a session as `find` reads it, telling a look that
+/// found none from one that could not be made: Ok(None) only where the
+/// account's projects folder and each folder the session could be filed
+/// under were read and none holds it. An error where the project has no
+/// path, the id is not one Claude Code writes, or a folder could not be
+/// read, which says nothing either way.
+pub fn locate(
+    claude_dir: &Path,
+    project: &Path,
+    cwd: Option<&Path>,
+    session: &str,
+) -> std::io::Result<Option<PathBuf>> {
     if project.as_os_str().is_empty()
         || session.is_empty()
         || !session
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        return None;
+        return Err(std::io::ErrorKind::InvalidInput.into());
     }
     let own = mangle(project);
     let under = format!("{own}-");
     let ran = cwd.map(mangle);
     let file = format!("{session}.jsonl");
-    std::fs::read_dir(claude_dir.join("projects"))
-        .ok()?
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            let name = entry.file_name().to_string_lossy().to_string();
-            name == own || name.starts_with(&under) || ran.as_ref() == Some(&name)
-        })
-        .filter_map(|entry| {
-            let path = entry.path().join(&file);
-            let meta = std::fs::metadata(&path).ok()?;
-            meta.is_file().then(|| (meta.modified().ok(), path))
-        })
-        .max_by_key(|(modified, _)| *modified)
-        .map(|(_, path)| path)
+    let mut newest: Option<(Option<std::time::SystemTime>, PathBuf)> = None;
+    for entry in std::fs::read_dir(claude_dir.join("projects"))? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !(name == own || name.starts_with(&under) || ran.as_ref() == Some(&name)) {
+            continue;
+        }
+        let path = entry.path().join(&file);
+        let meta = match std::fs::metadata(&path) {
+            Ok(meta) => meta,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) =>
+            {
+                continue
+            }
+            Err(error) => return Err(error),
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let modified = meta.modified().ok();
+        if newest.as_ref().is_none_or(|(newer, _)| modified >= *newer) {
+            newest = Some((modified, path));
+        }
+    }
+    Ok(newest.map(|(_, path)| path))
 }
 
 /// The most of a transcript's end read for the mode it last ran in.

@@ -1510,9 +1510,10 @@ impl Core {
     /// fresh one from the briefing this answers with. With `always` it
     /// goes on from the briefing whatever its size and however long it
     /// rested. Whole for any other agent, while notes are switched off,
-    /// and for a Codex conversation whose index cannot be read. Where no
-    /// transcript of it is found, or Codex's index holds no rollout of it,
-    /// it is missing, with its notes alone as the briefing.
+    /// and for a Codex conversation whose index cannot be read. Missing,
+    /// with its notes alone as the briefing, only where the folders it
+    /// would be stored in were read and hold nothing of it; whole where
+    /// they could not be read.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1554,8 +1555,10 @@ impl Core {
             return Ok(whole);
         }
         let dir = account::claude_dir(home, config_dir, &environment.vars);
-        let Some(path) = crate::claude_history::find(&dir, project, cwd, session) else {
-            return Ok(crate::going_on::missing(notes));
+        let path = match crate::claude_history::locate(&dir, project, cwd, session) {
+            Ok(Some(path)) => path,
+            Ok(None) => return Ok(crate::going_on::missing(notes)),
+            Err(_) => return Ok(whole),
         };
         // A conversation held at a point it went back to is judged and
         // briefed as it stands there.
@@ -2848,6 +2851,7 @@ mod tests {
     fn a_codex_conversation_is_taken_up_from_its_rollout() {
         let home = Scratch::new("api-codex-taken-up");
         let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
+        std::fs::create_dir_all(codex.join("sessions")).unwrap();
         let core = core_at(&home);
         let dir = codex.to_str();
         let judged = core
@@ -2895,6 +2899,7 @@ mod tests {
         let home = Scratch::new("api-codex-no-rollout");
         let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
         std::fs::remove_file(&rollout).unwrap();
+        std::fs::create_dir_all(codex.join("sessions").join("2026")).unwrap();
         let core = core_at(&home);
         crate::notes::Notes::open(home.path())
             .unwrap()
@@ -2926,6 +2931,68 @@ mod tests {
         assert!(briefing.contains("Half built."));
         assert!(briefing.contains("No transcript of the earlier conversation was found"));
         assert!(!briefing.contains("rollout-thread.jsonl"));
+    }
+
+    /// A Codex thread the index does not hold yet, or names a rollout of
+    /// that is not where it says, is not missing while its rollout lies in
+    /// the sessions folder; with no sessions folder to look in it is not
+    /// missing either.
+    #[test]
+    fn a_codex_thread_is_missing_only_where_the_sessions_folder_holds_no_rollout_of_it() {
+        let home = Scratch::new("api-codex-scanned");
+        let (codex, _) = codex_account(
+            &home,
+            Some(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL); \
+                 INSERT INTO threads VALUES ('moved', '/elsewhere/rollout-moved.jsonl');",
+            ),
+        );
+        let core = core_at(&home);
+        let dir = codex.to_str();
+        assert!(!judged_missing(&core, "unindexed", dir));
+        let day = codex.join("sessions").join("2026").join("01").join("02");
+        std::fs::create_dir_all(&day).unwrap();
+        std::fs::write(day.join("rollout-2026-01-02T08-00-00-unindexed.jsonl"), "").unwrap();
+        std::fs::write(day.join("rollout-2026-01-02T09-00-00-moved.jsonl"), "").unwrap();
+        assert!(!judged_missing(&core, "unindexed", dir));
+        assert!(!judged_missing(&core, "moved", dir));
+        assert!(judged_missing(&core, "never-written", dir));
+    }
+
+    /// A Claude Code conversation is not missing where the account's
+    /// projects folder is not there or cannot be read: it is resumed whole.
+    #[test]
+    fn a_claude_code_conversation_is_not_missing_where_its_folder_cannot_be_read() {
+        let home = Scratch::new("api-claude-unread");
+        let core = core_at(&home);
+        let judge = |core: &Core| {
+            core.taken_up(
+                "claude-code",
+                home.path(),
+                None,
+                "written",
+                None,
+                "token",
+                false,
+            )
+            .unwrap()
+        };
+        let absent = judge(&core);
+        assert!(!absent.missing);
+        assert!(!absent.goes_on);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let projects = home.path().join(".claude").join("projects");
+            std::fs::create_dir_all(&projects).unwrap();
+            std::fs::set_permissions(&projects, std::fs::Permissions::from_mode(0o000)).unwrap();
+            let readable = std::fs::read_dir(&projects).is_ok();
+            let unread = judge(&core);
+            std::fs::set_permissions(&projects, std::fs::Permissions::from_mode(0o755)).unwrap();
+            if !readable {
+                assert!(!unread.missing);
+            }
+        }
     }
 
     /// A Claude Code conversation with no transcript is missing, with no
