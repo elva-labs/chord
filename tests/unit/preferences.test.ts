@@ -49,6 +49,7 @@ const DEFAULTS: Settings = {
   notesOn: true,
   agentsOn: true,
   compact: false,
+  wordWrap: false,
   lastChosen: {},
 };
 
@@ -718,6 +719,7 @@ describe("adopt", () => {
       keys: storedTable(PRESETS.vim),
       hooks: { everywhere: false, overrides: { "/x": true } },
       compact: true,
+      wordWrap: true,
       lastChosen: { "claude-code": { model: "opus", mode: "acceptEdits" } },
       autoResume: true,
     };
