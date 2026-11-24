@@ -1539,15 +1539,31 @@ it.
 A fresh conversation is stored by its harness only once something is
 said to it, so a row closed or started again before then holds an id
 nothing is kept under, and so does one whose transcript or Codex thread
-was deleted. The core says so when it judges the conversation, and the
-row goes on with the newest conversation it went on through that is
-stored, judged as its own would be; the id that held nothing is no longer
-counted as going on from it. Where none is stored, the row goes on as a
-fresh conversation from its notes alone, the briefing saying no
-transcript was found. Either way a conversation row's thread says which
-in a line under the earlier messages, and the session can be written to
-at once. A core
-too old to say is taken as finding the conversation.
+was deleted. The core says nothing is stored only where it looked and
+found nothing: no transcript in the account's folders for the project,
+or for Codex, no thread in its index and no rollout under `sessions/`. A
+folder it could not read says nothing either way, and the conversation
+is resumed whole as before, so the failure shows and the next start can
+find it.
+
+Where nothing is stored and the id is a fresh run of the row, one that
+went on from another or that nothing was said to in this window, the row
+goes on with the newest conversation it went on through that is stored,
+judged as its own would be. The ids that held nothing are no longer
+counted as going on from anything. A conversation in that walk that
+cannot be judged is resumed whole. Where none is stored, the row goes on
+as a fresh conversation, briefed from its notes where it has any, the
+briefing saying no transcript was found, and Resume whole is not
+offered. Any other id that holds nothing, and the id of a row whose run
+is up, is resumed whole.
+
+A conversation row's thread says what happened in a line under the
+earlier messages, such as that the last run kept no record and the row
+goes on from the conversation before it, or goes on as a fresh
+conversation from its notes. A row that held only that id and has no
+notes lost nothing, and starts fresh without a line. A terminal row goes
+on the same way with no line. The session can be written to at once. A
+core too old to say is taken as finding the conversation.
 
 What can be lost is what the old conversation held and the notes did
 not: files read, results seen, reasoning not written down. The agent is
@@ -1595,8 +1611,9 @@ read off the lines around it. The events are:
   the last one left. A compaction within the turn counts as part of it.
 - **resume**: a conversation was taken up again, whole or from its notes,
   with its context and how long it had rested where its transcript says,
-  and the id that held nothing where it went on with an earlier one or
-  fresh from its notes for that reason.
+  the id that held nothing where it went on with an earlier one or fresh
+  for that reason, and whether nothing was stored where it was resumed
+  whole anyway.
 - **wake**: the workbench woke a starter, with how many reports went in
   the message and how many sessions were still at work.
 - **start**: a session another session started came up, with its

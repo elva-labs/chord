@@ -68,7 +68,7 @@ Each session keeps short notes of its conversation through the app: a brief of w
 
 ### Going on from the notes
 
-A Claude Code conversation that is large and has gone cold, past its prompt cache, goes on from its notes in a fresh conversation rather than being read again whole. Resume whole, in the row's menu, reads it all again instead, and with notes switched off in the settings every conversation is resumed whole. A row whose conversation was never stored, as a fresh one that nothing was said to, goes on with the last one before it that was, or fresh from its notes, and says so. See [going on from the notes](reference/sessions.md#going-on-from-the-notes).
+A Claude Code conversation that is large and has gone cold, past its prompt cache, goes on from its notes in a fresh conversation rather than being read again whole. Resume whole, in the row's menu, reads it all again instead, and with notes switched off in the settings every conversation is resumed whole. A row whose conversation was never stored, as a fresh one that nothing was said to, goes on with the last one before it that was, or fresh, and a conversation row says so in its thread. See [going on from the notes](reference/sessions.md#going-on-from-the-notes).
 
 ## Dropping files
 
