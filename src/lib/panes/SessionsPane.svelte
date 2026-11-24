@@ -751,10 +751,10 @@
       rows: the ones left open at the last quit, latest first, and after
       all of them its past sessions, latest first, however lately those
       changed. Once there are more than a few quiet rows, the tail of them
-      stands behind a fold that counts them, though a quiet row that is
-      unread always stands, and counts toward the rows that stand, and is drawn under it while
-      it is open. Past sessions are listed under the project on screen
-      alone. */
+      stands behind a fold that counts them, and is drawn under it while
+      it is open. A quiet row that is unread never goes behind the fold:
+      it stands, and counts toward the quiet rows that stand. Past
+      sessions are listed under the project on screen alone. */
   function bodyOf(path: string): { entries: Entry[]; tail: Entry[] } {
     const own = byChange(ownFor(path)).map(
       (session): Entry => ({ kind: "session", id: `session:${session.key}`, session, at: lastChanged(session) }),
