@@ -14,7 +14,7 @@
  * its row draws the old conversation's messages above its own after a
  * restart too, and what the window keeps by the old id follows it.
  */
-import { dirFor } from "$lib/accounts.svelte";
+import { dirFor, known } from "$lib/accounts.svelte";
 import { core, type GoingOn } from "$lib/core";
 import { logUsage } from "$lib/usageLog";
 import type { Session } from "$lib/sessions.svelte";
@@ -118,7 +118,8 @@ export interface TakingUp {
  * goes on fresh under a new id, from the notes where there are any.
  * Either way `lostAt` says so once, except for a row with no notes that
  * went on from nothing before the id, which lost nothing and starts
- * fresh. The id of a running row is resumed whole.
+ * fresh. The id of a running row is resumed whole, and so is that of a
+ * row under an account the window does not know.
  */
 export async function takeUp(session: Session, how: TakingUp = {}): Promise<string | null> {
   const from = session.resumedFrom;
@@ -133,7 +134,9 @@ export async function takeUp(session: Session, how: TakingUp = {}): Promise<stri
   try {
     const judged = await judge(session, from, always);
     if (judged.missing !== true) return took(session, from, judged, always);
-    if (how.running !== true) return await takeUpStored(session, from, judged, always);
+    // Under an account the window does not know, the core looked in the
+    // agent's own folder, which says nothing of the account's.
+    if (how.running !== true && known(session.account)) return await takeUpStored(session, from, judged, always);
     logUsage(session, "resume", { from, whole: true, missing: true, ...(always ? { afterLimit: true } : {}) });
     return from;
   } catch {

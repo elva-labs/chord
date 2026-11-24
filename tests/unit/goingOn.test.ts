@@ -18,7 +18,12 @@ vi.mock("$lib/core", () => ({
     },
   }),
 }));
-vi.mock("$lib/accounts.svelte", () => ({ dirFor: () => undefined }));
+/** The accounts the window adopted. */
+const adopted = new Set<string>();
+vi.mock("$lib/accounts.svelte", () => ({
+  dirFor: () => undefined,
+  known: (account: string | null) => account === null || adopted.has(account),
+}));
 
 const {
   askWhole,
@@ -60,6 +65,7 @@ beforeEach(() => {
   localStorage.clear();
   asked.length = 0;
   failing.clear();
+  adopted.clear();
   for (const id of Object.keys(answers)) delete answers[id];
   answer = { context: 40_000, idle: 60, goesOn: false, briefing: null };
   onWentOn(null);
@@ -254,6 +260,24 @@ describe("taking a conversation up again", () => {
       expect(lineage()).toEqual({ "new-id": "old-id" });
       expect(moved).toEqual([]);
     }
+  });
+
+  it("resumes whole a missing id of a row under an account the window does not know", async () => {
+    const moved: [string, string][] = [];
+    onWentOn((from, to) => moved.push([from, to]));
+    going.lineage["new-id"] = "old-id";
+    answers["new-id"] = { context: null, idle: null, goesOn: false, briefing: "NOTES ALONE", missing: true };
+    expect(await takeUp(row({ resumedFrom: "new-id", account: "Work" }))).toBe("new-id");
+    expect(asked.map((one) => one.session)).not.toContain("old-id");
+    expect(wentOn("row-1")).toBeNull();
+    expect(lostAt("row-1")).toBeNull();
+    expect(lineage()).toEqual({ "new-id": "old-id" });
+    expect(moved).toEqual([]);
+    // Once adopted, the account's answer is acted on.
+    adopted.add("Work");
+    answers["old-id"] = { context: 40_000, idle: 60, goesOn: false, briefing: null };
+    expect(await takeUp(row({ resumedFrom: "new-id", account: "Work" }))).toBe("old-id");
+    expect(lostAt("row-1")).toMatchObject({ id: "new-id", to: "old-id" });
   });
 
   it("takes a core that does not say what is missing as finding it", async () => {

@@ -164,6 +164,13 @@ export function loadPicked() {
   }
 }
 
+/** Whether the window knows the account a row names: no account, or one
+    adopted from the settings. One it does not know, as when the settings
+    could not be read, has a folder the window cannot say. */
+export function known(account: string | null): boolean {
+  return account === null || account in accounts.list;
+}
+
 /** Where an agent keeps its configuration under an account, or nothing
     for the agent's own directory. */
 export function dirFor(
