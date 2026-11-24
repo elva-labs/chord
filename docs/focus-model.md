@@ -270,19 +270,21 @@ question.
 Closing the window ends the app, and every session and shell running in it.
 So the window's close, by the shortcut, by Close Window on
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>W</kbd>, by the red button or by the
-controls the app draws, and the app's quit, ask first while a session runs,
-a shell has something running in it, by the rule above, or the editor
-holds unsaved edits. The question is a sheet in the middle of the whole
-window, holding the keyboard as a question in a strip does. It says how
-many sessions are open and how many of them are working, as the sessions pane's rows say, how many wait on you, what runs in each busy
-shell and, for one not on screen, the session or project it belongs to,
-that the sessions come back as rows next time to resume, and names
-every unsaved file. Its answers are a row walked by the arrow keys, the
+controls the app draws, and the app's quit, ask first while a session is
+working on a turn, a shell has something running in it, by the rule above,
+or the editor holds unsaved edits. The question names only what can be
+lost. It is a sheet in the middle of the whole window, holding the
+keyboard as a question in a strip does. It says how many sessions are
+working, as the sessions pane's dots say, and, of those, how many wait on
+you for a permission, what runs in each busy shell and, for one not on
+screen, the session or project it belongs to, and names every unsaved
+file. Its answers are a row walked by the arrow keys, the
 way out to give first and Cancel last, and Cancel holds the keyboard, so
-<kbd>Return</kbd> keeps everything. A row left from the last quit has no process and counts
-for nothing, and a window with no session open and no busy shell,
-idle shells included,
-closes without a question. There is no setting to turn
+<kbd>Return</kbd> keeps everything. A session open at rest loses nothing, since it
+comes back as a row to resume, so it is not counted or mentioned, nor is
+one stopped with something unread, a row left from the last quit or an
+idle shell. A window with no session working, no busy shell and nothing
+unsaved closes without a question. There is no setting to turn
 the question off. How it is held for unsaved edits is in
 [the editor](editor.md#nothing-unsaved-goes-unasked).
 

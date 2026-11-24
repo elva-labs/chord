@@ -824,8 +824,8 @@ export async function installFakeCore(
           (w.__openedUrls ??= []).push(url);
         },
         // The window's close goes through the core's question while the
-        // editor says it holds unsaved edits or sessions run, as the
-        // core's does.
+        // editor says it holds unsaved edits, a session works or a shell is
+        // open, as the core's does.
         windowControl: async (action: string) => {
           const w = window as unknown as { __windowControls?: string[] };
           if (action === "close" && (leave.unsaved || leave.running) && !leave.allowed) {
@@ -2238,4 +2238,17 @@ export async function installFakeCore(
       orchestratorTranscripts: options.orchestratorTranscripts ?? [],
     },
   );
+}
+
+/** Says the agent in a session has begun a turn, as its hook would, so the
+    row reads as working. */
+export async function beginTurn(page: Page, sessionId = "session-1") {
+  await page.evaluate(
+    (id) =>
+      (
+        window as unknown as { __sessionEvent?: (event: { sessionId: string; kind: string }) => void }
+      ).__sessionEvent?.({ sessionId: id, kind: "prompt" }),
+    sessionId,
+  );
+  await expect(page.locator(".session .dot.working")).toHaveCount(1);
 }

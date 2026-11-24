@@ -62,51 +62,59 @@ beforeEach(() => {
 });
 
 describe("what closing the window takes", () => {
-  it("counts the sessions running, and those waiting on the user, but not a row left from the last quit", () => {
-    sessions.all = [row("running"), row("starting"), row("running", { unread: true }), row("dormant"), row("exited", { unread: true })];
-    expect(running()).toEqual({ count: 3, working: 0, waiting: 1 });
+  it("counts only the sessions on a turn, and those of them waiting on a permission", () => {
+    sessions.all = [
+      row("running", { working: true }),
+      row("running", { permission: true }),
+      row("starting", { working: true }),
+      row("running"),
+      row("running", { unread: true }),
+      row("dormant"),
+      row("exited", { working: true }),
+    ];
+    expect(running()).toEqual({ count: 3, waiting: 1 });
   });
 
-  it("counts the sessions working on a turn apart from those open at rest", () => {
-    sessions.all = [row("running", { working: true }), row("running"), row("starting"), row("exited", { working: true })];
-    expect(running()).toEqual({ count: 3, working: 1, waiting: 0 });
+  it("counts nothing for sessions open at rest, so the window closes without asking", () => {
+    sessions.all = [row("running"), row("starting"), row("running", { unread: true }), row("dormant")];
+    expect(running()).toEqual({ count: 0, waiting: 0 });
   });
 
-  it("says how many run and what becomes of them, for the window and for a quit", () => {
-    expect(runningQuestion("window", { count: 1, working: 0, waiting: 0 })).toEqual({
-      question: `Close the window with 1${NBSP}session open?`,
-      detail: "Closing the window quits the app and stops it. The session comes back as a row next time, to resume.",
+  it("says how many are working and what becomes of them, for the window and for a quit", () => {
+    expect(runningQuestion("window", { count: 1, waiting: 0 })).toEqual({
+      question: `Close the window with 1${NBSP}session working?`,
+      detail: "Closing the window quits the app and stops it.",
       action: "Close window",
     });
-    expect(runningQuestion("window", { count: 3, working: 0, waiting: 2 }).detail).toBe(
-      "2 of the sessions are waiting on you. Closing the window quits the app and stops them. The sessions come back as rows next time, to resume.",
+    expect(runningQuestion("window", { count: 3, waiting: 2 }).detail).toBe(
+      "2 of the sessions are waiting on you. Closing the window quits the app and stops them.",
     );
-    expect(runningQuestion("quit", { count: 2, working: 0, waiting: 1 })).toEqual({
-      question: `Quit with 2${NBSP}sessions open?`,
-      detail: "1 of the sessions is waiting on you. Quitting stops them. The sessions come back as rows next time, to resume.",
+    expect(runningQuestion("quit", { count: 2, waiting: 1 })).toEqual({
+      question: `Quit with 2${NBSP}sessions working?`,
+      detail: "1 of the sessions is waiting on you. Quitting stops them.",
       action: "Quit",
     });
-    expect(runningQuestion("window", { count: 1, working: 0, waiting: 1 }).detail).toMatch(/^The session is waiting on you\. /);
-    expect(runningQuestion("window", { count: 0, working: 0, waiting: 0 }).question).toBe("Close the window?");
+    expect(runningQuestion("window", { count: 1, waiting: 1 }).detail).toMatch(/^The session is waiting on you\. /);
+    expect(runningQuestion("window", { count: 0, waiting: 0 }).question).toBe("Close the window?");
   });
 
   it("names the busy shells and what runs in them, alone or beside sessions", () => {
     const dev = { label: "shell 2", running: ["npm run dev"] };
-    expect(runningQuestion("window", { count: 0, working: 0, waiting: 0 }, [dev])).toEqual({
+    expect(runningQuestion("window", { count: 0, waiting: 0 }, [dev])).toEqual({
       question: `Close the window with 1${NBSP}busy shell running?`,
       detail: "“npm run dev” is running in shell 2. Closing the window quits the app and stops it.",
       action: "Close window",
     });
-    expect(runningQuestion("window", { count: 1, working: 0, waiting: 0 }, [dev]).question).toBe(
-      `Close the window with 1${NBSP}session open and 1${NBSP}busy shell running?`,
+    expect(runningQuestion("window", { count: 1, waiting: 0 }, [dev]).question).toBe(
+      `Close the window with 1${NBSP}session working and 1${NBSP}busy shell running?`,
     );
     expect(
-      runningQuestion("quit", { count: 0, working: 0, waiting: 0 }, [
+      runningQuestion("quit", { count: 0, waiting: 0 }, [
         { label: "shell 1", running: ["npm run dev", "sleep 600"] },
       ]).detail,
     ).toBe(`“npm run dev” and 1${NBSP}more are running in shell 1. Quitting stops it.`);
     expect(
-      runningQuestion("window", { count: 0, working: 0, waiting: 0 }, [
+      runningQuestion("window", { count: 0, waiting: 0 }, [
         dev,
         { label: "shell 3", running: ["sleep 600"] },
         { label: "shell 1 in other", running: ["make"] },
@@ -116,16 +124,14 @@ describe("what closing the window takes", () => {
     );
   });
 
-  it("adds what runs to the question about unsaved edits", () => {
-    expect(runningAside({ count: 0, working: 0, waiting: 0 })).toBe("");
-    expect(runningAside({ count: 2, working: 0, waiting: 0 })).toBe(` 2${NBSP}sessions are open, and stop with the app.`);
-    expect(runningAside({ count: 8, working: 1, waiting: 0 })).toBe(` 8${NBSP}sessions are open, 1 of them working, and stop with the app.`);
-    expect(runningAside({ count: 1, working: 1, waiting: 0 })).toBe(` 1${NBSP}session is open and working, and stops with the app.`);
-    expect(runningAside({ count: 1, working: 0, waiting: 0 })).toBe(` 1${NBSP}session is open, and stops with the app.`);
-    expect(runningAside({ count: 2, working: 1, waiting: 0 }, [{ label: "shell 1", running: ["make"] }])).toBe(
-      ` 2${NBSP}sessions are open, 1 of them working, and 1${NBSP}busy shell is running, and stop with the app.`,
+  it("adds what is lost to the question about unsaved edits", () => {
+    expect(runningAside({ count: 0, waiting: 0 })).toBe("");
+    expect(runningAside({ count: 1, waiting: 0 })).toBe(` 1${NBSP}session is working, and stops with the app.`);
+    expect(runningAside({ count: 2, waiting: 0 })).toBe(` 2${NBSP}sessions are working, and stop with the app.`);
+    expect(runningAside({ count: 2, waiting: 0 }, [{ label: "shell 1", running: ["make"] }])).toBe(
+      ` 2${NBSP}sessions are working, and 1${NBSP}busy shell is running, and stop with the app.`,
     );
-    expect(runningAside({ count: 0, working: 0, waiting: 0 }, [{ label: "shell 1", running: ["make"] }])).toBe(
+    expect(runningAside({ count: 0, waiting: 0 }, [{ label: "shell 1", running: ["make"] }])).toBe(
       ` 1${NBSP}busy shell is running, and stops with the app.`,
     );
   });
@@ -212,11 +218,18 @@ describe("naming a busy shell", () => {
 });
 
 describe("the core holding the window back", () => {
-  it("puts the question up while sessions run", () => {
-    sessions.all = [row("running")];
+  it("puts the question up while a session works", () => {
+    sessions.all = [row("running", { working: true })];
     void leaveAsked({ kind: "window", generation: 1 });
     expect(editor.asking).toEqual({ kind: "leave", leave: "window", generation: 1 });
     expect(confirmed).toEqual([]);
+  });
+
+  it("lets the window go at once with only sessions at rest", async () => {
+    sessions.all = [row("running"), row("running", { unread: true })];
+    await leaveAsked({ kind: "window", generation: 6 });
+    expect(editor.asking).toBeNull();
+    expect(confirmed).toEqual(["window"]);
   });
 
   it("lets the window go at once when nothing would be lost by now", async () => {
@@ -242,7 +255,7 @@ describe("the core holding the window back", () => {
   });
 
   it("names a busy shell beside the sessions once it is read, the question already up", async () => {
-    sessions.all = [row("running")];
+    sessions.all = [row("running", { working: true })];
     shell("pty-dev");
     under["pty-dev"] = [{ pid: 20, parent: 10, name: "sleep", command: "sleep 600", started: 1 }];
     const asked = leaveAsked({ kind: "window", generation: 5 });

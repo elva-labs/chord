@@ -205,8 +205,8 @@ without saving apart:
   the pane folds, and names the busy shells that would stop with it;
 - closing the window or quitting the app, the question in a sheet in the
   middle of the window, whatever the panes show, with Save all first,
-  naming every unsaved file and counting the sessions open, how many of them are working, and the busy
-  shells that stop with the app. While those are open it
+  naming every unsaved file and counting the sessions working and the busy
+  shells that stop with the app. While those are going it
   asks with nothing unsaved as well, as
   [focus](focus-model.md#closing-what-is-in-front) describes.
 
