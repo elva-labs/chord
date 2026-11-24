@@ -19,6 +19,7 @@
 import { untrack } from "svelte";
 import { core } from "$lib/core";
 import { anyUnsaved, editor, leaveRequested } from "$lib/editor.svelte";
+import { conducting } from "$lib/orchestrator.svelte";
 import { byKey as sessionByKey, groupOf, isLive, sessions, shownName } from "$lib/sessions.svelte";
 import {
   belongsTo,
@@ -49,11 +50,24 @@ export const leaving = $state({
     without them: well inside the time the core waits for the question. */
 export const READ_WITHIN = 1500;
 
-/** The sessions running, and how many of them wait on the user: asking
-    for a permission, or stopped with something unread. */
-export function running(): { count: number; waiting: number } {
+/** How many sessions are open with a process behind them, how many of
+    those are working on a turn, and how many wait on the user: asking for
+    a permission, or stopped with something unread. Working is what the
+    sessions pane's dot says, so the question and the rows agree. */
+export interface Open {
+  count: number;
+  working: number;
+  waiting: number;
+}
+
+/** The sessions open, as the question counts them. */
+export function running(): Open {
   const live = sessions.all.filter(isLive);
-  return { count: live.length, waiting: live.filter((session) => groupOf(session) === "needs").length };
+  return {
+    count: live.length,
+    working: live.filter(conducting).length,
+    waiting: live.filter((session) => groupOf(session) === "needs").length,
+  };
 }
 
 /** Whether a shell has a process behind it. */
@@ -146,14 +160,20 @@ function counted(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-/** What runs, as one noun phrase: sessions, busy shells, or both. */
+/** What is open or running, as one noun phrase: sessions open, busy
+    shells running, or both. */
 function what(count: number, shells: number): string {
   return [
-    count > 0 ? counted(count, "session", "sessions") : null,
-    shells > 0 ? counted(shells, "busy shell", "busy shells") : null,
+    count > 0 ? `${counted(count, "session", "sessions")} open` : null,
+    shells > 0 ? `${counted(shells, "busy shell", "busy shells")} running` : null,
   ]
     .filter((part) => part !== null)
     .join(" and ");
+}
+
+/** The shells alone, as one noun phrase. */
+function shellsRunning(shells: number): string {
+  return `${counted(shells, "busy shell", "busy shells")} running`;
 }
 
 /** Where the busy shells' first commands run. */
@@ -176,7 +196,7 @@ function shellsSentence(busy: BusyShell[]): string {
     and nothing unsaved. */
 export function runningQuestion(
   kind: "window" | "quit",
-  { count, waiting }: { count: number; waiting: number },
+  { count, waiting }: Open,
   busy: BusyShell[] = [],
 ): { question: string; detail: string; action: string } {
   const action = kind === "quit" ? "Quit" : "Close window";
@@ -185,8 +205,8 @@ export function runningQuestion(
   if (total === 0) {
     return { question: kind === "quit" ? "Quit?" : "Close the window?", detail: "Nothing is running now.", action };
   }
-  const running = what(count, busy.length);
-  const question = kind === "quit" ? `Quit with ${running} running?` : `Close the window with ${running} running?`;
+  const open = what(count, busy.length);
+  const question = kind === "quit" ? `Quit with ${open}?` : `Close the window with ${open}?`;
   const sentences: string[] = [];
   if (waiting > 0) {
     sentences.push(
@@ -208,12 +228,19 @@ export function runningQuestion(
   return { question, detail: sentences.join(" "), action };
 }
 
-/** What the unsaved question adds about sessions running and busy
-    shells, if any. */
-export function runningAside({ count }: { count: number; waiting: number }, busy: BusyShell[] = []): string {
+/** What the unsaved question adds about sessions open and busy shells
+    running, if any. */
+export function runningAside({ count, working }: Open, busy: BusyShell[] = []): string {
   const total = count + busy.length;
   if (total === 0) return "";
-  return ` ${what(count, busy.length)} ${total === 1 ? "is" : "are"} running, and ${total === 1 ? "stops" : "stop"} with the app.`;
+  const parts: string[] = [];
+  if (count > 0) {
+    const open = `${counted(count, "session", "sessions")} ${count === 1 ? "is" : "are"} open`;
+    if (working === 0) parts.push(open);
+    else parts.push(count === 1 ? `${open} and working` : `${open}, ${working} of them working`);
+  }
+  if (busy.length > 0) parts.push(`${counted(busy.length, "busy shell", "busy shells")} ${busy.length === 1 ? "is" : "are"} running`);
+  return ` ${parts.join(", and ")}, and ${total === 1 ? "stops" : "stop"} with the app.`;
 }
 
 /** The question before a session or a project closes while shells that go
@@ -226,7 +253,7 @@ export function closingQuestion(
 ): { question: string; detail: string; action: string } {
   const them = busy.length === 1 ? "it" : "them";
   return {
-    question: `Close ${name} with ${what(0, busy.length)} running?`,
+    question: `Close ${name} with ${shellsRunning(busy.length)}?`,
     detail: `${shellsSentence(busy)} Closing the ${kind} stops ${them}.`,
     action: kind === "session" ? "Close session" : "Close project",
   };
@@ -236,5 +263,5 @@ export function closingQuestion(
     about the busy shells that go with it, if any. */
 export function closingAside(kind: "session" | "project", busy: BusyShell[]): string {
   if (busy.length === 0) return "";
-  return ` ${what(0, busy.length)} ${busy.length === 1 ? "is" : "are"} running, and ${busy.length === 1 ? "stops" : "stop"} with the ${kind}.`;
+  return ` ${counted(busy.length, "busy shell", "busy shells")} ${busy.length === 1 ? "is" : "are"} running, and ${busy.length === 1 ? "stops" : "stop"} with the ${kind}.`;
 }

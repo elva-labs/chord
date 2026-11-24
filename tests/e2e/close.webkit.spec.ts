@@ -251,7 +251,7 @@ test.describe("the window", () => {
       await expect.poll(() => closeName(page)).toBe("Close Window");
       await page.keyboard.press(platform.inTerminal);
       const ask = page.getByTestId("close-window");
-      await expect(ask).toContainText("Close the window with 1 session running?");
+      await expect(ask).toContainText("Close the window with 1 session open?");
       await expect(ask).toContainText("Closing the window quits the app");
       await expect(page.getByTestId("close-window-cancel")).toBeFocused();
       await expect(page.getByTestId("close-window-confirm")).toHaveText("Close window");
@@ -324,11 +324,11 @@ test.describe("the window", () => {
     await page.evaluate(() =>
       (window as unknown as { __CHORD_CORE__: { windowControl: (a: string) => Promise<void> } }).__CHORD_CORE__.windowControl("close"),
     );
-    await expect(page.getByTestId("close-window")).toContainText("Close the window with 1 session running?");
+    await expect(page.getByTestId("close-window")).toContainText("Close the window with 1 session open?");
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("close-window")).toHaveCount(0);
     await page.evaluate(() => (window as unknown as { __quit: () => void }).__quit());
-    await expect(page.getByTestId("close-window")).toContainText("Quit with 1 session running?");
+    await expect(page.getByTestId("close-window")).toContainText("Quit with 1 session open?");
     await page.getByTestId("close-window-confirm").click();
     await expect.poll(() => controls(page)).toEqual(["quit"]);
   });
