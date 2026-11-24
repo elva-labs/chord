@@ -29,7 +29,7 @@ A setting under Appearance that takes the sessions pane out of the layout. It sl
 
 ## The status bar
 
-The row along the window's foot names the branch the session on screen works on and, with more than one account, the account and how much of its allowance is used. At its right end it says how many sessions wait for you. The session's state is on its row's dot, and its model on the composer and the agent pane's header. See [the status bar](reference/layout.md#the-status-bar).
+The row along the window's foot names the branch the session on screen works on and, with more than one account, the account and how much of its allowance is used. At its right end it says how many sessions wait for you. The session's state is on its row's dot, and its model on the composer; a terminal session, which has no composer, says it on the agent pane's header. See [the status bar](reference/layout.md#the-status-bar).
 
 ## The terminal panel
 

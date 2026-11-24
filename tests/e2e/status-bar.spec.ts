@@ -245,7 +245,8 @@ test.describe("the session on screen", () => {
       { kind: "session", percent: 23, resetsAt: HOUR + 35 * 60 },
       { kind: "weekly", percent: 41, resetsAt: 4 * 24 * HOUR },
     ], { plan: "plus" });
-    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveText("GPT-5-Codex");
+    await expect(page.getByTestId("model-chip")).toHaveText("GPT-5-Codex");
+    await expect(page.locator("section[data-pane='agent'] > header .meta")).toHaveCount(0);
     await expect(page.getByTestId("account-readout")).toHaveText("account: personal");
     await expect(page.getByTestId("limit-figure")).toHaveText(["5h23%", "Week41%"]);
     await page.getByTestId("account-group").click();
