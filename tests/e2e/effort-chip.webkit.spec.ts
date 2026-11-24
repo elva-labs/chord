@@ -42,7 +42,7 @@ for (const codex of [false, true])
     await open(page, codex);
     await agent(page, `f.configure("${H}", { effort: "high" });`);
     const effort = chip(page, "effort");
-    await expect(effort).toHaveText("High effort");
+    await expect(effort).toHaveText("High");
     await expect(effort).toHaveAccessibleName("Effort: High");
     const [model, own] = await Promise.all(["model", "effort"].map((which) => chip(page, which as "model").boundingBox()));
     expect(model!.x + model!.width).toBeLessThanOrEqual(own!.x);
@@ -53,7 +53,7 @@ for (const codex of [false, true])
     await expect(option(page, "High")).toHaveAttribute("aria-checked", "true");
     await option(page, "Low").click();
     await expect(page.getByTestId("effort-menu")).toHaveCount(0);
-    await expect(effort).toHaveText("Low effort");
+    await expect(effort).toHaveText("Low");
     await expect(page.getByTestId("composer-input")).toBeFocused();
     expect((await calls(page)).filter((call) => call.method === "configure").at(-1)).toMatchObject({
       settings: { effort: "low" },
@@ -63,12 +63,12 @@ for (const codex of [false, true])
 test("goes for a model that takes no effort, and comes back with one that does", async ({ page }) => {
   await open(page);
   await agent(page, `f.configure("${H}", { effort: "high" });`);
-  await expect(chip(page, "effort")).toHaveText("High effort");
+  await expect(chip(page, "effort")).toHaveText("High");
   await agent(page, `f.configure("${H}", { model: "haiku" });`);
   await expect(chip(page, "model")).toHaveText("Haiku");
   await expect(chip(page, "effort")).toHaveCount(0);
   await agent(page, `f.configure("${H}", { model: "sonnet" });`);
-  await expect(chip(page, "effort")).toHaveText("High effort");
+  await expect(chip(page, "effort")).toHaveText("High");
 });
 
 test("an effort picked is what the next new session starts on", async ({ page }) => {
@@ -76,12 +76,12 @@ test("an effort picked is what the next new session starts on", async ({ page })
   await agent(page, `f.configure("${H}", { effort: "high" });`);
   await chip(page, "effort").click();
   await option(page, "Low").click();
-  await expect(chip(page, "effort")).toHaveText("Low effort");
+  await expect(chip(page, "effort")).toHaveText("Low");
   await agent(page, `f.holdReady = true;`);
   await page.getByTestId("project-new-session").click();
   await startNew(page);
   // Shown from the first frame, before the agent has said what it takes.
-  await expect(chip(page, "effort")).toHaveText("Low effort");
+  await expect(chip(page, "effort")).toHaveText("Low");
   expect((await calls(page)).filter((call) => call.method === "start").at(-1)!.options).toMatchObject({ effort: "low" });
 });
 
@@ -94,7 +94,7 @@ test("leaves the row its plain name after a command, and follows what the comman
   await expect(row).toContainText("New session");
   // The agent reports the effort the command set.
   await agent(page, `f.emit("${H}", { type: "configured", model: "claude-sonnet-5-5", mode: "default", effort: "high", efforts: ["low", "medium", "high"] });`);
-  await expect(chip(page, "effort")).toHaveText("High effort");
+  await expect(chip(page, "effort")).toHaveText("High");
 
   await page.keyboard.type("Fix the build");
   await page.keyboard.press("Enter");
@@ -106,16 +106,16 @@ test("leaves the row its plain name after a command, and follows what the comman
   await expect(row).not.toContainText("Fix the build");
 });
 
-test("in a narrow pane keeps the chips whole, the effort by its level alone", async ({ page }) => {
+test("in a narrow pane keeps the chips whole", async ({ page }) => {
   await open(page);
   await agent(page, `f.configure("${H}", { effort: "high" });`);
-  await expect(chip(page, "effort")).toHaveText("High effort");
+  await expect(chip(page, "effort")).toHaveText("High");
   await page.locator("section[data-pane='agent']").evaluate((pane) => {
     (pane as HTMLElement).style.width = "360px";
     (pane as HTMLElement).style.flex = "none";
   });
   await expect(page.locator(".conv.tight")).toHaveCount(1);
-  await expect(chip(page, "effort")).toHaveText("High", { useInnerText: true });
+  await expect(chip(page, "effort")).toHaveText("High");
   await expect(chip(page, "effort")).toHaveAccessibleName("Effort: High");
   const bar = (await page.locator(".composer .bar:visible").boundingBox())!;
   const boxes = await Promise.all(["model", "effort"].map((which) => chip(page, which as "model").boundingBox()));

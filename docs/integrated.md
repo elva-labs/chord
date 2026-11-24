@@ -217,7 +217,7 @@ configured one. The effort's chip is there only while the model takes an
 effort, lists the efforts the harness says that model takes, from the least
 to the most and each with the line the harness gives for it, Codex's own
 words for ultra among them, and always names the one the status bar
-names. In a narrow pane it drops the word effort and keeps the level. The
+names. It shows the level alone, such as High. The
 agent pane's header names the model by the same name the model's chip uses,
 never its id. An
 effort set with the harness's own command is shown but is not the one a new

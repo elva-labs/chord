@@ -1725,7 +1725,6 @@
     {/if}
     {#if showEffort && effort !== null}
       <div class="picker">
-        <!-- In a narrow pane the word goes, and the level stays. -->
         <button
           class="chip"
           tabindex="0"
@@ -1736,7 +1735,7 @@
           aria-label="Effort: {effortName(effort)}"
           title={`${effortSetBy === null ? "" : `Set by ${effortSetBy}. `}How hard the model thinks before it answers`}
           data-testid="effort-chip"
-          ><span><Plain text={effortName(effort)} /><span class="word">{" "}effort</span></span><Icon name="down" size={12} /></button
+          ><Plain text={effortName(effort)} /><Icon name="down" size={12} /></button
         >
         {#if menu === "effort"}
           <ChoiceMenu
@@ -2407,10 +2406,6 @@
   .chip .lock {
     display: flex;
     color: var(--accent);
-  }
-
-  :global(.conv.tight) .chip .word {
-    display: none;
   }
 
   .chip.bare {
