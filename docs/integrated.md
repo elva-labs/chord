@@ -1011,35 +1011,59 @@ reset. Where the limit refuses the turn at once, because the window waited
 for was in fact still shut, the conversation says so and waits for the
 user.
 
-Nothing the user wrote around the limit is lost. The message whose turn
-the limit refused, and every message the user sent after it that the
-limit refused in turn, go with the first message the conversation is
-sent after them, whoever sends it: the line asking the fresh conversation
-to go on, the user's own message where they wrote while it started or
-went on by hand, or a line from the session's starter. They go word for
-word, in the order written, with their images in the same order ahead of
-that message's own, in a note of the workbench's that tells the agent
-they are the user's own and not yet answered, and that what the cut turn
-did may be half done. The same holds while the limit still holds: each
-message the user sends then carries the ones before it, so the turn that
-is finally answered holds them all. Each message stands once in the
-thread, where it was written, and one that carried others says so under
-it. A message that carried them and never reached the agent leaves them
-to the next; one that is refused again keeps them for the next, and one
-answered ends them. Only messages the user wrote on the composer in this
-window are carried: a line from another session is not passed off as the
-user's, and once the window is opened again the turns the limit refused
-are no longer known as such. Codex is not carried for, since it does not
-say a limit ended its turn.
+The messages the limit left unanswered go with the next message the
+conversation is sent, whoever sends it: the line asking the fresh
+conversation to go on, the user's own message where they wrote while it
+started or went on by hand, or a line from the session's starter. They
+are the message whose turn the limit refused and, after it, each message
+whose turn the limit refused again, failed, was stopped or ended with no
+answer, and each the agent never took: one that failed to send, or one
+the core dropped or still held once it was idle. They go word for word,
+in the order written, with their images in the same order ahead of that
+message's own, in a note of the workbench's that tells the agent they are
+the user's own and not yet answered, and that what the cut turn did may
+be half done. Each message stands once in the thread, where it was
+written, and one that carried others says so under it.
+
+A message that carried them stands for them all from then on. They end
+when a turn that answered a message carrying them finishes. Until a
+message has carried them, a turn answered after the limit reset ends them
+too, as does any answered turn where when the limit resets is not known;
+a turn answered before the reset leaves them in place. A message that
+carried them and failed to send is carried by the next message with what
+it carried, and then stands in the thread as taken, so a message written
+while it was on its way is neither lost nor sent twice.
+
+What is carried of a message is what the user typed on the composer,
+apart from the notes the workbench joined ahead of it. The window keeps,
+between runs and for the last thousand messages the user sent in any
+session, how many characters and images at the end of each message the
+user typed. After a reload or a restart the history is laid again from
+the transcript, which records the limit's refusal of each turn, so the
+refused turns and the user's words are both known again. A message the
+window kept no count for, sent by an earlier version or pushed out by
+later ones, is read for its words with the workbench's notes taken off;
+where a line of a note is still left in, the message is left out of the
+note, so the workbench's words are never passed off as the user's. A
+message from another session, a plugin or the workbench passes on what it
+carried, and its own words are not carried as the user's.
 
 The note goes after the briefing's end line, outside the quoted records,
 and every message in it is framed by a line that says how many lines it
 has, so no line a message holds can close the note or start another
-message. A record quoted from a tool, a page or another agent can never
-become one: the note is written from the messages the user sent from this
-window, never from the transcript or the notes. A later briefing quotes
-the message that carried them without the note, so the user's words are
-quoted once.
+message. Only messages that stand in the thread as sent to the agent are
+carried, never a record quoted in a briefing, a note, a tool's answer or
+a page, and no session or plugin may send a line that opens or closes the
+note. A later briefing quotes the message that carried them without the
+note, so the user's words are quoted once.
+
+Where it stops: Codex is not carried for, since it does not say a limit
+ended its turn. A message that failed to send and carried nothing is not
+kept between runs, so one that failed before a restart is not carried
+after it. A message the window still has on its way, because sending it
+never settled, holds the others back until it settles. A message the core
+reported sent but that the agent never took is carried once the core is
+idle, and would go twice if the core then took it after all.
 
 ### Reading the limits with no session
 
