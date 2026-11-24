@@ -1509,11 +1509,12 @@ impl Core {
     /// Claude Code or Codex conversation that is cold and large, as a
     /// fresh one from the briefing this answers with. With `always` it
     /// goes on from the briefing whatever its size and however long it
-    /// rested. Whole for any other agent, while notes are switched off,
-    /// and for a Codex conversation whose index cannot be read. Missing,
-    /// with its notes alone as the briefing, only where the folders it
-    /// would be stored in were read and hold nothing of it; whole where
-    /// they could not be read.
+    /// rested. Whole for any other agent, for a stored conversation while
+    /// notes are switched off, and for a Codex conversation whose index
+    /// cannot be read. Missing only where the folders it would be stored in
+    /// were read and hold nothing of it, with its notes alone as the
+    /// briefing while notes are on and none while they are off; whole
+    /// where they could not be read.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1535,16 +1536,23 @@ impl Core {
         let Some(home) = self.home.as_ref() else {
             return Ok(whole);
         };
-        if !self.switched_on(|settings| settings.notes_on) {
-            return Ok(whole);
-        }
+        // With notes switched off a conversation is still looked for, so one
+        // nothing is stored under is missing, with no briefing.
+        let notes_on = self.switched_on(|settings| settings.notes_on);
+        let notes = |since| {
+            notes_on
+                .then(|| crate::notes::briefing_since(home, token, since))
+                .flatten()
+        };
         let environment = env::environment();
-        let notes = |since| crate::notes::briefing_since(home, token, since);
         let now = crate::notes::now() as u64 * 1000;
         if agent == "codex" {
             let codex_home = account::codex_home(home, config_dir, &environment.vars);
             if crate::codex::thread_missing(&codex_home, session) {
                 return Ok(crate::going_on::missing(notes));
+            }
+            if !notes_on {
+                return Ok(whole);
             }
             let Some(rollout) = crate::codex::rollout_path(&codex_home, session) else {
                 return Ok(whole);
@@ -1560,6 +1568,9 @@ impl Core {
             Ok(None) => return Ok(crate::going_on::missing(notes)),
             Err(_) => return Ok(whole),
         };
+        if !notes_on {
+            return Ok(whole);
+        }
         // A conversation held at a point it went back to is judged and
         // briefed as it stands there.
         let leaf = crate::claude_history::leaf(&path);
@@ -2931,6 +2942,49 @@ mod tests {
         assert!(briefing.contains("Half built."));
         assert!(briefing.contains("No transcript of the earlier conversation was found"));
         assert!(!briefing.contains("rollout-thread.jsonl"));
+    }
+
+    /// With notes switched off a conversation is still looked for: one with
+    /// nothing stored is missing, with no briefing though it has notes, and
+    /// one that is stored is resumed whole.
+    #[test]
+    fn with_notes_off_a_conversation_with_nothing_stored_is_still_missing() {
+        let home = Scratch::new("api-notes-off-missing");
+        let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
+        std::fs::create_dir_all(home.path().join(".claude").join("projects")).unwrap();
+        let core = core_at(&home);
+        crate::notes::Notes::open(home.path())
+            .unwrap()
+            .add(
+                "token",
+                &crate::notes::NewNote {
+                    title: "Importer",
+                    summary: "Half built.",
+                    body: "",
+                    replaces: None,
+                },
+                0,
+            )
+            .unwrap();
+        let settings = crate::settings::settings_path(home.path());
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(&settings, r#"{ "notesOn": false }"#).unwrap();
+        let judged = |agent: &str, session: &str, dir: Option<&str>| {
+            core.taken_up(agent, home.path(), None, session, dir, "token", false)
+                .unwrap()
+        };
+        let stored = judged("codex", "thread", codex.to_str());
+        assert!(!stored.missing && !stored.goes_on);
+        std::fs::remove_file(&rollout).unwrap();
+        std::fs::create_dir_all(codex.join("sessions").join("2026")).unwrap();
+        for gone in [
+            judged("codex", "thread", codex.to_str()),
+            judged("claude-code", "never-written", None),
+        ] {
+            assert!(gone.missing);
+            assert!(!gone.goes_on);
+            assert_eq!(gone.briefing, None);
+        }
     }
 
     /// A Codex thread the index does not hold yet, or names a rollout of
