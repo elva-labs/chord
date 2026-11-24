@@ -455,6 +455,18 @@ pub struct Settings {
     /// the starter's own project on its agent and account is not asked.
     #[serde(default)]
     pub ask_every_start: bool,
+    /// Whether a session keeps notes with the note tool and a cold, large
+    /// conversation goes on from them. Off, the agent is not told to keep
+    /// notes, the note tools are not offered, and a conversation is always
+    /// resumed whole. A file from before has none, which reads as on.
+    #[serde(default = "on")]
+    pub notes_on: bool,
+    /// Whether agents, teams and their gates are offered at all. Off, no
+    /// session starts as an agent or leads a team, and a team's run already
+    /// going on holds nothing until they are on again. A file from before
+    /// has none, which reads as on.
+    #[serde(default = "on")]
+    pub agents_on: bool,
     /// Whether the sessions pane leaves the layout and slides in over the
     /// panes from the window's left edge. A file from before has none,
     /// which reads as off.
@@ -474,6 +486,10 @@ pub struct Settings {
     /// What the file holds that is not used. Not a setting: it is read from the file and written back to it.
     #[serde(default)]
     pub unread_entries: Vec<UnreadEntry>,
+}
+
+fn on() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -503,6 +519,8 @@ impl Default for Settings {
             notifications: true,
             chime: false,
             ask_every_start: false,
+            notes_on: true,
+            agents_on: true,
             compact: false,
             auto_resume: false,
             last_chosen: BTreeMap::new(),
@@ -1406,6 +1424,8 @@ fn set_field(settings: &mut Settings, field: &str, value: &Value) -> Result<(), 
         "askEveryStart" => {
             settings.ask_every_start = value.as_bool().ok_or("askEveryStart is true or false")?;
         }
+        "notesOn" => settings.notes_on = value.as_bool().ok_or("notesOn is true or false")?,
+        "agentsOn" => settings.agents_on = value.as_bool().ok_or("agentsOn is true or false")?,
         "compact" => settings.compact = value.as_bool().ok_or("compact is true or false")?,
         "autoResume" => {
             settings.auto_resume = value.as_bool().ok_or("autoResume is true or false")?;
@@ -1485,6 +1505,27 @@ fn settle_palette(settings: &mut Settings) {
     {
         settings.palette = Settings::default().palette;
     }
+}
+
+/// The settings as the file under `home` holds them, for a process that
+/// keeps no store: the defaults where there is no file or it does not
+/// read, so a switch that cannot be read is on.
+pub fn read_from(home: &Path) -> Settings {
+    std::fs::read_to_string(settings_path(home))
+        .ok()
+        .and_then(|text| parse(&text))
+        .unwrap_or_default()
+}
+
+/// Whether sessions keep notes and go on from them. See
+/// [`Settings::notes_on`].
+pub fn notes_on(home: &Path) -> bool {
+    read_from(home).notes_on
+}
+
+/// Whether agents, teams and gates are on. See [`Settings::agents_on`].
+pub fn agents_on(home: &Path) -> bool {
+    read_from(home).agents_on
 }
 
 /// The settings a file's text holds. Each value that does not read is left
@@ -3775,6 +3816,45 @@ mod tests {
             .unwrap()
             .unread_entries
             .is_empty());
+    }
+
+    #[test]
+    fn notes_and_agents_are_on_until_switched_off() {
+        let defaults = Settings::default();
+        assert!(defaults.notes_on && defaults.agents_on);
+        let off = apply(&defaults, &json!({ "notesOn": false, "agentsOn": false })).unwrap();
+        assert!(!off.notes_on && !off.agents_on);
+        assert!(apply(&off, &json!({ "notesOn": "no" })).is_err());
+        assert!(apply(&off, &json!({ "agentsOn": 0 })).is_err());
+        let read = parse(r#"{ "notesOn": false, "agentsOn": true }"#).unwrap();
+        assert!(!read.notes_on && read.agents_on);
+        // A file from before the switches reads as both on, and a value
+        // that is not true or false is set aside, leaving the switch on.
+        let before = parse(r#"{ "chime": true }"#).unwrap();
+        assert!(before.notes_on && before.agents_on);
+        let odd = parse(r#"{ "agentsOn": "off" }"#).unwrap();
+        assert!(odd.agents_on);
+        assert_eq!(odd.unread_entries.len(), 1);
+        // Written and read back, they stay as they were.
+        let text = serde_json::to_string(&off).unwrap();
+        assert!(text.contains(r#""notesOn":false"#) && text.contains(r#""agentsOn":false"#));
+        let back = parse(&text).unwrap();
+        assert!(!back.notes_on && !back.agents_on);
+    }
+
+    #[test]
+    fn the_switches_read_from_home_are_on_without_a_file_that_reads() {
+        let home = crate::scratch::Scratch::new("switches");
+        assert!(notes_on(home.path()) && agents_on(home.path()));
+        std::fs::create_dir_all(settings_path(home.path()).parent().unwrap()).unwrap();
+        std::fs::write(settings_path(home.path()), "{ cut sh").unwrap();
+        assert!(notes_on(home.path()) && agents_on(home.path()));
+        std::fs::write(
+            settings_path(home.path()),
+            r#"{ "notesOn": false, "agentsOn": false }"#,
+        )
+        .unwrap();
+        assert!(!notes_on(home.path()) && !agents_on(home.path()));
     }
 
     #[test]

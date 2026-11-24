@@ -81,6 +81,11 @@ const TAKEN_INTO: &str = "Codex took this message into a turn that was running, 
 const TEAM_AND_JOINING: &str =
     "A session is started either as the lead of a team's run or into the run it is started from, never both.";
 
+/// Why a start that leads a team's run is refused while agents are
+/// switched off in the settings.
+const AGENTS_OFF: &str =
+    "Agents and teams are switched off in the settings, so no team's run begins until they are on again.";
+
 /// Why a session that follows a workflow is not started: it would have no
 /// start tool to hand its work out with.
 pub const NO_TOOLS: &str = "This session follows a workflow, which hands out its work with the workbench's tools, and this machine has no tool server to give it them. Pick an agent to start one alone instead.";
@@ -446,6 +451,15 @@ impl Core {
             .ok_or_else(|| "no home directory".to_string())
     }
 
+    /// Whether a switch of the settings is on, as stored, or as by default
+    /// where there are none.
+    fn switched_on(&self, switch: impl Fn(&crate::settings::Settings) -> bool) -> bool {
+        switch(&self.home.as_deref().map_or_else(
+            crate::settings::Settings::default,
+            crate::settings::read_from,
+        ))
+    }
+
     /// The machine's settings, and whether a file held them yet. A list of
     /// workflows written before one shipped is offered it first, once.
     pub fn settings_get(&self) -> Result<crate::settings::Stored, String> {
@@ -515,6 +529,19 @@ impl Core {
         change: &serde_json::Value,
     ) -> Result<crate::settings::Settings, String> {
         self.settings()?.set(change)
+    }
+
+    /// Takes the two switches of the window that reaches this machine from
+    /// another, so that what is checked here follows the user's switches.
+    /// The settings are written only where a switch differs from them.
+    pub fn switches_set(&self, notes_on: bool, agents_on: bool) -> Result<(), String> {
+        if self.switched_on(|s| s.notes_on) == notes_on
+            && self.switched_on(|s| s.agents_on) == agents_on
+        {
+            return Ok(());
+        }
+        self.settings_set(&serde_json::json!({ "notesOn": notes_on, "agentsOn": agents_on }))
+            .map(|_| ())
     }
 
     /// Hands over the settings a window holds, for a machine whose file is
@@ -1149,8 +1176,12 @@ impl Core {
         Ok(())
     }
 
-    /// The team of the run a start's token leads, while that run goes on.
+    /// The team of the run a start's token leads, while that run goes on
+    /// and agents are switched on.
     fn led_team(&self, run: &Run) -> Option<crate::team::Team> {
+        if !self.switched_on(|settings| settings.agents_on) {
+            return None;
+        }
         let home = self.home.as_deref()?;
         let token = run
             .token
@@ -1178,7 +1209,9 @@ impl Core {
     /// Begins the team's run of a lead started with one, and records a
     /// session started for one in a run as its member, in `folder`, before
     /// the session's first turn. Answers with what the member is recorded
-    /// by, for its harness's id once that is known.
+    /// by, for its harness's id once that is known. A lead is refused
+    /// while agents are switched off; a member is still recorded, so the
+    /// run holds it once they are on again.
     fn engage(
         &self,
         run: &Run,
@@ -1190,6 +1223,9 @@ impl Core {
         }
         if run.team.is_some() && run.joining.is_some() {
             return Err(TEAM_AND_JOINING.into());
+        }
+        if run.team.is_some() && !self.switched_on(|settings| settings.agents_on) {
+            return Err(AGENTS_OFF.into());
         }
         let home = self.home.as_deref().ok_or("no home directory")?;
         let token = run
@@ -1473,8 +1509,8 @@ impl Core {
     /// Claude Code or Codex conversation that is cold and large, as a
     /// fresh one from the briefing this answers with. With `always` it
     /// goes on from the briefing whatever its size and however long it
-    /// rested. Whole for any other agent, and where no transcript or
-    /// rollout of it is found.
+    /// rested. Whole for any other agent, while notes are switched off,
+    /// and where no transcript or rollout of it is found.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1495,6 +1531,9 @@ impl Core {
         let Some(home) = self.home.as_ref() else {
             return Ok(whole);
         };
+        if !self.switched_on(|settings| settings.notes_on) {
+            return Ok(whole);
+        }
         let environment = env::environment();
         let notes = |since| crate::notes::briefing_since(home, token, since);
         let now = crate::notes::now() as u64 * 1000;
@@ -2819,6 +2858,20 @@ mod tests {
             .unwrap();
         assert!(!unknown.goes_on);
         assert_eq!(unknown.context, None);
+        let settings = crate::settings::settings_path(home.path());
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(&settings, r#"{ "notesOn": false }"#).unwrap();
+        let whole = core
+            .taken_up("codex", home.path(), None, "thread", dir, "token", true)
+            .unwrap();
+        assert!(!whole.goes_on, "notes switched off resume it whole");
+        assert_eq!(whole.briefing, None);
+        std::fs::write(&settings, r#"{ "notesOn": true }"#).unwrap();
+        assert!(
+            core.taken_up("codex", home.path(), None, "thread", dir, "token", false)
+                .unwrap()
+                .goes_on
+        );
     }
 
     /// A cold and large Codex conversation whose rollout the account's
@@ -2840,6 +2893,21 @@ mod tests {
         assert!(!judged.goes_on);
         assert_eq!(judged.context, None);
         assert_eq!(judged.briefing, None);
+    }
+
+    #[test]
+    fn the_switches_of_a_window_elsewhere_are_taken_and_written_only_where_they_differ() {
+        let dir = Scratch::new("switches-set");
+        let core = Core::at_home(Arc::new(Recorder::default()), Some(dir.to_path_buf()));
+        let file = crate::settings::settings_path(&dir);
+        core.switches_set(true, true).unwrap();
+        assert!(!file.exists());
+        core.switches_set(false, true).unwrap();
+        assert!(!crate::settings::notes_on(&dir));
+        assert!(crate::settings::agents_on(&dir));
+        core.switches_set(true, false).unwrap();
+        assert!(crate::settings::notes_on(&dir));
+        assert!(!crate::settings::agents_on(&dir));
     }
 
     #[test]
@@ -3438,6 +3506,21 @@ mod tests {
         );
         assert_eq!(both.err().as_deref(), Some(TEAM_AND_JOINING));
         assert_eq!(crate::run::state(&home, "both").unwrap(), None);
+        // Agents switched off, no run begins.
+        let settings = crate::settings::settings_path(&home);
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(&settings, r#"{ "agentsOn": false }"#).unwrap();
+        let off = core.engage(&run("off", Some("quick fix"), None), folder.path(), None);
+        assert_eq!(off.err().as_deref(), Some(AGENTS_OFF));
+        assert_eq!(crate::run::state(&home, "off").unwrap(), None);
+        // A lead resumed meanwhile is a plain session, and leads again once
+        // agents are on.
+        let mut resumed = run("lead", None, None);
+        core.tell_lead(&mut resumed).unwrap();
+        assert_eq!(resumed.instructions, None);
+        std::fs::write(&settings, r#"{ "agentsOn": true }"#).unwrap();
+        core.tell_lead(&mut resumed).unwrap();
+        assert!(resumed.instructions.is_some());
     }
 
     #[test]

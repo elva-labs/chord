@@ -305,8 +305,25 @@ impl Remotes {
             ssh::ensure_daemon(host, resources.as_deref())?;
         }
         let connection = open(&self.app, host, &files)?;
+        // The machine checks the notes and agents switches itself, so it is
+        // told this machine's. A daemon that does not know the call keeps
+        // its own.
+        if let Some(home) = chord_core::api::home_directory() {
+            let _ = connection.call_within("switches", switches(&home), HELLO);
+        }
         connections.insert(host.to_string(), Arc::clone(&connection));
         Ok(connection)
+    }
+
+    /// Tells every machine reached the notes and agents switches of this
+    /// one, as they are stored.
+    pub fn follow_switches(&self) {
+        let Some(home) = chord_core::api::home_directory() else {
+            return;
+        };
+        for connection in self.all() {
+            let _ = connection.call("switches", switches(&home));
+        }
     }
 
     /// Opens the connection, or says why it cannot, and what the daemon
@@ -403,6 +420,13 @@ fn unreachable(error: &str) -> bool {
     .any(|sign| lower.contains(sign))
 }
 
+/// The notes and agents switches stored on this machine, as a machine
+/// reached from it is told them.
+fn switches(home: &std::path::Path) -> Value {
+    let settings = chord_core::settings::read_from(home);
+    json!({ "notesOn": settings.notes_on, "agentsOn": settings.agents_on })
+}
+
 fn open_at(
     app: &AppHandle,
     host: &str,
@@ -429,7 +453,8 @@ fn open_at(
                 || event == chord_core::styles::USER_STYLES_CHANGED
             {
                 // The window follows the settings of the machine it runs on,
-                // never another's.
+                // never another's. Of its own it tells a machine it reaches
+                // only the notes and agents switches.
             } else {
                 let _ = app.emit(event, homeward(&name, event, payload));
             }
