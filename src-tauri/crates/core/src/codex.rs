@@ -149,8 +149,10 @@ pub fn rollout_path(codex_home: &Path, id: &str) -> Option<PathBuf> {
 /// Whether no conversation is stored under the id: Codex's index holds no
 /// such thread or the rollout it names is not on disk, and no rollout of
 /// it lies in the account's sessions folder, which Codex itself looks
-/// through where its index falls behind. False where the index or that
-/// folder cannot be read, which says nothing either way.
+/// through where its index falls behind, or in its archived sessions
+/// folder. False where the index or either folder cannot be read, which
+/// says nothing either way; an archive folder Codex has not made yet holds
+/// nothing.
 pub fn thread_missing(codex_home: &Path, id: &str) -> bool {
     let Some(db) = open(codex_home) else {
         return false;
@@ -164,7 +166,15 @@ pub fn thread_missing(codex_home: &Path, id: &str) -> bool {
         Err(rusqlite::Error::QueryReturnedNoRows) => false,
         Err(_) => return false,
     };
-    !indexed
+    if indexed {
+        return false;
+    }
+    // Codex makes the archive folder only once a thread is archived.
+    let archived = match stored_rollout(&codex_home.join("archived_sessions"), id, 0) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        archived => archived,
+    };
+    matches!(archived, Ok(false))
         && matches!(
             stored_rollout(&codex_home.join("sessions"), id, 0),
             Ok(false)

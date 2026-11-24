@@ -3013,6 +3013,26 @@ mod tests {
         assert!(judged_missing(&core, "never-written", dir));
     }
 
+    /// A Codex thread the index does not hold is not missing while its
+    /// rollout lies in the archive folder.
+    #[test]
+    fn a_codex_thread_whose_rollout_is_archived_is_not_missing() {
+        let home = Scratch::new("api-codex-archived");
+        let (codex, _) = codex_account(
+            &home,
+            Some("CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL);"),
+        );
+        std::fs::create_dir_all(codex.join("sessions").join("2026")).unwrap();
+        let core = core_at(&home);
+        let dir = codex.to_str();
+        assert!(judged_missing(&core, "archived", dir));
+        let archive = codex.join("archived_sessions");
+        std::fs::create_dir_all(&archive).unwrap();
+        std::fs::write(archive.join("rollout-2026-01-02T08-00-00-archived.jsonl"), "").unwrap();
+        assert!(!judged_missing(&core, "archived", dir));
+        assert!(judged_missing(&core, "never-written", dir));
+    }
+
     /// A Claude Code conversation is not missing where the account's
     /// projects folder is not there or cannot be read: it is resumed whole.
     #[test]
