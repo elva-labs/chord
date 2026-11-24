@@ -261,6 +261,69 @@ describe("the user's messages a usage limit left unanswered", () => {
     expect(ownImages("Go on.", ["a", "b"])).toEqual(["a", "b"]);
   });
 
+  it("are read by their digits alone, as the core reads them", async () => {
+    const { UNANSWERED_HEAD, UNANSWERED_END } = await import("$lib/instructions");
+    for (const text of [
+      `${UNANSWERED_HEAD}\nThe user's message +1 of 1, 1 line:\nBuild it.\n${UNANSWERED_END}\nHi`,
+      `${UNANSWERED_HEAD}\nThe user's message 1 of +1, 1 line:\nBuild it.\n${UNANSWERED_END}\nHi`,
+      `${UNANSWERED_HEAD}\nThe user's message 1 of 1, +1 line:\nBuild it.\n${UNANSWERED_END}\nHi`,
+      `${UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line, +1 image:\nBuild it.\n${UNANSWERED_END}\nHi`,
+      `${UNANSWERED_HEAD}\nThe user's message 1 of 1, 18446744073709551615 lines:\nBuild it.\n${UNANSWERED_END}\nHi`,
+      `${UNANSWERED_HEAD}\nThe user's message 1 of 1, 99999999999999999999999 lines:\nBuild it.\n${UNANSWERED_END}\nHi`,
+    ]) {
+      const words = spoken(text, true);
+      expect(words.text).toBe(text);
+      expect(words.carried).toBeUndefined();
+    }
+    const note = `${UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line:\nBuild it.\n${UNANSWERED_END}`;
+    expect(spoken(`${note}\n\n  Hi`, true).text).toBe("  Hi");
+    expect(spoken(`${note}\n\tHi`, true).text).toBe("\tHi");
+  });
+
+  it("are carried again from the message that carried them, with their images", async () => {
+    const { carriedBy, unansweredNote } = await import("$lib/instructions");
+    const note = unansweredNote([
+      { text: "One.", images: 1 },
+      { text: "Two.\nLines.", images: 2 },
+    ]);
+    expect(carriedBy(`${note}\n\nGo on.`, ["a", "b", "c", "d"])).toEqual([
+      { text: "One.", images: ["a"] },
+      { text: "Two.\nLines.", images: ["b", "c"] },
+    ]);
+    expect(carriedBy("Go on.", ["a"])).toEqual([]);
+  });
+
+  it("are told in words no session or plugin may send", async () => {
+    const { holdsUnansweredNote, UNANSWERED_HEAD, UNANSWERED_END } = await import("$lib/instructions");
+    expect(holdsUnansweredNote(`Hi\n${UNANSWERED_HEAD}`)).toBe(true);
+    expect(holdsUnansweredNote(`${UNANSWERED_END}\nHi`)).toBe(true);
+    expect(holdsUnansweredNote(`Hi ${UNANSWERED_END}`)).toBe(false);
+  });
+
+  it("carry only what the user typed of each, after the workbench's notes", async () => {
+    const { ahead, carries, GOING_ON_HEAD, GOING_ON_END, typedWords, unansweredNote } = await import(
+      "$lib/instructions"
+    );
+    const briefing = `${GOING_ON_HEAD}\n\nNo notes.\n${GOING_ON_END}`;
+    const note = unansweredNote([{ text: "Build it.", images: 1 }]);
+    const later = `${REPORTS_HEAD}\nYour start of sid-9 went ahead: it started.`;
+    const sent = `${briefing}\n\n${note}\n\n${later}\n\nGo on.`;
+    expect(ahead(sent)).toMatchObject({ briefing: "No notes.", carried: { messages: 1, images: 1 } });
+    expect(carries(sent)).toBe(true);
+    expect(carries("Go on.")).toBe(false);
+    // As the window kept it when it sent it.
+    expect(typedWords(sent, ["a", "b"], ["Go on.".length, 1], true)).toEqual({ text: "Go on.", images: ["b"] });
+    // Kept wrong for this text: read for its words.
+    expect(typedWords("Go on.", [], [99, 0], true)).toEqual({ text: "Go on.", images: [] });
+    expect(typedWords(`ab\nGo on.`, [], ["Go on.".length, 0], true)).toEqual({ text: "ab\nGo on.", images: [] });
+    // Nothing kept: the notes taken out, the later news too.
+    expect(typedWords(sent, ["a", "b"], null, true)).toEqual({ text: "Go on.", images: ["b"] });
+    // A note line left over after the strip: nothing in it is told to be theirs.
+    expect(typedWords(`Hi\n${REPORTS_HEAD}\nGo on.`, [], null, true)).toBeNull();
+    // Another's message is never the user's.
+    expect(typedWords("Go on.", [], null, false)).toBeNull();
+  });
+
   it("are marked as the core reads them", async () => {
     const { UNANSWERED_HEAD, UNANSWERED_END } = await import("$lib/instructions");
     const { readFileSync } = await import("node:fs");

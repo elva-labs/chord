@@ -1,4 +1,4 @@
-import type { Part } from "$lib/conversation.svelte";
+import { Conversation, type Part } from "$lib/conversation.svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   answer,
@@ -42,12 +42,16 @@ import {
   resumesWords,
 } from "$lib/autoResume.svelte";
 import {
+  carriedBy,
+  carries as carriesNote,
   GOING_ON_END,
   GOING_ON_HEAD,
   ownImages as ownImagesOf,
   spoken as spokenWords,
+  typedWords,
   unansweredNote,
 } from "$lib/instructions";
+import { typedOf } from "$lib/senders.svelte";
 import type { IntegratedImage } from "$lib/core";
 import { stateWord } from "$lib/orchestrator.svelte";
 import {
@@ -495,7 +499,8 @@ describe("a session the usage limit cut short", () => {
       .filter((said) => said !== undefined);
 
   it("carries every message written while the limit held, in order with their images, as it goes on", async () => {
-    core();
+    const briefing = `${GOING_ON_HEAD}\n\nNo notes.\n${GOING_ON_END}`;
+    core(briefing);
     const { key, handle } = await chosen();
     refused(key, handle);
     refusedToo(key, handle, "Also add tests.", [image("one")]);
@@ -515,7 +520,7 @@ describe("a session the usage limit cut short", () => {
     const sent = sends().at(-1)!;
     expect(sent.id).toBe(handleOf(key));
     expect(sent.text).toBe(
-      `BRIEFING\n\n${unansweredNote([
+      `${briefing}\n\n${unansweredNote([
         { text: "Build it.", images: 0 },
         { text: "Also add tests.", images: 1 },
         { text: "And the docs.\nBoth of them.", images: 2 },
@@ -610,7 +615,15 @@ describe("a session the usage limit cut short", () => {
     await settled();
     own.integratedSend = send_;
     send(key, "Go on, again.");
-    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on, again.`);
+    expect(sends().at(-1)!.text).toBe(
+      `${unansweredNote([
+        { text: "Build it.", images: 0 },
+        { text: "Go on.", images: 0 },
+      ])}\n\nGo on, again.`,
+    );
+    // Carried, the message that failed is not put back to be sent twice.
+    const failed = userTexts(key).find((said) => spokenText(said.text) === "Go on.");
+    expect(failed).toMatchObject({ state: "taken", placed: true });
   });
 
   it("carries a director's message with them but never as the user's", async () => {
@@ -622,14 +635,41 @@ describe("a session the usage limit cut short", () => {
     expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
   });
 
-  it("carries nothing once a turn after the limit ended otherwise", async () => {
+  it("carries them on past a turn after the limit that was stopped, with its own message", async () => {
     const { key, handle } = await started();
     refused(key, handle);
     send(key, "Go on.");
     fake.startTurn(handle);
     fake.endTurn(handle, "interrupted");
     send(key, "Never mind.");
-    expect(sends().at(-1)!.text).toBe("Never mind.");
+    expect(sends().at(-1)!.text).toBe(
+      `${unansweredNote([
+        { text: "Build it.", images: 0 },
+        { text: "Go on.", images: 0 },
+      ])}\n\nNever mind.`,
+    );
+    fake.startTurn(handle);
+    fake.endTurn(handle, "done");
+    send(key, "Thanks.");
+    expect(sends().at(-1)!.text).toBe("Thanks.");
+  });
+
+  it("carries what the user typed of each after a reload, never the notes the workbench joined to it", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    send(key, "Go on.");
+    fake.startTurn(handle);
+    fake.endTurn(handle, "failed", "API Error: 529 overloaded");
+    const read = new Conversation(() => 99_000);
+    const history = await fake.history({ agent: "claude-code", project: "/repo", session: "integrated-session-1" });
+    read.lay(history!, null);
+    const backlog = read.unanswered((said) => carriesNote(said.text));
+    expect(backlog.map((said) => spokenText(said.text))).toEqual(["Go on."]);
+    const carried = backlog.flatMap((said) => [
+      ...carriedBy(said.text, said.images),
+      typedWords(said.text, said.images, typedOf(said.id), true)!,
+    ]);
+    expect(carried.map((said) => said.text)).toEqual(["Build it.", "Go on."]);
   });
 
   it("a limit refusing the turn it sent at once is said and not waited for", async () => {

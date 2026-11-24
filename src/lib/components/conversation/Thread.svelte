@@ -2,7 +2,7 @@
   import { tick, untrack } from "svelte";
   import type { Command, Conversation, Entry, Message } from "$lib/conversation.svelte";
   import { clock, commandEnd, drawnPart, lineCount, notRead, nowDoing, replyMarkdown, speaker, startedIds, timeBreaks, tokens, toHear, exactTime, dayName } from "$lib/thread";
-  import { agentAt, ownImages, reportsShown, spoken, wakeShown } from "$lib/instructions";
+  import { ahead, agentAt, ownImages, reportsShown, spoken, wakeShown } from "$lib/instructions";
   import { sentParts, unsent } from "$lib/mention";
   import { mentionsOf } from "$lib/mentioned.svelte";
   import { sessionName, timeOf, type Sender } from "$lib/senders.svelte";
@@ -204,7 +204,7 @@
         const said = conversation.messages[id];
         const from = said === undefined ? null : (sender?.(said) ?? null);
         if (said === undefined || from?.workbench) continue;
-        const agent = from?.plugin ? agentAt(said.text)?.agent : spoken(said.text, from === null).agent;
+        const agent = from?.plugin ? agentAt(ahead(said.text).rest)?.agent : spoken(said.text, from === null).agent;
         title = agent?.title ?? title;
       }
       if (title !== null) titles.set(turn.id, title);
@@ -212,17 +212,19 @@
     return titles;
   });
 
-  /** A plugin's words as they were sent, after the agent note the
-      workbench put ahead of its start prompt where it has one. */
+  /** A plugin's words as they were sent, after what the workbench put
+      ahead of them: a briefing, the user's unanswered messages it carried,
+      and the agent note ahead of its start prompt, each where it has one. */
   function pluginWords(text: string) {
-    const led = agentAt(text);
+    const before = ahead(text);
+    const led = agentAt(before.rest);
     return {
-      text: led?.rest ?? text,
+      text: led?.rest ?? before.rest,
       instructions: null,
       reports: null,
       filesBack: null,
-      briefing: undefined,
-      carried: undefined,
+      briefing: before.briefing,
+      carried: before.carried,
       agent: led?.agent,
     };
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Conversation, type Entry, type ToolCall } from "$lib/conversation.svelte";
 import { fakeIntegrated, type FakeIntegratedOptions } from "../fakeIntegrated";
+import { carriedBy, carries, typedWords, unansweredNote } from "$lib/instructions";
 
 const M1 = "11111111-1111-4111-8111-111111111111";
 const M2 = "22222222-2222-4222-8222-222222222222";
@@ -1078,20 +1079,38 @@ describe("the messages a usage limit left unanswered", () => {
     expect(play.conversation.unanswered().map((said) => said.text)).toEqual(["Build it.", "Also add tests."]);
   });
 
-  it("are none while a turn runs or a message is on its way", () => {
+  it("are none while a turn runs or a message is on its way, and end where one that carried them is answered", () => {
     const play = played();
     refused(play, M1, "Build it.");
+    const carrier = (said: { id: string }) => said.id === M2;
     play.conversation.sending(M2, "Go on.");
-    expect(play.conversation.unanswered()).toEqual([]);
+    expect(play.conversation.unanswered(carrier)).toEqual([]);
     play.fake.send(play.id, M2, "Go on.");
-    expect(play.conversation.unanswered()).toEqual([]);
+    expect(play.conversation.unanswered(carrier)).toEqual([]);
     play.fake.startTurn(play.id);
-    expect(play.conversation.unanswered()).toEqual([]);
+    expect(play.conversation.unanswered(carrier)).toEqual([]);
     play.fake.endTurn(play.id, "done");
+    expect(play.conversation.unanswered(carrier)).toEqual([]);
+  });
+
+  it("stay after a turn answered before the reset that did not carry them", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    play.send(M2, "Go on.");
+    play.fake.turn(play.id, "ok");
+    expect(play.conversation.unanswered().map((said) => said.id)).toEqual([M1]);
+  });
+
+  it("end at a turn answered after the reset where none carried them", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    play.tick(5_000_000);
+    play.send(M2, "Go on.");
+    play.fake.turn(play.id, "ok");
     expect(play.conversation.unanswered()).toEqual([]);
   });
 
-  it("take in a turn of the agent's own the limit refused, and end at one it finished", () => {
+  it("take in a turn of the agent's own the limit refused, and stay after one of its own it finished", () => {
     const play = played();
     refused(play, M1, "Build it.");
     play.fake.emit(play.id, { type: "turnStarted", messages: [] });
@@ -1100,15 +1119,83 @@ describe("the messages a usage limit left unanswered", () => {
     expect(play.conversation.unanswered().map((said) => said.text)).toEqual(["Build it."]);
     play.fake.emit(play.id, { type: "turnStarted", messages: [] });
     play.fake.endTurn(play.id);
-    expect(play.conversation.unanswered()).toEqual([]);
+    expect(play.conversation.unanswered().map((said) => said.text)).toEqual(["Build it."]);
   });
 
-  it("are none where the last turn was stopped or failed some other way", () => {
+  it("take in a turn that failed or was stopped after the limit, with its own message", () => {
     const play = played();
     refused(play, M1, "Build it.");
     play.send(M2, "Go on.");
     play.fake.startTurn(play.id);
     play.fake.endTurn(play.id, "failed", "API Error: 529 overloaded");
+    play.send(M3, "And the docs.");
+    play.fake.startTurn(play.id);
+    play.fake.endTurn(play.id, "interrupted");
+    expect(play.conversation.unanswered().map((said) => said.id)).toEqual([M1, M2, M3]);
+  });
+
+  it("take in a message the core dropped after the limit", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    play.send(M2, "Go on.");
+    play.fake.drop(play.id, M2, "the message was not taken in time");
+    expect(play.conversation.unanswered().map((said) => said.id)).toEqual([M1, M2]);
+  });
+
+  it("take in a message the core holds no more once it says it is idle, so it blocks no carrying", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    play.send(M2, "Go on.");
     expect(play.conversation.unanswered()).toEqual([]);
+    play.fake.emit(play.id, { type: "state", state: "idle" });
+    expect(play.conversation.unanswered().map((said) => said.id)).toEqual([M1, M2]);
+  });
+
+  it("go back to the next send when the message that carried them fails, while another was sent, each once", () => {
+    const play = played();
+    const carrier = (said: { text: string }) => carries(said.text);
+    refused(play, M1, "Build it.");
+    const backlog = play.conversation.unanswered(carrier);
+    expect(backlog.map((said) => said.id)).toEqual([M1]);
+    const second = `${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`;
+    play.conversation.sending(M2, second);
+    for (const said of backlog) play.conversation.wentWith(said.id);
+    // Sent while the first was on its way, so it carries nothing.
+    expect(play.conversation.unanswered(carrier)).toEqual([]);
+    play.send(M3, "And the docs.");
+    play.conversation.sendFailed(M2, "the session is not running");
+    play.fake.startTurn(play.id);
+    play.fake.endTurn(play.id, "done");
+    const next = play.conversation.unanswered(carrier);
+    expect(next.map((said) => said.id)).toEqual([M2]);
+    const words = next.flatMap((said) => [
+      ...carriedBy(said.text, said.images),
+      typedWords(said.text, said.images, ["Go on.".length, 0], true)!,
+    ]);
+    expect(words.map((said) => said.text)).toEqual(["Build it.", "Go on."]);
+    const M4 = "44444444-4444-4444-8444-444444444444";
+    play.send(M4, `${unansweredNote(words.map((said) => ({ text: said.text, images: 0 })))}\n\nThanks.`);
+    for (const said of next) play.conversation.wentWith(said.id);
+    expect(play.conversation.messages[M2]).toMatchObject({ state: "taken", placed: true });
+    expect(play.conversation.below).toEqual([]);
+    play.fake.startTurn(play.id);
+    play.fake.endTurn(play.id, "done");
+    expect(play.conversation.unanswered(carrier)).toEqual([]);
+  });
+
+  it("are known again from a history laid after a reload, without stopping the conversation", async () => {
+    const play = played();
+    play.send(M1, "Done before.");
+    play.fake.turn(play.id, "ok");
+    refused(play, M2, "Build it.");
+    refused(play, M3, "Also add tests.");
+    const read = new Conversation(() => 99_000);
+    const history = await play.fake.history({ agent: "claude-code", project: "/repo", session: "integrated-session-1" });
+    read.lay(history!, null);
+    expect(read.unanswered().map((said) => [said.id, said.text])).toEqual([
+      [M2, "Build it."],
+      [M3, "Also add tests."],
+    ]);
+    expect(read.stoppedAt).toBeNull();
   });
 });

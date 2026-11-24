@@ -1,7 +1,7 @@
 import { tick } from "svelte";
 import { withoutArrowControls } from "$lib/strayKeys";
 import { dirFor } from "$lib/accounts.svelte";
-import { filesBackNote, ownImages, spoken, unansweredNote } from "$lib/instructions";
+import { carriedBy, carries, filesBackNote, ownImages, spoken, typedWords, unansweredNote } from "$lib/instructions";
 import {
   agentAhead,
   agentAheadBack,
@@ -18,7 +18,7 @@ import { unsent, type Sent } from "$lib/mention";
 import { mentionedIn, mentionsOf } from "$lib/mentioned.svelte";
 import { reservedName, shown } from "$lib/unseen";
 import { failureOf } from "$lib/turnFailure";
-import { senderOf, sentAt, sentBy, starterOf, WORKBENCH } from "$lib/senders.svelte";
+import { senderOf, sentAt, sentBy, starterOf, typedAs, typedOf, WORKBENCH } from "$lib/senders.svelte";
 import { pluginMarkFor } from "$lib/pluginStarts.svelte";
 import { keepMode, modeOf } from "$lib/sessionModes";
 import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
@@ -200,9 +200,6 @@ export class Link {
   attaching: Promise<boolean> | null = null;
   /** The first prompt was sent, for a session started with one. */
   prompted = false;
-  /** The messages the user wrote on the composer that this window sent,
-      by id: the only ones carried to the agent as the user's own. */
-  typed = new Set<string>();
   /** The run behind the row is being started again under the workflow
       just picked. The session counts as ready meanwhile: a message sent
       waits for the new run, and a change of model or mode is made on it. */
@@ -1331,13 +1328,16 @@ export function send(
   // The agent picked on the composer is told ahead of the user's own next
   // message, once.
   const agent = from === null ? agentAhead(key) : null;
-  // The user's messages a usage limit left unanswered go with the first
-  // message after it, whoever sends it, word for word with their images,
-  // until one that carries them is answered or refused in turn.
-  const carried = link.conversation
-    .unanswered()
-    .filter((said) => link.typed.has(said.id))
-    .map((said) => ({ text: spoken(said.text, true).text, images: ownImages(said.text, said.images) }));
+  // The user's messages a usage limit left unanswered go with the next
+  // message, whoever sends it, word for word with their images: what a
+  // message that carried them held, and what the user typed of each. Only
+  // what is told to be the user's typing goes, never a note the workbench
+  // joined to it or another's words.
+  const backlog = link.conversation.unanswered((said) => carries(said.text));
+  const carried = backlog.flatMap((said) => {
+    const own = typedWords(said.text, said.images, typedOf(said.id), senderOf(said) === null);
+    return [...carriedBy(said.text, said.images), ...(own === null ? [] : [own])];
+  });
   const unanswered =
     carried.length === 0
       ? null
@@ -1348,8 +1348,9 @@ export function send(
   const sent = [...carried.flatMap((said) => said.images), ...images];
   const id = crypto.randomUUID();
   mentionedIn(id, mentions);
-  if (from === null) link.typed.add(id);
+  if (from === null) typedAs(id, words.length, images.length);
   link.conversation.sending(id, text, sent);
+  for (const said of backlog) link.conversation.wentWith(said.id);
   link.backSaid = null;
   link.filesBack = from === null ? [] : link.filesBack;
   if (note !== null || files.length > 0)
