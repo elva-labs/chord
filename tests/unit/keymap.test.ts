@@ -286,6 +286,13 @@ describe("editor mode", () => {
     expect(resolveAction(mod("n", { altKey: true, code: "KeyN" }), tree)).toEqual({ type: "newFile" });
   });
 
+  it("turns wrapping on or off on Alt+Cmd+Z, in editor mode alone", () => {
+    const wrap = mod("z", { altKey: true, code: "KeyZ" });
+    expect(resolveAction(wrap, editor)).toEqual({ type: "toggleWrap" });
+    expect(resolveAction(wrap, tree)).toEqual({ type: "toggleWrap" });
+    expect(resolveAction(wrap, { focus: "agent" })).toBeNull();
+  });
+
   it("saves on Cmd+S anywhere in editor mode but a terminal", () => {
     expect(resolveAction(mod("s"), editor)).toEqual({ type: "save" });
     expect(resolveAction(mod("s"), tree)).toEqual({ type: "save" });

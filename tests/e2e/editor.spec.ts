@@ -2212,3 +2212,57 @@ for (const linux of [false, true]) {
     });
   }
 }
+
+test.describe("word wrap in the editor", () => {
+  const LONG = "word ".repeat(120);
+  const wrapped = (page: Page) =>
+    page.locator(".cm-scroller").evaluate((el) => el.scrollWidth <= el.clientWidth);
+
+  async function palette(page: Page, query: string) {
+    await page.keyboard.press(`${MOD}+Shift+P`);
+    await page.keyboard.type(query);
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await open(page, 1728);
+    await flip(page);
+  });
+
+  test("is offered with a file open and not without, and its label says what it does", async ({ page }) => {
+    await palette(page, "word wrap");
+    await expect(page.getByTestId("palette-label")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    await treeRow(page, "README.md").click();
+    await expect.poll(() => editorText(page)).toContain("// README.md");
+    await palette(page, "word wrap");
+    await expect(page.getByTestId("palette-label")).toHaveText([/Turn word wrap on/]);
+    await page.keyboard.press("Enter");
+    await palette(page, "word wrap");
+    await expect(page.getByTestId("palette-label")).toHaveText([/Turn word wrap off/]);
+  });
+
+  test("breaks long lines at once, keeps the caret, and is kept across a restart", async ({ page }) => {
+    await treeRow(page, "README.md").click();
+    await expect.poll(() => editorText(page)).toContain("// README.md");
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.insertText(LONG);
+    await expect(page.getByTestId("editor-position")).toHaveText(/Ln 4/);
+    const column = await page.getByTestId("editor-position").innerText();
+    expect(await wrapped(page)).toBe(false);
+
+    await palette(page, "word wrap");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => wrapped(page)).toBe(true);
+    await expect(page.getByTestId("editor-position")).toHaveText(column);
+
+    await page.reload();
+    await expect(page.locator(AGENT)).toBeVisible();
+    if ((await page.getByTestId("shell").getAttribute("data-mode")) !== "editing") await flip(page);
+    await treeRow(page, "Cargo.toml").click();
+    await expect.poll(() => editorText(page)).toContain("// Cargo.toml");
+    await palette(page, "word wrap");
+    await expect(page.getByTestId("palette-label")).toHaveText([/Turn word wrap off/]);
+  });
+});
