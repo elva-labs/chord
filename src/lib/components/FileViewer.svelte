@@ -104,7 +104,7 @@
 <div
   class="viewer"
   data-testid="viewer"
-  data-view={files.pluginView !== null ? "plugin" : files.media !== null ? "media" : view}
+  data-view={files.pluginView !== null ? "plugin" : files.picture !== null ? "picture" : files.media !== null ? "media" : view}
   bind:this={viewer}
 >
   {#if bare}
@@ -112,6 +112,11 @@
   {:else if files.pluginView !== null}
     <div class="bar">
       <span class="path" title={files.pluginView.plugin} data-testid="plugin-view-name">{files.pluginView.plugin}</span>
+      <button class="close" onclick={onClose} aria-label="Close the viewer">Esc</button>
+    </div>
+  {:else if files.picture !== null}
+    <div class="bar">
+      <span class="path" title={files.picture.caption} data-testid="picture-caption">{files.picture.caption}</span>
       <button class="close" onclick={onClose} aria-label="Close the viewer">Esc</button>
     </div>
   {:else if files.media !== null}
@@ -141,6 +146,10 @@
   {/if}
   {#if files.pluginView !== null}
     <PluginView page={files.pluginView} />
+  {:else if files.picture !== null}
+    <div class="rendered" data-testid="viewer-picture">
+      <img class="picture" src={files.picture.src} alt={files.picture.caption} />
+    </div>
   {:else if files.media !== null}
     <MediaStack item={files.media} />
   {:else if entry === null}
@@ -276,6 +285,14 @@
 
   .rendered {
     padding: 12px var(--pane-pad) 24px;
+  }
+
+  .picture {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg);
   }
 
   .lines {

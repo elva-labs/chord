@@ -361,7 +361,7 @@ function standing(path: string): string {
     source while its rendering is. Offered with the viewer holding a file,
     outside editor mode, which has its own views. */
 function viewCommand(): PaletteItem | null {
-  if (layout.mode !== "reviewing" || files.media !== null || files.pluginView !== null)
+  if (layout.mode !== "reviewing" || files.media !== null || files.picture !== null || files.pluginView !== null)
     return null;
   if (browser.showing) return null;
   const entry = selectedEntry();
