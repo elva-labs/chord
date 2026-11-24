@@ -822,3 +822,50 @@ fn reads_a_command_written_in_two_entries_or_taken_while_a_turn_ran() {
     );
     assert_eq!(first_said(&path).as_deref(), Some("Go on"));
 }
+
+/// The entry a transcript holds where the usage limit refused a request,
+/// as the agent writes it.
+fn refusal(uuid: &str, id: &str, kind: &str) -> Value {
+    json!({"type":"assistant","uuid":uuid,"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"apiError":"usage_limit_reached","apiErrorParams":{"rate_limit_info":{"status":"rejected","resetsAt":1_795_476_600_u64,"rateLimitType":kind,"overageStatus":"rejected","isUsingOverage":false}},"message":{"id":id,"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"You've hit your 5-hour limit · resets 12:30am"}],"stop_reason":"stop_sequence"}})
+}
+
+#[test]
+fn reads_a_turn_the_usage_limit_refused_as_the_live_one_ends() {
+    let mut throttled = refusal("a-4", "msg_4", "five_hour");
+    throttled["apiError"] = json!("rate_limited");
+    let body = entries(&[
+        user("u-1", "Build it"),
+        answer("a-1", "msg_1", "Building."),
+        user("u-2", "And test it"),
+        refusal("a-2", "msg_2", "five_hour"),
+        user("u-3", "Also the docs"),
+        refusal("a-3", "msg_3", "seven_day"),
+        user("u-4", "Still there?"),
+        throttled,
+    ]);
+    let (_home, path) = transcript("refused", PROJECT, &body);
+    let history = read(&path);
+    assert_eq!(
+        said(&history),
+        [
+            "message Sent u-1: Build it",
+            "turn started for [u-1] on claude-sonnet-5-5",
+            "text msg_1#0: Building.",
+            "turn ended Done after None",
+            "message Sent u-2: And test it",
+            "turn started for [u-2] on no model",
+            "text msg_2#0: You've hit your 5-hour limit · resets 12:30am",
+            "LimitReached { window: Some(Session), resets_at: Some(1795476600) }",
+            "turn ended Failed after None",
+            "message Sent u-3: Also the docs",
+            "turn started for [u-3] on no model",
+            "text msg_3#0: You've hit your 5-hour limit · resets 12:30am",
+            "LimitReached { window: Some(Weekly), resets_at: Some(1795476600) }",
+            "turn ended Failed after None",
+            "message Sent u-4: Still there?",
+            "turn started for [u-4] on no model",
+            "text msg_4#0: You've hit your 5-hour limit · resets 12:30am",
+            "turn ended Done after None",
+        ]
+    );
+}

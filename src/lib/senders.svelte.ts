@@ -152,9 +152,13 @@ export function outsideFolder(caller: string): string | null {
 export function resetSenders() {
   senders.byMessage = {};
   times.at = {};
+  typed.of = {};
+  uncarried.of = {};
   loaded = false;
   load();
   loadTimes();
+  loadTyped();
+  loadUncarried();
 }
 
 const TIMES_KEY = "chord.sent-at";
@@ -194,4 +198,91 @@ export function sentAt(message: string, at: number) {
 /** When the window sent a message, if it did. */
 export function timeOf(message: string): number | null {
   return times.at[message] ?? null;
+}
+
+const TYPED_KEY = "chord.typed";
+
+/** How much of each message the user sent was what they typed on the
+    composer, by its id, kept between runs: how many characters end its
+    text and how many images end its images. The workbench's notes go
+    ahead of those words, so after a reload they are told apart by this
+    and by nothing the text says. */
+const typed = $state({ of: {} as Record<string, [number, number]> });
+
+function loadTyped() {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(TYPED_KEY) ?? "{}");
+    if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return;
+    const of: Record<string, [number, number]> = {};
+    for (const [message, kept] of Object.entries(stored))
+      if (Array.isArray(kept) && kept.length === 2 && kept.every((count) => Number.isSafeInteger(count) && count >= 0))
+        of[message] = [kept[0], kept[1]];
+    typed.of = of;
+  } catch {
+    // Nothing remembered, then: such a message is read for its words.
+  }
+}
+
+// Read when the module loads, as the senders are.
+loadTyped();
+
+/** The user typed the last `length` characters and `images` images of the
+    message with this id. */
+export function typedAs(message: string, length: number, images: number) {
+  typed.of[message] = [length, images];
+  const kept = Object.entries(typed.of);
+  if (kept.length > KEEP) typed.of = Object.fromEntries(kept.slice(-KEEP));
+  try {
+    localStorage.setItem(TYPED_KEY, JSON.stringify(typed.of));
+  } catch {
+    // Non-fatal: it is known until the window closes.
+  }
+}
+
+/** How much of a message the user typed, where the window kept it. */
+export function typedOf(message: string): [number, number] | null {
+  return typed.of[message] ?? null;
+}
+
+const UNCARRIED_KEY = "chord.uncarried";
+
+/** How many of the messages a usage limit left unanswered could not go
+    with each message that went on after them, by its id, kept between
+    runs: messages the window can show neither to be the user's typing
+    nor to be another's, which the user is told to send again. */
+const uncarried = $state({ of: {} as Record<string, number> });
+
+function loadUncarried() {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(UNCARRIED_KEY) ?? "{}");
+    if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return;
+    const of: Record<string, number> = {};
+    for (const [message, count] of Object.entries(stored))
+      if (Number.isSafeInteger(count) && (count as number) > 0) of[message] = count as number;
+    uncarried.of = of;
+  } catch {
+    // Nothing remembered, then: the thread says nothing under the message.
+  }
+}
+
+// Read when the module loads, as the senders are.
+loadUncarried();
+
+/** `count` messages the limit left unanswered could not go with the
+    message with this id. */
+export function leftOut(message: string, count: number) {
+  uncarried.of[message] = count;
+  const kept = Object.entries(uncarried.of);
+  if (kept.length > KEEP) uncarried.of = Object.fromEntries(kept.slice(-KEEP));
+  try {
+    localStorage.setItem(UNCARRIED_KEY, JSON.stringify(uncarried.of));
+  } catch {
+    // Non-fatal: it is known until the window closes.
+  }
+}
+
+/** How many unanswered messages could not go with a message, where any
+    could not. */
+export function leftOutOf(message: string): number | null {
+  return uncarried.of[message] ?? null;
 }

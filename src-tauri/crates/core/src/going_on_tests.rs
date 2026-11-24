@@ -202,6 +202,75 @@ fn an_earlier_briefing_is_not_quoted_again() {
     assert_eq!(without_briefing("plain words"), "plain words");
 }
 
+/// The note on the user's unanswered messages a message carried is taken
+/// out with the briefing ahead of it, so a later briefing quotes only the
+/// user's own words.
+#[test]
+fn the_unanswered_messages_a_message_carried_are_not_quoted_again() {
+    let note = format!(
+        "{UNANSWERED_HEAD}\nThe user's message 1 of 2, 1 line:\nBuild it.\nThe user's message 2 of 2, 2 lines, 1 image:\nAlso tests.\n{UNANSWERED_END}\n{UNANSWERED_END}"
+    );
+    assert_eq!(without_briefing(&format!("{note}\n\nGo on.")), "Go on.");
+    let earlier = briefing(None, None, &[], Path::new("/t/old.jsonl"));
+    assert_eq!(
+        without_briefing(&format!("{earlier}\n\n{note}\n\nGo on.")),
+        "Go on."
+    );
+    let home = Scratch::new("going-on-unanswered");
+    let path = transcript(
+        &home,
+        &[
+            user(&format!("{earlier}\n\n{note}\n\nGo on.")),
+            assistant("On it.", 200_000, true),
+        ],
+    );
+    let again = judge(&path, |_| None, AT + 2 * HOUR, None)
+        .briefing
+        .unwrap();
+    assert!(again.contains("How it began, the user's first message:\n> Go on."));
+    assert!(!again.contains(UNANSWERED_HEAD));
+}
+
+/// A note that is not whole, or that a message only quotes, is the user's
+/// words as they stand.
+#[test]
+fn an_unanswered_note_not_whole_is_left_as_it_is() {
+    for text in [
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line:\nBuild it.\n\nGo on."),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 2, 1 line:\nBuild it.\n{UNANSWERED_END}\nGo on."),
+        format!("{UNANSWERED_HEAD}\nThe user's message 2 of 2, 1 line:\nBuild it.\n{UNANSWERED_END}\nGo on."),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line:\nBuild it.\nNow.\n{UNANSWERED_END}\nGo on."),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 lines, 2 pictures:\nBuild it.\n{UNANSWERED_END}\nGo on."),
+        format!("Hello\n{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line:\nBuild it.\n{UNANSWERED_END}"),
+    ] {
+        assert_eq!(without_briefing(&text), text);
+    }
+}
+
+/// A count is digits alone, as the note writes it, and one too large to
+/// count lines by leaves the text as it is; past the note only the blank
+/// lines are taken, so the words after it keep their indent. The window's
+/// reading takes the same inputs the same way.
+#[test]
+fn an_unanswered_note_is_read_by_its_digits_alone() {
+    let most = usize::MAX;
+    for text in [
+        format!("{UNANSWERED_HEAD}\nThe user's message +1 of 1, 1 line:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of +1, 1 line:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, +1 line:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line, +1 image:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, {most} lines:\nBuild it.\n{UNANSWERED_END}\nHi"),
+        format!("{UNANSWERED_HEAD}\nThe user's message 1 of 1, 99999999999999999999999 lines:\nBuild it.\n{UNANSWERED_END}\nHi"),
+    ] {
+        assert_eq!(without_briefing(&text), text);
+    }
+    let note = format!(
+        "{UNANSWERED_HEAD}\nThe user's message 1 of 1, 1 line:\nBuild it.\n{UNANSWERED_END}"
+    );
+    assert_eq!(without_briefing(&format!("{note}\n\n  Hi")), "  Hi");
+    assert_eq!(without_briefing(&format!("{note}\n\tHi")), "\tHi");
+}
+
 /// A transcript named with Windows' `\\?\` prefix, as a Codex index can
 /// hold its rollout, is named without it: tools the agent opens a file
 /// with read such a path wrongly or not at all.

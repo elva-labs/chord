@@ -1,7 +1,7 @@
 import { tick } from "svelte";
 import { withoutArrowControls } from "$lib/strayKeys";
 import { dirFor } from "$lib/accounts.svelte";
-import { filesBackNote, spoken } from "$lib/instructions";
+import { carriedBy, carries, filesBackNote, ownImages, spoken, typedWords, unansweredNote } from "$lib/instructions";
 import {
   agentAhead,
   agentAheadBack,
@@ -19,7 +19,7 @@ import { unsent, type Sent } from "$lib/mention";
 import { mentionedIn, mentionsOf } from "$lib/mentioned.svelte";
 import { reservedName, shown } from "$lib/unseen";
 import { failureOf } from "$lib/turnFailure";
-import { senderOf, sentAt, sentBy, starterOf, WORKBENCH } from "$lib/senders.svelte";
+import { leftOut, leftOutOf, senderOf, sentAt, sentBy, starterOf, typedAs, typedOf, WORKBENCH } from "$lib/senders.svelte";
 import { pluginMarkFor } from "$lib/pluginStarts.svelte";
 import { keepMode, modeOf } from "$lib/sessionModes";
 import { modeName as nameOfMode, nextNarrower } from "$lib/modeFit";
@@ -1346,10 +1346,38 @@ export function send(
     link.picked = null;
   }
   const agent = from === null && switches.agents ? agentAhead(key) : null;
-  const text = [briefing, agent, told, note?.text ?? null, words].filter((part) => part !== null).join("\n\n");
+  // The user's messages a usage limit left unanswered go with the next
+  // message, whoever sends it, word for word with their images: what a
+  // message that carried them held, and what the user typed of each. Only
+  // what the window kept as the user's typing goes, never a note the
+  // workbench joined to it or another's words. A message it can show to
+  // be neither the user's typing nor another's is left out, and the
+  // thread tells the user under this message to send it again. A message
+  // that left some out stands for them as one that carried them does.
+  const backlog = link.conversation.unanswered((said) => carries(said.text) || leftOutOf(said.id) !== null);
+  let lost = 0;
+  const went: string[] = [];
+  const carried = backlog.flatMap((said) => {
+    const held = carriedBy(said.text, said.images);
+    const own = typedWords(said.text, said.images, typedOf(said.id));
+    if (own === null && senderOf(said) === null) lost += 1;
+    if (own !== null || held.length > 0) went.push(said.id);
+    return [...held, ...(own === null ? [] : [own])];
+  });
+  const unanswered =
+    carried.length === 0
+      ? null
+      : unansweredNote(carried.map((said) => ({ text: said.text, images: said.images.length })));
+  const text = [briefing, unanswered, agent, told, note?.text ?? null, words]
+    .filter((part) => part !== null)
+    .join("\n\n");
+  const sent = [...carried.flatMap((said) => said.images), ...images];
   const id = crypto.randomUUID();
   mentionedIn(id, mentions);
-  link.conversation.sending(id, text, images);
+  if (from === null) typedAs(id, words.length, images.length);
+  if (lost > 0) leftOut(id, lost);
+  link.conversation.sending(id, text, sent);
+  for (const said of went) link.conversation.wentWith(said);
   link.backSaid = null;
   link.filesBack = from === null ? [] : link.filesBack;
   if (note !== null || files.length > 0)
@@ -1386,7 +1414,7 @@ export function send(
     if (title !== null && !nameTaken(title, key) && !reservedName(title)) namedForNow(key, title);
   }
   core()
-    .integratedSend(link.handle, id, text, images)
+    .integratedSend(link.handle, id, text, sent)
     .catch((error) => {
       link.conversation.sendFailed(id, message(error));
       settleNotes(key, link);
@@ -1846,9 +1874,10 @@ export function restore(key: string, said: Message, caret: "start" | "end" | nul
   const link = links.get(key);
   if (link === undefined) return;
   const back = unsent(spoken(said.text, senderOf(said) === null).text, mentionsOf(said.id));
+  const images = ownImages(said.text, said.images);
   const chain = link.upChain;
   if (chain !== null && chain.ids.includes(said.id) && link.draft === chain.draft) {
-    chain.back[said.id] = { draft: back.draft, mentions: back.picked, images: [...said.images] };
+    chain.back[said.id] = { draft: back.draft, mentions: back.picked, images };
     const kept = chain.ids.flatMap((id) => chain.back[id] ?? []);
     link.draft = kept.map((one) => one.draft).join("\n");
     link.mentions = [...new Set(kept.flatMap((one) => one.mentions))];
@@ -1859,7 +1888,7 @@ export function restore(key: string, said: Message, caret: "start" | "end" | nul
     if (chain !== null && link.draft !== chain.draft) link.upChain = null;
     link.draft = link.draft.trim() === "" ? back.draft : `${back.draft}\n\n${link.draft}`;
     link.mentions = [...new Set([...link.mentions, ...back.picked])];
-    link.images = [...said.images, ...link.images];
+    link.images = [...images, ...link.images];
   }
   if (!said.placed) link.conversation.forget(said.id);
   void tick().then(() => {

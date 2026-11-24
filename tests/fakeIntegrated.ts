@@ -1609,6 +1609,9 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
       case "toolFinished":
       case "turnEnded":
       case "compacted":
+      // The transcript keeps the limit's refusal, which its history reads
+      // back as the limit ahead of the turn's end.
+      case "limitReached":
         write(body);
         break;
       case "command":

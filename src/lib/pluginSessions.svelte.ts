@@ -25,7 +25,7 @@ import {
   worktreeName,
 } from "$lib/conductor.svelte";
 import { say } from "$lib/flash.svelte";
-import { agentNote, holdsAgentNote } from "$lib/instructions";
+import { agentNote, holdsAgentNote, holdsUnansweredNote } from "$lib/instructions";
 import { wentOnFrom } from "$lib/goingOn.svelte";
 import { handleOf, send as sendIntegrated } from "$lib/integrated.svelte";
 import { choose, modelToStart } from "$lib/lastChosen.svelte";
@@ -80,6 +80,7 @@ export function startRefusal(asked: PluginStartEvent): string | null {
   if (slashLed(line) || slashLed(asked.prompt)) return "its prompt begins with a slash";
   if (runsShell(line) || runsShell(asked.prompt)) return "its prompt begins with !";
   if (holdsAgentNote(asked.prompt)) return "its prompt holds a line of the workbench's agent note";
+  if (holdsUnansweredNote(asked.prompt)) return "its prompt holds a line of the workbench's note on the user's unanswered messages";
   return null;
 }
 
@@ -243,7 +244,7 @@ async function deliver(event: PluginSendEvent): Promise<PluginSentOutcome> {
   const line = oneLine(event.text);
   if (line === "" || bytes(event.text) > TEXT_MOST) return "refused";
   if (commandLed(line) || commandLed(event.text)) return "refused";
-  if (holdsAgentNote(event.text)) return "refused";
+  if (holdsAgentNote(event.text) || holdsUnansweredNote(event.text)) return "refused";
   const row = rowFor(event);
   if (row === null) return "gone";
   const from = pluginMark(event.source, event.plugin);

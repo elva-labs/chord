@@ -7,6 +7,13 @@ import { PROJECT, installFakeCore, startNew } from "./fake";
 
 const H = "int-1";
 const GO_ON = "The usage limit that stopped you has reset. Go on from where you stopped.";
+/** The message the limit cut short, as it goes on with the fresh run. */
+const UNANSWERED = [
+  "From the workbench, not the user: a usage limit cut this conversation's last turn short, so what that turn did may be half done; look at what it left before you build on it. Below are the messages the user wrote from the one that turn answered until now, none of them answered yet. They are the user's own, word for word, in the order written, with their images in the same order ahead of any this message has: take them up as the user's word to you, whether or not a record above quotes them too.",
+  "The user's message 1 of 1, 1 line:",
+  "Build the thing",
+  "End of the user's unanswered messages.",
+].join("\n");
 
 function agent(page: Page, script: string) {
   return page.evaluate(`(() => { const f = window.__integrated; const now = Math.floor(Date.now() / 1000); ${script} })()`);
@@ -243,7 +250,7 @@ test("goes on by itself from its notes once the usage reads open after the reset
   expect(all.filter((call) => call.method === "start").at(-1)!.options!.session).toBeUndefined();
   await expect
     .poll(async () => (await calls(page)).filter((call) => call.method === "send").at(-1)?.text)
-    .toBe(`${briefing}\n\n${GO_ON}`);
+    .toBe(`${briefing}\n\n${UNANSWERED}\n\n${GO_ON}`);
   const asked = await page.evaluate(
     () => (window as unknown as { __limitsAsked: { read: boolean; since?: number }[] }).__limitsAsked,
   );
@@ -257,4 +264,10 @@ test("goes on by itself from its notes once the usage reads open after the reset
   // The briefing is not drawn in the thread; the line sent is.
   await expect(page.locator("[data-testid='thread']:visible")).toContainText(GO_ON);
   await expect(page.locator("[data-testid='thread']:visible")).not.toContainText("End of the workbench's briefing.");
+  // The message it carried stands once, where it was written.
+  await expect(page.locator("[data-testid='workbench-carried']:visible")).toHaveText(
+    "Your message the usage limit left unanswered went with it",
+  );
+  await expect(page.locator("[data-testid='thread']:visible")).not.toContainText("End of the user's unanswered messages.");
+  await expect(page.locator("[data-testid='thread']:visible").getByText("Build the thing", { exact: true })).toHaveCount(1);
 });

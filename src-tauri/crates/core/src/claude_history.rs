@@ -23,9 +23,12 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::claude_stream::{file_changes, steps, text_of, tool_kind, PLAN_TOOL, TODO_TOOL};
+use crate::claude_stream::{
+    file_changes, steps, text_of, tool_kind, usage_limit, PLAN_TOOL, TODO_TOOL,
+};
 use crate::integrated::{
-    CommandState, CompactReason, Event, History, Image, MessageState, Outcome, Said, ToolKind,
+    CommandState, CompactReason, Event, History, Image, LimitKind, MessageState, Outcome, Said,
+    ToolKind,
 };
 use crate::transcripts::mangle;
 
@@ -877,6 +880,9 @@ struct Turn {
     /// The record says it is over: the agent stopped of its own accord, or
     /// how long the turn took was noted.
     over: bool,
+    /// The usage limit the agent's last line in it says refused it: the
+    /// window used up and when it resets, as the live turn tells it.
+    limit: Option<(Option<LimitKind>, Option<u64>)>,
 }
 
 /// What a user entry says, as the conversation shows it.
@@ -971,6 +977,7 @@ impl Reader {
             interrupted: false,
             duration: None,
             over: false,
+            limit: None,
         });
     }
 
@@ -983,9 +990,17 @@ impl Reader {
         for call in turn.open {
             self.push(failed(call, None));
         }
+        // A turn the usage limit refused failed on it, as the live one
+        // says: a stop by the user is the user's all the same.
+        let refused = turn.limit.filter(|_| !turn.interrupted);
+        if let Some((window, resets_at)) = refused {
+            self.push(Event::LimitReached { window, resets_at });
+        }
         self.push(Event::TurnEnded {
             outcome: if turn.interrupted {
                 Outcome::Interrupted
+            } else if refused.is_some() {
+                Outcome::Failed
             } else {
                 Outcome::Done
             },
@@ -1169,6 +1184,9 @@ impl Reader {
                     turn.model = true;
                     self.items[turn.start].model = Some(model.to_string());
                 }
+            }
+            if let Some(turn) = &mut self.turn {
+                turn.limit = usage_limit(entry);
             }
         }
         let id = message["id"]

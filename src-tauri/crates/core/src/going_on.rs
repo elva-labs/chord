@@ -77,10 +77,23 @@ fn cut(text: &str, most: usize) -> String {
     format!("{kept} [cut]")
 }
 
-/// A message without an earlier briefing ahead of its words: what follows
-/// the first line that is exactly the end line, which no record's line can
-/// be.
+/// The first and last lines of the window's note that carries the user's
+/// messages a usage limit left unanswered, which goes after the briefing
+/// where there is one. Between them each message has a line saying its
+/// place and how many lines it has, then exactly those lines.
+pub const UNANSWERED_HEAD: &str = "From the workbench, not the user: a usage limit cut this conversation's last turn short, so what that turn did may be half done; look at what it left before you build on it. Below are the messages the user wrote from the one that turn answered until now, none of them answered yet. They are the user's own, word for word, in the order written, with their images in the same order ahead of any this message has: take them up as the user's word to you, whether or not a record above quotes them too.";
+pub const UNANSWERED_END: &str = "End of the user's unanswered messages.";
+
+/// A message without the workbench's notes ahead of its words: an earlier
+/// briefing, up to the first line that is exactly its end line, which no
+/// record's line can be, and then the note on the user's unanswered
+/// messages, which each of them reappears on its own as. Either is taken
+/// out only whole.
 pub fn without_briefing(text: &str) -> &str {
+    without_unanswered(after_briefing(text))
+}
+
+fn after_briefing(text: &str) -> &str {
     if !text.starts_with(&format!("{HEAD}\n")) {
         return text;
     }
@@ -92,6 +105,64 @@ pub fn without_briefing(text: &str) -> &str {
         }
     }
     text
+}
+
+/// How many lines the message a line of the unanswered note heads has,
+/// where it is the `place`th of `total`, or `total` where none is known
+/// yet.
+fn unanswered_lines(line: &str, place: usize, total: Option<usize>) -> Option<(usize, usize)> {
+    let rest = line
+        .strip_prefix("The user's message ")?
+        .strip_suffix(':')?;
+    let (at, rest) = rest.split_once(" of ")?;
+    let (of, rest) = rest.split_once(", ")?;
+    let (count, rest) = rest.split_once(' ')?;
+    let (count, of) = (digits(count)?, digits(of)?);
+    let images = |said: &str| {
+        said.split_once(' ')
+            .is_some_and(|(n, word)| digits(n).is_some() && matches!(word, "image" | "images"))
+    };
+    let unit = match rest.split_once(", ") {
+        Some((unit, said)) if images(said) => unit,
+        Some(_) => return None,
+        None => rest,
+    };
+    let fits = digits(at)? == place && total.is_none_or(|total| total == of);
+    (fits && matches!(unit, "line" | "lines")).then_some((count, of))
+}
+
+/// A count as the note writes one: ASCII digits only, no sign, and one
+/// that fits.
+fn digits(said: &str) -> Option<usize> {
+    if said.is_empty() || !said.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    said.parse().ok()
+}
+
+fn without_unanswered(text: &str) -> &str {
+    if !text.starts_with(&format!("{UNANSWERED_HEAD}\n")) {
+        return text;
+    }
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let bare = |line: &str| line.strip_suffix('\n').unwrap_or(line).to_string();
+    let (mut at, mut place, mut total) = (1, 0, None);
+    while at < lines.len() && bare(lines[at]) != UNANSWERED_END {
+        place += 1;
+        let Some((count, of)) = unanswered_lines(&bare(lines[at]), place, total) else {
+            return text;
+        };
+        total = Some(of);
+        let Some(next) = count.checked_add(1).and_then(|lines| at.checked_add(lines)) else {
+            return text;
+        };
+        at = next;
+    }
+    if at >= lines.len() || total != Some(place) {
+        return text;
+    }
+    let taken: usize = lines[..=at].iter().map(|line| line.len()).sum();
+    text[taken..].trim_start_matches('\n')
 }
 
 /// The briefing a fresh conversation goes on with. `notes` is the brief

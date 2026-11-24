@@ -930,11 +930,21 @@ const USAGE_LIMIT: &str = "usage_limit_reached";
 /// over, where the agent says. None for a line that is no such refusal.
 /// A refusal that names no window, one from the credits bought beyond the
 /// plan, and one held until the next day by a daily cap name no window.
-fn usage_limit(line: &Value) -> Option<(Option<LimitKind>, Option<u64>)> {
-    if line["error"] != "rate_limit" || line["api_error"] != USAGE_LIMIT {
+/// The stream names the fields in snake case and the transcript's entry
+/// for the same line in camel case; either is read.
+pub(crate) fn usage_limit(line: &Value) -> Option<(Option<LimitKind>, Option<u64>)> {
+    let field = |snake: &str, camel: &str| {
+        if line[snake].is_null() {
+            line[camel].clone()
+        } else {
+            line[snake].clone()
+        }
+    };
+    if line["error"] != "rate_limit" || field("api_error", "apiError") != USAGE_LIMIT {
         return None;
     }
-    let info = &line["api_error_params"]["rate_limit_info"];
+    let params = field("api_error_params", "apiErrorParams");
+    let info = &params["rate_limit_info"];
     if info["status"] != "rejected" {
         return None;
     }

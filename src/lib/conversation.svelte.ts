@@ -406,6 +406,115 @@ export class Conversation {
       .filter((message) => message !== undefined && !message.placed);
   }
 
+  /**
+   * The messages a usage limit left unanswered, in the order written, for
+   * the next message sent to carry: from the first turn the limit refused
+   * on, each turn's messages that it refused, that failed, was stopped or
+   * ended unanswered, and each message the agent never took (one that
+   * failed to send, or that the core dropped or holds no more). A message
+   * that carried the ones before it (`carries`) stands for them all, so
+   * the backlog starts again from it. It ends at a turn that answered a
+   * message that carried it, or, where none carried it yet, at a turn
+   * that answered one after the limit reset, or at any such turn where
+   * when it resets is not known. None while a turn runs or a message is
+   * on its way to the agent, which then carries them or is answered
+   * with them.
+   */
+  unanswered(carries: (message: Message) => boolean = () => false): Message[] {
+    if (this.current !== null) return [];
+    // The core says it is idle only with nothing of the window's waiting
+    // in it: a message still sent or queued then was left behind.
+    const idle = this.state === "idle";
+    const held = (message: Message) => (message.state === "sent" || message.state === "queued") && idle;
+    const ahead = (message: Message | undefined) =>
+      message !== undefined &&
+      (message.state === "sending" || ((message.state === "sent" || message.state === "queued") && !held(message)));
+    if (this.order.some((id) => ahead(this.messages[id]))) return [];
+    const of = new Map<string, Turn>();
+    for (const turn of Object.values(this.turns))
+      if (!this.#loose.has(turn.id)) for (const id of turn.messages) of.set(id, turn);
+    const untaken = (message: Message) =>
+      message.state === "failed" || message.state === "dropped" || held(message);
+    const items: ({ turn: Turn } | { message: Message })[] = [];
+    const seen = new Set<number>();
+    const listed = new Set<string>();
+    for (const entry of this.entries) {
+      let turn: Turn | undefined;
+      if (entry.kind === "agent") turn = this.#loose.has(entry.turn) ? undefined : this.turns[entry.turn];
+      else if (entry.kind === "user") {
+        turn = of.get(entry.message);
+        const message = this.messages[entry.message];
+        if (turn === undefined && message !== undefined && untaken(message)) {
+          items.push({ message });
+          listed.add(message.id);
+        }
+      }
+      if (turn === undefined || seen.has(turn.id)) continue;
+      seen.add(turn.id);
+      items.push({ turn });
+    }
+    // What never stood in the thread goes where it was sent among the
+    // turns, or last where when is not known.
+    for (const message of this.waiting) {
+      if (listed.has(message.id) || of.has(message.id) || !untaken(message)) continue;
+      const at = message.at;
+      const before =
+        at === null
+          ? -1
+          : items.findIndex((item) => "turn" in item && item.turn.startedAt !== null && item.turn.startedAt > at);
+      items.splice(before === -1 ? items.length : before, 0, { message });
+    }
+    let open = false;
+    let backlog: Message[] = [];
+    let resetsAt: number | null = null;
+    let carried = false;
+    const add = (message: Message) => {
+      if (carries(message)) {
+        backlog = [message];
+        carried = true;
+      } else backlog.push(message);
+    };
+    for (const item of items) {
+      if ("message" in item) {
+        if (open) add(item.message);
+        continue;
+      }
+      const { turn } = item;
+      const messages = turn.messages.map((id) => this.messages[id]).filter((message) => message !== undefined);
+      if (turn.limit !== null) {
+        open = true;
+        resetsAt = turn.limit.resetsAt;
+        messages.forEach(add);
+        continue;
+      }
+      if (!open) continue;
+      if (turn.outcome !== "done") {
+        messages.forEach(add);
+        continue;
+      }
+      const after = resetsAt === null || (turn.startedAt !== null && turn.startedAt >= resetsAt * 1000);
+      if (messages.some(carries) || (messages.length > 0 && !carried && after)) {
+        open = false;
+        backlog = [];
+        resetsAt = null;
+        carried = false;
+      }
+    }
+    return backlog;
+  }
+
+  /** A message that failed to send went with the one sent now, which
+      carried it to the agent: it stands in the thread as taken, where it
+      can no longer be put back to be sent twice. */
+  wentWith(id: string) {
+    const message = this.messages[id];
+    if (message === undefined || message.placed || message.state !== "failed") return;
+    this.#changed();
+    message.state = "taken";
+    message.error = null;
+    this.#place(message);
+  }
+
   /** The messages and commands not standing in the thread, in the order
       sent: what `waiting` holds, and the commands that wait, failed to
       send, or run while a turn does. */
@@ -700,6 +809,10 @@ export class Conversation {
     this.entries = [];
     this.current = null;
     let after: string | null | undefined;
+    // What was said before tells which turns a limit refused, never that
+    // one stops the conversation now.
+    const stoppedAt = this.stoppedAt;
+    const limitHeard = this.#limitHeard;
     this.#laying = true;
     for (const item of history.items) {
       const main = !("parent" in item.event) || item.event.parent === null;
@@ -712,6 +825,8 @@ export class Conversation {
       }
     }
     this.#laying = false;
+    this.stoppedAt = stoppedAt;
+    this.#limitHeard = limitHeard;
     if (after === undefined) after = this.entries[this.entries.length - 1]?.key ?? null;
     const left = this.current;
     this.entries = [...this.entries, ...later];

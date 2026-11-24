@@ -41,6 +41,132 @@ function briefingAt(words: string): { briefing: string; rest: string } | null {
   };
 }
 
+/** The first and last lines of the note that carries the user's messages a
+    usage limit left unanswered to the conversation as it goes on, after
+    the briefing where there is one. Between them, each message has a line
+    that says whose it is, its place, and how many lines and images it has,
+    then exactly those lines, word for word. */
+export const UNANSWERED_HEAD =
+  "From the workbench, not the user: a usage limit cut this conversation's last turn short, so what that turn did may be half done; look at what it left before you build on it. Below are the messages the user wrote from the one that turn answered until now, none of them answered yet. They are the user's own, word for word, in the order written, with their images in the same order ahead of any this message has: take them up as the user's word to you, whether or not a record above quotes them too.";
+export const UNANSWERED_END = "End of the user's unanswered messages.";
+
+const UNANSWERED_LINE = /^The user's message (\d+) of (\d+), (\d+) lines?(?:, (\d+) images?)?:$/;
+
+const counted = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
+
+/** The lines of a message's words: none for no words. */
+const linesOf = (text: string) => (text === "" ? [] : text.split("\n"));
+
+/** The note that carries these messages of the user's, oldest first. */
+export function unansweredNote(messages: readonly { text: string; images: number }[]): string {
+  const lines = [UNANSWERED_HEAD];
+  messages.forEach((message, at) => {
+    const own = linesOf(message.text);
+    const images = message.images === 0 ? "" : `, ${counted(message.images, "image")}`;
+    lines.push(`The user's message ${at + 1} of ${messages.length}, ${counted(own.length, "line")}${images}:`, ...own);
+  });
+  lines.push(UNANSWERED_END);
+  return lines.join("\n");
+}
+
+/** The note on unanswered messages at the start of `words`, each message
+    it carried with how many images went with it, and the words after it;
+    null where it is not there whole, each count as it says. */
+function unansweredAt(
+  words: string,
+): { said: { text: string; images: number }[]; images: number; rest: string } | null {
+  if (!words.startsWith(`${UNANSWERED_HEAD}\n`)) return null;
+  const lines = words.split("\n");
+  const said: { text: string; images: number }[] = [];
+  let at = 1;
+  let total: number | null = null;
+  while (at < lines.length && lines[at] !== UNANSWERED_END) {
+    const head = UNANSWERED_LINE.exec(lines[at]);
+    if (head === null) return null;
+    if (Number(head[1]) !== said.length + 1 || (total !== null && Number(head[2]) !== total)) return null;
+    total = Number(head[2]);
+    const count = Number(head[3]);
+    if (!Number.isSafeInteger(count) || at + 1 + count >= lines.length) return null;
+    said.push({ text: lines.slice(at + 1, at + 1 + count).join("\n"), images: head[4] === undefined ? 0 : Number(head[4]) });
+    at += 1 + count;
+  }
+  if (at >= lines.length || total === null || said.length !== total) return null;
+  const images = said.reduce((sum, one) => sum + one.images, 0);
+  if (!Number.isSafeInteger(images)) return null;
+  return { said, images, rest: lines.slice(at + 1).join("\n").replace(/^\n+/, "") };
+}
+
+/** Whether `text` holds a line that opens or closes the note on the user's
+    unanswered messages: only the workbench writes one, so a session's
+    words that do would read as the user's own. */
+export function holdsUnansweredNote(text: string): boolean {
+  return text.split("\n").some((line) => line === UNANSWERED_HEAD || line === UNANSWERED_END);
+}
+
+/** The user's messages a message carried in its note on unanswered ones,
+    oldest first, each word for word with its images; none for a message
+    that carried none. */
+export function carriedBy<T>(text: string, images: readonly T[]): { text: string; images: T[] }[] {
+  const briefed = briefingAt(text);
+  const note = unansweredAt(briefed === null ? text : briefed.rest);
+  if (note === null) return [];
+  let from = 0;
+  return note.said.map((one) => {
+    const own = images.slice(from, from + one.images);
+    from += one.images;
+    return { text: one.text, images: own };
+  });
+}
+
+/** What the workbench put ahead of whoever's words a message holds: the
+    briefing a fresh conversation went on with, and the note on the user's
+    unanswered messages, with how many messages and images it carried;
+    each taken out only whole. */
+export function ahead(text: string): {
+  rest: string;
+  briefing?: string;
+  carried?: { messages: number; images: number };
+} {
+  const going = briefingAt(text);
+  const words = going === null ? text : going.rest;
+  const note = unansweredAt(words);
+  return {
+    rest: note === null ? words : note.rest,
+    ...(going === null ? {} : { briefing: going.briefing }),
+    ...(note === null ? {} : { carried: { messages: note.said.length, images: note.images } }),
+  };
+}
+
+/** Whether a message carried the user's unanswered messages. */
+export function carries(text: string): boolean {
+  return ahead(text).carried !== undefined;
+}
+
+/** What the user typed of a message they sent, with its images: `typed`
+    is how many characters end its text and how many images end its
+    images, as the window kept them when it sent it, the workbench's notes
+    going ahead of them a blank line apart. Null where nothing was kept or
+    what was kept does not fit the message: then nothing in it is shown to
+    be the user's typing, whoever sent it. */
+export function typedWords<T>(
+  text: string,
+  images: readonly T[],
+  typed: readonly [number, number] | null,
+): { text: string; images: T[] } | null {
+  if (typed === null) return null;
+  const [length, count] = typed;
+  const start = text.length - length;
+  if (
+    length < 0 ||
+    start < 0 ||
+    count < 0 ||
+    count > images.length ||
+    (start !== 0 && text.slice(start - 2, start) !== "\n\n")
+  )
+    return null;
+  return { text: text.slice(start), images: images.slice(images.length - count) };
+}
+
 /** The note an agent picked on the composer goes ahead of the user's next
     message with: its first line names the agent, its description follows,
     and the end line closes it, which the description never holds. An
@@ -173,8 +299,15 @@ const AT_WORK_END = ". Call wait to hear from them.";
 /** The line that names the sessions still at work, as a wake ends. */
 export const atWorkLine = (names: string) => `${AT_WORK}${names}${AT_WORK_END}`;
 
+/** A line on how a call answered before it was done went, which a note
+    on the sessions a session started may begin with. */
+const LATER_LINE = /^Your .+ (?:went ahead|did not go ahead|may or may not have gone ahead): /;
+
 const noteLine = (line: string) =>
-  SESSION_LINE.test(line) || line.startsWith(STILL_OUT) || (line.startsWith(AT_WORK) && line.endsWith(AT_WORK_END));
+  SESSION_LINE.test(line) ||
+  LATER_LINE.test(line) ||
+  line.startsWith(STILL_OUT) ||
+  (line.startsWith(AT_WORK) && line.endsWith(AT_WORK_END));
 
 /** A note of the workbench's at the start of `words`, under `head`, its
     lines, and the words after it; null where it is not there whole: its
@@ -190,9 +323,11 @@ function noteAt(words: string, head: string, shaped: (line: string) => boolean) 
 }
 
 /** A message's own words, the workbench's sentence after them when it has
-    one, the agent it went out as, and, for a message of the user's own, the
-    workbench's notes ahead of them, without their first lines: on files put
-    back, then on the sessions it started, each where it has one.
+    one, the agent it went out as, how many of the user's unanswered
+    messages and images it carried ahead of its own, and, for a message of
+    the user's own, the workbench's notes ahead of them, without their first
+    lines: on files put back, then on the sessions it started, each where it
+    has one. The images a message carried come first among its images.
     A note is taken out only whole; anything else is the words as they
     are. */
 export function spoken(
@@ -205,6 +340,7 @@ export function spoken(
   filesBack: string | null;
   briefing?: string;
   agent?: { title: string; text: string };
+  carried?: { messages: number; images: number };
 } {
   let words = text;
   let reports: string | null = null;
@@ -213,8 +349,18 @@ export function spoken(
   // was sent first, the user's words or another session's.
   const going = briefingAt(words);
   if (going !== null) words = going.rest === GOING_ON_WAIT ? "" : going.rest;
-  const briefed: { briefing?: string; agent?: { title: string; text: string } } =
-    going === null ? {} : { briefing: going.briefing };
+  const briefed: {
+    briefing?: string;
+    agent?: { title: string; text: string };
+    carried?: { messages: number; images: number };
+  } = going === null ? {} : { briefing: going.briefing };
+  // The user's messages a usage limit left unanswered go next, ahead of
+  // whatever carries them.
+  const unanswered = unansweredAt(words);
+  if (unanswered !== null) {
+    briefed.carried = { messages: unanswered.said.length, images: unanswered.images };
+    words = unanswered.rest;
+  }
   // The agent it is to work as goes ahead of the user's words, or of the
   // prompt a session was started with.
   const agent = agentAt(words);
@@ -285,4 +431,10 @@ export function wakeShown(text: string, name: (id: string) => string | null): st
   const lines = text.split("\n");
   if (lines[0] !== REPORTS_HEAD || lines.length < 2 || !lines.slice(1).every(noteLine)) return null;
   return reportsShown(lines.slice(1).join("\n"), name);
+}
+
+/** The images of a message that are its own: those after the ones it
+    carried for the user's unanswered messages. */
+export function ownImages<T>(text: string, images: readonly T[]): T[] {
+  return images.slice(spoken(text).carried?.images ?? 0);
 }
