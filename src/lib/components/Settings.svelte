@@ -765,8 +765,8 @@
               <div class="s-grp">
                 <div class="s-head"><h3 class="s-title">Run</h3></div>
                 <UnreadEntries field={["hooks", "notesOn", "agentsOn"]} />
-                <div class="s-part" data-testid="session-kinds">
-                  <div class="s-card">
+                <div class="s-card">
+                  <div class="s-wrap" data-testid="session-kinds">
                     {#each installed().length > 0 ? installed() : HARNESSES as id (id)}
                       <div class="s-row" data-testid="session-kind" data-agent={id}>
                         <span class="s-name">{harnessLabel(id)}</span>
@@ -796,13 +796,10 @@
                         </div>
                       </div>
                     {/each}
+                    <p class="s-rownote" data-testid="session-kind-when">
+                      A change moves the sessions already open too. Reopen, from a right click on it, moves it now.
+                    </p>
                   </div>
-                  <p class="s-after" data-testid="session-kind-when">
-                    A change also moves that harness's open sessions, each the next time it is at rest and opened. To
-                    move a session now, right-click it and choose Reopen.
-                  </p>
-                </div>
-                <div class="s-card">
                   <div class="s-wrap" data-testid="settings-live">
                     <div class="s-row" data-testid="hooks-everywhere-row">
                       <span class="s-name"
