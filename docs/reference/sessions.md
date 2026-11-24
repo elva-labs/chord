@@ -1534,17 +1534,22 @@ from each conversation the row went on through, the line where the run
 began says it went on from its notes, and the briefing is folded under
 the first message. The old conversation is no longer listed among the
 earlier sessions from the moment the row goes on: the row goes on with
-it.
+it. An id that held nothing is not the row's to go on with, and stays
+listed wherever it turns up.
 
 A fresh conversation is stored by its harness only once something is
 said to it, so a row closed or started again before then holds an id
 nothing is kept under, and so does one whose transcript or Codex thread
 was deleted. The core says nothing is stored only where it looked and
 found nothing: no transcript in the account's folders for the project,
-or for Codex, no thread in its index and no rollout under `sessions/`. A
-folder it could not read says nothing either way, and the conversation
-is resumed whole as before, so the failure shows and the next start can
-find it.
+or for Codex, no thread in its index and no rollout under `sessions/` or
+`archived_sessions/`. Claude Code names a project's folder after its
+path, and where that name runs past 200 characters, by its first 200, a
+dash and a short hash of the path; the core looks under both, and
+where the shortened folder is not there it cannot tell it looked in the
+right place, so it says nothing. A folder it could not read says nothing
+either way, and the conversation is resumed whole as before, so the
+failure shows and the next start can find it.
 
 Where nothing is stored under the id, the row goes on with the newest
 conversation it went on through that is stored, judged as its own would
@@ -1554,13 +1559,17 @@ whole. Where none is stored, the row goes on as a fresh conversation
 under a new id, briefed from its notes where it has any, the briefing
 saying no transcript was found, and Resume whole is not offered. With
 notes switched off the core still looks, and the row goes on the same
-way with no briefing. Only the id of a row whose run is up is resumed
-whole however it reads.
+way with no briefing. The id of a row whose run is up is resumed whole
+however it reads, and so is that of a row under an account the window
+has not adopted, as when the settings could not be read: the core would
+have looked in the agent's own folders, not the account's.
 
 A conversation row's thread says what happened in a line under the
 earlier messages, such as that the last run kept no record and the row
 goes on from the conversation before it, or goes on as a fresh
-conversation from its notes. A row that held only that id and has no
+conversation from its notes. The line names the id that held nothing by
+its first eight characters, which the earlier sessions' filter finds it
+by should it be stored where the core did not look. A row that held only that id and has no
 notes lost nothing, and starts fresh without a line. A terminal row goes
 on the same way with no line. The session can be written to at once. A
 core too old to say is taken as finding the conversation.
