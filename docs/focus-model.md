@@ -168,7 +168,9 @@ screen can do.
 action the keys can do, each with its shortcut, and the ones that have none: new
 session, new session in the project on screen, open project and open remote
 project, and Preview file or Show source for the file in the viewer when it
-is Markdown, HTML, Mermaid or SVG (the commands have no shortcut). Picking an
+is Markdown, HTML, Mermaid or SVG (the commands have no shortcut). With a
+text file shown as text in the editor, Turn word wrap on or Turn word wrap off
+is listed too, with its shortcut, in place of the action of that name. Picking an
 action does what its shortcut does. The first entry goes to
 the next session that needs you, as <kbd>Cmd</kbd><kbd>.</kbd> does (see
 [sessions](reference/sessions.md#active-and-inactive)). It shows how many are waiting, and with none it

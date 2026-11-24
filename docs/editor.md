@@ -101,6 +101,20 @@ disk: with unsaved edits the foot says they show the saved version.
 A file that is binary, not UTF-8 or larger than 4 MB says so and shows as
 the viewer shows it.
 
+## Long lines
+
+A long line runs off the editor's edge and the editor scrolls sideways, until
+word wrap is on. On, a line breaks at the edge, over as many rows as it
+needs, and nothing sideways is left to scroll. The choice is one for every
+file, kept across restarts, and off to begin with. It is turned on and off
+by <kbd>Alt</kbd><kbd>Cmd</kbd><kbd>Z</kbd>, by Turn word wrap on or Turn
+word wrap off in the command palette, or by Wrap long lines in the editor in
+Settings. The shortcut can be changed in Settings under Keys, in the
+Editor group. The command is listed with a text file in the editor, shown as
+its text; it takes effect at once, with the caret, the selection and the
+unsaved edits where they were. The viewer outside editor mode does not
+wrap.
+
 ## Saving
 
 Nothing is written until <kbd>Cmd</kbd><kbd>S</kbd>, or Save in the File
