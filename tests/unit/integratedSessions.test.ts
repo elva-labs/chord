@@ -356,6 +356,74 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(back.ownTitle).toBe(true);
   });
 
+  /** A core that judges each conversation by `judge`, and says of one
+      it has no transcript of that it is missing, as the core does: a
+      fresh run's id is stored under nothing until a message is sent. */
+  function storedOnly(judge: (session: string) => unknown) {
+    const core = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    const judged: string[] = [];
+    core.goingOn = async (options: { session: string }) => {
+      judged.push(options.session);
+      if (kept.has(options.session)) return judge(options.session);
+      return { context: null, idle: null, goesOn: false, briefing: null, missing: true };
+    };
+    const kept = new Set<string>();
+    return { judged, kept };
+  }
+
+  it("goes on from the conversation it went on from where the fresh run's id was never stored, after a restart", async () => {
+    fake.transcript("old-conversation", written(1_000_000, "Count the files", "There are 12."));
+    let cold = true;
+    const { kept } = storedOnly(() => (cold ? COLD : WARM));
+    kept.add("old-conversation");
+    const { key } = await started({ resumedFrom: "old-conversation" });
+    // It went on fresh, and its id is the fresh run's, which nothing was
+    // said to.
+    const fresh = byKey(key)!.id!;
+    expect(fresh).not.toBe("old-conversation");
+    expect(wentOn(key)).toMatchObject({ from: "old-conversation" });
+
+    // The app quits and comes back: the row is reopened by the fresh id.
+    stopListening();
+    resetSessions();
+    resetIntegrated();
+    resetGoingOn();
+    stopListening = await listenIntegrated();
+    cold = false;
+    const row = reopened(PROJECT, fresh, "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    // It resumes the conversation that is stored, never the fresh id.
+    const starts = fake.calls.filter((call) => call.method === "start");
+    expect(starts.at(-1)).toMatchObject({ options: { session: "old-conversation" } });
+    expect(byKey(row.key)!.status).not.toBe("exited");
+    // The thread says so, and draws what the stored one said.
+    const conversation = conversationOf(row.key);
+    expect(conversation.entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []))).toEqual([
+      "Claude Code kept no record of this session's last run, so it goes on from the conversation before it.",
+    ]);
+    await vi.waitFor(() => expect(conversation.earlier).toBe("read"));
+    expect(agentTexts(conversation)).toEqual(["There are 12."]);
+  });
+
+  it("goes on fresh from its notes where nothing of its conversation is stored, and says so", async () => {
+    storedOnly(() => WARM);
+    const row = reopened(PROJECT, "never-stored", "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    const starts = fake.calls.filter((call) => call.method === "start");
+    expect(starts.at(-1)).toMatchObject({ options: { session: undefined } });
+    expect(wentOn(row.key)).toMatchObject({ from: "never-stored" });
+    const conversation = conversationOf(row.key);
+    expect(conversation.entries.flatMap((entry) => (entry.kind === "note" ? [entry.text] : []))).toEqual([
+      "Claude Code kept no record of this session's last run, nor of the conversations before it, so it goes on as a fresh conversation from its notes.",
+    ]);
+    // The user gets on: what they send reaches the fresh run.
+    send(row.key, "Where are we?");
+    fake.turn(handleOf(row.key)!, "Here.");
+    expect(agentTexts(conversation)).toContain("Here.");
+  });
+
   async function large() {
     const row = await started();
     fake.emit(row.handle, { type: "context", used: 400_000, size: 1_000_000 });

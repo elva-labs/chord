@@ -46,6 +46,9 @@ export function layEarlier(
   spoken = true,
 ): Promise<void> {
   const id = session.resumedFrom ?? session.id;
+  // The chain is read as the start finds it, before taking it up can
+  // drop an id that held nothing from it.
+  const chain = id === null ? [] : lineageOf(id);
   conversation.earlier = "loading";
   const laid = (async () => {
     let history: IntegratedHistory | null = null;
@@ -67,11 +70,15 @@ export function layEarlier(
       if (id !== null) {
         // A conversation that went on from notes draws the ones it went on
         // from above its own, each read on its own; one that cannot be
-        // read is passed over.
-        const before = lineageOf(id).slice(0, -1);
+        // read is passed over, and so is its own where nothing is kept of
+        // it while one before it was read.
+        const before = chain.slice(0, -1);
         const earlier = await Promise.all(before.map((one) => read(one).catch(() => null)));
-        const own = await read(id);
         const items = earlier.flatMap((one) => one?.items ?? []);
+        const own = await read(id).catch((error: unknown) => {
+          if (items.length === 0) throw error;
+          return { items: [], cut: false };
+        });
         history =
           own === null || items.length === 0
             ? own

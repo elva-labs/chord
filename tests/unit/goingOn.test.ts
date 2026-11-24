@@ -3,13 +3,15 @@ import type { GoingOn, GoingOnOptions } from "$lib/core";
 import type { Session } from "$lib/sessions.svelte";
 
 let answer: GoingOn = { context: null, idle: null, goesOn: false, briefing: null };
+/** Answers by conversation id, ahead of `answer`. */
+const answers: Record<string, GoingOn> = {};
 const asked: GoingOnOptions[] = [];
 
 vi.mock("$lib/core", () => ({
   core: () => ({
     async goingOn(options: GoingOnOptions) {
       asked.push(options);
-      return answer;
+      return answers[options.session] ?? answer;
     },
   }),
 }));
@@ -21,7 +23,9 @@ const {
   briefingFor,
   identified,
   leftBy,
+  lineage,
   lineageOf,
+  lostAt,
   onWentOn,
   resetGoingOn,
   spoke,
@@ -51,6 +55,7 @@ beforeEach(() => {
   resetGoingOn();
   localStorage.clear();
   asked.length = 0;
+  for (const id of Object.keys(answers)) delete answers[id];
   answer = { context: 40_000, idle: 60, goesOn: false, briefing: null };
   onWentOn(null);
 });
@@ -126,6 +131,58 @@ describe("taking a conversation up again", () => {
     expect(wentOnFrom("old-id")).toBe("newer-id");
     expect(wentOnFrom("old-i")).toBe("newer-id");
     expect(wentOnFrom("other")).toBeNull();
+  });
+
+  it("goes on with the newest stored conversation of the chain where nothing is stored under the id, and drops that id from it", async () => {
+    const moved: [string, string][] = [];
+    onWentOn((from, to) => moved.push([from, to]));
+    // old-id went on as new-id, never spoken to, so nothing is stored
+    // under new-id, which the row kept.
+    answer = COLD;
+    await takeUp(row());
+    identified("row-1", "new-id");
+    moved.length = 0;
+    answers["new-id"] = { context: null, idle: null, goesOn: false, briefing: "NOTES ALONE", missing: true };
+    answer = { context: 40_000, idle: 60, goesOn: false, briefing: null };
+    expect(await takeUp(row({ resumedFrom: "new-id" }))).toBe("old-id");
+    expect(asked.map((one) => one.session).slice(-2)).toEqual(["new-id", "old-id"]);
+    expect(wentOn("row-1")).toBeNull();
+    expect(lostAt("row-1")).toEqual({ id: "new-id", to: "old-id" });
+    expect(lostAt("row-1")).toBeNull();
+    expect(lineage()).toEqual({});
+    expect(moved).toEqual([["new-id", "old-id"]]);
+    // Cold and large, the stored one goes on from its notes as its own would.
+    answer = COLD;
+    await takeUp(row());
+    identified("row-1", "new-id");
+    expect(await takeUp(row({ resumedFrom: "new-id" }))).toBeNull();
+    expect(wentOn("row-1")).toMatchObject({ from: "old-id", briefing: "BRIEFING" });
+    identified("row-1", "newer-id");
+    expect(lineage()).toEqual({ "newer-id": "old-id" });
+    expect(wentOnFrom("old-id")).toBe("newer-id");
+  });
+
+  it("goes on fresh from the notes alone where nothing of the chain is stored, keeping the chain", async () => {
+    answer = COLD;
+    await takeUp(row());
+    identified("row-1", "new-id");
+    const nothing = { context: null, idle: null, goesOn: false, briefing: "NOTES ALONE", missing: true };
+    answers["new-id"] = nothing;
+    answers["old-id"] = { ...nothing, briefing: null };
+    expect(await takeUp(row({ resumedFrom: "new-id" }))).toBeNull();
+    expect(wentOn("row-1")).toEqual({ from: "new-id", context: null, briefing: "NOTES ALONE", spoken: false });
+    expect(lostAt("row-1")).toEqual({ id: "new-id", to: null });
+    identified("row-1", "fresh-id");
+    expect(lineageOf("fresh-id")).toEqual(["old-id", "new-id", "fresh-id"]);
+    // With no notes either, it still starts fresh, with nothing to brief.
+    answers["lonely"] = { ...nothing, briefing: null };
+    expect(await takeUp(row({ key: "row-2", resumedFrom: "lonely" }))).toBeNull();
+    expect(wentOn("row-2")).toMatchObject({ from: "lonely", briefing: null });
+  });
+
+  it("takes a core that does not say what is missing as finding it", async () => {
+    expect(await takeUp(row())).toBe("old-id");
+    expect(lostAt("row-1")).toBeNull();
   });
 
   it("offers to resume whole only until anything is said to the fresh run", async () => {
