@@ -227,6 +227,33 @@ const SCENES: Record<string, { extra?: Record<string, unknown>; reach: (page: Pa
   },
 };
 
+/** What a settings tab opens before its cards are walked: a fold, an add
+    form, or a row under the pointer. */
+const SETTINGS_TABS: Record<string, (page: Page) => Promise<void>> = {
+  sessions: async (page) => {
+    await page.getByTestId("hooks-overrides").click();
+    await expect(page.getByTestId("hooks-overrides")).toHaveAttribute("aria-expanded", "true");
+  },
+  agents: async (page) => {
+    await page.getByTestId("agent-new").hover();
+  },
+  setup: async (page) => {
+    await page.getByTestId("setup-check").hover();
+  },
+  accounts: async (page) => {
+    await page.getByTestId("account-add-open").click();
+    await expect(page.getByTestId("account-form")).toBeVisible();
+  },
+  plugins: async (page) => {
+    await page.getByTestId("plugin-add-source").click();
+    await expect(page.getByTestId("plugin-add")).toBeVisible();
+  },
+  keys: async (page) => {
+    await page.getByTestId("chord-file.close").hover();
+  },
+  notifications: async () => {},
+};
+
 for (const look of LOOKS)
   for (const appearance of APPEARANCES) {
     test.describe(`${look}, ${appearance}`, () => {
@@ -236,6 +263,19 @@ for (const look of LOOKS)
           await scene.reach(page);
           await walk(page);
         });
+
+      test("nothing solid in a card: every settings tab, with its fold or form open", async ({ page }) => {
+        await open(page, look, appearance);
+        await page.keyboard.press(`${MOD}+,`);
+        await expect(page.getByTestId("settings")).toBeVisible();
+        expect(await inCard(page, "settings")).toBe(true);
+        for (const [tab, reach] of Object.entries(SETTINGS_TABS)) {
+          await page.getByTestId(`settings-tab-${tab}`).click();
+          await expect(page.getByTestId("settings-heading")).toHaveText(new RegExp(tab, "i"));
+          await reach(page);
+          await walk(page);
+        }
+      });
 
       test("nothing solid in a card: the menus over the files and the palette", async ({ page }) => {
         await open(page, look, appearance);

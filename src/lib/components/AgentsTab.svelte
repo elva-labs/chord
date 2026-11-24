@@ -531,7 +531,7 @@
   .alist {
     display: flex;
     flex-direction: column;
-    background: var(--surface);
+    background: var(--s-card-fill, var(--clear-surface));
     border: 1px solid var(--s-card-edge, var(--rule));
     border-radius: var(--card-radius);
     box-shadow: var(--s-card-shadow, none);
@@ -600,7 +600,7 @@
   }
 
   .arow.on .av {
-    background: var(--surface);
+    background: var(--paint-surface);
     color: var(--accent);
   }
 

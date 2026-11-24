@@ -135,7 +135,7 @@
   }
 
   .card {
-    background: var(--surface);
+    background: var(--s-card-fill, var(--clear-surface));
     border-radius: var(--card-radius);
     box-shadow: inset 0 0 0 1px var(--rule);
     margin-bottom: 10px;
