@@ -1040,13 +1040,15 @@ between runs and for the last thousand messages the user sent in any
 session, how many characters and images at the end of each message the
 user typed. After a reload or a restart the history is laid again from
 the transcript, which records the limit's refusal of each turn, so the
-refused turns and the user's words are both known again. A message the
-window kept no count for, sent by an earlier version or pushed out by
-later ones, is read for its words with the workbench's notes taken off;
-where a line of a note is still left in, the message is left out of the
-note, so the workbench's words are never passed off as the user's. A
-message from another session, a plugin or the workbench passes on what it
-carried, and its own words are not carried as the user's.
+refused turns and the user's words are both known again. That count is
+all that shows a message to be the user's. A message from another
+session, a plugin or the workbench passes on what it carried, and its own
+words are not carried as the user's. A message the window kept no count
+for and whose sender it does not know, sent by an earlier version, pushed
+out by later ones or lost with the window's storage, is left out of the
+note, so nothing unknown is passed off as the user's word. The thread
+says under the message that went on how many could not go with it, once,
+and asks the user to send them again.
 
 The note goes after the briefing's end line, outside the quoted records,
 and every message in it is framed by a line that says how many lines it
@@ -1059,11 +1061,13 @@ note, so the user's words are quoted once.
 
 Where it stops: Codex is not carried for, since it does not say a limit
 ended its turn. A message that failed to send and carried nothing is not
-kept between runs, so one that failed before a restart is not carried
-after it. A message the window still has on its way, because sending it
-never settled, holds the others back until it settles. A message the core
-reported sent but that the agent never took is carried once the core is
-idle, and would go twice if the core then took it after all.
+kept between runs, so one that failed before a reload or a restart is not
+carried after it. A message the window can show neither to be the user's
+typing nor to be another's is not carried at all: the user is told to
+send it again. A message the window still has on its way, because sending
+it never settled, holds the others back until it settles. A message the
+core reported sent but that the agent never took is carried once the core
+is idle, and would go twice if the core then took it after all.
 
 ### Reading the limits with no session
 
