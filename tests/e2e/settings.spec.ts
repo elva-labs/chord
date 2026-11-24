@@ -27,6 +27,23 @@ test("opens on the chord and from the menu, and closes on Escape", async ({
   await expect(page.getByTestId("settings")).toBeHidden();
 });
 
+// What a control is for reaches the keyboard and a screen reader in
+// words on the page, not only under the pointer.
+test("says in words what a font, the custom styles and a fold's number are", async ({ page }) => {
+  await page.keyboard.press(`${MOD}+,`);
+  await page.getByTestId("settings-tab-appearance").click();
+  for (const kind of ["mono", "sans"]) {
+    await expect(page.getByTestId(`${kind}-hint`)).toHaveText("System is what the machine has.");
+    await expect(page.getByTestId(`${kind}-system`)).toHaveAccessibleDescription("System is what the machine has.");
+    await expect(page.getByTestId(`${kind}-system`)).not.toHaveAttribute("title");
+  }
+  const note = (await page.getByTestId("styles-note").innerText()).trim();
+  expect(note).not.toBe("");
+  await expect(page.getByTestId("styles")).toHaveAccessibleName(new RegExp(`^Custom styles\\s*${note.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  await page.getByTestId("settings-tab-sessions").click();
+  await expect(page.getByTestId("hooks-overrides-count")).toHaveText("0 of their own");
+});
+
 // Tabs down the left, one section's worth of settings beside them.
 test.describe("the tabs", () => {
   test("show one section at a time", async ({ page }) => {

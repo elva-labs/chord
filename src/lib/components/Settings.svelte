@@ -282,9 +282,9 @@
     return `${summary(plugin)} · ${stateLabel(plugin)}`;
   }
 
-  /** Whether the background image's row is open: from the start once
-      any palette has an image. */
-  let backgroundOpen = $state(Object.keys(theme.backgrounds ?? {}).length > 0);
+  /** Whether the background image's row is open: from the start while
+      the palette in use has an image, which is what the row's end says. */
+  let backgroundOpen = $state(Object.hasOwn(theme.backgrounds ?? {}, theme.palette));
 
   /** The projects the hooks answer covers: the open ones, and the
       orchestrator folder while the sessions pane lists it. */
@@ -657,7 +657,12 @@
               <UnreadEntries field={["terminalFont", "interfaceFont"]} />
               <div class="s-card">
                 <div class="s-row">
-                  <span class="s-name">Terminal font</span>
+                  <span class="s-name"
+                    >Terminal font{#each TERMINAL_FONTS.filter((font) => font.hint) as font (font.name)}<small
+                        id="mono-hint-{font.name}"
+                        data-testid="mono-hint">{font.label} is {font.hint}.</small
+                      >{/each}</span
+                  >
                   <div class="s-ctl">
                     <div class="s-seg" role="radiogroup" aria-label="Terminal font">
                       {#each TERMINAL_FONTS as font (font.name)}
@@ -667,7 +672,7 @@
                           aria-checked={theme.mono === font.name}
                           class:on={theme.mono === font.name}
                           onclick={() => setMono(font.name)}
-                          title={font.hint ? `${font.hint[0].toUpperCase()}${font.hint.slice(1)}` : null}
+                          aria-describedby={font.hint ? `mono-hint-${font.name}` : null}
                           style:font-family={font.family}
                           data-testid="mono-{font.name}">{font.label}</button
                         >
@@ -676,7 +681,12 @@
                   </div>
                 </div>
                 <div class="s-row">
-                  <span class="s-name">Interface font</span>
+                  <span class="s-name"
+                    >Interface font{#each INTERFACE_FONTS.filter((font) => font.hint) as font (font.name)}<small
+                        id="sans-hint-{font.name}"
+                        data-testid="sans-hint">{font.label} is {font.hint}.</small
+                      >{/each}</span
+                  >
                   <div class="s-ctl">
                     <div class="s-seg" role="radiogroup" aria-label="Interface font">
                       {#each INTERFACE_FONTS as font (font.name)}
@@ -686,7 +696,7 @@
                           aria-checked={theme.sans === font.name}
                           class:on={theme.sans === font.name}
                           onclick={() => setSans(font.name)}
-                          title={font.hint ? `${font.hint[0].toUpperCase()}${font.hint.slice(1)}` : null}
+                          aria-describedby={font.hint ? `sans-hint-${font.name}` : null}
                           style:font-family={font.family}
                           data-testid="sans-{font.name}">{font.label}</button
                         >
@@ -720,8 +730,8 @@
                   </div>
                 {/if}
                 <div class="s-row">
-                  <span class="s-name"
-                    ><span id="styles-label">Custom styles</span><small data-testid="styles-note">
+                  <span class="s-name" id="styles-label"
+                    ><span>Custom styles</span><small data-testid="styles-note">
                       {#if userStyles.problem !== null}
                         Not used, for the reason below.
                       {:else if userStyles.css === ""}
@@ -779,6 +789,9 @@
                         </div>
                       </div>
                     {/each}
+                    <p class="s-rownote" data-testid="session-kind-when">
+                      A change moves the sessions already open too. Reopen, from a right click on it, moves it now.
+                    </p>
                   </div>
                   <div class="s-wrap" data-testid="settings-live">
                     <div class="s-row" data-testid="hooks-everywhere-row">
@@ -808,7 +821,7 @@
                           <span class="s-chev" class:rot={overridesOpen}><Icon name="chev" size={12} /></span>
                           By project
                         </span>
-                        <span class="s-value" aria-label="{overridden} with an answer of their own">{overridden}</span>
+                        <span class="s-value" data-testid="hooks-overrides-count">{overridden} of their own</span>
                       </button>
                     {/if}
                     {#if overridesOpen && hooked.length > 0}
@@ -887,9 +900,6 @@
                     </div>
                   </div>
                 </div>
-                <p class="s-after" data-testid="session-kind-when">
-                  A change moves the sessions already open too. Reopen, from a right click on it, moves it now.
-                </p>
               </div>
 
               <div class="s-grp">
@@ -982,7 +992,7 @@
           {:else if tab === "agents"}
             <AgentsTab bind:this={agentsTab} />
           {:else if tab === "setup"}
-            <section class="setup" data-testid="settings-setup">
+            <section data-testid="settings-setup">
               <SetupChecks />
               {#if setupDemand}
                 <p class="s-after" role="status" data-testid="setup-demand">{setupDemand}</p>
@@ -1122,8 +1132,8 @@
                         <span class="s-chev" class:rot={accountOverridesOpen}><Icon name="chev" size={12} /></span>
                         By project
                       </span>
-                      <span class="s-value" aria-label="{accountOverridden} with an account of their own"
-                        >{accountOverridden}</span
+                      <span class="s-value" data-testid="account-overrides-count"
+                        >{accountOverridden} of their own</span
                       >
                     </button>
                   {/if}
@@ -1217,6 +1227,9 @@
                     {/if}
                   </div>
                 </div>
+                {#if source.error}
+                  <p class="s-after bad" data-testid="plugin-source-error">{source.error}</p>
+                {/if}
                 {#if source.plugins.length > 0}
                   <div class="s-card">
                     {#each source.plugins as plugin (plugin.name)}
@@ -1275,9 +1288,6 @@
                       {/if}
                     {/each}
                   </div>
-                {/if}
-                {#if source.error}
-                  <p class="s-after bad">{source.error}</p>
                 {/if}
               </div>
             {/each}
@@ -1385,7 +1395,7 @@
                 <div class="s-head"><h3 class="s-title">{group.name}</h3></div>
                 <div class="s-card dense">
                   {#each group.actions as action (action.key)}
-                    <div class="s-row">
+                    <div class="s-row" class:problem={problem?.action === action.key}>
                       <span class="s-name"
                         >{action.label}{#if action.key === "file.close" && also !== null}<small
                             data-testid="chord-also">Also {describe(also)}, which works in a terminal</small
@@ -1445,8 +1455,13 @@
 
   /* One size for every tab, so nothing moves when the tab changes: the
      tabs in a column on the left, and the tab shown beside them. */
+  /* The gutter is measured from the dialog's outer edge, so what meets
+     the border takes its line off, and --title-top puts the titles'
+     capitals a gutter from the top in either look. */
   .dialog {
     --gutter: 28px;
+    --edge: 1px;
+    --title-top: 16px;
     width: min(940px, 92vw);
     height: min(740px, 92vh);
     display: grid;
@@ -1455,14 +1470,13 @@
     border: var(--edge) solid var(--pane-border-on);
     border-radius: var(--radius-pane);
     font-family: var(--chrome);
-  /* The gutter is measured from the dialog's outer edge, so what meets
-     the border takes its line off, and --title-top puts the titles'
-     capitals a gutter from the top in either look. */
     color: var(--ink);
     overflow: hidden;
-    --edge: 1px;
-    --title-top: 16px;
     outline: none;
+  }
+
+  :global(:root[data-look="modern"]) .dialog {
+    --title-top: 18px;
   }
 
   /* The tabs stand on a ground a shade below the dialog's own. A tab's
@@ -1475,10 +1489,6 @@
     min-height: 0;
     padding: 0 calc(var(--gutter) / 2) 12px calc(var(--gutter) / 2 - var(--edge));
     background: var(--pane-bg);
-  :global(:root[data-look="modern"]) .dialog {
-    --title-top: 18px;
-  }
-
     border-right: 1px solid var(--divider, var(--rule));
     overflow-y: auto;
     scrollbar-width: thin;

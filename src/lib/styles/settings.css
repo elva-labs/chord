@@ -1,7 +1,8 @@
 /* The grid every tab of the settings is drawn on: a section is a line of
    words over a card of rows, a row is a name and its control, and every
-   control is one height. The classes are shared by the components the
-   tabs are made of, so they carry a prefix rather than a scope. */
+   control is one height. The settings' own component draws its tabs with
+   these classes, and the setup rows overrule a few of them inside the
+   dialog, so they carry a prefix rather than a scope. */
 
 .s-dialog {
   --s-ground: var(--bg);
@@ -109,6 +110,11 @@
   color: var(--del);
 }
 
+/* A note on a section's head stands between the head and the card. */
+.s-head + .s-after {
+  margin: -2px 2px 8px;
+}
+
 .s-card {
   background: var(--s-card-fill);
   border: 1px solid var(--s-card-edge);
@@ -206,6 +212,21 @@
   font-size: 12px;
   line-height: 1.45;
   color: var(--del);
+}
+
+/* The row a problem line is about says so in its name. */
+.s-row.problem .s-name {
+  color: var(--del);
+}
+
+/* A line of words on the row above it, as part of that row. */
+.s-rownote {
+  margin: -4px 0 0;
+  padding: 0 14px 9px;
+  max-width: 72ch;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
 }
 
 /* A choice of a few, one of them taken. */

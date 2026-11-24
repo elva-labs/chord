@@ -1244,8 +1244,9 @@ test.describe("how sessions run, in the settings", () => {
     const when = page.getByTestId("session-kind-when");
     await expect(when).toContainText("A change moves the sessions already open too");
     await expect(when).toContainText("Reopen, from a right click on it, moves it now.");
-    const last = (await codex.boundingBox())!;
+    const last = (await codex.getByTestId("session-kind-only").boundingBox())!;
     expect((await when.boundingBox())!.y).toBeGreaterThanOrEqual(last.y + last.height);
+    expect(await when.evaluate((el) => el.parentElement?.dataset.testid)).toBe("session-kinds");
   });
 
   test("offers it for any agent the core says it can drive", async ({ page }) => {
