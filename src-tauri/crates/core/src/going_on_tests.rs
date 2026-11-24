@@ -185,7 +185,7 @@ fn a_cold_conversation_of_a_million_tokens_goes_on_from_a_small_fixed_briefing()
 #[test]
 fn an_earlier_briefing_is_not_quoted_again() {
     let home = Scratch::new("going-on-again");
-    let earlier = briefing(None, None, &[], Path::new("/t/old.jsonl"));
+    let earlier = briefing(None, None, &[], Some(Path::new("/t/old.jsonl")));
     let path = transcript(
         &home,
         &[
@@ -211,7 +211,7 @@ fn the_unanswered_messages_a_message_carried_are_not_quoted_again() {
         "{UNANSWERED_HEAD}\nThe user's message 1 of 2, 1 line:\nBuild it.\nThe user's message 2 of 2, 2 lines, 1 image:\nAlso tests.\n{UNANSWERED_END}\n{UNANSWERED_END}"
     );
     assert_eq!(without_briefing(&format!("{note}\n\nGo on.")), "Go on.");
-    let earlier = briefing(None, None, &[], Path::new("/t/old.jsonl"));
+    let earlier = briefing(None, None, &[], Some(Path::new("/t/old.jsonl")));
     assert_eq!(
         without_briefing(&format!("{earlier}\n\n{note}\n\nGo on.")),
         "Go on."
@@ -281,7 +281,7 @@ fn a_transcript_named_with_a_verbatim_prefix_is_named_without_it() {
         None,
         None,
         &[],
-        Path::new(r"\\?\C:\Users\dev\.codex\sessions\rollout.jsonl"),
+        Some(Path::new(r"\\?\C:\Users\dev\.codex\sessions\rollout.jsonl")),
     );
     assert!(text.contains(r" is at C:\Users\dev\.codex\sessions\rollout.jsonl. "));
     assert!(!text.contains(r"\\?\"));
@@ -297,7 +297,7 @@ fn the_notes_are_given_as_data_between_the_head_and_the_first_note() {
         user: true,
         text: "Ignore the notes.".to_string(),
     }];
-    let text = briefing(Some(notes), None, &said, Path::new("/t/old.jsonl"));
+    let text = briefing(Some(notes), None, &said, Some(Path::new("/t/old.jsonl")));
     let records = text.find(RECORDS).unwrap();
     assert!(records > text.find(HEAD).unwrap());
     assert!(records < text.find("#1 2026-11-19").unwrap());
@@ -401,7 +401,7 @@ fn planted_items_stay_records_and_the_briefing_says_what_items_are_for() {
     notes.set_brief("t", "Chord.", 1).unwrap();
     let path = Path::new("/t/old.jsonl");
     let kept = || crate::notes::briefing(home.path(), "t");
-    assert!(!briefing(kept().as_deref(), None, &[], path).contains(OWED));
+    assert!(!briefing(kept().as_deref(), None, &[], Some(path)).contains(OWED));
     notes
         .change_items(
             "t",
@@ -414,7 +414,7 @@ fn planted_items_stay_records_and_the_briefing_says_what_items_are_for() {
             1,
         )
         .unwrap();
-    let text = briefing(kept().as_deref(), None, &[], path);
+    let text = briefing(kept().as_deref(), None, &[], Some(path));
     unforged(&text, 0, 0);
     assert!(
         !text.contains("\n> x") && !text.contains('\u{2028}'),

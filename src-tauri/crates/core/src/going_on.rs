@@ -169,12 +169,13 @@ fn without_unanswered(text: &str) -> &str {
 /// and list as the notes module gives them, each line of a record already
 /// quoted; the quoted messages are quoted here. The transcript is named
 /// without a Windows `\\?\` prefix where it can do without one, as a path
-/// every tool the agent has opens.
+/// every tool the agent has opens; with none, the briefing says no
+/// transcript was found.
 pub fn briefing(
     notes: Option<&str>,
     began: Option<&str>,
     said: &[Quoted],
-    transcript: &Path,
+    transcript: Option<&Path>,
 ) -> String {
     let mut text = String::from(HEAD);
     text.push_str("\n\n");
@@ -211,13 +212,18 @@ pub fn briefing(
             text.push_str(&quoted(&cut(words, SAID_MOST)));
         }
     }
-    text.push_str(&format!(
-        "\n\nThe whole earlier conversation is at {}. When the user refers to something neither the notes nor the above cover, read the matching notes first, then search that file for the detail with your own tools; never read it whole. Keep notes from here on as before.\n{END}",
-        dunce::simplified(transcript)
-            .display()
-            .to_string()
-            .replace(LINE_BREAKS, " ")
-    ));
+    match transcript {
+        Some(transcript) => text.push_str(&format!(
+            "\n\nThe whole earlier conversation is at {}. When the user refers to something neither the notes nor the above cover, read the matching notes first, then search that file for the detail with your own tools; never read it whole. Keep notes from here on as before.\n{END}",
+            dunce::simplified(transcript)
+                .display()
+                .to_string()
+                .replace(LINE_BREAKS, " ")
+        )),
+        None => text.push_str(&format!(
+            "\n\nNo transcript of the earlier conversation was found, so the notes are all that is kept of it. When the user refers to something they do not cover, say so and ask. Keep notes from here on as before.\n{END}"
+        )),
+    }
     text
 }
 
@@ -232,6 +238,23 @@ pub struct GoingOn {
     pub idle: Option<u64>,
     pub goes_on: bool,
     pub briefing: Option<String>,
+    /// No transcript or rollout of it was found: nothing is stored under
+    /// its id, and resuming it fails. The briefing then holds its notes
+    /// alone, where it has any, for a fresh conversation to go on with.
+    pub missing: bool,
+}
+
+/// What the window is told of a conversation nothing is stored under: it
+/// is missing, and its notes, where it has any, are a briefing to go on
+/// with.
+pub fn missing(notes: impl FnOnce(Option<i64>) -> Option<String>) -> GoingOn {
+    GoingOn {
+        context: None,
+        idle: None,
+        goes_on: false,
+        briefing: notes(None).map(|notes| briefing(Some(&notes), None, &[], None)),
+        missing: true,
+    }
 }
 
 /// How a Claude Code conversation is taken up again: from its notes when
@@ -278,6 +301,7 @@ fn judged(
                     idle: None,
                     goes_on: false,
                     briefing: None,
+                    missing: false,
                 }
             }
         },
@@ -340,13 +364,14 @@ fn decided(
             .map(|standing| (standing.at / 1000) as i64);
         let notes = notes(since);
         let (began, said) = said();
-        briefing(notes.as_deref(), began.as_deref(), &said, transcript)
+        briefing(notes.as_deref(), began.as_deref(), &said, Some(transcript))
     });
     GoingOn {
         context: standing.map(|standing| standing.context),
         idle: standing.map(|standing| now.saturating_sub(standing.at) / 1000),
         goes_on,
         briefing,
+        missing: false,
     }
 }
 

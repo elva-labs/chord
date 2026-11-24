@@ -1510,7 +1510,9 @@ impl Core {
     /// fresh one from the briefing this answers with. With `always` it
     /// goes on from the briefing whatever its size and however long it
     /// rested. Whole for any other agent, while notes are switched off,
-    /// and where no transcript or rollout of it is found.
+    /// and for a Codex conversation whose index cannot be read. Where no
+    /// transcript of it is found, or Codex's index holds no rollout of it,
+    /// it is missing, with its notes alone as the briefing.
     #[allow(clippy::too_many_arguments)]
     pub fn taken_up(
         &self,
@@ -1527,6 +1529,7 @@ impl Core {
             idle: None,
             goes_on: false,
             briefing: None,
+            missing: false,
         };
         let Some(home) = self.home.as_ref() else {
             return Ok(whole);
@@ -1539,6 +1542,9 @@ impl Core {
         let now = crate::notes::now() as u64 * 1000;
         if agent == "codex" {
             let codex_home = account::codex_home(home, config_dir, &environment.vars);
+            if crate::codex::thread_missing(&codex_home, session) {
+                return Ok(crate::going_on::missing(notes));
+            }
             let Some(rollout) = crate::codex::rollout_path(&codex_home, session) else {
                 return Ok(whole);
             };
@@ -1549,7 +1555,7 @@ impl Core {
         }
         let dir = account::claude_dir(home, config_dir, &environment.vars);
         let Some(path) = crate::claude_history::find(&dir, project, cwd, session) else {
-            return Ok(whole);
+            return Ok(crate::going_on::missing(notes));
         };
         // A conversation held at a point it went back to is judged and
         // briefed as it stands there.
@@ -2858,6 +2864,8 @@ mod tests {
             .unwrap();
         assert!(!unknown.goes_on);
         assert_eq!(unknown.context, None);
+        assert!(unknown.missing);
+        assert!(!judged_missing(&core, "thread", dir));
         let settings = crate::settings::settings_path(home.path());
         std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
         std::fs::write(&settings, r#"{ "notesOn": false }"#).unwrap();
@@ -2872,6 +2880,74 @@ mod tests {
                 .unwrap()
                 .goes_on
         );
+    }
+
+    fn judged_missing(core: &Core, session: &str, dir: Option<&str>) -> bool {
+        core.taken_up("codex", Path::new("/p"), None, session, dir, "token", false)
+            .unwrap()
+            .missing
+    }
+
+    /// A Codex thread the index holds whose rollout is not on disk yet is
+    /// missing, its notes the briefing to go on with.
+    #[test]
+    fn a_codex_thread_with_no_rollout_on_disk_is_missing() {
+        let home = Scratch::new("api-codex-no-rollout");
+        let (codex, rollout) = codex_account(&home, Some(CODEX_INDEX));
+        std::fs::remove_file(&rollout).unwrap();
+        let core = core_at(&home);
+        crate::notes::Notes::open(home.path())
+            .unwrap()
+            .add(
+                "token",
+                &crate::notes::NewNote {
+                    title: "Importer",
+                    summary: "Half built.",
+                    body: "",
+                    replaces: None,
+                },
+                0,
+            )
+            .unwrap();
+        let judged = core
+            .taken_up(
+                "codex",
+                home.path(),
+                None,
+                "thread",
+                codex.to_str(),
+                "token",
+                false,
+            )
+            .unwrap();
+        assert!(judged.missing);
+        assert!(!judged.goes_on);
+        let briefing = judged.briefing.unwrap();
+        assert!(briefing.contains("Half built."));
+        assert!(briefing.contains("No transcript of the earlier conversation was found"));
+        assert!(!briefing.contains("rollout-thread.jsonl"));
+    }
+
+    /// A Claude Code conversation with no transcript is missing, with no
+    /// briefing where it kept no notes.
+    #[test]
+    fn a_claude_code_conversation_with_no_transcript_is_missing() {
+        let home = Scratch::new("api-claude-missing");
+        std::fs::create_dir_all(home.path().join(".claude").join("projects")).unwrap();
+        let judged = core_at(&home)
+            .taken_up(
+                "claude-code",
+                home.path(),
+                None,
+                "never-written",
+                None,
+                "token",
+                false,
+            )
+            .unwrap();
+        assert!(judged.missing);
+        assert!(!judged.goes_on);
+        assert_eq!(judged.briefing, None);
     }
 
     /// A cold and large Codex conversation whose rollout the account's
@@ -2893,6 +2969,7 @@ mod tests {
         assert!(!judged.goes_on);
         assert_eq!(judged.context, None);
         assert_eq!(judged.briefing, None);
+        assert!(!judged.missing);
     }
 
     #[test]

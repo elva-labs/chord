@@ -146,6 +146,24 @@ pub fn rollout_path(codex_home: &Path, id: &str) -> Option<PathBuf> {
         .ok()
 }
 
+/// Whether Codex's index says no conversation is stored under the id: it
+/// holds no such thread, or the rollout it names is not on disk. False
+/// where the index cannot be read, which says nothing either way.
+pub fn thread_missing(codex_home: &Path, id: &str) -> bool {
+    let Some(db) = open(codex_home) else {
+        return false;
+    };
+    match db.query_row(
+        "SELECT rollout_path FROM threads WHERE id = ?1",
+        [id],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(path) => !Path::new(&path).is_file(),
+        Err(rusqlite::Error::QueryReturnedNoRows) => true,
+        Err(_) => false,
+    }
+}
+
 /// Reads complete turn events, retaining the byte offset across polls.
 /// A resumed conversation starts at its current end, without replaying history.
 pub struct Activity {
