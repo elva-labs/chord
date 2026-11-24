@@ -15,6 +15,8 @@
     notifications: "notifications choice",
     chime: "chime choice",
     askEveryStart: "choice on asking before every start",
+    notesOn: "notes choice",
+    agentsOn: "agents choice",
     lastChosen: "choices new sessions start on",
     autoResume: "choice on going on after a usage limit",
     compact: "compact mode choice",

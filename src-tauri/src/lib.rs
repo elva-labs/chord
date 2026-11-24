@@ -2193,9 +2193,23 @@ async fn settings_get(core: State<'_, Arc<Core>>) -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn settings_set(core: State<'_, Arc<Core>>, change: Value) -> Result<Value, String> {
+async fn settings_set(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    change: Value,
+) -> Result<Value, String> {
     let core = Arc::clone(&core);
-    blocking(move || core.settings_set(&change).and_then(value)).await
+    let remotes = Arc::clone(&remotes);
+    blocking(move || {
+        let settings = core.settings_set(&change)?;
+        // A machine reached from this one follows its notes and agents
+        // switches.
+        if change.get("notesOn").is_some() || change.get("agentsOn").is_some() {
+            remotes.follow_switches();
+        }
+        value(settings)
+    })
+    .await
 }
 
 #[tauri::command]

@@ -1009,12 +1009,14 @@ it started: it is theirs to go on with. A limit that ends that turn
 later is waited for like any other, so the conversation goes on at every
 reset. Where the limit refuses the turn at once, because the window waited
 for was in fact still shut, the conversation says so and waits for the
-user.
+user. With [notes switched off](reference/settings.md#keep-notes) the run
+is not started again: the session at rest is sent the line as it is and
+goes on with the whole of its conversation.
 
 The messages the limit left unanswered go with the next message the
-conversation is sent, whoever sends it: the line asking the fresh
-conversation to go on, the user's own message where they wrote while it
-started or went on by hand, or a line from the session's starter. They
+conversation is sent, whoever sends it: the line asking the conversation
+to go on, fresh or whole, the user's own message where they wrote while
+it started or went on by hand, or a line from the session's starter. They
 are the message whose turn the limit refused and, after it, each message
 whose turn the limit refused again, failed, was stopped or ended with no
 answer, and each the agent never took: one that failed to send, or one

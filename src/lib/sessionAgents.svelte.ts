@@ -141,6 +141,12 @@ export function agentAhead(key: string): string | null {
   return note;
 }
 
+/** Whether the row's agent is still to be told: picked, and nothing sent
+    since. */
+export function agentWaits(key: string): boolean {
+  return ahead.has(key);
+}
+
 /** Puts the note back for a message that never reached the agent, unless
     another was picked since. */
 export function agentAheadBack(key: string, note: string) {

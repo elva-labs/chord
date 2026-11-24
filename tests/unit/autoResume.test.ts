@@ -23,6 +23,7 @@ vi.mock("$lib/remote.svelte", () => ({ hostOf: () => null }));
 vi.mock("$lib/persist", () => ({ persist: (change: unknown) => persisted.push(change) }));
 vi.mock("$lib/sessions.svelte", () => ({ byKey: (key: string) => rows.get(key) ?? null }));
 
+const { switches } = await import("$lib/switches.svelte");
 const {
   GIVE_UP_AFTER,
   GO_ON,
@@ -409,6 +410,23 @@ describe("going on once the limit resets", () => {
     expect(said[0].text).toBe(
       "Did not go on by itself: the conversation could not be started again from its notes.",
     );
+  });
+
+  it("says the run was not at rest, not its notes, where it cannot go on while notes are switched off", async () => {
+    withWindow();
+    opens();
+    row();
+    choose("a", true);
+    limitEnded("a", "session", RESET);
+    goes = false;
+    switches.notes = false;
+    try {
+      await look(AFTER);
+    } finally {
+      switches.notes = true;
+    }
+    expect(sent).toHaveLength(0);
+    expect(said[0].text).toBe("Did not go on by itself: the session was not at rest when the limit reset.");
   });
 
   it("sends no line where the choice was turned off, or the user wrote, while the run started again", async () => {

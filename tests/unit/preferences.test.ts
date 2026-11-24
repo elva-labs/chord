@@ -46,6 +46,8 @@ const DEFAULTS: Settings = {
   notifications: true,
   chime: false,
   askEveryStart: false,
+  notesOn: true,
+  agentsOn: true,
   compact: false,
   lastChosen: {},
 };
@@ -139,6 +141,7 @@ import { accounts, reset as resetAccounts } from "$lib/accounts.svelte";
 import { adopt, currentSettings, followSettings } from "$lib/preferences.svelte";
 import { loadTheme, setLook, setPalette, setThemes, theme } from "$lib/theme.svelte";
 import { notify, resetNotify, setChime, setNotifications } from "$lib/notify.svelte";
+import { resetSwitches, setAgentsOn, setNotesOn, switches } from "$lib/switches.svelte";
 import { workspace } from "$lib/workspace.svelte";
 import { unknowWorkflows, workflowsKnown } from "$lib/workflows.svelte";
 
@@ -168,6 +171,7 @@ beforeEach(() => {
   resetKeys();
   resetHooks();
   resetNotify();
+  resetSwitches();
   resetAccounts();
   theme.choice = "system";
   theme.palette = "teal";
@@ -210,6 +214,15 @@ describe("followSettings", () => {
     state.changed?.({ ...DEFAULTS });
     expect(notify.notifications).toBe(true);
     expect(notify.chime).toBe(false);
+  });
+
+  it("takes the notes and agents switches, and reads settings without them as both on", async () => {
+    state.stored = { ...DEFAULTS, notesOn: false, agentsOn: false };
+    await followSettings();
+    expect(switches).toEqual({ notes: false, agents: false });
+    const { notesOn: _notes, agentsOn: _agents, ...older } = DEFAULTS;
+    state.changed?.(older as Settings);
+    expect(switches).toEqual({ notes: true, agents: true });
   });
 
   it("keeps a copy for the first frame of the next start", async () => {
@@ -433,6 +446,14 @@ describe("a change in the window", () => {
     await settle();
     expect(state.sets).toEqual([{ notifications: false }, { chime: true }]);
     expect(currentSettings()).toMatchObject({ notifications: false, chime: true });
+  });
+
+  it("sends the notes and agents switches on their own", async () => {
+    setNotesOn(false);
+    setAgentsOn(false);
+    await settle();
+    expect(state.sets).toEqual([{ notesOn: false }, { agentsOn: false }]);
+    expect(currentSettings()).toMatchObject({ notesOn: false, agentsOn: false });
   });
 
   it("sends only what changed", async () => {

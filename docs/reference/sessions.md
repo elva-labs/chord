@@ -1362,7 +1362,10 @@ file is its path in the text.
 ## Notes
 
 Every session keeps notes of its own conversation, so that it can go on
-later from them rather than from the whole conversation read again. A
+later from them rather than from the whole conversation read again. Notes
+can be switched off in the settings, and then none are kept or read, and a
+conversation is always resumed whole, as
+[keep notes](settings.md#keep-notes) describes. A
 session has one brief, what is being built, kept current, and notes, each
 with a title, a one-line summary, a few lines of body and the day it was
 kept. A later note can replace an earlier one, which then no longer
@@ -1438,9 +1441,9 @@ A conversation held at a point it went back to is judged as it stands
 there, not by the turns it went back on. The same rule holds for the
 user's own sessions, the one on screen included, and for sessions another
 started. A conversation that goes on by itself once a usage limit resets
-goes on from its notes whatever its size and rest, and the messages of
-the user's that the limit left unanswered go after the briefing as the
-user's own, as
+goes on from its notes whatever its size and rest, unless
+[notes are switched off](settings.md#keep-notes), and the messages of the
+user's that the limit left unanswered go with it as the user's own, as
 [sessions in Chord](../integrated.md#going-on-after-a-limit) describes.
 
 Going on, the row starts a fresh conversation of the harness's, with the
