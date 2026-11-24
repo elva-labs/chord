@@ -3028,7 +3028,11 @@ mod tests {
         assert!(judged_missing(&core, "archived", dir));
         let archive = codex.join("archived_sessions");
         std::fs::create_dir_all(&archive).unwrap();
-        std::fs::write(archive.join("rollout-2026-01-02T08-00-00-archived.jsonl"), "").unwrap();
+        std::fs::write(
+            archive.join("rollout-2026-01-02T08-00-00-archived.jsonl"),
+            "",
+        )
+        .unwrap();
         assert!(!judged_missing(&core, "archived", dir));
         assert!(judged_missing(&core, "never-written", dir));
     }

@@ -80,7 +80,11 @@ pub fn folder_name(path: &Path) -> String {
             .wrapping_sub(hash)
             .wrapping_add(i32::from(unit))
     });
-    format!("{}-{}", &mangled[..FOLDER_MOST], base36(hash.unsigned_abs()))
+    format!(
+        "{}-{}",
+        &mangled[..FOLDER_MOST],
+        base36(hash.unsigned_abs())
+    )
 }
 
 fn base36(mut value: u32) -> String {
@@ -627,7 +631,10 @@ mod tests {
         assert_eq!(folder_name(short), mangle(short));
         let long = format!("/home/ada/{}", "a".repeat(200));
         let name = folder_name(Path::new(&long));
-        assert_eq!(&name[..FOLDER_MOST], &mangle(Path::new(&long))[..FOLDER_MOST]);
+        assert_eq!(
+            &name[..FOLDER_MOST],
+            &mangle(Path::new(&long))[..FOLDER_MOST]
+        );
         // The hash Claude Code's own shortening gives for this path.
         assert_eq!(&name[FOLDER_MOST..], "-rvxyuq");
     }
