@@ -769,7 +769,7 @@
                   <div class="s-wrap" data-testid="session-kinds">
                     {#each installed().length > 0 ? installed() : HARNESSES as id (id)}
                       <div class="s-row" data-testid="session-kind" data-agent={id}>
-                        <span class="s-name">{harnessLabel(id)}</span>
+                        <span class="s-name s-starred">{harnessLabel(id)}<span class="s-star" aria-hidden="true">*</span></span>
                         <div class="s-ctl">
                           {#if canIntegrate(id)}
                             <div class="s-seg" role="radiogroup" aria-label="Where {harnessLabel(id)} sessions run">
@@ -796,9 +796,6 @@
                         </div>
                       </div>
                     {/each}
-                    <p class="s-rownote" data-testid="session-kind-when">
-                      A change moves the sessions already open too. Reopen, from a right click on it, moves it now.
-                    </p>
                   </div>
                   <div class="s-wrap" data-testid="settings-live">
                     <div class="s-row" data-testid="hooks-everywhere-row">
@@ -907,6 +904,10 @@
                     </div>
                   </div>
                 </div>
+                <p class="s-after" data-testid="session-kind-when">
+                  <span aria-hidden="true">*</span> A change also moves that harness's open sessions, each the next time it is at rest and opened.
+                  To move a session now, right-click it and choose Reopen.
+                </p>
               </div>
 
               <div class="s-grp">
