@@ -1452,11 +1452,16 @@
     display: grid;
     grid-template-columns: 196px minmax(0, 1fr);
     background: var(--s-ground);
-    border: 1px solid var(--pane-border-on);
+    border: var(--edge) solid var(--pane-border-on);
     border-radius: var(--radius-pane);
     font-family: var(--chrome);
+  /* The gutter is measured from the dialog's outer edge, so what meets
+     the border takes its line off, and --title-top puts the titles'
+     capitals a gutter from the top in either look. */
     color: var(--ink);
     overflow: hidden;
+    --edge: 1px;
+    --title-top: 16px;
     outline: none;
   }
 
@@ -1468,8 +1473,12 @@
     flex-direction: column;
     gap: 2px;
     min-height: 0;
-    padding: 0 calc(var(--gutter) / 2) 12px;
+    padding: 0 calc(var(--gutter) / 2) 12px calc(var(--gutter) / 2 - var(--edge));
     background: var(--pane-bg);
+  :global(:root[data-look="modern"]) .dialog {
+    --title-top: 18px;
+  }
+
     border-right: 1px solid var(--divider, var(--rule));
     overflow-y: auto;
     scrollbar-width: thin;
@@ -1485,7 +1494,7 @@
     flex: none;
     align-items: baseline;
     height: 26px;
-    margin: 18px 0 14px;
+    margin: var(--title-top) 0 calc(32px - var(--title-top));
     padding: 0 calc(var(--gutter) / 2);
     font-family: var(--chrome);
     font-size: var(--title-size);
@@ -1560,7 +1569,7 @@
     width: 100%;
     max-width: 776px;
     margin-inline: auto;
-    padding-inline: var(--gutter);
+    padding-inline: var(--gutter) calc(var(--gutter) - var(--edge));
   }
 
   .head {
@@ -1569,8 +1578,8 @@
     align-items: center;
     gap: 8px;
     height: 26px;
-    margin-top: 18px;
-    margin-bottom: 14px;
+    margin-top: var(--title-top);
+    margin-bottom: calc(32px - var(--title-top));
   }
 
   .close {

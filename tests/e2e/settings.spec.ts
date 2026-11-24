@@ -116,9 +116,9 @@ test.describe("the tabs", () => {
           const at = await measure();
           const where = `${look}, ${size.width} wide, ${tab}`;
           expect(Math.abs(at.lines[0] - at.lines[1]), where).toBeLessThan(0.5);
-          for (const gutter of [...at.beside, ...at.card]) expect(Math.abs(gutter - 28), where).toBeLessThanOrEqual(1);
+          for (const gutter of [...at.beside, ...at.card]) expect(Math.abs(gutter - 28), where).toBeLessThanOrEqual(0.5);
           expect(Math.abs(at.close - 28), where).toBeLessThanOrEqual(8);
-          if (look === "modern") expect(Math.abs(at.above - 28), where).toBeLessThanOrEqual(1.5);
+          expect(Math.abs(at.above - 28), where).toBeLessThanOrEqual(1);
         }
       }
     }
