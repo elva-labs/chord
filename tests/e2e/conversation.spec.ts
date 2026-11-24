@@ -1242,8 +1242,8 @@ test.describe("how sessions run, in the settings", () => {
     await expect(claude.getByTestId("session-kind-integrated")).toHaveAttribute("aria-checked", "true");
     // Under the choice, in so many words: when it applies.
     const when = page.getByTestId("session-kind-when");
-    await expect(when).toContainText("A change moves the sessions already open too");
-    await expect(when).toContainText("Reopen, from a right click on it, moves it now.");
+    await expect(when).toContainText("A change also moves that harness's open sessions");
+    await expect(when).toContainText("right-click it and choose Reopen.");
     const last = (await codex.getByTestId("session-kind-only").boundingBox())!;
     expect((await when.boundingBox())!.y).toBeGreaterThanOrEqual(last.y + last.height);
     expect(await when.evaluate((el) => el.parentElement?.dataset.testid)).toBe("session-kinds");

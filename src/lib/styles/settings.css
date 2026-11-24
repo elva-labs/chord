@@ -219,14 +219,10 @@
   color: var(--del);
 }
 
-/* A line of words on the row above it, as part of that row. */
-.s-rownote {
-  margin: -4px 0 0;
-  padding: 0 14px 9px;
-  max-width: 72ch;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--ink-3);
+/* A card and the note on all of its rows, with the section's next card
+   after them. */
+.s-part + .s-card {
+  margin-top: 14px;
 }
 
 /* A choice of a few, one of them taken. */
