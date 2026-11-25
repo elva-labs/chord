@@ -869,7 +869,9 @@ impl Core {
         let prompt = prompt.filter(|prompt| !prompt.trim().is_empty());
         let prompt = first_prompt(prompt, through_cmd, &mut files, self.home.as_deref())?;
         let model = model.filter(|model| !model.trim().is_empty());
-        let spending = self.spending(agent, project, config_dir, model, cache_ttl, vars);
+        let (spending, compact_at) = self.spending(
+            agent, project, config_dir, model, cache_ttl, compact_at, vars,
+        );
         let ctx = LaunchCtx {
             project,
             env: vars,
@@ -1075,12 +1077,13 @@ impl Core {
         );
         let joining = self.engage(&run, project, session.as_deref())?;
         let model = model.filter(|model| !model.trim().is_empty());
-        let spending = self.spending(
+        let (spending, compact_at) = self.spending(
             agent,
             project,
             config_dir,
             model,
             run.cache_ttl.as_deref(),
+            run.compact_at,
             &environment.vars,
         );
         let launch = crate::integrated::Launch {
@@ -1098,7 +1101,7 @@ impl Core {
             instructions,
             start_only: instructions.is_some() && start_only,
             afresh: resume && afresh,
-            compact_at: run.compact_at,
+            compact_at,
             spending: &spending,
             resume_at: at.as_deref().filter(|_| resume),
             reads_only: run.reads_only,
@@ -1437,7 +1440,11 @@ impl Core {
     /// What a session of `agent` in `project` is given in its environment
     /// over the captured `vars` so it spends fewer tokens, for Claude Code
     /// as [`adapter::claude_spending`] says from the settings files that
-    /// apply under the account. None for another harness.
+    /// apply under the account, and the context it compacts at from
+    /// `compact_at`, which is None where the user set their own, as
+    /// [`adapter::claude_compacts_as_set`] says. None and `compact_at` for
+    /// another harness.
+    #[allow(clippy::too_many_arguments)]
     fn spending(
         &self,
         agent: &str,
@@ -1445,10 +1452,11 @@ impl Core {
         config_dir: Option<&str>,
         model: Option<&str>,
         cache_ttl: Option<&str>,
+        compact_at: Option<u64>,
         vars: &HashMap<String, String>,
-    ) -> Vec<(String, String)> {
+    ) -> (Vec<(String, String)>, Option<u64>) {
         if agent != crate::claude_stream::AGENT {
-            return Vec::new();
+            return (Vec::new(), compact_at);
         }
         let settings = match self.home.as_deref() {
             Some(home) => {
@@ -1456,7 +1464,10 @@ impl Core {
             }
             None => Vec::new(),
         };
-        adapter::claude_spending(vars, &settings, model, cache_ttl)
+        (
+            adapter::claude_spending(vars, &settings, model, cache_ttl),
+            compact_at.filter(|_| !adapter::claude_compacts_as_set(vars, &settings)),
+        )
     }
 
     /// The settings a session of `agent` is given for the Codex profile

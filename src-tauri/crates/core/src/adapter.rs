@@ -401,7 +401,8 @@ fn claude_workflow(ctx: &LaunchCtx) -> Vec<String> {
 }
 
 /// What Claude Code is given for the context at which it compacts the
-/// conversation on its own, when the session names one.
+/// conversation on its own, when the session names one. The launch names
+/// none where the user set one, as [`claude_compacts_as_set`] says.
 fn claude_compaction(ctx: &LaunchCtx) -> Vec<String> {
     match ctx.compact_at {
         Some(tokens) => vec!["--autocompact".to_string(), tokens.to_string()],
@@ -510,6 +511,40 @@ fn managed_settings() -> Vec<PathBuf> {
     files.reverse();
     files.push(dir.join("managed-settings.json"));
     files
+}
+
+/// The variable and the setting Claude Code reads the context it compacts
+/// at from, the setting for every model or, under `modelSettings`, for one.
+const COMPACT_VAR: &str = "CLAUDE_CODE_AUTO_COMPACT_WINDOW";
+const COMPACT_SETTING: &str = "autoCompactWindow";
+const MODEL_SETTINGS: &str = "modelSettings";
+
+/// Whether the user said where Claude Code compacts, in `vars`, in the
+/// `env` of one of the `settings` files, or as the setting in one of them
+/// for any model. Claude Code takes `--autocompact` over the setting, so a
+/// session that names a context is launched without it there, and the
+/// user's own figure wins.
+pub fn claude_compacts_as_set(
+    vars: &HashMap<String, String>,
+    settings: &[Map<String, Value>],
+) -> bool {
+    vars.contains_key(COMPACT_VAR)
+        || settings.iter().any(|file| {
+            file.get("env")
+                .and_then(Value::as_object)
+                .is_some_and(|env| env.contains_key(COMPACT_VAR))
+                || file.contains_key(COMPACT_SETTING)
+                || file
+                    .get(MODEL_SETTINGS)
+                    .and_then(Value::as_object)
+                    .is_some_and(|models| {
+                        models.values().any(|model| {
+                            model
+                                .as_object()
+                                .is_some_and(|model| model.contains_key(COMPACT_SETTING))
+                        })
+                    })
+        })
 }
 
 /// What Claude Code is given in its environment so a session spends fewer
@@ -2472,6 +2507,37 @@ mod tests {
         );
         // The model the session names wins over the user's.
         assert_eq!(claude_spending(&old, &[file], Some("sonnet"), None), on);
+    }
+
+    #[test]
+    fn the_users_own_compaction_window_is_left_to_win() {
+        let none = HashMap::new();
+        assert!(!claude_compacts_as_set(&none, &[]));
+        let theirs = HashMap::from([(
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW".to_string(),
+            "300000".to_string(),
+        )]);
+        assert!(claude_compacts_as_set(&theirs, &[]));
+        for file in [
+            json!({ "env": { "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "300000" } }),
+            json!({ "autoCompactWindow": 300000 }),
+            json!({ "modelSettings": { "claude-opus-4-6": { "autoCompactWindow": 300000 } } }),
+        ] {
+            assert!(
+                claude_compacts_as_set(&none, &[settings(file.clone())]),
+                "{file}"
+            );
+        }
+        for file in [
+            json!({ "env": { "OTHER": "1" }, "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1" }),
+            json!({ "modelSettings": { "claude-opus-4-6": { "other": 1 } } }),
+            json!({ "env": { "autoCompactWindow": 300000 } }),
+        ] {
+            assert!(
+                !claude_compacts_as_set(&none, &[settings(file.clone())]),
+                "{file}"
+            );
+        }
     }
 
     #[test]

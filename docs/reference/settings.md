@@ -384,8 +384,11 @@ reads the whole context and a started session's work seldom needs its
 oldest turns word for word. A figure is a whole number from 100,000, the
 fewest Claude Code takes, to 1,000,000, and empty is written as null. A
 session takes the figure when it starts or is resumed, through Claude
-Code's `--autocompact` flag, which `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the
-user's own environment outranks. A file from before has neither, which
+Code's `--autocompact` flag. Your own setting or variable wins: where
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` is in the environment or the `env` of a
+Claude Code settings file, or `autoCompactWindow` is set in one, for every
+model or for one under `modelSettings`, the flag is left out. A file from
+before has neither, which
 reads as the defaults. They are the user's to change, and an agent's
 settings tools refuse them.
 
