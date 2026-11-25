@@ -176,8 +176,9 @@ action does what its shortcut does. The first entry goes to
 the next session that needs you, as <kbd>Cmd</kbd><kbd>.</kbd> does (see
 [sessions](reference/sessions.md#active-and-inactive)). It shows how many are waiting, and with none it
 cannot be picked.
-After the app's come the commands the enabled
-[plugins](plugins.md#palette-commands) put there for the project on screen,
+After the app's come the commands that the
+[plugins](plugins.md#palette-commands) running where the project on screen is
+put there for it,
 each with the plugin's name beside it and found by that name as well as its
 label. None are listed while no project is on screen, and none can take a
 label the app's own commands use. Picking one puts the palette away and tells
