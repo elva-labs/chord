@@ -424,6 +424,37 @@ const NO_TOOL_SEARCH: &[&str] = &[
     "claude-3-7-sonnet",
 ];
 
+/// The variable that sends Claude Code to Vertex AI, where a model before
+/// 4.5 refuses tool search and an older Claude Code asks for it anyway.
+const VERTEX_VAR: &str = "CLAUDE_CODE_USE_VERTEX";
+
+/// The first Claude version Vertex AI searches tools on.
+const VERTEX_TOOL_SEARCH: (u32, u32) = (4, 5);
+
+/// The version a Claude model's name holds, major and minor: 4.1 in
+/// `claude-opus-4-1@20250805`, 3.7 in
+/// `us.anthropic.claude-3-7-sonnet-20250219-v1:0`, 4.0 in
+/// `claude-sonnet-4-20250514`. None for a name with none, such as an
+/// alias.
+fn claude_version(model: &str) -> Option<(u32, u32)> {
+    let name = &model[model.find("claude-")? + "claude-".len()..];
+    let name = name.split(['@', ':', '[']).next()?;
+    let number = |part: &str| {
+        (!part.is_empty() && part.len() <= 2)
+            .then(|| part.parse::<u32>().ok())
+            .flatten()
+    };
+    let mut parts = name.split('-').skip_while(|part| number(part).is_none());
+    let major = number(parts.next()?)?;
+    let minor = parts.next().and_then(number).unwrap_or(0);
+    Some((major, minor))
+}
+
+/// Whether a variable's value turns a switch on, as Claude Code reads it.
+fn truthy(value: &str) -> bool {
+    ["1", "true", "yes", "on"].contains(&value.trim().to_lowercase().as_str())
+}
+
 /// The variable Claude Code reads its prompt cache's lifetime from, `5m`
 /// or `1h`.
 pub const CACHE_TTL_VAR: &str = "CLAUDE_CODE_PROMPT_CACHE_TTL";
@@ -486,8 +517,9 @@ fn managed_settings() -> Vec<PathBuf> {
 /// `cache_ttl` names one. A variable the user set, in `vars` or in the
 /// `env` of one of the `settings` files, is theirs and left alone, and so
 /// is a lifetime they asked for any other way. Tool search is left out on
-/// a model Claude Code does not search tools on: the one the session runs
-/// on where it names one, else the one the user set.
+/// a model Claude Code does not search tools on, and on Vertex AI on a
+/// model before 4.5: the one the session runs on where it names one, else
+/// the one the user set.
 pub fn claude_spending(
     vars: &HashMap<String, String>,
     settings: &[Map<String, Value>],
@@ -517,9 +549,19 @@ pub fn claude_spending(
                 .map(str::to_string)
         })
         .map(|model| model.to_lowercase());
-    let searches = model
-        .as_deref()
-        .is_none_or(|model| !NO_TOOL_SEARCH.iter().any(|old| model.contains(old)));
+    let vertex = in_settings(VERTEX_VAR)
+        .map(|value| {
+            value
+                .as_str()
+                .map_or_else(|| value.to_string(), str::to_string)
+        })
+        .or_else(|| vars.get(VERTEX_VAR).cloned())
+        .is_some_and(|value| truthy(&value));
+    let searches = model.as_deref().is_none_or(|model| {
+        !NO_TOOL_SEARCH.iter().any(|old| model.contains(old))
+            && !(vertex
+                && claude_version(model).is_some_and(|version| version < VERTEX_TOOL_SEARCH))
+    });
     let mut added = Vec::new();
     if searches && !set(TOOL_SEARCH_VAR) {
         added.push((TOOL_SEARCH_VAR.to_string(), "true".to_string()));
@@ -2430,6 +2472,60 @@ mod tests {
         );
         // The model the session names wins over the user's.
         assert_eq!(claude_spending(&old, &[file], Some("sonnet"), None), on);
+    }
+
+    #[test]
+    fn claude_code_on_vertex_searches_tools_from_claude_4_5() {
+        let on = vec![(TOOL_SEARCH_VAR.to_string(), "true".to_string())];
+        let none = HashMap::new();
+        let vertex = HashMap::from([("CLAUDE_CODE_USE_VERTEX".to_string(), "1".to_string())]);
+        let in_file = settings(json!({ "env": { "CLAUDE_CODE_USE_VERTEX": "true" } }));
+        for older in [
+            "claude-sonnet-4@20250514",
+            "claude-opus-4-1@20250805",
+            "claude-opus-4-20250514",
+            "claude-3-5-haiku@20241022",
+        ] {
+            assert_eq!(
+                claude_spending(&vertex, &[], Some(older), None),
+                [],
+                "{older}"
+            );
+            assert_eq!(
+                claude_spending(&none, std::slice::from_ref(&in_file), Some(older), None),
+                [],
+                "{older}"
+            );
+            // Elsewhere only Claude 3 is left out.
+            let elsewhere = if older.starts_with("claude-3") {
+                vec![]
+            } else {
+                on.clone()
+            };
+            assert_eq!(
+                claude_spending(&none, &[], Some(older), None),
+                elsewhere,
+                "{older}"
+            );
+        }
+        for newer in [
+            "claude-sonnet-4-5@20250929",
+            "claude-opus-4-6[1m]",
+            "sonnet",
+            "claude-haiku-4-5",
+        ] {
+            assert_eq!(
+                claude_spending(&vertex, &[], Some(newer), None),
+                on,
+                "{newer}"
+            );
+        }
+        assert_eq!(claude_spending(&vertex, &[], None, None), on);
+        let off = HashMap::from([("CLAUDE_CODE_USE_VERTEX".to_string(), "0".to_string())]);
+        assert_eq!(
+            claude_spending(&off, &[], Some("claude-sonnet-4@20250514"), None),
+            on
+        );
     }
 
     #[test]
