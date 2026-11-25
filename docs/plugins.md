@@ -884,7 +884,7 @@ and then says it is done:
 
 A pick never holds the palette: it closes as the command is picked. What
 goes wrong is said in the status bar, with the command's label, for a few
-seconds more the longer it is, and in the plugin's settings row. A plugin
+seconds more the longer it is, and on the plugin's sections for a while. A plugin
 that is not running is said at once. One that stops or is turned off
 before it answers, or sends no result within 10 seconds, is said then,
 and so is the `error` of a result that carries one. Once a pick is said
