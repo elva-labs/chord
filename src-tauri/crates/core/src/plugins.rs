@@ -3941,16 +3941,16 @@ impl Inner {
         }
     }
 
-    /// Ends the pick `id` of `plugin`, and gives its label if it was still
-    /// waiting. A result that comes for a pick already over, or from
-    /// another plugin, ends nothing.
+    /// Ends the pick `id` of `plugin` with its result, and gives its label
+    /// if it was still waiting. Once its result is in, the plugin can no
+    /// longer act on the pick. A result that comes for a pick already over,
+    /// or from another plugin, ends nothing.
     fn end_pick(&self, id: &str, plugin: &Key) -> Option<String> {
         let mut picks = self.picks.lock().expect("plugins lock");
         if picks.get(id).is_none_or(|(key, _)| key != plugin) {
             return None;
         }
-        self.pending.lock().expect("plugins lock").remove(id);
-        picks.remove(id).map(|(_, label)| label)
+        self.forget_pick(&mut picks, id).map(|(_, label)| label)
     }
 
     /// Forgets the pick `id` with what it may still do: nothing waits for
@@ -4730,12 +4730,12 @@ done
 
     /// A plugin that puts commands in the palette for an open project and
     /// for one that is not, then answers a pick late, both at once in the
-    /// other order, or by stopping.
+    /// other order, or by stopping, or answers one and acts on it after.
     #[cfg(unix)]
     const PICKS: &str = r#"#!/bin/sh
 echo '{"type":"hello","name":"board","version":"1.0.0"}'
 echo '{"type":"palette","project":"/not/open","commands":[{"id":"first","label":"First"}]}'
-echo '{"type":"palette","project":"PROJECT","commands":[{"id":"slow","label":"Slow"},{"id":"first","label":"First"},{"id":"second","label":"Second"},{"id":"crash","label":"Crash"}]}'
+echo '{"type":"palette","project":"PROJECT","commands":[{"id":"slow","label":"Slow"},{"id":"first","label":"First"},{"id":"second","label":"Second"},{"id":"crash","label":"Crash"},{"id":"after","label":"After"}]}'
 first=""
 while IFS= read -r line; do
   case "$line" in
@@ -4754,6 +4754,10 @@ while IFS= read -r line; do
           printf '{"type":"result","id":"%s"}\n' "$first"
           ;;
         *'"command":"crash"'*) exit 3;;
+        *'"command":"after"'*)
+          printf '{"type":"result","id":"%s"}\n' "$id"
+          printf '{"type":"open_url","project":"PROJECT","answers":"%s","url":"https://example.com/after"}\n' "$id"
+          ;;
       esac
       ;;
   esac
@@ -5834,7 +5838,7 @@ palette = ["overview", "checks", "refresh", "long", "lower", "twin"]
 name = "board"
 path = "github"
 run = ["sh", "main.sh"]
-palette = ["slow", "first", "second", "crash"]
+palette = ["slow", "first", "second", "crash", "after"]
 "#,
             "palette-picks",
         );
@@ -5914,6 +5918,17 @@ palette = ["slow", "first", "second", "crash"]
         std::thread::sleep(Duration::from_millis(600));
         assert!(notices("First").is_empty(), "the first pick was answered");
         assert_eq!(notices("Second"), ["second went wrong"]);
+
+        // Once its result is in, the plugin can no longer act on the pick.
+        plugins
+            .palette_pick(&added.id, "board", "after", &here, None)
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(600));
+        assert!(
+            said(PLUGIN_OPEN_URL).is_empty(),
+            "a pick that has its result opens nothing"
+        );
+        assert!(notices("After").is_empty(), "the pick was answered");
 
         // A plugin that stops on a pick is told as stopped, once.
         plugins
