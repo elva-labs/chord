@@ -80,6 +80,7 @@ import { ownerOnScreen } from "$lib/terminals.svelte";
 
 const DIR = "/home/ada/.chord/chats";
 const A = "/home/ada/dev/one";
+const B = "/home/ada/dev/two";
 
 /** A past chat, written `days` ago. */
 const past = (id: string, days: number): HistoryEntry => ({
@@ -384,13 +385,21 @@ describe("a chat on screen", () => {
     expect(projectFor(place("/tmp/plot.png", "/home/ada/elsewhere"))).toBeNull();
   });
 
-  it("closed, takes the chats out of the front for the first open project", () => {
+  it("closed, takes the chats out of the front for the project last used, with no session on screen", () => {
+    workspace.open = [
+      { path: A, name: "one", repository: A, isGit: true },
+      { path: B, name: "two", repository: B, isGit: true },
+    ];
+    startSession(A);
+    startSession(B);
+    projects.used = { [A]: 1_000, [B]: 2_000 };
     startSession(DIR);
     const chat = activeSession()!;
     expect(chatInFront()).toBe(true);
     close(chat.key);
     chatClosed(chat.key);
-    expect(workspace.active).toBe(A);
+    expect(workspace.active).toBe(B);
+    expect(sessions.active).toBeNull();
   });
 
   it("closed with no project open, leaves nothing in front", () => {

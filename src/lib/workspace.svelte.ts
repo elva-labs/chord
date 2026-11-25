@@ -17,7 +17,7 @@ import {
   type Session,
 } from "$lib/sessions.svelte";
 import { closeProject as closeShells } from "$lib/terminals.svelte";
-import { drawnIn, forgetUsed, touch } from "$lib/projects.svelte";
+import { drawnIn, forgetUsed, sortProjects, touch } from "$lib/projects.svelte";
 import {
   closeFolder,
   folderShown,
@@ -204,11 +204,13 @@ export function chatInFront(): boolean {
 }
 
 /** The session that was on screen is gone with none in its place: when it
-    was a chat, the chats folder leaves the front for the first open
-    project, or for none, as a closed project's place is taken. */
+    was a chat, the chats folder leaves the front for the open project the
+    user last used, with no session on screen, or for none when no project
+    is open. */
 export function chatClosed(was: string | null) {
   if (was === null || sessions.active !== null || byKey(was) !== null || !chatInFront()) return;
-  const next = workspace.open[0]?.path ?? null;
+  const open = workspace.open.map((project) => project.path);
+  const next = sortProjects(open, "used")[0] ?? null;
   workspace.active = next;
   if (next !== null) activate(next);
   else save();
