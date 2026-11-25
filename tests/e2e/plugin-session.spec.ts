@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore, startNew, sessionRowOf } from "./fake";
+import { PROJECT, columnsAtRest, installFakeCore, startNew, sessionRowOf } from "./fake";
 
 /**
  * What a plugin shows for one session: a section in the changes pane only
@@ -92,6 +92,92 @@ async function pushMark(page: Page, session: string, mark: Record<string, unknow
   );
 }
 
+const action = (id: string, label: string) => ({ id, label, input: null });
+
+/** Rows whose text and actions are all longer than a narrow pane has room for. */
+const CROWDED = [
+  {
+    id: "two",
+    label: "#14137 docs(sdvp): add the SDK workspace and ten use cases",
+    detail: "docs/issue-12583-sdk-workspace-use-cases · ready to merge",
+    actions: [action("open", "Open on GitHub"), action("merge", "Merge")],
+  },
+  { id: "none", label: "#9 A row with no actions and a long title", detail: "docs/a-branch-name-longer-than-the-pane-is-wide", actions: [] },
+  { id: "bare", label: "#10 A row with no second line and a long title", detail: null, actions: [action("open", "Open on GitHub")] },
+  {
+    id: "three",
+    label: "#11 Three actions on one row",
+    detail: "feat/three-actions · checks running",
+    actions: [action("open", "Open on GitHub"), action("merge", "Merge"), action("close", "Close")],
+  },
+  {
+    id: "long",
+    label: "#12 An action label without an end",
+    detail: "fix/long-label · draft",
+    actions: [action("long", "Open this pull request ".repeat(20)), action("merge", "Merge")],
+  },
+].map((row) => ({ ...row, state: "ok", default: null }));
+
+type Box = { x: number; y: number; width: number; height: number };
+
+const intersects = (a: Box, b: Box) =>
+  a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
+
+/** Hovers every row and holds its actions to a place of their own. */
+async function actionsKeepClear(page: Page) {
+  const pane = (await page.locator(CHANGES).boundingBox())!;
+  const rows = page.getByTestId("plugin-row");
+  for (const given of CROWDED) {
+    const line = rows.and(page.locator(`[data-row='${given.id}']`));
+    await page.mouse.move(0, 0);
+    await line.scrollIntoViewIfNeeded();
+    const rest = (await line.boundingBox())!;
+    await line.hover();
+    const hovered = (await line.boundingBox())!;
+    expect(hovered.height).toBeCloseTo(rest.height, 1);
+
+    const texts = [(await line.locator(".media-caption").boundingBox())!];
+    if (given.detail !== null) {
+      const meta = line.locator(".media-meta");
+      texts.push((await meta.boundingBox())!);
+      expect(texts[1].height).toBeLessThan(20);
+      await expect(meta).toHaveCSS("text-overflow", "ellipsis");
+      await expect(meta).toHaveCSS("white-space", "nowrap");
+    }
+    for (const text of texts) expect(text.width).toBeGreaterThan(20);
+
+    const buttons = line.getByTestId("plugin-row-action");
+    await expect(buttons).toHaveCount(given.actions.length);
+    const boxes: Box[] = [];
+    for (const button of await buttons.all()) {
+      await expect(button).toBeVisible();
+      const box = (await button.boundingBox())!;
+      for (const other of [...texts, ...boxes]) expect(intersects(box, other), `${given.id} ${JSON.stringify({ box, other })}`).toBe(false);
+      expect(box.width).toBeGreaterThan(12);
+      expect(box.x).toBeGreaterThanOrEqual(hovered.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(pane.x + pane.width + 0.5);
+      expect(box.y).toBeGreaterThanOrEqual(hovered.y - 0.5);
+      expect(box.y + box.height).toBeLessThanOrEqual(hovered.y + hovered.height + 0.5);
+      boxes.push(box);
+    }
+    if (SHOTS !== undefined && given.id === "two") {
+      const name = await page.evaluate(() => (window as unknown as { __shot: string }).__shot);
+      await page.locator(CHANGES).screenshot({ path: `${SHOTS}/${name}.png` });
+    }
+  }
+}
+
+async function drag(page: Page, name: string, by: number) {
+  const box = (await page.getByRole("separator", { name }).boundingBox())!;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + by, y, { steps: 5 });
+  await page.mouse.up();
+  await columnsAtRest(page);
+}
+
 for (const look of ["modern", "terminal"] as const) {
   test.describe(`in the ${look} look`, () => {
     test("shows a session's section only while that session is shown", async ({ page }) => {
@@ -165,6 +251,44 @@ for (const look of ["modern", "terminal"] as const) {
       await expect(rows.last().getByTestId("plugin-facts")).toHaveCount(1);
       await page.keyboard.press("Enter");
       await expect(rows.last().getByTestId("plugin-facts")).toHaveCount(0);
+    });
+
+    test("keeps a row's actions off its text, at any width", async ({ page }) => {
+      await two(page, look);
+      await page.evaluate(
+        ({ project, rows }) =>
+          (window as unknown as { __pluginSection: (event: unknown) => void }).__pluginSection({
+            source: "src-1",
+            plugin: "github",
+            section: "Pull requests",
+            title: "Pull requests",
+            detail: null,
+            project,
+            session: null,
+            rows,
+            actions: [],
+          }),
+        { project: PROJECT, rows: CROWDED },
+      );
+      await page.getByTestId("plugin-fold").click();
+      await columnsAtRest(page);
+      const shot = (width: string) =>
+        page.evaluate((name) => ((window as unknown as { __shot: string }).__shot = name), `${width}-${look}`);
+
+      await shot("normal");
+      await actionsKeepClear(page);
+
+      // The pane at its least width.
+      await drag(page, "Resize changes", 600);
+      await shot("narrow");
+      await actionsKeepClear(page);
+
+      // The tree column beside an open file, at its least width.
+      await page.locator("[data-testid='file-tree']").getByText("mod.rs", { exact: true }).click();
+      await columnsAtRest(page);
+      await drag(page, "Resize the file tree", -600);
+      await shot("tree");
+      await actionsKeepClear(page);
     });
 
     test("marks a session's row quietly, on its second line", async ({ page }) => {

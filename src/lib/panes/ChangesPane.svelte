@@ -1836,7 +1836,7 @@
             sectionCursor = sectionEntries.findIndex((entry) => entry.id === pluginRowId(section.key, row));
             pressRow(section, row);
           }}
-          title={row.detail ?? row.label}
+          title={row.detail === null ? row.label : `${row.label}\n${row.detail}`}
           aria-expanded={facts.length > 0 ? opened : undefined}
         >
           <span class="row-line">
@@ -1857,6 +1857,7 @@
               tabindex="-1"
               onpointerdown={(e) => e.preventDefault()}
               onclick={() => act(section, action, row.id)}
+              title={action.label}
               data-action={action.id}
               data-testid="plugin-row-action">{action.label}</button
             >
@@ -1960,24 +1961,19 @@
   }
 
   /* A process row: the text, and a stop button over its end on hover. A
-     browser tab's row and a plugin's row carry their own actions the same
-     way. */
+     browser tab's row carries its own the same way. */
   .process,
   .browser-tab,
   .plugin {
     position: relative;
   }
 
-  .stop,
-  .row-actions {
+  .stop {
     position: absolute;
     top: 0;
     right: 6px;
     bottom: 0;
     opacity: 0;
-  }
-
-  .stop {
     border: 0;
     background: none;
     color: var(--ink-3);
@@ -1989,9 +1985,7 @@
   .process:hover .stop,
   .process.cursor .stop,
   .browser-tab:hover .stop,
-  .browser-tab.cursor .stop,
-  .plugin:hover .row-actions,
-  .plugin.cursor .row-actions {
+  .browser-tab.cursor .stop {
     opacity: 1;
   }
 
@@ -2031,10 +2025,49 @@
     padding-left: calc(var(--row-indent) + 12px);
   }
 
-  /* A row's own line, which its actions sit over the end of; the facts it
-     opens to sit under it, outside their reach. */
+  /* A row's own line: its text, then its actions in a place of their own
+     while the row is hovered or has the cursor, the text ending before them.
+     The facts it opens to sit under the line. */
   .plugin-line {
-    position: relative;
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius);
+  }
+
+  .plugin-line:hover {
+    background: var(--surface-2);
+  }
+
+  .plugin .media-row {
+    flex: 1;
+  }
+
+  .plugin .media-row:hover {
+    background: none;
+  }
+
+  .plugin .media-meta {
+    display: block;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* Never more than this share of the line. Where the labels need more, they
+     split it evenly, a short one keeping its whole word, and the rest end in
+     an ellipsis. */
+  .row-actions {
+    display: none;
+    flex: 0 1 auto;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, max-content);
+    gap: 2px;
+    max-width: 50%;
+    padding-right: 6px;
+  }
+
+  .plugin:hover .row-actions,
+  .plugin.cursor .row-actions {
+    display: grid;
   }
 
   /* A row that opens to show facts carries a chevron in its indent, so its
@@ -2098,14 +2131,10 @@
     color: var(--del);
   }
 
-  .head-actions,
-  .row-actions {
+  .head-actions {
     display: flex;
     align-items: center;
     gap: 2px;
-  }
-
-  .head-actions {
     flex: none;
     padding-right: 6px;
   }
@@ -2129,6 +2158,12 @@
   .row-action:hover {
     color: var(--accent);
     background: var(--surface-2);
+  }
+
+  .row-action {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .section-notice {

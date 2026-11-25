@@ -745,8 +745,11 @@ is open, and a group's appear once the group is. The title and the detail
 beside it keep their text, so the actions a narrow pane has no room for
 are found under a "⋯" button at the end of the line. Enter on a row runs
 its default action, or opens the row when it has facts; the other actions
-show on hover and under the cursor, as the stop button on a process does. The tree's cursor walks a plugin's rows and
-its group lines as it walks the others.
+show at the row's end on hover and under the cursor. The row's text ends
+before them, in an ellipsis where it is cut, and they take half the row at
+most, a long label ending in an ellipsis too. The row's second line is a
+single line, and the row's tooltip holds both lines whole. The tree's cursor
+walks a plugin's rows and its group lines as it walks the others.
 
 ![The git plugin's fold under the tree: the branch and its standing beside the title, a row per changed file, and the actions the pane has no room for under a menu.](plugin-fold.png)
 
