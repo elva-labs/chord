@@ -190,6 +190,7 @@ fn start_in(
         start_only: false,
         afresh: false,
         compact_at: None,
+        spending: &[],
         resume_at: None,
         reads_only: false,
         profile: &[],
@@ -308,6 +309,7 @@ impl Harness {
             start_only: false,
             afresh: false,
             compact_at: None,
+            spending: &[],
             resume_at: again.at.as_deref(),
             reads_only: again.settings.reads_only,
             profile: &[],
@@ -612,6 +614,25 @@ fn a_session_given_a_context_to_compact_at_passes_it_to_the_agent() {
     h.until_type("ready");
     let args = arguments(&h);
     assert!(!args.contains(&"--autocompact".to_string()), "{args:?}");
+    h.stop();
+}
+
+#[test]
+fn a_session_is_given_the_variables_that_spend_fewer_tokens() {
+    let spending = vec![("ENABLE_TOOL_SEARCH".to_string(), "true".to_string())];
+    let spending: &'static [(String, String)] = Box::leak(spending.into_boxed_slice());
+    let h = start_with("spending", &format!("{READY}\ndrain"), |launch| {
+        launch.spending = spending;
+    });
+    h.until_type("ready");
+    let env = std::fs::read_to_string(h.dir.join("env")).unwrap();
+    assert!(env.lines().any(|l| l == "ENABLE_TOOL_SEARCH=true"), "{env}");
+    h.stop();
+
+    let h = start_with("no-spending", &format!("{READY}\ndrain"), |_| {});
+    h.until_type("ready");
+    let env = std::fs::read_to_string(h.dir.join("env")).unwrap();
+    assert!(!env.contains("ENABLE_TOOL_SEARCH="), "{env}");
     h.stop();
 }
 
@@ -1932,6 +1953,7 @@ fn a_missing_agent_explains_itself() {
         start_only: false,
         afresh: false,
         compact_at: None,
+        spending: &[],
         resume_at: None,
         reads_only: false,
         profile: &[],
@@ -1976,6 +1998,7 @@ fn real_claude_holds_a_short_turn() {
         start_only: false,
         afresh: false,
         compact_at: None,
+        spending: &[],
         resume_at: None,
         reads_only: false,
         profile: &[],

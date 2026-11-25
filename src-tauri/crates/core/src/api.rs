@@ -862,13 +862,15 @@ impl Core {
             .is_some_and(|home| hook::hears_turns(home, project, agent));
         let prompt = prompt.filter(|prompt| !prompt.trim().is_empty());
         let prompt = first_prompt(prompt, through_cmd, &mut files, self.home.as_deref())?;
+        let model = model.filter(|model| !model.trim().is_empty());
+        let spending = self.spending(agent, project, config_dir, model, vars);
         let ctx = LaunchCtx {
             project,
             env: vars,
             session: session_id.as_deref(),
             token,
             prompt: prompt.as_deref(),
-            model: model.filter(|model| !model.trim().is_empty()),
+            model,
             mode: mode.filter(|mode| !mode.trim().is_empty()),
             config_dir: expanded.as_deref(),
             orchestrator,
@@ -880,6 +882,7 @@ impl Core {
             configured: configured.as_deref(),
             afresh: resumed && afresh,
             compact_at,
+            spending: &spending,
             wakes,
             profile: &profile,
         };
@@ -1063,13 +1066,15 @@ impl Core {
             project,
         );
         let joining = self.engage(&run, project, session.as_deref())?;
+        let model = model.filter(|model| !model.trim().is_empty());
+        let spending = self.spending(agent, project, config_dir, model, &environment.vars);
         let launch = crate::integrated::Launch {
             project,
             env: &environment.vars,
             session: session.as_deref(),
             token: token.filter(|token| !token.trim().is_empty()),
             resume,
-            model: model.filter(|model| !model.trim().is_empty()),
+            model,
             mode: mode.as_deref(),
             effort: effort.filter(|effort| !effort.trim().is_empty()),
             config_dir: expanded.as_deref(),
@@ -1079,6 +1084,7 @@ impl Core {
             start_only: instructions.is_some() && start_only,
             afresh: resume && afresh,
             compact_at: run.compact_at,
+            spending: &spending,
             resume_at: at.as_deref().filter(|_| resume),
             reads_only: run.reads_only,
             profile: &profile,
@@ -1411,6 +1417,30 @@ impl Core {
         };
         let vars = &env::environment().vars;
         crate::codex_profiles::list(&account::codex_home(home, config_dir, vars))
+    }
+
+    /// What a session of `agent` in `project` is given in its environment
+    /// over the captured `vars` so it spends fewer tokens, for Claude Code
+    /// as [`adapter::claude_spending`] says from the settings files that
+    /// apply under the account. None for another harness.
+    fn spending(
+        &self,
+        agent: &str,
+        project: &Path,
+        config_dir: Option<&str>,
+        model: Option<&str>,
+        vars: &HashMap<String, String>,
+    ) -> Vec<(String, String)> {
+        if agent != crate::claude_stream::AGENT {
+            return Vec::new();
+        }
+        let settings = match self.home.as_deref() {
+            Some(home) => {
+                adapter::claude_settings(&account::claude_dir(home, config_dir, vars), project)
+            }
+            None => Vec::new(),
+        };
+        adapter::claude_spending(vars, &settings, model)
     }
 
     /// The settings a session of `agent` is given for the Codex profile
@@ -3275,6 +3305,72 @@ mod tests {
             role(Some("1. Direct the work.")),
             Some(adapter::ORCHESTRATOR_ROLE.to_string())
         );
+    }
+
+    /// A Claude Code session, fresh or resumed, searches tools unless the
+    /// user's settings for it say how; a Codex one is given nothing.
+    #[test]
+    fn a_claude_code_session_searches_tools_unless_its_settings_say_otherwise() {
+        let home = Scratch::new("api-tool-search");
+        let project = home.join("project");
+        std::fs::create_dir_all(project.join(".claude")).unwrap();
+        let bin = home.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        crate::executable::write(bin.join("claude"), b"#!/bin/sh\n").unwrap();
+        crate::executable::write(bin.join("codex"), b"#!/bin/sh\n").unwrap();
+        let vars = HashMap::from([("PATH".to_string(), bin.to_string_lossy().to_string())]);
+        let search = |agent: &str, session: Option<&str>, config_dir: Option<&str>| {
+            core_at(&home)
+                .prepare(
+                    agent,
+                    &project,
+                    None,
+                    session.map(str::to_string),
+                    None,
+                    None,
+                    None,
+                    None,
+                    config_dir,
+                    None,
+                    None,
+                    false,
+                    false,
+                    None,
+                    false,
+                    &vars,
+                )
+                .unwrap()
+                .command
+                .get_env(adapter::TOOL_SEARCH_VAR)
+                .map(|value| value.to_string_lossy().to_string())
+        };
+        assert_eq!(search("claude-code", None, None).as_deref(), Some("true"));
+        assert_eq!(
+            search("claude-code", Some("old"), None).as_deref(),
+            Some("true")
+        );
+        assert_eq!(search("codex", None, None), None);
+
+        // Set in the settings of the account the session runs under.
+        let account = home.join("work");
+        std::fs::create_dir_all(&account).unwrap();
+        std::fs::write(
+            account.join("settings.json"),
+            r#"{"env":{"ENABLE_TOOL_SEARCH":"auto"}}"#,
+        )
+        .unwrap();
+        let account = account.to_string_lossy().to_string();
+        assert_eq!(search("claude-code", None, Some(&account)), None);
+        assert_eq!(search("claude-code", None, None).as_deref(), Some("true"));
+
+        // Set in the project's.
+        std::fs::write(
+            project.join(".claude").join("settings.json"),
+            r#"{"env":{"ENABLE_TOOL_SEARCH":"false"}}"#,
+        )
+        .unwrap();
+        assert_eq!(search("claude-code", None, None), None);
+        assert_eq!(search("claude-code", Some("old"), None), None);
     }
 
     #[test]

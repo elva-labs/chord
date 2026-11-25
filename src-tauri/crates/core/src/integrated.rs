@@ -961,6 +961,10 @@ pub struct Launch<'a> {
     /// The context, in tokens, at which the agent compacts the conversation
     /// on its own, for an agent that takes one. Its own default when None.
     pub compact_at: Option<u64>,
+    /// Variables added to the agent's environment over the captured ones,
+    /// as [`crate::adapter::claude_spending`] gives them for Claude Code.
+    /// Empty for none.
+    pub spending: &'a [(String, String)],
     /// For a resumed conversation, the entry of the agent's record it goes
     /// on from, leaving out everything after it; from its newest when None.
     pub resume_at: Option<&'a str>,
@@ -6036,6 +6040,7 @@ mod tests {
             start_only: false,
             afresh: false,
             compact_at: None,
+            spending: &[],
             resume_at: None,
             reads_only: false,
             profile: &[],

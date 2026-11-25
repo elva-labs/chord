@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use portable_pty::CommandBuilder;
 use serde::Serialize;
+use serde_json::{Map, Value};
 
 use crate::env::{find_on_path, is_shell_script};
 
@@ -101,6 +102,9 @@ pub struct LaunchCtx<'a> {
     /// The context, in tokens, at which the agent compacts the conversation
     /// on its own, for an agent that takes one. Its own default when None.
     pub compact_at: Option<u64>,
+    /// Variables added to the agent's environment over the captured ones,
+    /// as [`claude_spending`] gives them for Claude Code. Empty for none.
+    pub spending: &'a [(String, String)],
     /// Whether the workbench hears the session's turns end, so it can wake
     /// the agent once a session it started stops or asks: given to the
     /// agent's environment as [`WAKE_VAR`], which decides what the tool
@@ -405,6 +409,110 @@ fn claude_compaction(ctx: &LaunchCtx) -> Vec<String> {
     }
 }
 
+/// The variable that turns Claude Code's tool search on: the tools of its
+/// servers stay out of the context until the model loads one by name.
+pub const TOOL_SEARCH_VAR: &str = "ENABLE_TOOL_SEARCH";
+
+/// The models Claude Code does not search tools on, by a part of their
+/// names that holds whatever the provider puts around them.
+const NO_TOOL_SEARCH: &[&str] = &[
+    "claude-3-opus",
+    "claude-3-sonnet",
+    "claude-3-haiku",
+    "claude-3-5-sonnet",
+    "claude-3-5-haiku",
+    "claude-3-7-sonnet",
+];
+
+/// The variable Claude Code reads the model from when it is given none.
+const MODEL_VAR: &str = "ANTHROPIC_MODEL";
+
+/// Claude Code's settings files that apply to a session in `project` under
+/// the configuration directory `claude_dir`, each read as an object, the
+/// one that wins first: the managed ones, the project's own, the shared
+/// project's, the user's. A file that is not there, or not an object, is
+/// left out.
+pub fn claude_settings(claude_dir: &Path, project: &Path) -> Vec<Map<String, Value>> {
+    let mut files = managed_settings();
+    files.push(project.join(crate::hook::CLAUDE_LOCAL));
+    files.push(project.join(".claude").join("settings.json"));
+    files.push(claude_dir.join("settings.json"));
+    files
+        .iter()
+        .map(|file| crate::hook::read_settings(file))
+        .filter(|settings| !settings.is_empty())
+        .collect()
+}
+
+/// Where Claude Code's managed settings are on this system: the files
+/// dropped in beside the main one, the last one first, then the main one.
+fn managed_settings() -> Vec<PathBuf> {
+    let dir = Path::new(if cfg!(target_os = "macos") {
+        "/Library/Application Support/ClaudeCode"
+    } else if cfg!(windows) {
+        r"C:\Program Files\ClaudeCode"
+    } else {
+        "/etc/claude-code"
+    });
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir.join("managed-settings.d"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    files.reverse();
+    files.push(dir.join("managed-settings.json"));
+    files
+}
+
+/// What Claude Code is given in its environment so a session spends fewer
+/// tokens: tool search on. A variable the user set, in `vars` or in the
+/// `env` of one of the `settings` files, is theirs and left alone. Tool
+/// search is left out on a model Claude Code does not search tools on:
+/// the one the session runs on where it names one, else the one the user
+/// set.
+pub fn claude_spending(
+    vars: &HashMap<String, String>,
+    settings: &[Map<String, Value>],
+    model: Option<&str>,
+) -> Vec<(String, String)> {
+    let in_settings = |var: &str| {
+        settings.iter().find_map(|file| {
+            file.get("env")
+                .and_then(Value::as_object)
+                .and_then(|env| env.get(var))
+        })
+    };
+    let set = |var: &str| vars.contains_key(var) || in_settings(var).is_some();
+    let model = model
+        .map(str::to_string)
+        .or_else(|| {
+            in_settings(MODEL_VAR)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| vars.get(MODEL_VAR).cloned())
+        .or_else(|| {
+            settings
+                .iter()
+                .find_map(|file| file.get("model").and_then(Value::as_str))
+                .map(str::to_string)
+        })
+        .map(|model| model.to_lowercase());
+    let searches = model
+        .as_deref()
+        .is_none_or(|model| !NO_TOOL_SEARCH.iter().any(|old| model.contains(old)));
+    let mut added = Vec::new();
+    if searches && !set(TOOL_SEARCH_VAR) {
+        added.push((TOOL_SEARCH_VAR.to_string(), "true".to_string()));
+    }
+    added
+}
+
 /// Why Codex does not start a session that follows a workflow in a
 /// terminal on Windows: it takes the instructions only on its command line
 /// there, and an install run through the command interpreter loses every
@@ -621,6 +729,9 @@ impl ClaudeCode {
         if let Some(dir) = ctx.config_dir {
             command.env(CLAUDE_CONFIG_VAR, dir);
         }
+        for (key, value) in ctx.spending {
+            command.env(key, value);
+        }
 
         Ok(Surface::Pty(command))
     }
@@ -819,6 +930,7 @@ pub fn adapter_for(id: &str) -> Option<&'static dyn AgentAdapter> {
 mod tests {
     use super::*;
     use crate::scratch::Scratch;
+    use serde_json::json;
 
     #[test]
     fn the_agents_that_run_integrated_are_the_ones_whose_adapter_drives_them() {
@@ -890,6 +1002,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -938,6 +1051,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -993,6 +1107,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1038,6 +1153,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1114,6 +1230,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1192,6 +1309,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1433,6 +1551,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: true,
             profile: &[],
         };
@@ -1605,6 +1724,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1693,6 +1813,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1734,6 +1855,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1767,6 +1889,7 @@ mod tests {
             configured: Some(daemon),
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &profile,
         };
@@ -1807,6 +1930,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1984,6 +2108,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2046,6 +2171,7 @@ mod tests {
                 configured: None,
                 afresh: false,
                 compact_at: None,
+                spending: &[],
                 wakes: false,
                 profile: &[],
             };
@@ -2092,6 +2218,7 @@ mod tests {
                 configured: None,
                 afresh: false,
                 compact_at: None,
+                spending: &[],
                 wakes,
                 profile: &[],
             };
@@ -2132,6 +2259,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2162,6 +2290,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2198,6 +2327,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2228,6 +2358,106 @@ mod tests {
         }
     }
 
+    fn settings(json: Value) -> Map<String, Value> {
+        json.as_object().unwrap().clone()
+    }
+
+    #[test]
+    fn claude_code_searches_tools_unless_the_user_or_the_model_says_otherwise() {
+        let on = vec![(TOOL_SEARCH_VAR.to_string(), "true".to_string())];
+        let none = HashMap::new();
+        assert_eq!(claude_spending(&none, &[], None), on);
+        assert_eq!(claude_spending(&none, &[], Some("opus")), on);
+        assert_eq!(claude_spending(&none, &[], Some("claude-opus-4-1")), on);
+
+        // The user's own value, in the environment or in a settings file,
+        // whatever it says.
+        let theirs = HashMap::from([(TOOL_SEARCH_VAR.to_string(), "auto:5".to_string())]);
+        assert_eq!(claude_spending(&theirs, &[], None), []);
+        let file = settings(json!({ "env": { "ENABLE_TOOL_SEARCH": "false" } }));
+        assert_eq!(claude_spending(&none, &[file], None), []);
+        let elsewhere = settings(json!({ "env": { "OTHER": "1" }, "ENABLE_TOOL_SEARCH": "x" }));
+        assert_eq!(claude_spending(&none, &[elsewhere], None), on);
+
+        // A model that does not search tools, named for the session, in
+        // the environment, or in a settings file.
+        assert_eq!(
+            claude_spending(&none, &[], Some("claude-3-5-haiku-20241022")),
+            []
+        );
+        assert_eq!(
+            claude_spending(
+                &none,
+                &[],
+                Some("us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+            ),
+            []
+        );
+        let old = HashMap::from([("ANTHROPIC_MODEL".to_string(), "claude-3-opus".to_string())]);
+        assert_eq!(claude_spending(&old, &[], None), []);
+        let file = settings(json!({ "model": "claude-3-5-sonnet-latest" }));
+        assert_eq!(claude_spending(&none, std::slice::from_ref(&file), None), []);
+        // The model the session names wins over the user's.
+        assert_eq!(claude_spending(&old, &[file], Some("sonnet")), on);
+    }
+
+    #[test]
+    fn claude_settings_are_read_from_the_project_and_the_configuration_directory() {
+        let root = Scratch::new("adapter-settings");
+        let (project, config) = (root.join("project"), root.join("config"));
+        std::fs::create_dir_all(project.join(".claude")).unwrap();
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(
+            project.join(".claude").join("settings.local.json"),
+            r#"{"env":{"A":"local"}}"#,
+        )
+        .unwrap();
+        std::fs::write(project.join(".claude").join("settings.json"), "not json").unwrap();
+        std::fs::write(config.join("settings.json"), r#"{"env":{"A":"user"}}"#).unwrap();
+        let read = claude_settings(&config, &project);
+        let ours: Vec<_> = read
+            .iter()
+            .filter_map(|file| file.get("env")?.get("A")?.as_str())
+            .collect();
+        assert_eq!(ours, ["local", "user"]);
+    }
+
+    #[test]
+    fn claude_code_is_given_the_variables_that_spend_fewer_tokens() {
+        let dir = fake_claude("adapter-spending");
+        let vars = vars_with_path(&dir);
+        let spending = [(TOOL_SEARCH_VAR.to_string(), "true".to_string())];
+        let ctx = LaunchCtx {
+            project: Path::new("/tmp"),
+            env: &vars,
+            config_dir: None,
+            session: None,
+            token: None,
+            prompt: None,
+            model: None,
+            mode: None,
+            orchestrator: false,
+            instructions: None,
+            start_only: false,
+            server: None,
+            instructions_file: None,
+            server_file: None,
+            configured: None,
+            afresh: false,
+            compact_at: None,
+            spending: &spending,
+            wakes: false,
+            profile: &[],
+        };
+        for surface in [
+            ClaudeCode.launch(&ctx, "abc").unwrap(),
+            ClaudeCode.resume(&ctx, "abc").unwrap(),
+        ] {
+            let Surface::Pty(command) = surface;
+            assert_eq!(command.get_env(TOOL_SEARCH_VAR), Some("true".as_ref()));
+        }
+    }
+
     #[test]
     fn resume_passes_the_session_id_through() {
         let dir = fake_claude("adapter-resume");
@@ -2250,6 +2480,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2292,6 +2523,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2331,6 +2563,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2365,6 +2598,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };

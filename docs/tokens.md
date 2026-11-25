@@ -24,6 +24,10 @@ The size of both is recorded: the bytes of the instructions and of the tool list
 
 The `sessions` listing for an orchestrating session gives open sessions in full and a session that is over as one short line, the last ten only. `all` lists the rest and `find` matches words of a name.
 
+## Tool search
+
+Every Claude Code session is started with `ENABLE_TOOL_SEARCH=true`: yours and those another session started, in a terminal or in Chord. The tools of its servers, Chord's among them, stay out of its context until the model loads one by name with Claude Code's own tool search, which tells the model how. A current Claude Code searches tools without the variable too, except in a conversation that has already run without tool search, which it keeps that way until it is compacted or cleared; the variable turns it on there as well. Chord leaves the variable out where you set it yourself, in your environment or in the `env` of a Claude Code settings file, and for a Claude 3 model, which has no tool search. Codex is given nothing.
+
 ## Orchestration
 
 A session started by another session:
