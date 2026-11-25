@@ -544,10 +544,18 @@ describe("coming back", () => {
     expect(activeSession()?.id).toBe("one");
   });
 
-  it("falls back to the front project's most recent", () => {
+  it("opens no session when the one on screen was another project's", () => {
     onRecord([entry(A, "one"), entry(A, "two"), entry(B, "three")], "three");
     stop = reopen();
-    expect(activeSession()?.id).toBe("two");
+    expect(sessions.active).toBeNull();
+  });
+
+  it("opens no session when none was on screen", () => {
+    onRecord([entry(A, "one"), entry(A, "two")], null);
+    stop = reopen();
+    expect(sessions.active).toBeNull();
+    flushSync();
+    expect(record().active).toBeNull();
   });
 
   it("brings back the name a session had", () => {
@@ -707,16 +715,16 @@ describe("a project on another machine", () => {
     expect(forProject(A).map((session) => session.status)).toEqual(["dormant"]);
   });
 
-  it("selects the most recent in front when the one on screen cannot come back", async () => {
+  it("opens no session when the one on screen cannot come back", async () => {
     const arrived = await restoring("there", R);
     host.release(false);
     await arrived();
     flushSync();
     expect(workspace.active).toBe(A);
-    expect(activeSession()?.id).toBe("here");
+    expect(sessions.active).toBeNull();
   });
 
-  it("starts nothing in front while it waits with no sessions on record", async () => {
+  it("opens no session when none was on screen and its project is on another machine", async () => {
     resetWorkspace();
     localStorage.setItem(
       "chord.workspace",
@@ -735,7 +743,7 @@ describe("a project on another machine", () => {
     await Promise.all(arriving.values());
     flushSync();
     expect(workspace.active).toBe(A);
-    expect(activeSession()?.id).toBe("here");
+    expect(sessions.active).toBeNull();
   });
 
   it("keeps a session picked while it waited across a quit", async () => {

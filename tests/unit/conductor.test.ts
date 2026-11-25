@@ -637,6 +637,17 @@ describe("starting a session", () => {
     expect(sessions.active).toBe(caller.key);
   });
 
+  it("opens nothing where no session was on screen", async () => {
+    live(A, "pty-0", "caller-1");
+    sessions.active = null;
+    await startAllowed(
+      call("start", { project: A, prompt: "Fix it" }, { session: "caller-1" }),
+      "pty-1",
+      "sid-1",
+    );
+    expect(sessions.active).toBeNull();
+  });
+
   it("names the session and its worktree after the name the caller gives", async () => {
     const row = await startAllowed(
       call(
@@ -2009,6 +2020,16 @@ describe("a session named by the start of its id", () => {
     const row = await resumed(call("start", { session: ONE.slice(0, ID_START) }), "pty-1b");
     expect(row.id).toBe(ONE);
     expect(last().content).toContain(`Resumed session ${ONE} in ${B}.`);
+  });
+
+  it("takes the place on screen of the ended row it replaces", async () => {
+    const first = await startAllowed(call("start", { project: B, prompt: "Fix it" }), "pty-1", ONE);
+    ended({ id: "pty-1", code: 0, clean: true });
+    flushSync();
+    sessions.active = first.key;
+    const row = await resumed(call("start", { session: ONE }), "pty-1b");
+    expect(row.key).not.toBe(first.key);
+    expect(sessions.active).toBe(row.key);
   });
 
   it("carries the plugin start of an ended row to the row resumed in its place", async () => {
@@ -4027,6 +4048,16 @@ describe("resuming a session", () => {
     expect(row.prompt).toBeNull();
     expect(conductor.asking).toBeNull();
     expect(last().content).toContain("Send it a line to go on");
+  });
+
+  it("opens nothing where no session was on screen", async () => {
+    await startInTree();
+    sessions.active = null;
+    await resumed(
+      call("start", { session: "sid-1" }, { session: "caller-1" }),
+      "pty-5",
+    );
+    expect(sessions.active).toBeNull();
   });
 
   it("leaves the window where it was", async () => {
