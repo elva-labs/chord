@@ -305,31 +305,23 @@ function unnamed(href: string, title: string | null | undefined, text: string): 
 /** Everything a link may read as: its words with every fold inside it as
     it is drawn, and what each shut fold holds, together and a child at a
     time, which shows once it opens. Each is read without and with its
-    images' words. */
+    images' words. Every element is read once, however deep the folds go. */
 function readings(link: Element): string[] {
   const out: string[] = [];
-  const read = (nodes: Node[]) => {
-    let text = "";
-    let withImages = "";
-    const visit = (node: Node) => {
-      if (node instanceof Text) {
-        text += node.data;
-        withImages += node.data;
-      } else if (node instanceof Element) {
-        if (node.tagName === "IMG") withImages += node.getAttribute("alt") ?? "";
-        const children = [...node.childNodes];
-        if (node.tagName !== "DETAILS" || node.hasAttribute("open")) return children.forEach(visit);
-        const summary = (child: Node) => child instanceof Element && child.tagName === "SUMMARY";
-        const hidden = children.filter((child) => !summary(child));
-        children.filter(summary).forEach(visit);
-        read(hidden);
-        for (const child of hidden) read([child]);
-      }
-    };
-    nodes.forEach(visit);
-    out.push(text, withImages);
+  type Words = [string, string];
+  const note = (words: Words) => (out.push(...words), words);
+  const joined = (parts: Words[]): Words => [parts.map((part) => part[0]).join(""), parts.map((part) => part[1]).join("")];
+  const read = (node: Node): Words => {
+    if (node instanceof Text) return [node.data, node.data];
+    if (!(node instanceof Element)) return ["", ""];
+    if (node.tagName === "IMG") return ["", node.getAttribute("alt") ?? ""];
+    const children = [...node.childNodes];
+    if (node.tagName !== "DETAILS" || node.hasAttribute("open")) return joined(children.map(read));
+    const summary = (child: Node) => child instanceof Element && child.tagName === "SUMMARY";
+    note(joined(children.filter((child) => !summary(child)).map((child) => note(read(child)))));
+    return joined(children.filter(summary).map(read));
   };
-  read([link]);
+  note(read(link));
   return out;
 }
 

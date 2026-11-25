@@ -1197,6 +1197,13 @@ describe("the HTML a reply may draw", () => {
     }
   });
 
+  it("reads a link that holds folds nested deep without stalling", () => {
+    const deep = 90;
+    const box = drawn(`<div><a href="https://evil.example">${"<details>".repeat(deep)}google.com${"</details>".repeat(deep)}</a></div>`);
+    expect(box.querySelectorAll("details")).toHaveLength(deep);
+    expect(box.querySelector("a[href] + .goes")?.textContent).toBe(" (https://evil.example)");
+  });
+
   it("holds a fold's blocks inside it, and closes one left open at the end", () => {
     for (const markdown of ["<details>\n\none\n\ntwo\n\n</details>\n\nafter", "<details>\n\none\n\ntwo"]) {
       const box = drawn(markdown);
