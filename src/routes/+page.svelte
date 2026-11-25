@@ -46,7 +46,7 @@
   } from "$lib/show.svelte";
   import { watchSelection } from "$lib/selection.svelte";
   import { watchViewed } from "$lib/viewed.svelte";
-  import { sessionShown, unfoldSessions } from "$lib/viewers.svelte";
+  import { switchViewer, unfoldSessions } from "$lib/viewers.svelte";
   import { newFile, newUntitled } from "$lib/fileOps.svelte";
   import { askFind } from "$lib/find.svelte";
   import {
@@ -435,9 +435,7 @@
     untrack(() => {
       // Picked from the peeked pane, or started there: the pane goes back.
       peekSessions(false);
-      void sessionShown(key).then(() => {
-        if (key !== null) switched(key);
-      });
+      switchViewer(key, () => (key === null ? undefined : switched(key)));
     });
   });
 

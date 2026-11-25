@@ -194,15 +194,15 @@ export function held(
 }
 
 /** The user switched to a session: what its agent asked to open while
-    they were elsewhere opens now. */
-export function switched(key: string) {
+    they were elsewhere opens now. Resolves once it is open. */
+export async function switched(key: string): Promise<void> {
   for (const stale of heldOpens.keys()) {
     if (byKey(stale) === null) heldOpens.delete(stale);
   }
   const open = heldOpens.get(key);
   if (open === undefined) return;
   heldOpens.delete(key);
-  void open();
+  await open();
 }
 
 /** Forgets what was held, for tests. */

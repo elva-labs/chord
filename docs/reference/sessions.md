@@ -1455,10 +1455,12 @@ number, day, title and summary, and a count of the others, which it finds
 by their words. A note is read whole by its number.
 
 A row's menu has Show notes when its session keeps a brief, a note or an
-item. It writes them out as a document and opens it in the viewer: the
-open items oldest first, the brief, the standing notes newest first, those
-a later note replaced, then the closed items with the day each closed, the
-last closed first. There is nothing to manage.
+item. It brings the session on screen, as picking its row does, writes them
+out as a document and opens it in the viewer: the open items oldest first,
+the brief, the standing notes newest first, those a later note replaced,
+then the closed items with the day each closed, the last closed first. A
+session left from the last quit starts its agent once it is on screen, so
+its notes open without the switch. There is nothing to manage.
 
 ### Going on from the notes
 

@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore, startNew, sessionRowOf } from "./fake";
+import { PROJECT, installFakeCore, startNew, sessionBox, sessionRowOf } from "./fake";
 
 /**
  * The notes a session keeps of its conversation are read from its row's
  * menu, and only there: the item is offered for a session that keeps any,
- * and opens them in the viewer as a document.
+ * brings that session on screen and opens them in the viewer as a document.
  */
 
 const ROW = "[data-testid='session-row']";
@@ -14,6 +14,26 @@ const row = (page: Page, name: string) =>
   /^session \d+$/.test(name)
     ? sessionRowOf(page, Number(name.replace("session ", "")))
     : page.locator(ROW).filter({ hasText: name });
+
+const OTHER = "/home/ada/dev/other";
+
+/** Has the first session keep notes. */
+const keepNotes = (page: Page, session = "session-1") =>
+  page.evaluate((session) => {
+    const fake = window as unknown as { __notes: unknown; __markdown: string };
+    fake.__notes = { [session]: { standing: 1, brief: true } };
+    fake.__markdown = "# Notes\n\n## Brief\n\nA desktop app for agents.\n";
+  }, session);
+
+async function showNotes(page: Page, project?: string) {
+  await sessionRowOf(page, 1, project).click({ button: "right" });
+  await page.getByTestId("session-menu-notes").click();
+}
+
+async function notesShown(page: Page) {
+  await expect(page.getByTestId("media-caption")).toHaveText("Notes");
+  await expect(page.getByTestId("media-file").getByRole("heading", { name: "Brief" })).toBeVisible();
+}
 
 test("opens a session's notes in the viewer from its menu, offered only when it keeps some", async ({ page }) => {
   await installFakeCore(page, { open: [PROJECT] });
@@ -53,12 +73,114 @@ test("opens a session's notes in the viewer from its menu, offered only when it 
   // Quiet: it sits above the stop, never first.
   await expect(menu.getByRole("menuitem").first()).not.toHaveText("Show notes");
   await expect(menu.getByRole("menuitem").last()).not.toHaveText("Show notes");
+  await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
   await item.click();
   await expect(menu).toHaveCount(0);
+  await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("media-caption")).toHaveText("Notes");
   const viewer = page.getByTestId("media-file");
   await expect(viewer.getByRole("heading", { name: "Default model" })).toBeVisible();
   await expect(viewer.getByRole("heading", { name: "Notes.md" })).toBeVisible();
+});
+
+for (const mode of ["agent", "editor"] as const) {
+  test(`switching project in ${mode} mode, the notes stand over the file the session had open`, async ({ page }) => {
+    await installFakeCore(page, { open: [PROJECT, OTHER] });
+    await page.goto("/");
+    await expect(page.locator("section[data-pane='agent']")).toBeVisible();
+    for (const project of [PROJECT, OTHER]) {
+      const header = page.locator(`[data-row='project:${project}']`);
+      await header.hover();
+      await header.getByTestId("project-new-session").click();
+      await startNew(page);
+      await expect(sessionRowOf(page, 1, project)).toContainText("running");
+    }
+    if (mode === "editor") {
+      await page.keyboard.press("ControlOrMeta+Shift+E");
+      await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "editing");
+    }
+    // The file each session has open: a tab while editing, else the viewer's.
+    const open = (name: string) =>
+      mode === "editor"
+        ? page.locator(`[data-testid='editor-tab'][data-path$='${name}']`)
+        : page.getByTestId("viewer").getByText(name).first();
+    // Reading a file in the viewer folds the sessions pane: its rows are
+    // picked from the pane peeked.
+    const unfold = async () => {
+      const button = page.getByTestId("unfold-sessions");
+      if (await button.isVisible()) await button.click();
+    };
+    for (const [project, name] of [
+      [PROJECT, "mod.rs"],
+      [OTHER, "lib.rs"],
+    ]) {
+      await unfold();
+      await sessionRowOf(page, 1, project).click();
+      await expect(sessionBox(page, 1, project)).toHaveClass(/\bon\b/);
+      const file = page.locator("section[data-pane='changes']").getByText(name, { exact: true }).first();
+      if (mode === "editor") await file.dblclick();
+      else await file.click();
+      await expect(open(name)).toBeVisible();
+    }
+
+    await keepNotes(page);
+    await unfold();
+    await showNotes(page, PROJECT);
+    await expect(sessionBox(page, 1, PROJECT)).toHaveClass(/\bon\b/);
+    await notesShown(page);
+    if (mode === "editor") await expect(open("mod.rs")).toBeVisible();
+  });
+}
+
+test("in compact mode, brings the session on screen with its notes and puts the pane away", async ({ page }) => {
+  // A binding of its own, so the test presses what is bound.
+  const bound = { key: "y", shift: false, alt: false };
+  await installFakeCore(page, { open: [PROJECT], settings: { compact: true, keys: { "focus.sessions": bound } } });
+  await page.goto("/");
+  const pane = page.locator("[data-testid='sessions-slot'] section[data-pane='sessions']");
+  await expect(page.locator("section[data-pane='agent']")).toBeVisible();
+  await expect(pane).toBeHidden();
+  for (const _ of [1, 2]) {
+    await page.keyboard.press("ControlOrMeta+y");
+    await expect(pane).toBeVisible();
+    await page.getByTestId("new-session").click();
+    await startNew(page);
+    await expect(pane).toBeHidden();
+  }
+  await keepNotes(page);
+  await page.keyboard.press("ControlOrMeta+y");
+  await showNotes(page);
+  await expect(pane).toBeHidden();
+  await notesShown(page);
+  await page.keyboard.press("ControlOrMeta+y");
+  await expect(sessionBox(page, 1)).toHaveClass(/\bon\b/);
+});
+
+test("opens the notes of a session left from the last quit without starting it", async ({ page }) => {
+  await installFakeCore(page, { open: [PROJECT] });
+  await page.goto("/");
+  for (const count of [1, 2]) {
+    await page.getByTestId("new-session").click();
+    await startNew(page);
+    await expect(page.locator(ROW)).toHaveCount(count);
+    await expect(sessionRowOf(page, count)).toContainText("running");
+  }
+  // After a reload the fake knows a row's notes by its token alone.
+  const token = await page.evaluate(
+    () => (window as unknown as { __spawns: { token: string }[] }).__spawns[0].token,
+  );
+  await page.reload();
+  await expect(sessionBox(page, 1).locator(".dot.dormant")).toBeVisible();
+  const spawns = () =>
+    page.evaluate(() => (window as unknown as { __spawns?: { session?: string }[] }).__spawns?.map((s) => s.session));
+  await expect.poll(spawns).toEqual(["session-2"]);
+
+  await keepNotes(page, token);
+  await showNotes(page);
+  await notesShown(page);
+  await expect(sessionBox(page, 2)).toHaveClass(/\bon\b/);
+  await expect(sessionBox(page, 1).locator(".dot.dormant")).toBeVisible();
+  expect(await spawns()).toEqual(["session-2"]);
 });
 
 test("a terminal row goes on from its notes in its first prompt, and its menu resumes the old conversation whole", async ({ page }) => {
