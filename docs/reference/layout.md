@@ -279,8 +279,10 @@ were and nothing resized. Every row is where it stands in the column, so
 the dots do not move and the names appear beside them. Picking a session
 puts the pane back; so does the pointer leaving it, <kbd>Esc</kbd>,
 <kbd>Tab</kbd>, or the shortcut again, and the keyboard then returns to the
-viewer. A pane peeked
-from the keyboard stays while the pointer wanders.
+viewer. While the
+keyboard is in the pane, as after a project is picked in it or after the
+shortcut, the pointer wandering leaves it there; once the keyboard leaves it
+with the pointer elsewhere, by a click or a shortcut, it goes back.
 
 ## Compact mode
 
@@ -337,7 +339,8 @@ Picking a session sends it back with the keyboard in that session's
 agent, as a pick does anywhere; picking a project leaves it in, to pick one
 of the project's sessions from. Going to a session from the palette leaves
 the pane where it is, out of sight, and going to a project slides it in with
-the keyboard in it.
+the keyboard in it, unless the session on screen is that project's: then it
+stays, with the keyboard in its agent, and the pane stays out of sight.
 
 What the pane would tell is not lost while it is out of sight. The status
 bar counts the sessions waiting for you, as it always does.

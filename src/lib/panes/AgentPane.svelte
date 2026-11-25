@@ -55,6 +55,13 @@
 
   let current = $derived(activeSession());
   let blocked = $derived(unavailableReason());
+  /** What the empty state of a project with no session says, for the line
+      a screen reader hears. */
+  let emptySaid = $derived(
+    blocked === null && workspace.active !== null && current === null
+      ? `No session open in ${projectLabel(workspace.active)}.`
+      : "",
+  );
 
   onMount(detect);
 
@@ -189,6 +196,8 @@
 
 <Pane id="agent" {title} meta={model ?? undefined} head={tag !== null ? head : undefined}>
   <div class="wrap" bind:this={wrap}>
+    <!-- Stands ahead of the empty state, so a screen reader hears it come. -->
+    <p class="sr" role="status" data-testid="empty-said">{emptySaid}</p>
     {#if refusal !== null && current !== null}
       <!-- What the workflow refused the agent, said to the user too. -->
       <p class="refused" data-testid="workflow-refused">
@@ -310,6 +319,16 @@
 </Pane>
 
 <style>
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .wrap {
     position: relative;
     flex: 1;

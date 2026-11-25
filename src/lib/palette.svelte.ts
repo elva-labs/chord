@@ -1028,7 +1028,7 @@ export function stepBack() {
 
 /** Gives the keyboard to the sessions pane, which a project with no session
     has instead of a terminal. Called once the page has reacted to the
-    project coming forward, which puts a peeked pane back. A folded pane is
+    project coming forward, so the layout read here is that project's. A folded pane is
     opened first, or peeked over the panes beside it in compact mode and
     while reviewing, so the viewer stays. A window too narrow for the pane
     leaves it folded, as the user set it, and the keyboard goes to the agent

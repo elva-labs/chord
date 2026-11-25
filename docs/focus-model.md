@@ -149,7 +149,8 @@ first. <kbd>Enter</kbd> on a session shows it and puts the keyboard in its
 agent, as a click on its row does. On a project it brings the project forward
 and counts it as used, as [sessions](reference/sessions.md#active-and-inactive) orders
 them, opening no session, as a click on its header does, with the keyboard in
-the sessions pane, on the project. A sessions pane that is folded opens for
+the sessions pane, on the project. The project of the session on screen
+leaves that session there, with the keyboard in its agent. A sessions pane that is folded opens for
 that, or peeks over the panes beside it while reviewing, so the viewer stays,
 and in compact mode. In a window too narrow for the pane it stays folded, and
 the keyboard goes to the agent pane, on its New session button when no session
