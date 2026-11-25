@@ -356,10 +356,15 @@ fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', r"'\''"))
 }
 
+/// A settings file read as an object, empty where it is not there or not
+/// an object. A byte order mark at its start, which editors on Windows
+/// write, is not part of the JSON.
 pub(crate) fn read_settings(path: &Path) -> Map<String, Value> {
     std::fs::read_to_string(path)
         .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|text| {
+            serde_json::from_str::<Value>(text.strip_prefix('\u{feff}').unwrap_or(&text)).ok()
+        })
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default()
 }
@@ -1833,6 +1838,17 @@ mod tests {
             Scratch::new(&format!("hook-{name}-home")),
             Scratch::new(&format!("hook-{name}-project")),
         )
+    }
+
+    #[test]
+    fn a_settings_file_that_starts_with_a_byte_order_mark_is_read() {
+        let dir = Scratch::new("hook-byte-order-mark");
+        let file = dir.join("settings.json");
+        std::fs::write(&file, "\u{feff}{ \"promptCacheTtl\": \"1h\" }").unwrap();
+        assert_eq!(
+            read_settings(&file).get("promptCacheTtl"),
+            Some(&json!("1h"))
+        );
     }
 
     #[test]
