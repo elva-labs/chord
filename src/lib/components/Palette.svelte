@@ -209,7 +209,7 @@
   // What go to can do is what its list holds: sessions and projects to go to
   // and start in, the one row that opens a project when nothing is open, or
   // nothing.
-  const goable = $derived(items.some((item) => item.kind === "session" || item.kind === "project"));
+  const goable = $derived(items.some((item) => item.kind === "session" || item.kind === "past" || item.kind === "project"));
   const modifier = isMac() ? "⌘" : "Ctrl+";
 </script>
 
@@ -312,6 +312,8 @@
                   class:permission={item.session.needs === "permission"}
                   data-testid="palette-dot"
                 ></span>
+              {:else if item.kind === "past"}
+                <span class="dot" data-testid="palette-dot"></span>
               {:else if item.kind === "project" || (item.kind === "choice" && item.step.kind === "project")}
                 <svg class="folder" viewBox="0 0 16 16" aria-hidden="true">
                   <path
@@ -323,7 +325,7 @@
               {/if}
               <span
                 class="label"
-                class:unnamed={item.kind === "session" && item.unnamed}
+                class:unnamed={(item.kind === "session" || item.kind === "past") && item.unnamed}
                 data-testid="palette-label">{item.label}</span
               >
               {#if item.kind === "ready"}
@@ -333,6 +335,9 @@
                 <span class="detail"></span>
               {:else if item.kind === "session"}
                 <span class="detail" data-testid="palette-detail">{item.project}</span>
+                <span class="end" data-testid="palette-end">{item.when}</span>
+              {:else if item.kind === "past"}
+                <span class="detail" data-testid="palette-detail">chat</span>
                 <span class="end" data-testid="palette-end">{item.when}</span>
               {:else if item.kind === "choice"}
                 <span class="detail" data-testid="palette-detail">{item.detail}</span>

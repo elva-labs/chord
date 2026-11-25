@@ -254,6 +254,62 @@ describe("go to", () => {
   });
 });
 
+describe("chats in go to", () => {
+  const CHATS = "/home/ada/.chord/chats";
+  const groups = (items: PaletteItem[]) => items.map((item) => `${item.kind}:${item.group}`);
+
+  beforeEach(() => {
+    resetChats(CHATS);
+    create(A).changedAt = 3000;
+    const open = create(CHATS);
+    open.changedAt = 2500;
+    open.title = "Plan the export rework";
+    sessions.history[CHATS] = [
+      { id: "old", modified: 2, size: 1, title: "Invoice export formats", agent: "claude-code", account: null },
+    ];
+  });
+
+  it("stand in a group of their own between the sessions and the projects, past chats too", () => {
+    expect(groups(goToItems(""))).toEqual([
+      "session:Sessions",
+      "session:Chats",
+      "past:Chats",
+      "project:Projects",
+      "project:Projects",
+      "project:Projects",
+    ]);
+    const [open, past] = goToItems("").filter((item) => item.group === "Chats");
+    expect(open).toMatchObject({ label: "Plan the export rework", project: "chat" });
+    expect(past).toMatchObject({ label: "Invoice export formats" });
+    expect(projectPaths(goToItems(""))).not.toContain(CHATS);
+  });
+
+  it("match on their name, and all of them on the word chat", () => {
+    expect(goToItems("export").map((item) => item.label)).toEqual([
+      "Plan the export rework",
+      "Invoice export formats",
+    ]);
+    expect(goToItems("chat").filter((item) => item.group !== "Chats")).toEqual([]);
+    expect(goToItems("chat")).toHaveLength(2);
+  });
+
+  it("resume a past chat in front when picked, not as a project", () => {
+    const past = goToItems("formats")[0];
+    const outcome = pickItem(past);
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all.find((session) => session.resumedFrom === "old")).toMatchObject({ project: CHATS });
+    expect(workspace.active).toBe(CHATS);
+    expect(workspace.open.map(({ path }) => path)).not.toContain(CHATS);
+  });
+
+  it("start a new chat on a chat held alone", () => {
+    expect(pickItem(goToItems("formats")[0], true)).toEqual({ type: "stay" });
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: CHATS }]);
+  });
+});
+
 describe("where go to starts", () => {
   it("puts the cursor on the first session that is not the one on screen", () => {
     const first = create(A);

@@ -50,10 +50,13 @@ import {
 } from "$lib/workflows.svelte";
 import {
   defaultAgent,
+  hasName,
+  historyLabel,
   otherWay,
   rowName,
   sessions,
   waitingOnYou,
+  type HistoryEntry,
   type Session,
 } from "$lib/sessions.svelte";
 import {
@@ -62,6 +65,7 @@ import {
   onScreen,
   pick,
   projectLabel,
+  resumeChat,
   startSession,
   workspace,
 } from "$lib/workspace.svelte";
@@ -69,7 +73,7 @@ import { liveUnder } from "$lib/projects.svelte";
 import { startsIn } from "$lib/orchestratorFolder.svelte";
 import { unfoldSessions } from "$lib/viewers.svelte";
 import { reduced } from "$lib/motion";
-import { chats, isChatsFolder } from "$lib/chats.svelte";
+import { chatRows, chats, isChat, isChatsFolder, pastChats } from "$lib/chats.svelte";
 import { canGoBack, openBack } from "$lib/rewind.svelte";
 import { compact } from "$lib/compact.svelte";
 import { browser } from "$lib/browser.svelte";
@@ -151,6 +155,16 @@ export type PaletteItem =
       when: string;
     }
   | {
+      /** A past chat, which picking resumes. */
+      kind: "past";
+      id: string;
+      label: string;
+      unnamed: boolean;
+      group: string;
+      transcript: HistoryEntry;
+      when: string;
+    }
+  | {
       kind: "project";
       id: string;
       label: string;
@@ -217,6 +231,7 @@ const CHAT = ACTIONS.find(({ key }) => key === "chat.new")!;
 export const ATTENTION_LABEL = JUMP.label;
 
 export const SESSIONS = "Sessions";
+export const CHATS = "Chats";
 export const PROJECTS = "Projects";
 
 export const palette = $state({
@@ -398,13 +413,48 @@ function wrapCommand(): PaletteItem | null {
   };
 }
 
-/** The sessions and the projects a query leaves, in that order, then the
-    command for the file in the viewer when something is typed that it
-    matches, first when the text is the start of its name: go to lists no
-    commands otherwise. */
+/** The chats a query leaves, open and past, the latest changed first. A
+    chat matches on its name and on the word chat, which lists them all. */
+function chatItems(query: string, now: number): PaletteItem[] {
+  const rows = chatRows().map((session) => ({
+    at: session.changedAt,
+    item: {
+      kind: "session",
+      id: `session:${session.key}`,
+      label: rowName(session) ?? "New chat",
+      unnamed: rowName(session) === null,
+      group: CHATS,
+      session,
+      project: "chat",
+      when: since(session.changedAt, now),
+    } satisfies PaletteItem,
+  }));
+  const past = pastChats().map((transcript) => ({
+    at: transcript.modified * 1000,
+    item: {
+      kind: "past",
+      id: `past:${transcript.id}`,
+      label: historyLabel(transcript),
+      unnamed: !hasName(transcript),
+      group: CHATS,
+      transcript,
+      when: since(transcript.modified * 1000, now),
+    } satisfies PaletteItem,
+  }));
+  return [...rows, ...past]
+    .sort((a, b) => b.at - a.at)
+    .map(({ item }): PaletteItem => item)
+    .filter((item) => matches(`${item.label} chat`, query));
+}
+
+/** The sessions, the chats and the projects a query leaves, in that order,
+    then the command for the file in the viewer when something is typed
+    that it matches, first when the text is the start of its name: go to
+    lists no commands otherwise. */
 export function goToItems(query: string): PaletteItem[] {
   const now = Date.now();
-  const rows = [...sessions.all]
+  const rows = sessions.all
+    .filter((session) => !isChat(session))
     .sort((a, b) => b.changedAt - a.changedAt)
     .map((session): PaletteItem => ({
       kind: "session",
@@ -421,6 +471,7 @@ export function goToItems(query: string): PaletteItem[] {
         item.kind === "session" &&
         matches(`${item.label} ${item.project}`, query),
     );
+  const talks = chatItems(query, now);
   const projects = projectsByUse()
     .map((path): PaletteItem => ({
       kind: "project",
@@ -439,7 +490,7 @@ export function goToItems(query: string): PaletteItem[] {
     view !== null &&
     shown.length > 0 &&
     view.label.toLowerCase().startsWith(query.trim().toLowerCase());
-  if (sessions.all.length === 0 && workspace.open.length === 0) {
+  if (sessions.all.length === 0 && workspace.open.length === 0 && pastChats().length === 0) {
     const open: PaletteItem = {
       kind: "command",
       id: "command:open",
@@ -450,7 +501,7 @@ export function goToItems(query: string): PaletteItem[] {
     };
     return [...(matches(open.label, query) ? [open] : []), ...shown];
   }
-  return first ? [...shown, ...rows, ...projects] : [...rows, ...projects, ...shown];
+  return first ? [...shown, ...rows, ...talks, ...projects] : [...rows, ...talks, ...projects, ...shown];
 }
 
 /** The commands a query leaves: the jump to who needs you, then the ones
@@ -864,6 +915,7 @@ export function paletteItems(): PaletteItem[] {
     does not, and neither does a new session while no agent is ready. */
 export function pickable(item: PaletteItem): boolean {
   if (item.kind === "attention") return item.waiting > 0;
+  if (item.kind === "past") return isReady();
   if (item.kind === "command")
     return (
       isReady() ||
@@ -1094,6 +1146,12 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       return {
         type: "close",
         then: () => void (goTo(item.session.key) && focusPane("agent")),
+      };
+    case "past":
+      if (alone) return beginChat();
+      return {
+        type: "close",
+        then: () => void (resumeChat(item.transcript) !== null && focusPane("agent")),
       };
     case "project":
       if (alone) return beginNew(item.path);
