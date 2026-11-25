@@ -162,10 +162,13 @@ function showFolder(path: string): boolean {
   return true;
 }
 
-/** The chats folder is never one of the open projects: opening it puts
-    the latest chat in front, as the chats line does. */
+/** The chats folder is never one of the open projects. Opened by its
+    path it is in front with no chat on screen, where the empty chat state
+    offers New chat: a chat comes on screen only when the user picks it,
+    from its row, the tray, go to or New chat. Already in front, it keeps
+    what it shows. */
 function showChats(path: string): boolean {
-  bringForward(path);
+  if (workspace.active !== path) activate(path);
   return true;
 }
 

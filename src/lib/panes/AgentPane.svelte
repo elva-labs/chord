@@ -289,6 +289,8 @@
         <p class="message">No session open in {projectLabel(workspace.active)}.</p>
       </div>
     {:else if current === null && isChatsFolder(workspace.active)}
+      <!-- The chats in front with none picked: a chat comes on screen only
+           when the user picks one or starts one here. -->
       <div class="empty" data-testid="agent-status">
         <p class="message">No chat open.</p>
         <button class="primary" onclick={startAnother} data-testid="start-agent">New chat</button>

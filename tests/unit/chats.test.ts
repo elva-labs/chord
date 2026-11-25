@@ -62,6 +62,7 @@ import { offeredChats, openResume, pickChat, resume } from "$lib/resume.svelte";
 import {
   chatClosed,
   chatInFront,
+  goTo,
   hookedProjects,
   openPath,
   projectLabel,
@@ -211,10 +212,26 @@ describe("the chats folder in the window", () => {
     expect(projects.used[A]).toBeDefined();
   });
 
-  it("opened by its path puts the latest chat in front and stays out of the open projects", async () => {
-    const chat = create(DIR, null, "claude-code", null, null, null, null);
+  it("opened by its path is in front with no chat on screen, and stays out of the open projects", async () => {
+    create(DIR, null, "claude-code", null, null, null, null);
+    sessions.active = null;
     expect(await openPath(DIR)).toBe(true);
     expect(workspace.open.map((project) => project.path)).toEqual([A]);
+    expect(workspace.active).toBe(DIR);
+    expect(activeSession()).toBeNull();
+  });
+
+  it("opened by its path with a chat on screen keeps that chat", async () => {
+    startSession(DIR);
+    const chat = activeSession()!;
+    expect(await openPath(DIR)).toBe(true);
+    expect(activeSession()).toBe(chat);
+  });
+
+  it("brings a chat on screen when the user picks it", () => {
+    const chat = create(DIR, null, "claude-code", null, null, null, null);
+    startSession(A);
+    expect(goTo(chat.key)).toBe(true);
     expect(workspace.active).toBe(DIR);
     expect(activeSession()).toBe(chat);
   });
@@ -232,6 +249,16 @@ describe("the chats folder in the window", () => {
     await restore();
     expect(workspace.open.map((project) => project.path)).toEqual([A]);
     expect(workspace.active).toBe(DIR);
+  });
+
+  it("is in front after a restart with no chat in place of the one that was on screen", async () => {
+    resetChats();
+    workspace.open = [];
+    create(DIR, null, "claude-code", null, null, null, null);
+    localStorage.setItem("chord.workspace", JSON.stringify({ open: [A], active: DIR }));
+    await restore();
+    expect(workspace.active).toBe(DIR);
+    expect(activeSession()).toBeNull();
   });
 });
 
