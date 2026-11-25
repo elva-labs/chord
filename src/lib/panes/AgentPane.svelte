@@ -52,6 +52,8 @@
   import { openNew } from "$lib/palette.svelte";
   import { openSetup } from "$lib/settings.svelte";
   import { sizeOf } from "$lib/zoom.svelte";
+  import { isChat } from "$lib/chats.svelte";
+  import Icon from "$lib/components/conversation/Icon.svelte";
 
   let current = $derived(activeSession());
   let blocked = $derived(unavailableReason());
@@ -85,19 +87,25 @@
   const leaving = (session: Session) =>
     session.kind === "terminal" && session.status === "running" && reopeningRow(session.key);
 
-  // An integrated session's header names it.
+  /** Whether the session on screen is a chat, whose header is its mark and
+      its name, whatever way it runs. */
+  let chat = $derived(current !== null && isChat(current));
+
+  // An integrated session's header names it, as a chat's does.
   let title = $derived(
     current === null
       ? "Agent"
-      : integrated
-        ? (rowName(current) ?? "New session")
-        : `Agent · ${harnessLabel(current.agent)}`,
+      : chat
+        ? (rowName(current) ?? "New chat")
+        : integrated
+          ? (rowName(current) ?? "New session")
+          : `Agent · ${harnessLabel(current.agent)}`,
   );
 
   /** The model a terminal session runs on, by its full display name: the
-      header is the only place a terminal session says it. A conversation
-      says its model on the composer. */
-  let model = $derived(current === null || integrated ? null : sessionModelName(current));
+      header is the only place a terminal session says it, a chat's aside.
+      A conversation says its model on the composer. */
+  let model = $derived(current === null || integrated || chat ? null : sessionModelName(current));
 
   /** The workflow the session on screen is part of, and its place in it. */
   let tag = $derived(current === null ? null : workflowTag(current));
@@ -194,7 +202,17 @@
   {/if}
 {/snippet}
 
-<Pane id="agent" {title} meta={model ?? undefined} head={tag !== null ? head : undefined}>
+{#snippet chatMark()}
+  <span data-testid="chat-mark"><Icon name="chat" size={13} /></span>
+{/snippet}
+
+<Pane
+  id="agent"
+  {title}
+  meta={model ?? undefined}
+  mark={chat ? chatMark : undefined}
+  head={tag !== null ? head : undefined}
+>
   <div class="wrap" bind:this={wrap}>
     <!-- Stands ahead of the empty state, so a screen reader hears it come. -->
     <p class="sr" role="status" data-testid="empty-said">{emptySaid}</p>

@@ -34,7 +34,7 @@
   import { handle as browserRequested } from "$lib/browserTools.svelte";
   import { handle as settingsRequested, settingsAsk } from "$lib/settingsTools.svelte";
   import { folderToRead, load as loadOrchestratorFolder } from "$lib/orchestratorFolder.svelte";
-  import { chats, load as loadChats } from "$lib/chats.svelte";
+  import { chats, isChatsFolder, load as loadChats } from "$lib/chats.svelte";
   import { core } from "$lib/core";
   import { ensure as ensureHooks, hearsChanged } from "$lib/hook.svelte";
   import {
@@ -153,7 +153,7 @@
     ownerOnScreen as shellOwner,
     terminals,
   } from "$lib/terminals.svelte";
-  import { goTo, hookedProjects, settleFolder, workspace } from "$lib/workspace.svelte";
+  import { chatClosed, goTo, hookedProjects, settleFolder, workspace } from "$lib/workspace.svelte";
   import {
     CONTROLS_INSET,
     DEFAULT,
@@ -446,9 +446,22 @@
     });
   });
 
-  // The changes pane has nothing to show until a project is open.
+  // The changes pane has nothing to show until a project is open, and a
+  // chat shows only what its agent presents.
   $effect(() => {
     layout.noProject = workspace.active === null;
+    layout.chat = isChatsFolder(workspace.active);
+  });
+
+  // A chat closed on screen takes the chats out of the front with it.
+  let lastShown = untrack(() => sessions.active);
+  $effect(() => {
+    const key = sessions.active;
+    untrack(() => {
+      const was = lastShown;
+      lastShown = key;
+      if (key === null) chatClosed(was);
+    });
   });
 
   // The browser shows the tabs of the session on screen, or of the project
@@ -1055,7 +1068,8 @@
         toggleScope();
         break;
       case "toggleTerminal":
-        toggleTerminal();
+        if (layout.chat) say("A chat has no terminal");
+        else toggleTerminal();
         break;
       case "openSettings":
         openSettings();

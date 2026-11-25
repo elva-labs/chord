@@ -20,11 +20,12 @@
   import { sessionState } from "$lib/orchestrator.svelte";
   import { hostOf } from "$lib/remote.svelte";
   import { activeSession, unreadCount } from "$lib/sessions.svelte";
+  import { isChat } from "$lib/chats.svelte";
   import Icon from "./conversation/Icon.svelte";
 
   /**
    * The window's foot. At the left the branch the session on screen works
-   * on; at its right the account it runs under, once there is more than one,
+   * on, or for a chat that it is one; at its right the account it runs under, once there is more than one,
    * and the Codex profile where it runs under one, with that account's
    * allowance, the share used of each limit window the agent reported,
    * then how many sessions wait for you. A word in passing keeps its place
@@ -64,6 +65,7 @@
   let popover = $state<HTMLElement | null>(null);
 
   let session = $derived(activeSession());
+  let chat = $derived(session !== null && isChat(session));
   /** What the session is doing, in the words its row and its dot use. */
   let doing = $derived(session === null ? null : sessionState(session));
   /** What a screen reader is told as the session starts asking: only the
@@ -300,7 +302,9 @@
   {#if session !== null}
     <span class="place" data-testid="session-place">
       <span class="sr" aria-live="polite" data-testid="state-said">{asked}</span>
-      {#if branch !== null}
+      {#if chat}
+        <span class="where" data-testid="chat-readout"><Icon name="chat" size={12} /><span class="txt">Chat</span></span>
+      {:else if branch !== null}
         <span class="where branch" title="Branch {branch}" data-testid="branch-readout"
           ><Icon name="branch" size={12} /><span class="txt">{branch}</span></span
         >

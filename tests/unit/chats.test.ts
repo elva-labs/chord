@@ -49,6 +49,7 @@ import {
 } from "$lib/chats.svelte";
 import {
   activeSession,
+  close,
   create,
   forProject,
   reset as resetSessions,
@@ -58,6 +59,7 @@ import {
 } from "$lib/sessions.svelte";
 import { offeredChats, openResume, pickChat, resume } from "$lib/resume.svelte";
 import {
+  chatClosed,
   chatInFront,
   hookedProjects,
   openPath,
@@ -69,6 +71,9 @@ import {
   workspace,
 } from "$lib/workspace.svelte";
 import { projects, resetProjects } from "$lib/projects.svelte";
+import { changesVisible, layout, terminalVisible, toggleTerminal } from "$lib/layout.svelte";
+import { projectFor } from "$lib/show.svelte";
+import { ownerOnScreen } from "$lib/terminals.svelte";
 
 const DIR = "/home/ada/.chord/chats";
 const A = "/home/ada/dev/one";
@@ -289,6 +294,77 @@ describe("the older chats", () => {
     pickChat(entry);
     expect(resume.open).toBe(false);
     expect(activeSession()?.resumedFrom).toBe("a");
+    expect(workspace.active).toBe(DIR);
+  });
+});
+
+describe("a chat on screen", () => {
+  const place = (path: string, cwd = DIR) => ({ path, from: 1, to: 1, note: null, cwd, session: null });
+
+  beforeEach(() => {
+    layout.mode = "working";
+    layout.chat = false;
+    layout.changesChosen = true;
+    layout.changesForced = false;
+    layout.noProject = false;
+    layout.terminalChosen = false;
+    layout.terminalForced = false;
+  });
+
+  it("hides the right side but for what its agent presents or shows", () => {
+    layout.chat = true;
+    expect(changesVisible()).toBe(false);
+    layout.mode = "reviewing";
+    expect(changesVisible()).toBe(true);
+    layout.chat = false;
+    layout.mode = "working";
+    expect(changesVisible()).toBe(true);
+  });
+
+  it("has no project terminal, and its toggle leaves the choice alone", () => {
+    layout.terminalChosen = true;
+    layout.chat = true;
+    expect(terminalVisible()).toBe(false);
+    toggleTerminal();
+    expect(layout.terminalChosen).toBe(true);
+    startSession(DIR);
+    expect(ownerOnScreen()).toBeNull();
+  });
+
+  it("shows its own files and what lies under no open project, a project's in the project", () => {
+    expect(projectFor(place(`${DIR}/march-budget.md`))).toBe(DIR);
+    expect(projectFor(place(`${DIR}/notes.md`, A))).toBe(DIR);
+    expect(projectFor(place("/tmp/plot.png"))).toBe(DIR);
+    expect(projectFor(place(`${A}/src/main.ts`))).toBe(A);
+    expect(projectFor(place("/tmp/plot.png", "/home/ada/elsewhere"))).toBeNull();
+  });
+
+  it("closed, takes the chats out of the front for the first open project", () => {
+    startSession(DIR);
+    const chat = activeSession()!;
+    expect(chatInFront()).toBe(true);
+    close(chat.key);
+    chatClosed(chat.key);
+    expect(workspace.active).toBe(A);
+  });
+
+  it("closed with no project open, leaves nothing in front", () => {
+    workspace.open = [];
+    startSession(DIR);
+    const chat = activeSession()!;
+    close(chat.key);
+    chatClosed(chat.key);
+    expect(workspace.active).toBeNull();
+  });
+
+  it("leaves the chats in front when another session takes the closed one's place", () => {
+    startSession(DIR);
+    const one = activeSession()!;
+    startSession(DIR);
+    const two = activeSession()!;
+    close(one.key);
+    select(two.key);
+    chatClosed(one.key);
     expect(workspace.active).toBe(DIR);
   });
 });

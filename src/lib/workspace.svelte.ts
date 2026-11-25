@@ -200,6 +200,17 @@ export function chatInFront(): boolean {
   return isChatsFolder(workspace.active);
 }
 
+/** The session that was on screen is gone with none in its place: when it
+    was a chat, the chats folder leaves the front for the first open
+    project, or for none, as a closed project's place is taken. */
+export function chatClosed(was: string | null) {
+  if (was === null || sessions.active !== null || byKey(was) !== null || !chatInFront()) return;
+  const next = workspace.open[0]?.path ?? null;
+  workspace.active = next;
+  if (next !== null) activate(next);
+  else save();
+}
+
 /** The user brought a project forward, from the sessions pane, go to or
     by opening it: it counts as used. The session on screen stays when it is
     drawn under this project, and the project in front stays the one that
