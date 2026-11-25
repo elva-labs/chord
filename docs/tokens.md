@@ -20,6 +20,8 @@ Every session keeps a brief, what is being built, notes, each a title, a summary
 
 The instructions the workbench gives an agent about its tools stay between roughly 2,600 and 3,600 characters, depending on the session, inside the 4,096 characters Claude Code keeps of a tool server's instructions, so they arrive whole. A test fails if one grows past that. Codex shows its model only the start of such instructions until it takes up a tool, so a Codex session is given them whole as developer instructions. Rules that belong to one tool live in that tool's description, which a session reads when it takes the tool up. Descriptions are written short.
 
+The size of both is recorded: the bytes of the instructions and of the tool list as it is sent, for each kind of session, with default settings and no plugin running. A test fails when either differs from the record, smaller as well as larger, and prints the measured values and the command that records them. A change in size is therefore a line to review in the change that causes it.
+
 The `sessions` listing for an orchestrating session gives open sessions in full and a session that is over as one short line, the last ten only. `all` lists the rest and `find` matches words of a name.
 
 ## Orchestration
