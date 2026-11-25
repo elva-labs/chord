@@ -55,6 +55,7 @@ import {
   reset as resetSessions,
   select,
   sessions,
+  shownName,
   type HistoryEntry,
 } from "$lib/sessions.svelte";
 import { offeredChats, openResume, pickChat, resume } from "$lib/resume.svelte";
@@ -127,6 +128,11 @@ describe("chats", () => {
     expect(isChat(chat)).toBe(true);
     expect(isChat(work)).toBe(false);
     expect(chatRows()).toEqual([chat]);
+  });
+
+  it("read as a new chat until something names them", () => {
+    expect(shownName(create(DIR, null, "claude-code", null, null, null, null))).toBe("New chat");
+    expect(shownName(create(A, null, "claude-code", null, null, null, null))).toBe("New session");
   });
 
   // Aging hides a project's old past sessions behind a fold; a past chat

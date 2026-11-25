@@ -1748,7 +1748,7 @@
       onclick={(e) =>
         choose(byChat !== null && (e.target as Element).closest(".chat-tag") !== null ? byChat.key : session.key)}
       oncontextmenu={(e) => openSessionMenu(session.key, e)}
-      title={rowName(session) ?? "New session"}
+      title={shownName(session)}
       data-testid="session-row"
     >
       <span
@@ -1765,7 +1765,7 @@
           class="label"
           class:strong={session.status !== "dormant"}
           class:unread={session.unread || isAsking(session)}
-          class:unnamed={rowName(session) === null}>{rowName(session) ?? "New session"}</span
+          class:unnamed={rowName(session) === null}>{shownName(session)}</span
         >
         {#if byChat !== null}
           <span class="chat-tag" title="Started by the chat {shownName(byChat)}" data-testid="chat-tag"
