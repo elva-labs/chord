@@ -5,7 +5,7 @@ import { PROJECT, installFakeCore } from "./fake";
  * A plugin's commands in the command palette: listed after the app's with
  * the plugin's name, found by what is typed after a `>` in go to, and told
  * to the plugin when picked. A pick the core refuses is said in the status
- * bar. In both looks.
+ * bar. In both looks, and following the project on screen.
  */
 
 const MOD = "ControlOrMeta";
@@ -13,8 +13,11 @@ const MOD = "ControlOrMeta";
 /** Set to a folder, the test leaves its screenshots there. */
 const SHOTS = process.env.PLUGIN_PALETTE_SHOTS;
 
-/** The commands a plugin sends for the project. */
-async function pushCommands(page: Page, plugin: string, labels: string[]) {
+/** Another project open beside the first. */
+const OTHER = "/home/ada/dev/other";
+
+/** The commands a plugin sends for a project, the first unless named. */
+async function pushCommands(page: Page, plugin: string, labels: string[], project = PROJECT) {
   await page.evaluate(
     ({ project, plugin, labels }) =>
       (window as unknown as { __pluginPalette: (event: unknown) => void }).__pluginPalette({
@@ -23,7 +26,7 @@ async function pushCommands(page: Page, plugin: string, labels: string[]) {
         project,
         commands: labels.map((label, at) => ({ id: `c${at}`, label })),
       }),
-    { project: PROJECT, plugin, labels },
+    { project, plugin, labels },
   );
 }
 
@@ -81,3 +84,26 @@ for (const look of ["modern", "terminal"] as const) {
     });
   });
 }
+
+test("lists the commands of the project on screen, and follows it to another", async ({ page }) => {
+  await installFakeCore(page, { open: [PROJECT, OTHER] });
+  await page.goto("/");
+  await expect(page.getByTestId("status-bar")).toBeVisible();
+  await pushCommands(page, "github", ["Pull request overview"]);
+  await pushCommands(page, "github", ["Issue board"], OTHER);
+  const plugged = page.locator("[data-testid='palette-row'][data-kind='plugin']");
+
+  await page.keyboard.press(`${MOD}+Shift+P`);
+  await page.keyboard.type("github");
+  await expect(plugged).toHaveText([/Pull request overview/]);
+  await page.keyboard.press("Escape");
+
+  await page.locator(`[data-row="project:${OTHER}"] .project-row`).click();
+  await page.keyboard.press(`${MOD}+Shift+P`);
+  await page.keyboard.type("github");
+  await expect(plugged).toHaveText([/Issue board/]);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => picks(page)).toEqual([
+    { source: "src-1", plugin: "github", command: "c0", project: OTHER, session: null },
+  ]);
+});
