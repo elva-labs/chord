@@ -1748,7 +1748,8 @@ presents or shows something; asking for the terminal says that a chat has
 none. The header shows the chat's mark and its name, with no model. The
 status bar says Chat where a project's branch would be, and the account the
 chat runs under when [accounts](#accounts) are set up. Closing the chat on
-screen with none to take its place puts the first open project in front.
+screen with none to take its place puts the open project you last used in
+front, with no session opened.
 
 A chat is a session like any other in everything else: it is marked
 unread, working and waiting like a row in a project, counts toward the
