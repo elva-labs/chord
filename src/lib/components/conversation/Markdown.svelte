@@ -24,11 +24,13 @@
   interface Props {
     text: string;
     streaming?: boolean;
+    /** Draws every fold open, as a plain block that cannot be shut. */
+    flat?: boolean;
     /** Runs a command the text holds, without its `!`. */
     onrun?: (command: string) => void;
   }
 
-  let { text, streaming = false, onrun }: Props = $props();
+  let { text, streaming = false, flat = false, onrun }: Props = $props();
 
   // Drawn with its text from the first render, so the row it is in has its
   // full height when the thread measures it.
@@ -67,16 +69,16 @@
     // address defined after it as soon as it comes.
     if (!streaming || DEFINES.test(now)) {
       kept = { text: "", blocks: [] };
-      return saidBlocks(now);
+      return saidBlocks(now, flat);
     }
     if (!now.startsWith(kept.text)) kept = { text: "", blocks: [] };
     let rest = now.slice(kept.text.length);
     const whole = settled(rest);
     if (whole > 0) {
-      kept = { text: kept.text + rest.slice(0, whole), blocks: [...kept.blocks, ...saidBlocks(rest.slice(0, whole))] };
+      kept = { text: kept.text + rest.slice(0, whole), blocks: [...kept.blocks, ...saidBlocks(rest.slice(0, whole), flat)] };
       rest = rest.slice(whole);
     }
-    return [...kept.blocks, ...saidBlocks(rest)];
+    return [...kept.blocks, ...saidBlocks(rest, flat)];
   });
 
   let box = $state<HTMLDivElement | null>(null);
@@ -150,7 +152,7 @@
     const button = target?.closest("button");
     if (button !== null && button !== undefined && anchor.contains(button)) return;
     const href = anchor.getAttribute("href") ?? "";
-    if (/^https?:\/\//.test(href)) core().openUrl(href).catch(() => {});
+    if (/^https?:\/\//i.test(href)) core().openUrl(href).catch(() => {});
   }
 </script>
 
@@ -349,8 +351,16 @@
     color: var(--accent);
   }
 
+  /* An image narrowed to the text, or given both sizes, keeps its shape. */
   .md :global(img) {
     max-width: 100%;
+    height: auto;
+  }
+
+  /* The address after a link reads in its own direction, whatever letters
+     stand around it. */
+  .md :global(.goes) {
+    unicode-bidi: isolate;
   }
 
   .md :global(hr) {

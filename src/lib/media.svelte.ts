@@ -286,14 +286,14 @@ renderer.image = ({ href, title, text }) => {
 const said = new marked.Renderer();
 said.link = ({ href, title, tokens }) => {
   const text = said.parser.parseInline(tokens);
-  return LINK.test(href) ? unnamed(href, title, text) : text;
+  return WEB.test(href) ? unnamed(href, title, text) : text;
 };
 said.image = ({ href, title, text }) => {
   if (/^data:image\//i.test(href)) {
     const named = title ? ` title="${escapeAttribute(title)}"` : "";
     return `<img src="${escapeAttribute(href)}" alt="${escapeAttribute(text)}"${named}>`;
   }
-  if (!/^https?:/i.test(href)) return escapeText(text);
+  if (!WEB.test(href)) return escapeText(text);
   return unnamed(href, null, escapeText(text || href));
 };
 
@@ -430,7 +430,12 @@ said.codespan = function (this: typeof said, token) {
     tag may not be drawn with it. */
 type Check = (value: string) => string | null;
 const ANY: Check = (value) => value;
-const HREF: Check = (value) => (LINK.test(value.trim()) ? value.trim() : null);
+/** A conversation's links lead only to the web, which is all a click in one
+    opens. */
+const HREF: Check = (value) => {
+  const href = value.trim();
+  return (speaking ? WEB : LINK).test(href) ? href : null;
+};
 const SRC: Check = (value) => image(value);
 /** A value that is one of `values`, in any case, written in lower case. */
 const oneOf =
@@ -519,6 +524,19 @@ const VOID = new Set(["img", "br", "hr", "source"]);
     as Markdown's own links and emphasis do: one left open reaches no
     further than its block. */
 const INLINE = new Set(["a", "b", "i", "strong", "em", "code", "kbd", "sub", "sup", "picture"]);
+
+/** The elements of a reply's HTML that may hold the blocks after the one
+    they were opened in. Any other closes at the end of its own. */
+const HOLDING = new Set(["div", "details", "pre"]);
+
+/** Whether a reply's folds are drawn as plain blocks, which show all they
+    hold and cannot be shut. */
+let unfolded = false;
+
+/** The name an element is written with. */
+function written(name: string): string {
+  return unfolded && (name === "details" || name === "summary") ? "div" : name;
+}
 
 /** The most elements drawn open at once. An opening tag past them is
     shown as its text, which bounds both the work of a closing tag and the
@@ -648,7 +666,7 @@ function closeFrom(at: number): string {
     const name = opened.pop()!;
     counted.set(name, counted.get(name)! - 1);
     if (name === "picture") pictures.pop();
-    out += `</${name}>`;
+    out += `</${written(name)}>`;
   }
   return out;
 }
@@ -664,20 +682,20 @@ function opening(name: string, attributes: [string, string][], closes: boolean):
   const stays = !VOID.has(name) && !closes;
   if (stays && opened.length >= DEEPEST) return null;
   const seen = new Set<string>();
-  let tag = `<${name}`;
+  let tag = `<${written(name)}`;
   for (const [attribute, value] of attributes) {
     const check = allowed.get(attribute);
     if (check === undefined || seen.has(attribute)) return null;
     seen.add(attribute);
     const kept = check(value);
     if (kept === null) return null;
-    tag += ` ${attribute}="${escapeAttribute(kept)}"`;
+    if (written(name) === name) tag += ` ${attribute}="${escapeAttribute(kept)}"`;
   }
   if (name === "a") tag += ' rel="noopener noreferrer"';
   tag += ">";
   if (VOID.has(name)) return tag;
   // An element written as closing itself, `<b/>`, is drawn empty.
-  if (closes) return `${tag}</${name}>`;
+  if (closes) return `${tag}</${written(name)}>`;
   push(name);
   return tag;
 }
@@ -766,14 +784,17 @@ function markup(html: string): string {
     allows. Text is always escaped here: marked leaves text unescaped once
     it believes a raw block such as `<code>` has opened, and only what
     `markup` writes may be markup. Code is escaped by marked itself. */
-renderer.html = ({ text, block }) => {
-  const mark = opened.length;
-  const html = markup(text);
-  if (!block) return html;
-  const inline = opened.findIndex((name, at) => at >= mark && INLINE.has(name));
-  return inline === -1 ? html : html + closeFrom(inline);
-};
-said.html = renderer.html;
+const rawHtml =
+  (ends: (name: string) => boolean) =>
+  ({ text, block }: Tokens.HTML | Tokens.Tag) => {
+    const mark = opened.length;
+    const html = markup(text);
+    if (!block) return html;
+    const first = opened.findIndex((name, at) => at >= mark && ends(name));
+    return first === -1 ? html : html + closeFrom(first);
+  };
+renderer.html = rawHtml((name) => INLINE.has(name));
+said.html = rawHtml((name) => !HOLDING.has(name));
 renderer.text = (token) =>
   "tokens" in token && token.tokens ? renderer.parser.parseInline(token.tokens) : escapeText(token.text);
 said.text = (token) =>
@@ -815,6 +836,7 @@ function clear() {
   counted.clear();
   floor = 0;
   speaking = false;
+  unfolded = false;
   pictures = [];
   local = new Map();
   wanted = new Set();
@@ -855,13 +877,19 @@ export function render(markdown: string): string {
 }
 
 /** The top-level tokens of a reply drawn in order, `each` called with what
-    one draws, its source, and whether nothing is open after it. An element
-    a block of HTML leaves open holds the blocks after it, up to the one
+    one draws, its source, and whether nothing is open after it. A `<div>`,
+    `<details>` or `<pre>` a block of HTML leaves open holds the blocks after it, up to the one
     that closes it or the end of the reply; any other block closes what was
     opened in it and nothing opened before it. */
-function speak(tokens: TokensList, count: number, each: (html: string, raw: string, whole: boolean) => void) {
+function speak(
+  tokens: TokensList,
+  count: number,
+  each: (html: string, raw: string, whole: boolean) => void,
+  flat = false,
+) {
   clear();
   speaking = true;
+  unfolded = flat;
   try {
     const options = { ...marked.defaults, async: false, gfm: true, renderer: said };
     for (let at = 0; at < count; at++) {
@@ -888,28 +916,34 @@ function speak(tokens: TokensList, count: number, each: (html: string, raw: stri
 /** Markdown an agent wrote in a conversation, rendered as `render` does,
     raw HTML included, except that an image from anywhere but the text
     itself is not drawn: Markdown's shows as a link to it and HTML's as the
-    tag's text. Where each link goes can be read from it. */
-export function renderSaid(markdown: string): string {
-  return saidBlocks(markdown).join("");
+    tag's text. A link is drawn only to the web, and where it goes can be
+    read from it. With `flat`, a fold is drawn as a plain block. */
+export function renderSaid(markdown: string, flat = false): string {
+  return saidBlocks(markdown, flat).join("");
 }
 
 /** Markdown an agent wrote, rendered as `renderSaid` does, a piece at a
     time, so a piece that is done is drawn once while the words after it
     still come. A piece is a top-level block, or the blocks an element of
     its HTML holds. */
-export function saidBlocks(markdown: string): string[] {
+export function saidBlocks(markdown: string, flat = false): string[] {
   const tokens = marked.lexer(markdown, { gfm: true });
   const out: string[] = [];
   let piece = "";
   let drawn = false;
-  speak(tokens, tokens.length, (html, _, whole) => {
-    piece += html;
-    drawn ||= html !== "";
-    if (!whole || !drawn) return;
-    out.push(addressed(piece));
-    piece = "";
-    drawn = false;
-  });
+  speak(
+    tokens,
+    tokens.length,
+    (html, _, whole) => {
+      piece += html;
+      drawn ||= html !== "";
+      if (!whole || !drawn) return;
+      out.push(addressed(piece));
+      piece = "";
+      drawn = false;
+    },
+    flat,
+  );
   return out;
 }
 
@@ -937,6 +971,27 @@ export function settled(markdown: string): number {
     name, then what may be attributes, with no `>` yet. */
 const HALF = /<\/?(?:([a-z][a-z0-9]*)([\s/][^<>]{0,500})?)?$/i;
 
+/** Whether what follows a half tag's name may still be its attributes: each
+    further line of it starts as one of the element's attributes or a `/`,
+    and only the last, still being written, is empty or part of a name. A
+    blank line ends it. */
+function attributes(name: string, rest: string): boolean {
+  const names = [...(ALLOWED.get(name)?.keys() ?? [])];
+  return rest
+    .split("\n")
+    .slice(1)
+    .every((line, at, lines) => {
+      const last = at === lines.length - 1;
+      const said = line.trim();
+      if (said === "") return last;
+      if (said.startsWith("/")) return true;
+      const [, word, after] = /^([a-z]*)(.*)$/i.exec(said)!;
+      const known = word.toLowerCase();
+      if (last && after === "") return names.some((attribute) => attribute.startsWith(known));
+      return names.includes(known) && /^(?:$|[\s=/])/.test(after);
+    });
+}
+
 /** Markdown still being written without a tag at its end that has only half
     arrived and may yet be drawn, so its letters do not show and then give
     way to the element. Code, where a tag is its letters, is left whole. */
@@ -946,7 +1001,7 @@ export function arrived(markdown: string): string {
   const name = half[1]?.toLowerCase();
   if (name !== undefined) {
     const may = half[2] === undefined ? [...ALLOWED.keys()].some((known) => known.startsWith(name)) : ALLOWED.has(name);
-    if (!may) return markdown;
+    if (!may || !attributes(name, half[2] ?? "")) return markdown;
   }
   const line = markdown.slice(markdown.lastIndexOf("\n", half.index) + 1, half.index);
   if ((line.split("`").length - 1) % 2 === 1) return markdown;

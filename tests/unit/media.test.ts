@@ -735,9 +735,9 @@ describe("what Markdown may draw", () => {
 
   it("draws only the elements it allows, with no handlers and no scripted links", () => {
     for (const markdown of PAYLOADS)
-      for (const [html, sourced] of [
-        [render(markdown), /^(?:https?:|data:image\/)/],
-        [renderSaid(markdown), /^data:image\//],
+      for (const [html, sourced, linked] of [
+        [render(markdown), /^(?:https?:|data:image\/)/, /^(?:https?:|mailto:|#)/],
+        [renderSaid(markdown), /^data:image\//, /^https?:\/\//],
       ] as const) {
         const box = document.createElement("div");
         box.innerHTML = html;
@@ -751,7 +751,7 @@ describe("what Markdown may draw", () => {
           for (const src of sources)
             if (src !== null) expect(src, markdown).toMatch(sourced);
           const href = element.getAttribute("href");
-          if (href !== null) expect(href, markdown).toMatch(/^(?:https?:|mailto:|#)/);
+          if (href !== null) expect(href, markdown).toMatch(linked);
           for (const attribute of element.attributes) {
             expect(attribute.name.startsWith("on"), `${attribute.name} from ${markdown}`).toBe(false);
             expect(/javascript:/i.test(attribute.value), `${attribute.value} from ${markdown}`).toBe(false);
@@ -1220,6 +1220,59 @@ describe("the HTML a reply may draw", () => {
     }
   });
 
+  it("closes a paragraph, a heading and a summary at the end of their block", () => {
+    for (const name of ["p", "h1", "h2", "h3", "h4", "h5", "h6"]) {
+      const box = drawn(`<${name} align="center">\n\nlater\n\n</${name}>`);
+      expect(box.querySelector(`${name}[align]`)?.textContent?.trim(), name).toBe("");
+      expect(box.querySelector(`p:not([align])`)?.textContent, name).toBe("later");
+      expect(box.textContent, name).toContain(`</${name}>`);
+    }
+    const open = drawn("<details>\n<summary>s\n\nheld");
+    expect(open.querySelector("summary")?.textContent?.trim()).toBe("s");
+    expect(open.querySelector("details > p")?.textContent).toBe("held");
+    for (const name of ["div", "pre"])
+      expect(drawn(`<${name}></${name}>\n\n<div>\n\nheld`).querySelector("div > p")?.textContent).toBe("held");
+    // A document keeps a paragraph open to the tag that closes it.
+    const document = window.document.createElement("div");
+    document.innerHTML = render("<h2>\n\nlater\n\n</h2>");
+    expect(document.textContent).not.toContain("</h2>");
+  });
+
+  it("draws a link only to the web, since a click opens nothing else", () => {
+    for (const markdown of [
+      "[words](#usage)",
+      "[words](mailto:a@b.c)",
+      "[words](https:alert(1))",
+      '<a href="#usage">words</a>',
+      '<a href="mailto:a@b.c">words</a>',
+      '<a href="https:alert(1)">words</a>',
+      "write to a@b.com, words",
+      "![words](https:a.png)",
+    ]) {
+      const box = drawn(markdown);
+      expect(box.querySelector("a, img"), markdown).toBeNull();
+      expect(box.textContent, markdown).toContain("words");
+    }
+    expect(drawn("[a](HTTPS://example.com) <a href='http://example.com'>b</a>").querySelectorAll("a")).toHaveLength(2);
+  });
+
+  it("draws every fold of a flat reply as a plain block that shows what it holds", () => {
+    for (const markdown of [
+      "<details>\n<summary>s</summary>\n\nstep\n\n</details>\n\nafter",
+      "<details><summary>s</summary>step</details>\n\nafter",
+      "<details open>\n<summary>s\n\nstep",
+      "- <details><summary>s</summary>step</details>\n\n> <details/>after",
+    ]) {
+      const box = window.document.createElement("div");
+      box.innerHTML = renderSaid(markdown, true);
+      expect(box.querySelector("details, summary, [open]"), markdown).toBeNull();
+      expect(box.textContent, markdown).toContain("step");
+      expect(box.textContent, markdown).not.toContain("<");
+    }
+    expect(renderSaid("<details>x</details>")).toContain("<details>");
+    expect(render("<details>x</details>")).toContain("<details>");
+  });
+
   it("renders a reply with HTML in whole blocks as it renders it at once", () => {
     const text = "Press <kbd>K</kbd>.\n\n<details>\n<summary>s</summary>\n\none\n\n</details>\n\n<div>\n\ntwo\n\n</div>\n\nend";
     for (let length = 0; length <= text.length; length++) {
@@ -1249,6 +1302,20 @@ describe("a tag half arrived", () => {
       "    <kbd",
     ])
       expect(arrived(text), text).toBe(text);
+  });
+
+  it("is waited for no further than its attributes reach", () => {
+    for (const text of [
+      "if a <b then it stops\n\nmore",
+      "if a <b then\nmore words",
+      "<b\n\nmore",
+      "<a href=x\n\n",
+      "<a\nhref is a word\nand more",
+      "<details\nopening",
+    ])
+      expect(arrived(text), JSON.stringify(text)).toBe(text);
+    for (const half of ["<a\n", "<a\nhr", '<a\n  href="https://exa', '<img\n src="a"\n alt', "<details\nopen\n", "<br\n/"])
+      expect(arrived(`Press ${half}`), JSON.stringify(half)).toBe("Press ");
   });
 
   it("never shows its letters as an allowed tag streams in", () => {

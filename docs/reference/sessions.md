@@ -779,22 +779,28 @@ and sending a message takes it to its foot.
 
 HTML in what the agent wrote, its thinking, its plans and a subagent's words
 included, draws the same elements as in a [presented
-document](../hooks.md#the-agents-tools): a paragraph, block or heading aligned, a link, a
-line break, a rule, details that fold open, keys, subscript and
-superscript, bold, italics, code, an image and a picture. A key is drawn as
-a key cap. An image or a picture's source is drawn only when the image is
-written into its address, as a `data:` image, so nothing is fetched and no
-file of the project is read; any other shows as the text of its tag. A tag
-that is not one of these, or that carries anything more than they need,
-shows as the text it is, so a script, a style, a frame, a form or an event
-handler never runs, and HTML cannot make a code block's Copy or a command's
-Run. A link written in HTML says where it goes as one written in Markdown
-does. A fold the agent opened with a block of HTML holds the blocks after it
-up to its closing tag or the end of the message; a closing tag inside a list
-or a quote does not close one opened outside it. A fold's summary is part of
-the thread's arrow walk and opens with a click, <kbd>Enter</kbd> or
+document](../hooks.md#the-agents-tools): a paragraph, block or heading
+aligned, a link, a line break, a rule, details that fold open, keys, subscript
+and superscript, bold, italics, code, an image and a picture. A key is drawn
+as a key cap, and an image keeps its shape. An image or a picture's source is
+drawn only when the image is written into its address, as a `data:` image, so
+nothing is fetched and no file of the project is read; any other shows as the
+text of its tag. A tag that is not one of these, or that carries anything more
+than they need, shows as the text it is, so a script, a style, a frame, a form
+or an event handler never runs, and HTML cannot make a code block's Copy or a
+command's Run. A link, in HTML or Markdown, is drawn only to an `http` or
+`https` address and says where it goes; any other Markdown link, an email
+address or a place in the text among them, shows as its words, and in HTML as
+the text of its tag. A `div`, a fold or preformatted text the agent opened
+with a block of HTML holds the blocks after it up to its closing tag or the
+end of the message, while a paragraph, a heading and every other element
+closes at the end of its own block; a closing tag inside a list or a quote
+does not close one opened outside it. In a plan every fold is drawn open, its
+summary a plain line, and none can be shut. Elsewhere a fold's summary is part
+of the thread's arrow walk and opens with a click, <kbd>Enter</kbd> or
 <kbd>Space</kbd>. While a reply streams, a tag that has only half arrived at
-its end is held back until it is whole, outside code.
+its end is held back until it is whole, outside code; a blank line, or a new
+line that starts none of its attributes, ends the wait.
 
 The user's own message is drawn with the little Markdown a message uses: a
 quote of lines that start with `>`, lists of lines that start with `*`, `-`
