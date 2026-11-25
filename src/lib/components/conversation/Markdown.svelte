@@ -1,15 +1,15 @@
 <script lang="ts">
   import { core } from "$lib/core";
   import { runnable } from "$lib/bang";
-  import { saidBlocks, settled } from "$lib/media.svelte";
+  import { arrived, saidBlocks, settled } from "$lib/media.svelte";
   import { mount, tick, unmount, untrack } from "svelte";
   import Copy from "./Copy.svelte";
   import Run from "./Run.svelte";
 
   /**
-   * What the agent wrote, as a reader sees it: the same Markdown the viewer
-   * renders for a presented document, links opening outside the window and
-   * an image from an address shown as a link to it rather than fetched.
+   * What the agent wrote, as a reader sees it: the same Markdown and the
+   * same safe HTML the viewer renders for a presented document, links
+   * opening outside the window and no image fetched from anywhere.
    * While it streams it is drawn again at most once a frame, a block at a
    * time: the blocks before the last are rendered once and stay as they
    * are, only the last is rendered again as words come, and a caret
@@ -24,11 +24,13 @@
   interface Props {
     text: string;
     streaming?: boolean;
+    /** Draws every fold open, as a plain block that cannot be shut. */
+    flat?: boolean;
     /** Runs a command the text holds, without its `!`. */
     onrun?: (command: string) => void;
   }
 
-  let { text, streaming = false, onrun }: Props = $props();
+  let { text, streaming = false, flat = false, onrun }: Props = $props();
 
   // Drawn with its text from the first render, so the row it is in has its
   // full height when the thread measures it.
@@ -61,22 +63,22 @@
   const DEFINES = /^ {0,3}\[[^\]\n]+\]:/m;
 
   let blocks = $derived.by(() => {
-    const now = shown;
+    const now = streaming ? arrived(shown) : shown;
     // Whole, a reply is rendered whole once more, and one that defines a
     // reference link is rendered whole as it streams, so the link finds an
     // address defined after it as soon as it comes.
     if (!streaming || DEFINES.test(now)) {
       kept = { text: "", blocks: [] };
-      return saidBlocks(now);
+      return saidBlocks(now, flat);
     }
     if (!now.startsWith(kept.text)) kept = { text: "", blocks: [] };
     let rest = now.slice(kept.text.length);
     const whole = settled(rest);
     if (whole > 0) {
-      kept = { text: kept.text + rest.slice(0, whole), blocks: [...kept.blocks, ...saidBlocks(rest.slice(0, whole))] };
+      kept = { text: kept.text + rest.slice(0, whole), blocks: [...kept.blocks, ...saidBlocks(rest.slice(0, whole), flat)] };
       rest = rest.slice(whole);
     }
-    return [...kept.blocks, ...saidBlocks(rest)];
+    return [...kept.blocks, ...saidBlocks(rest, flat)];
   });
 
   let box = $state<HTMLDivElement | null>(null);
@@ -95,16 +97,16 @@
     return (code.querySelector("pre code")?.textContent ?? "").replace(/\n$/, "");
   }
 
-  // A link is walked with the arrows in the thread, which is one stop for
-  // Tab, rather than being a stop of its own; each code block gets its
-  // Copy, and each command its Run.
+  // A link and a fold's summary are walked with the arrows in the thread,
+  // which is one stop for Tab, rather than being stops of their own; each
+  // code block gets its Copy, and each command its Run.
   $effect(() => {
     blocks;
     const node = box;
     const run = streaming ? undefined : onrun;
     // After the text is drawn again, which can be a turn after this runs.
     void tick().then(() => {
-      for (const link of node?.querySelectorAll<HTMLAnchorElement>("a[href]") ?? []) link.tabIndex = -1;
+      for (const stop of node?.querySelectorAll<HTMLElement>("a[href], summary") ?? []) stop.tabIndex = -1;
       for (const [code, copy] of copies)
         if (!code.isConnected || node === null || !node.contains(code)) {
           void unmount(copy);
@@ -150,7 +152,7 @@
     const button = target?.closest("button");
     if (button !== null && button !== undefined && anchor.contains(button)) return;
     const href = anchor.getAttribute("href") ?? "";
-    if (/^https?:\/\//.test(href)) core().openUrl(href).catch(() => {});
+    if (/^https?:\/\//i.test(href)) core().openUrl(href).catch(() => {});
   }
 </script>
 
@@ -175,7 +177,8 @@
   .md :global(ol),
   .md :global(blockquote),
   .md :global(table),
-  .md :global(pre) {
+  .md :global(pre),
+  .md :global(details) {
     margin: 0 0 0.7em;
   }
 
@@ -186,7 +189,7 @@
 
   /* Words keep a measure that still reads in a wide pane; code, tables
      and what steps print use the whole width. */
-  .md > :global(:is(p, ul, ol, blockquote, h1, h2, h3, h4)) {
+  .md > :global(:is(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6, div:not(.code), details)) {
     max-width: var(--conv-measure);
   }
 
@@ -197,7 +200,9 @@
   .md :global(h1),
   .md :global(h2),
   .md :global(h3),
-  .md :global(h4) {
+  .md :global(h4),
+  .md :global(h5),
+  .md :global(h6) {
     margin: 1em 0 0.4em;
     font-size: 1.05em;
     font-weight: 600;
@@ -267,6 +272,40 @@
     text-indent: calc(-1 * var(--hang));
   }
 
+  /* A key, raised off the line it stands in. */
+  .md :global(kbd) {
+    display: inline-block;
+    min-width: 1.7em;
+    padding: 0 5px;
+    border: 1px solid var(--rule-strong);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    font-family: var(--mono);
+    font-size: 0.85em;
+    line-height: 1.5;
+    text-align: center;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+
+  /* One step down at most, so no nesting draws words too small to read. */
+  .md :global(:is(sub, sup)) {
+    line-height: 0;
+  }
+
+  .md :global(:is(sub, sup) :is(sub, sup)) {
+    font-size: 1em;
+  }
+
+  .md :global(summary) {
+    cursor: pointer;
+  }
+
+  .md :global(details[open] > summary) {
+    margin-bottom: 0.4em;
+  }
+
   /* Declared after every block's own margins, so a message starts and ends
      flush: a rule that comes first loses to the margin of a block, a
      heading or a table. */
@@ -312,8 +351,16 @@
     color: var(--accent);
   }
 
+  /* An image narrowed to the text, or given both sizes, keeps its shape. */
   .md :global(img) {
     max-width: 100%;
+    height: auto;
+  }
+
+  /* The address after a link reads in its own direction, whatever letters
+     stand around it. */
+  .md :global(.goes) {
+    unicode-bidi: isolate;
   }
 
   .md :global(hr) {

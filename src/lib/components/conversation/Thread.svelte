@@ -476,11 +476,11 @@
     pinned = false;
   }
 
-  /** What the arrows walk in the thread: its folds, steps and links, in
-      the order they stand, while they are drawn. */
+  /** What the arrows walk in the thread: its folds, steps and links, and
+      the folds an agent wrote, in the order they stand, while they are drawn. */
   function items(): HTMLElement[] {
     if (col === null) return [];
-    return [...col.querySelectorAll<HTMLElement>("[data-thread-item], a[href]")].filter(
+    return [...col.querySelectorAll<HTMLElement>("[data-thread-item], a[href], summary")].filter(
       (item) => item.getClientRects().length > 0 && !(item as HTMLButtonElement).disabled,
     );
   }
@@ -1071,6 +1071,9 @@
   export async function center(range: () => Range | null) {
     const first = range();
     if (first === null || scroller === null) return;
+    // A match in a fold an agent wrote shut is opened to.
+    for (let node = first.startContainer.parentElement; node !== null; node = node.parentElement)
+      if (node instanceof HTMLDetailsElement) node.open = true;
     const began = performance.now();
     const mine = ++moves;
     if (!place(first, true)) return;

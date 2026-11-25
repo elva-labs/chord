@@ -59,7 +59,7 @@
           </ol>
         {/if}
         {#if segment.part.text}
-          <div class="plan-text"><Markdown text={segment.part.text} /></div>
+          <div class="plan-text"><Markdown text={segment.part.text} flat /></div>
         {/if}
       </div>
     {:else if segment.kind === "question"}

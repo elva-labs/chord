@@ -24,6 +24,7 @@ import {
   type TextRenderer,
   type Token,
   type Tokens,
+  type TokensList,
 } from "marked";
 import { runnable } from "$lib/bang";
 import { core, type Media, type PresentRequest } from "$lib/core";
@@ -285,17 +286,65 @@ renderer.image = ({ href, title, text }) => {
 const said = new marked.Renderer();
 said.link = ({ href, title, tokens }) => {
   const text = said.parser.parseInline(tokens);
-  if (!LINK.test(href)) return text;
-  return anchor(href, title, text, said.parser.parseInline(tokens, said.parser.textRenderer));
+  return WEB.test(href) ? unnamed(href, title, text) : text;
 };
 said.image = ({ href, title, text }) => {
   if (/^data:image\//i.test(href)) {
     const named = title ? ` title="${escapeAttribute(title)}"` : "";
     return `<img src="${escapeAttribute(href)}" alt="${escapeAttribute(text)}"${named}>`;
   }
-  if (!/^https?:/i.test(href)) return escapeText(text);
-  return anchor(href, null, escapeText(text || href), text || href);
+  if (!WEB.test(href)) return escapeText(text);
+  return unnamed(href, null, escapeText(text || href));
 };
+
+/** A link of a reply before `addressed` says where it goes. */
+function unnamed(href: string, title: string | null | undefined, text: string): string {
+  return `<a href="${escapeAttribute(href)}" title="${escapeAttribute(title ?? "")}" rel="noopener noreferrer">${text}</a>`;
+}
+
+/** Everything a link may read as: its words with every fold inside it as
+    it is drawn, and what each shut fold holds, together and a child at a
+    time, which shows once it opens. Each is read without and with its
+    images' words. Every element is read once, however deep the folds go. */
+function readings(link: Element): string[] {
+  const out: string[] = [];
+  type Words = [string, string];
+  const note = (words: Words) => (out.push(...words), words);
+  const joined = (parts: Words[]): Words => [parts.map((part) => part[0]).join(""), parts.map((part) => part[1]).join("")];
+  const read = (node: Node): Words => {
+    if (node instanceof Text) return [node.data, node.data];
+    if (!(node instanceof Element)) return ["", ""];
+    if (node.tagName === "IMG") return ["", node.getAttribute("alt") ?? ""];
+    const children = [...node.childNodes];
+    if (node.tagName !== "DETAILS" || node.hasAttribute("open")) return joined(children.map(read));
+    const summary = (child: Node) => child instanceof Element && child.tagName === "SUMMARY";
+    note(joined(children.filter((child) => !summary(child)).map((child) => note(read(child)))));
+    return joined(children.filter(summary).map(read));
+  };
+  note(read(link));
+  return out;
+}
+
+/** A block of a reply with where each of its links goes said as `anchor`
+    says it, whether Markdown or HTML wrote the link. It is read from the
+    elements the block makes, so no markup among a link's words can pass
+    one address off as another. */
+function addressed(html: string): string {
+  if (!html.includes("<a ")) return html;
+  const made = document.createElement("template");
+  made.innerHTML = html;
+  for (const link of made.content.querySelectorAll("a[href]")) {
+    const href = link.getAttribute("href")!;
+    const title = link.getAttribute("title");
+    link.setAttribute("title", shown(title ? `${title} (${href})` : href));
+    if (!readings(link).some((words) => elsewhere(words, href))) continue;
+    const goes = document.createElement("span");
+    goes.className = "goes";
+    goes.textContent = ` (${shown(href)})`;
+    link.after(goes);
+  }
+  return made.innerHTML;
+}
 
 /** The languages a fenced block names when it holds words rather than
     code: such a block is a drafted message, a comment or a description
@@ -381,7 +430,12 @@ said.codespan = function (this: typeof said, token) {
     tag may not be drawn with it. */
 type Check = (value: string) => string | null;
 const ANY: Check = (value) => value;
-const HREF: Check = (value) => (LINK.test(value.trim()) ? value.trim() : null);
+/** A conversation's links lead only to the web, which is all a click in one
+    opens. */
+const HREF: Check = (value) => {
+  const href = value.trim();
+  return (speaking ? WEB : LINK).test(href) ? href : null;
+};
 const SRC: Check = (value) => image(value);
 /** A value that is one of `values`, in any case, written in lower case. */
 const oneOf =
@@ -407,9 +461,9 @@ const SCHEME: Check = (value) => {
 const ALIGN = new Map([["align", oneOf("left", "right", "center", "justify")]]);
 const NONE = new Map<string, Check>();
 
-/** The HTML a document may draw, a subset of what GitHub draws in a
-    README: each element and the attributes it may carry. An image or a
-    link points only where one written in Markdown may. No `id`, `name` or
+/** The HTML a document or a reply may draw, a subset of what GitHub draws
+    in a README: each element and the attributes it may carry. An image or
+    a link points only where one written in Markdown may. No `id`, `name` or
     `class`, which could stand in for the app's own elements, no `style`,
     and no `srcset` on an image, which would load what its `src` was
     checked not to. */
@@ -470,6 +524,19 @@ const VOID = new Set(["img", "br", "hr", "source"]);
     as Markdown's own links and emphasis do: one left open reaches no
     further than its block. */
 const INLINE = new Set(["a", "b", "i", "strong", "em", "code", "kbd", "sub", "sup", "picture"]);
+
+/** The elements of a reply's HTML that may hold the blocks after the one
+    they were opened in. Any other closes at the end of its own. */
+const HOLDING = new Set(["div", "details", "pre"]);
+
+/** Whether a reply's folds are drawn as plain blocks, which show all they
+    hold and cannot be shut. */
+let unfolded = false;
+
+/** The name an element is written with. */
+function written(name: string): string {
+  return unfolded && (name === "details" || name === "summary") ? "div" : name;
+}
 
 /** The most elements drawn open at once. An opening tag past them is
     shown as its text, which bounds both the work of a closing tag and the
@@ -545,15 +612,21 @@ function mixes(place: "web" | "project"): boolean {
   return first !== place;
 }
 
+/** Whether what is drawn is a reply in a conversation, whose HTML may draw
+    an image only from the text itself, as its Markdown may. */
+let speaking = false;
+
 /** An image's address as it is drawn, or null when the image is shown as
     its text: an address `IMAGE` allows, or a path relative to the
     document, drawn from the file of its project `load` read for it while
     the images of the project drawn before it leave room for it. In a
     picture, an image from the web or the project is drawn only when the
-    picture's others come from the same place. */
+    picture's others come from the same place. A conversation draws only an
+    image held in the address itself. */
 function image(address: string): string | null {
   const src = address.trim();
   if (/^data:image\//i.test(src)) return src;
+  if (speaking) return null;
   if (IMAGE.test(src)) return mixes("web") ? null : src;
   if (src === "" || /^[a-z][a-z0-9+.-]*:|^[/\\#?]/i.test(src) || mixes("project")) return null;
   const read = local.get(src);
@@ -581,6 +654,10 @@ function push(name: string) {
   if (name === "picture") pictures.push(null);
 }
 
+/** How many of the elements open were opened outside the block being
+    drawn, which its closing tags leave open. */
+let floor = 0;
+
 /** The closing tags of the elements open from `at` up, the innermost
     first, which are then open no longer. */
 function closeFrom(at: number): string {
@@ -589,7 +666,7 @@ function closeFrom(at: number): string {
     const name = opened.pop()!;
     counted.set(name, counted.get(name)! - 1);
     if (name === "picture") pictures.pop();
-    out += `</${name}>`;
+    out += `</${written(name)}>`;
   }
   return out;
 }
@@ -605,20 +682,20 @@ function opening(name: string, attributes: [string, string][], closes: boolean):
   const stays = !VOID.has(name) && !closes;
   if (stays && opened.length >= DEEPEST) return null;
   const seen = new Set<string>();
-  let tag = `<${name}`;
+  let tag = `<${written(name)}`;
   for (const [attribute, value] of attributes) {
     const check = allowed.get(attribute);
     if (check === undefined || seen.has(attribute)) return null;
     seen.add(attribute);
     const kept = check(value);
     if (kept === null) return null;
-    tag += ` ${attribute}="${escapeAttribute(kept)}"`;
+    if (written(name) === name) tag += ` ${attribute}="${escapeAttribute(kept)}"`;
   }
   if (name === "a") tag += ' rel="noopener noreferrer"';
   tag += ">";
   if (VOID.has(name)) return tag;
   // An element written as closing itself, `<b/>`, is drawn empty.
-  if (closes) return `${tag}</${name}>`;
+  if (closes) return `${tag}</${written(name)}>`;
   push(name);
   return tag;
 }
@@ -632,7 +709,8 @@ function closing(name: string): string | null {
   if (name === "br") return "<br>";
   if (VOID.has(name)) return "";
   if (!counted.get(name)) return null;
-  return closeFrom(opened.lastIndexOf(name));
+  const at = opened.lastIndexOf(name);
+  return at < floor ? null : closeFrom(at);
 }
 
 /** A piece of a document's raw HTML as HTML to draw. Each tag `opening`
@@ -702,19 +780,21 @@ function markup(html: string): string {
   return out + escapeText(html.slice(from));
 }
 
-/** Raw HTML in a document is drawn as far as `markup` allows, and in a
-    conversation is shown as the text it is, never drawn. Text is always
-    escaped here: marked leaves text unescaped once it believes a raw block
-    such as `<code>` has opened, and only what `markup` writes may be
-    markup. Code is escaped by marked itself. */
-renderer.html = ({ text, block }) => {
-  const mark = opened.length;
-  const html = markup(text);
-  if (!block) return html;
-  const inline = opened.findIndex((name, at) => at >= mark && INLINE.has(name));
-  return inline === -1 ? html : html + closeFrom(inline);
-};
-said.html = ({ text }) => escapeText(text);
+/** Raw HTML, in a document and in a reply, is drawn as far as `markup`
+    allows. Text is always escaped here: marked leaves text unescaped once
+    it believes a raw block such as `<code>` has opened, and only what
+    `markup` writes may be markup. Code is escaped by marked itself. */
+const rawHtml =
+  (ends: (name: string) => boolean) =>
+  ({ text, block }: Tokens.HTML | Tokens.Tag) => {
+    const mark = opened.length;
+    const html = markup(text);
+    if (!block) return html;
+    const first = opened.findIndex((name, at) => at >= mark && ends(name));
+    return first === -1 ? html : html + closeFrom(first);
+  };
+renderer.html = rawHtml((name) => INLINE.has(name));
+said.html = rawHtml((name) => !HOLDING.has(name));
 renderer.text = (token) =>
   "tokens" in token && token.tokens ? renderer.parser.parseInline(token.tokens) : escapeText(token.text);
 said.text = (token) =>
@@ -750,6 +830,20 @@ class Scoped extends Parser {
   }
 }
 
+/** Forgets what the last rendering left open and read. */
+function clear() {
+  opened = [];
+  counted.clear();
+  floor = 0;
+  speaking = false;
+  unfolded = false;
+  pictures = [];
+  local = new Map();
+  wanted = new Set();
+  spent = 0;
+  full = false;
+}
+
 /** A document drawn as `render` draws it, except that an image named by a
     path relative to it is drawn from `images`, the files of its project
     read for it by that path, as far as `image` allows; and the addresses
@@ -758,15 +852,6 @@ function drawDocument(
   markdown: string,
   images: ReadonlyMap<string, ProjectImage>,
 ): { html: string; wanted: string[] } {
-  const clear = () => {
-    opened = [];
-    counted.clear();
-    pictures = [];
-    local = new Map();
-    wanted = new Set();
-    spent = 0;
-    full = false;
-  };
   clear();
   local = images;
   try {
@@ -791,43 +876,137 @@ export function render(markdown: string): string {
   return drawDocument(markdown, new Map()).html;
 }
 
-/** Markdown an agent wrote in a conversation, rendered as `render` does,
-    with an image from anywhere but the text itself shown as a link. */
-export function renderSaid(markdown: string): string {
-  return marked.parse(markdown, { async: false, gfm: true, renderer: said }) as string;
+/** The top-level tokens of a reply drawn in order, `each` called with what
+    one draws, its source, and whether nothing is open after it. A `<div>`,
+    `<details>` or `<pre>` a block of HTML leaves open holds the blocks after it, up to the one
+    that closes it or the end of the reply; any other block closes what was
+    opened in it and nothing opened before it. */
+function speak(
+  tokens: TokensList,
+  count: number,
+  each: (html: string, raw: string, whole: boolean) => void,
+  flat = false,
+) {
+  clear();
+  speaking = true;
+  unfolded = flat;
+  try {
+    const options = { ...marked.defaults, async: false, gfm: true, renderer: said };
+    for (let at = 0; at < count; at++) {
+      const token = tokens[at];
+      if (token.type === "space") {
+        each("", token.raw, opened.length === 0);
+        continue;
+      }
+      const mark = opened.length;
+      floor = token.type === "html" ? 0 : mark;
+      // Each block is parsed with the whole text's link definitions, so a
+      // reference link finds its address wherever it is defined.
+      const one = Object.assign([token], { links: tokens.links });
+      let html = new Scoped(options).parse(one);
+      if (token.type !== "html") html += closeFrom(mark);
+      each(html, token.raw, opened.length === 0);
+    }
+    if (count === tokens.length && opened.length > 0) each(closeFrom(0), "", true);
+  } finally {
+    clear();
+  }
 }
 
-/** Markdown an agent wrote, rendered as `renderSaid` does, one top-level
-    block at a time, so a block that is done is drawn once while the words
-    after it still come. */
-export function saidBlocks(markdown: string): string[] {
+/** Markdown an agent wrote in a conversation, rendered as `render` does,
+    raw HTML included, except that an image from anywhere but the text
+    itself is not drawn: Markdown's shows as a link to it and HTML's as the
+    tag's text. A link is drawn only to the web, and where it goes can be
+    read from it. With `flat`, a fold is drawn as a plain block. */
+export function renderSaid(markdown: string, flat = false): string {
+  return saidBlocks(markdown, flat).join("");
+}
+
+/** Markdown an agent wrote, rendered as `renderSaid` does, a piece at a
+    time, so a piece that is done is drawn once while the words after it
+    still come. A piece is a top-level block, or the blocks an element of
+    its HTML holds. */
+export function saidBlocks(markdown: string, flat = false): string[] {
   const tokens = marked.lexer(markdown, { gfm: true });
   const out: string[] = [];
-  for (const token of tokens) {
-    if (token.type === "space") continue;
-    // Each block is parsed with the whole text's link definitions, so a
-    // reference link finds its address wherever it is defined.
-    const one = Object.assign([token], { links: tokens.links });
-    out.push(marked.parser(one, { async: false, gfm: true, renderer: said }));
-  }
+  let piece = "";
+  let drawn = false;
+  speak(
+    tokens,
+    tokens.length,
+    (html, _, whole) => {
+      piece += html;
+      drawn ||= html !== "";
+      if (!whole || !drawn) return;
+      out.push(addressed(piece));
+      piece = "";
+      drawn = false;
+    },
+    flat,
+  );
   return out;
 }
 
 /** How much of Markdown that is still being written stands in whole
     blocks that nothing written after it can change: every block but the
-    last, which may yet grow. Rendered on its own, that much renders as it
-    does at the head of the whole text, so it need only be rendered once. */
+    last, which may yet grow, up to where no element of its HTML is open.
+    Rendered on its own, that much renders as it does at the head of the
+    whole text, so it need only be rendered once. */
 export function settled(markdown: string): number {
   const tokens = marked.lexer(markdown, { gfm: true });
   let last = tokens.length - 1;
   while (last >= 0 && tokens[last].type === "space") last--;
-  const whole = tokens
-    .slice(0, Math.max(0, last))
-    .map((token) => token.raw)
-    .join("");
+  let read = "";
+  let whole = "";
+  speak(tokens, Math.max(0, last), (_, raw, closed) => {
+    read += raw;
+    if (closed) whole = read;
+  });
   // The lexer reads line ends its own way; what it read must be the text
   // as it stands for its length to say where the blocks end.
   return markdown.startsWith(whole) ? whole.length : 0;
+}
+
+/** The end of a text that may be the start of a tag: `<` or `</`, then a
+    name, then what may be attributes, with no `>` yet. */
+const HALF = /<\/?(?:([a-z][a-z0-9]*)([\s/][^<>]{0,500})?)?$/i;
+
+/** Whether what follows a half tag's name may still be its attributes: each
+    further line of it starts as one of the element's attributes or a `/`,
+    and only the last, still being written, is empty or part of a name. A
+    blank line ends it. */
+function attributes(name: string, rest: string): boolean {
+  const names = [...(ALLOWED.get(name)?.keys() ?? [])];
+  return rest
+    .split("\n")
+    .slice(1)
+    .every((line, at, lines) => {
+      const last = at === lines.length - 1;
+      const said = line.trim();
+      if (said === "") return last;
+      if (said.startsWith("/")) return true;
+      const [, word, after] = /^([a-z]*)(.*)$/i.exec(said)!;
+      const known = word.toLowerCase();
+      if (last && after === "") return names.some((attribute) => attribute.startsWith(known));
+      return names.includes(known) && /^(?:$|[\s=/])/.test(after);
+    });
+}
+
+/** Markdown still being written without a tag at its end that has only half
+    arrived and may yet be drawn, so its letters do not show and then give
+    way to the element. Code, where a tag is its letters, is left whole. */
+export function arrived(markdown: string): string {
+  const half = HALF.exec(markdown);
+  if (half === null) return markdown;
+  const name = half[1]?.toLowerCase();
+  if (name !== undefined) {
+    const may = half[2] === undefined ? [...ALLOWED.keys()].some((known) => known.startsWith(name)) : ALLOWED.has(name);
+    if (!may || !attributes(name, half[2] ?? "")) return markdown;
+  }
+  const line = markdown.slice(markdown.lastIndexOf("\n", half.index) + 1, half.index);
+  if ((line.split("`").length - 1) % 2 === 1) return markdown;
+  if (marked.lexer(markdown, { gfm: true }).findLast((token) => token.type !== "space")?.type === "code") return markdown;
+  return markdown.slice(0, half.index);
 }
 
 // ---- what the user sent ----

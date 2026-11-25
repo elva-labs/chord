@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  arrived,
   itemsFor,
   listed,
   load,
@@ -617,11 +618,11 @@ describe("code in Markdown", () => {
     }
   });
 
-  it("still draws raw HTML in a conversation as its text, inline and as a block", () => {
+  it("draws allowed HTML in a conversation, and a tag with a handler as its text", () => {
     const box = document.createElement("div");
     box.innerHTML = renderSaid("Hi <b>there</b>\n\n<div onclick=x>block</div>");
-    expect(box.querySelector("b, div")).toBeNull();
-    expect(box.textContent).toContain("<b>there</b>");
+    expect(box.querySelector("b")?.textContent).toBe("there");
+    expect(box.querySelector("div")).toBeNull();
     expect(box.textContent).toContain("<div onclick=x>block</div>");
   });
 
@@ -683,11 +684,13 @@ describe("a command the agent writes for the user to run", () => {
 });
 
 describe("what Markdown may draw", () => {
-  const ELEMENTS = new Set(
-    "P,BR,EM,STRONG,DEL,CODE,PRE,A,IMG,UL,OL,LI,BLOCKQUOTE,H1,H2,H3,H4,H5,H6,HR,TABLE,THEAD,TBODY,TR,TH,TD,INPUT".split(","),
+  /** What Markdown draws, and the HTML written in it. */
+  const DRAWN = new Set(
+    (
+      "P,BR,EM,STRONG,DEL,CODE,PRE,A,IMG,UL,OL,LI,BLOCKQUOTE,H1,H2,H3,H4,H5,H6,HR,TABLE,THEAD,TBODY,TR,TH,TD,INPUT," +
+      "DIV,DETAILS,SUMMARY,KBD,SUB,SUP,B,I,PICTURE,SOURCE"
+    ).split(","),
   );
-  /** A document draws a few more, from the HTML written in it. */
-  const DOCUMENT = new Set([...ELEMENTS, ..."DIV,DETAILS,SUMMARY,KBD,SUB,SUP,B,I,PICTURE,SOURCE".split(",")]);
   const PAYLOADS = [
     "x <code> <img/src=x onerror=alert(1)>",
     "<pre> <svg/onload=alert(1)>",
@@ -732,23 +735,23 @@ describe("what Markdown may draw", () => {
 
   it("draws only the elements it allows, with no handlers and no scripted links", () => {
     for (const markdown of PAYLOADS)
-      for (const [html, allowed] of [
-        [render(markdown), DOCUMENT],
-        [renderSaid(markdown), ELEMENTS],
+      for (const [html, sourced, linked] of [
+        [render(markdown), /^(?:https?:|data:image\/)/, /^(?:https?:|mailto:|#)/],
+        [renderSaid(markdown), /^data:image\//, /^https?:\/\//],
       ] as const) {
         const box = document.createElement("div");
         box.innerHTML = html;
         for (const element of box.querySelectorAll("*")) {
-          expect(allowed.has(element.tagName), `${element.tagName} from ${markdown}`).toBe(true);
+          expect(DRAWN.has(element.tagName) || element.matches("span.goes, span.line, div.code"), `${element.tagName} from ${markdown}`).toBe(true);
           expect(element.hasAttribute("style"), `style from ${markdown}`).toBe(false);
           const sources = [
             element.getAttribute("src"),
             ...(element.getAttribute("srcset")?.split(/,\s+/).map((candidate) => candidate.split(" ")[0]) ?? []),
           ];
           for (const src of sources)
-            if (src !== null) expect(src, markdown).toMatch(/^(?:https?:|data:image\/)/);
+            if (src !== null) expect(src, markdown).toMatch(sourced);
           const href = element.getAttribute("href");
-          if (href !== null) expect(href, markdown).toMatch(/^(?:https?:|mailto:|#)/);
+          if (href !== null) expect(href, markdown).toMatch(linked);
           for (const attribute of element.attributes) {
             expect(attribute.name.startsWith("on"), `${attribute.name} from ${markdown}`).toBe(false);
             expect(/javascript:/i.test(attribute.value), `${attribute.value} from ${markdown}`).toBe(false);
@@ -777,8 +780,8 @@ describe("what Markdown may draw", () => {
 
   it("escapes text once, after a raw tag as anywhere else", () => {
     const box = document.createElement("div");
-    box.innerHTML = renderSaid("x <code> a & b < c");
-    expect(box.textContent?.trim()).toBe("x <code> a & b < c");
+    box.innerHTML = renderSaid("x <code> a & b < c <i");
+    expect(box.querySelector("code")?.textContent).toBe(" a & b < c <i");
     box.innerHTML = render("x <code> a & b < c <i");
     expect(box.querySelector("code")?.textContent).toBe(" a & b < c <i");
   });
@@ -1083,11 +1086,244 @@ describe("the HTML a document may draw", () => {
     expect(box.querySelector("a")?.textContent).toBe("u");
     expect(box.querySelector("b")).toBeNull();
   });
+});
 
-  it("keeps a document's HTML as text in a conversation", () => {
+describe("the HTML a reply may draw", () => {
+  const drawn = (markdown: string) => {
     const box = document.createElement("div");
-    box.innerHTML = renderSaid(`${HERO}\n\n<details><summary>a</summary>b</details> <kbd>k</kbd>`);
-    expect(box.querySelector("img, details, kbd, p[align]")).toBeNull();
-    expect(box.textContent).toContain('<img src="https://example.com/icon.png" width="128" height="128" alt="">');
+    box.innerHTML = renderSaid(markdown);
+    return box;
+  };
+
+  it("draws a key, and the rest of the subset a document draws", () => {
+    const box = drawn(
+      'Press <kbd>Cmd</kbd>+<kbd>K</kbd>, H<sub>2</sub>O, x<sup>2</sup>,<br><b>b</b> <i>i</i>\n\n<p align="center">middle</p>\n\n<details><summary>More</summary>\n\nSome **bold** words.\n\n</details>',
+    );
+    expect([...box.querySelectorAll("kbd")].map((key) => key.textContent)).toEqual(["Cmd", "K"]);
+    expect(box.querySelector("sub")?.textContent).toBe("2");
+    expect(box.querySelector("sup")?.textContent).toBe("2");
+    expect(box.querySelector("br + b + i")).not.toBeNull();
+    expect(box.querySelector("p[align='center']")?.textContent).toBe("middle");
+    expect(box.querySelector("details > summary")?.textContent).toBe("More");
+    expect(box.querySelector("details strong")?.textContent).toBe("bold");
+    expect(box.textContent).not.toContain("<");
+  });
+
+  it("shows a tag in code as its letters", () => {
+    const box = drawn("`<kbd>` and\n\n```html\n<kbd>x</kbd>\n```");
+    expect(box.querySelector("kbd")).toBeNull();
+    expect(box.textContent).toContain("<kbd>x</kbd>");
+  });
+
+  it("shows what is outside the subset as its text", () => {
+    for (const tag of [
+      "<script>alert(1)</script>",
+      "<style>*{display:none}</style>",
+      '<iframe src="https://example.com"></iframe>',
+      '<form action="https://example.com"><input name="a"><button>go</button></form>',
+      '<link rel="stylesheet" href="https://example.com/a.css">',
+      '<meta http-equiv="refresh" content="0;url=https://example.com">',
+      '<video src="https://example.com/a.mp4" autoplay></video>',
+      '<object data="https://example.com"></object>',
+      "<svg onload=alert(1)></svg>",
+      '<kbd onclick="alert(1)">k',
+      '<b style="background:url(https://example.com)">b',
+      '<a href="javascript:alert(1)">a',
+      '<div class="code" data-copy-host="code">',
+      '<div id="x">',
+      '<span data-run="">! rm -rf ~',
+      '<kbd data-thread-item="">',
+      '<code data-run="">! rm -rf ~',
+      '<p data-find="">',
+    ]) {
+      const box = drawn(`${tag}\n\nafter ${tag}`);
+      expect(box.querySelector("script, style, iframe, form, input, button, link, meta, video, object, svg, span, [data-run], [data-thread-item], [data-find], [data-copy-host], [id], [class], [onclick], [style], a"), tag).toBeNull();
+      expect(box.textContent, tag).toContain(tag.slice(0, tag.indexOf(">") + 1));
+    }
+  });
+
+  it("marks no command that HTML writes", () => {
+    const box = drawn("<code>! rm -rf ~</code>\n\n<pre>! rm -rf ~</pre>");
+    expect(box.querySelector("code")?.textContent).toBe("! rm -rf ~");
+    expect(box.querySelector("[data-run], [data-copy-host]")).toBeNull();
+  });
+
+  it("draws no image that would be fetched, and one held in the text", () => {
+    for (const html of [
+      '<img src="https://example.com/a.png">',
+      '<img src="//example.com/a.png">',
+      '<img src="docs/a.png">',
+      '<img src="/etc/a.png">',
+      '<picture><source srcset="https://example.com/a.png"></picture>',
+      '<picture><source media="(prefers-color-scheme: dark)" srcset="data:image/png;base64,AA== 1x, https://example.com/a.png 2x"></picture>',
+      '<img src="data:image/png;base64,AA==" srcset="https://example.com/a.png">',
+    ]) {
+      const box = drawn(html);
+      expect(box.querySelector("img[src^='http'], img[src^='/'], img[src^='docs'], img[srcset], source[srcset]"), html).toBeNull();
+      expect(box.textContent, html).toContain(html.includes("<source") ? "<source" : "<img");
+    }
+    const held = drawn('<img src="data:image/png;base64,AA==" alt="held">');
+    expect(held.querySelector("img")?.getAttribute("alt")).toBe("held");
+  });
+
+  it("says where a link goes, whether HTML or Markdown wrote it", () => {
+    const box = drawn('<a href="https://example.com/x" title="Site">here</a>');
+    expect(box.querySelector("a")?.getAttribute("title")).toBe("Site (https://example.com/x)");
+    expect(box.querySelector(".goes")).toBeNull();
+  });
+
+  it("shows the address after a link whose words name another, however they are written", () => {
+    for (const markdown of [
+      '<a href="https://evil.example">google.com</a>',
+      '<a href="https://evil.example"><b>google</b>.com</a>',
+      '<a href="https://evil.example" title="https://google.com">https://google.com</a>',
+      "[<b>google.com</b>](https://evil.example)",
+      "[<kbd></kbd>google.com](https://evil.example)",
+      '<a href="https://evil.example"><img src="data:image/png;base64,AA==" alt="google.com"></a>',
+      '<a href="https://evil.example"><details><summary>google.com</summary>other words</details></a>',
+      '<div><a href="https://evil.example"><details><summary>click</summary>google.com</details></a></div>',
+      '<div><a href="https://evil.example"><details><summary>click</summary><b>google</b>.com</details></a></div>',
+      '<div><a href="https://evil.example"><details><summary>click</summary>go here<b>google.com</b></details></a></div>',
+      '<a href="https://example.com"><a href="https://evil.example">google.com</a></a>',
+      "[![google.com](data:image/png;base64,AA==)](https://evil.example)",
+    ]) {
+      // A browser may split a link around a block inside it, so the address
+      // follows whichever of its parts holds the words.
+      const box = drawn(markdown);
+      const said = box.querySelector("a[href='https://evil.example'] + .goes");
+      expect(said?.textContent, markdown).toBe(" (https://evil.example)");
+      for (const link of box.querySelectorAll("a[href='https://evil.example']"))
+        expect(link.getAttribute("title"), markdown).toContain("https://evil.example");
+    }
+  });
+
+  it("reads a link that holds folds nested deep without stalling", () => {
+    const deep = 90;
+    const box = drawn(`<div><a href="https://evil.example">${"<details>".repeat(deep)}google.com${"</details>".repeat(deep)}</a></div>`);
+    expect(box.querySelectorAll("details")).toHaveLength(deep);
+    expect(box.querySelector("a[href] + .goes")?.textContent).toBe(" (https://evil.example)");
+  });
+
+  it("holds a fold's blocks inside it, and closes one left open at the end", () => {
+    for (const markdown of ["<details>\n\none\n\ntwo\n\n</details>\n\nafter", "<details>\n\none\n\ntwo"]) {
+      const box = drawn(markdown);
+      expect([...box.querySelectorAll("details > p")].map((p) => p.textContent)).toEqual(["one", "two"]);
+    }
+    expect(drawn("<details>\n\none\n\n</details>\n\nafter").querySelector("details + p")?.textContent).toBe("after");
+    expect(saidBlocks("<details>\n\none\n\n</details>\n\nafter")).toHaveLength(2);
+  });
+
+  it("lets no tag in a list or a quote close an element opened outside it", () => {
+    for (const inner of ["- </div>", "> </div>", "- a\n\n  </div>"]) {
+      const box = drawn(`<div>\n\n${inner}\n\nstill inside\n\n</div>`);
+      expect(box.querySelector("div > p:last-child")?.textContent, inner).toBe("still inside");
+    }
+  });
+
+  it("closes a paragraph, a heading and a summary at the end of their block", () => {
+    for (const name of ["p", "h1", "h2", "h3", "h4", "h5", "h6"]) {
+      const box = drawn(`<${name} align="center">\n\nlater\n\n</${name}>`);
+      expect(box.querySelector(`${name}[align]`)?.textContent?.trim(), name).toBe("");
+      expect(box.querySelector(`p:not([align])`)?.textContent, name).toBe("later");
+      expect(box.textContent, name).toContain(`</${name}>`);
+    }
+    const open = drawn("<details>\n<summary>s\n\nheld");
+    expect(open.querySelector("summary")?.textContent?.trim()).toBe("s");
+    expect(open.querySelector("details > p")?.textContent).toBe("held");
+    for (const name of ["div", "pre"])
+      expect(drawn(`<${name}></${name}>\n\n<div>\n\nheld`).querySelector("div > p")?.textContent).toBe("held");
+    // A document keeps a paragraph open to the tag that closes it.
+    const document = window.document.createElement("div");
+    document.innerHTML = render("<h2>\n\nlater\n\n</h2>");
+    expect(document.textContent).not.toContain("</h2>");
+  });
+
+  it("draws a link only to the web, since a click opens nothing else", () => {
+    for (const markdown of [
+      "[words](#usage)",
+      "[words](mailto:a@b.c)",
+      "[words](https:alert(1))",
+      '<a href="#usage">words</a>',
+      '<a href="mailto:a@b.c">words</a>',
+      '<a href="https:alert(1)">words</a>',
+      "write to a@b.com, words",
+      "![words](https:a.png)",
+    ]) {
+      const box = drawn(markdown);
+      expect(box.querySelector("a, img"), markdown).toBeNull();
+      expect(box.textContent, markdown).toContain("words");
+    }
+    expect(drawn("[a](HTTPS://example.com) <a href='http://example.com'>b</a>").querySelectorAll("a")).toHaveLength(2);
+  });
+
+  it("draws every fold of a flat reply as a plain block that shows what it holds", () => {
+    for (const markdown of [
+      "<details>\n<summary>s</summary>\n\nstep\n\n</details>\n\nafter",
+      "<details><summary>s</summary>step</details>\n\nafter",
+      "<details open>\n<summary>s\n\nstep",
+      "- <details><summary>s</summary>step</details>\n\n> <details/>after",
+    ]) {
+      const box = window.document.createElement("div");
+      box.innerHTML = renderSaid(markdown, true);
+      expect(box.querySelector("details, summary, [open]"), markdown).toBeNull();
+      expect(box.textContent, markdown).toContain("step");
+      expect(box.textContent, markdown).not.toContain("<");
+    }
+    expect(renderSaid("<details>x</details>")).toContain("<details>");
+    expect(render("<details>x</details>")).toContain("<details>");
+  });
+
+  it("renders a reply with HTML in whole blocks as it renders it at once", () => {
+    const text = "Press <kbd>K</kbd>.\n\n<details>\n<summary>s</summary>\n\none\n\n</details>\n\n<div>\n\ntwo\n\n</div>\n\nend";
+    for (let length = 0; length <= text.length; length++) {
+      const now = arrived(text.slice(0, length));
+      const kept = settled(now);
+      expect([...saidBlocks(now.slice(0, kept)), ...saidBlocks(now.slice(kept))], now).toEqual(saidBlocks(now));
+    }
+  });
+});
+
+describe("a tag half arrived", () => {
+  it("is held back until it is whole", () => {
+    for (const half of ["<", "</", "<k", "<kbd", "</kb", "<details open", '<a href="https://exa', "<br /", "<IMG src="])
+      expect(arrived(`Press ${half}`), half).toBe("Press ");
+  });
+
+  it("is left when it can draw nothing, or is no tag", () => {
+    for (const text of [
+      "Press <kbd>",
+      "a < b",
+      "Vec<String",
+      "<script",
+      '<iframe src="x',
+      "<kbdx y",
+      "in `<kbd",
+      "```\n<kbd",
+      "    <kbd",
+    ])
+      expect(arrived(text), text).toBe(text);
+  });
+
+  it("is waited for no further than its attributes reach", () => {
+    for (const text of [
+      "if a <b then it stops\n\nmore",
+      "if a <b then\nmore words",
+      "<b\n\nmore",
+      "<a href=x\n\n",
+      "<a\nhref is a word\nand more",
+      "<details\nopening",
+    ])
+      expect(arrived(text), JSON.stringify(text)).toBe(text);
+    for (const half of ["<a\n", "<a\nhr", '<a\n  href="https://exa', '<img\n src="a"\n alt', "<details\nopen\n", "<br\n/"])
+      expect(arrived(`Press ${half}`), JSON.stringify(half)).toBe("Press ");
+  });
+
+  it("never shows its letters as an allowed tag streams in", () => {
+    const text = 'Press <kbd>Cmd</kbd> or <a href="https://example.com">go</a>.';
+    for (let length = 0; length <= text.length; length++) {
+      const box = document.createElement("div");
+      box.innerHTML = renderSaid(arrived(text.slice(0, length)));
+      expect(box.textContent, text.slice(0, length)).not.toContain("<");
+    }
   });
 });

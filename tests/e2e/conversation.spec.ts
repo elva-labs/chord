@@ -244,6 +244,131 @@ test.describe("an integrated session", () => {
     await expect(md.locator("table td").first()).toHaveText("a.ts");
   });
 
+  test("draws an agent's kbd as a key, and its other safe HTML, and fetches nothing", async ({ page }) => {
+    const fetched: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("tracker.example")) fetched.push(request.url());
+    });
+    await openIntegrated(page);
+    const said = [
+      "Press <kbd>Cmd</kbd> to go.",
+      "",
+      '<img src="https://tracker.example/a.png" onerror="window.__ran = true">',
+      "",
+      "<script>window.__ran = true</script>",
+      "",
+      "<details>",
+      "<summary>More</summary>",
+      "",
+      "A hidden needle.",
+      "",
+      "</details>",
+    ].join("\n");
+    await agent(page, `f.turn("${H}", ${JSON.stringify(said)});`);
+    const md = page.getByTestId("markdown");
+    const key = md.locator("kbd");
+    await expect(key).toHaveText("Cmd");
+    await expect(key).toBeVisible();
+    await expect(key).toHaveCSS("border-bottom-width", "2px");
+    await expect(key).toHaveCSS("border-top-style", "solid");
+    // The key stands in the line of its sentence.
+    const line = (await md.locator("p").first().boundingBox())!;
+    const box = (await key.boundingBox())!;
+    expect(box.width).toBeLessThan(line.width / 2);
+    expect(box.y).toBeGreaterThanOrEqual(line.y - 2);
+    expect(box.y + box.height).toBeLessThanOrEqual(line.y + line.height + 2);
+    await expect(md).not.toContainText("<kbd>");
+    // The rest is its letters.
+    await expect(md).toContainText('<img src="https://tracker.example/a.png"');
+    await expect(md).toContainText("<script>window.__ran = true</script>");
+    await expect(md.locator("img, script")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __ran?: boolean }).__ran)).toBeUndefined();
+    expect(fetched).toEqual([]);
+    // A fold opens at a click on its summary, which is no Tab stop.
+    await expect(md.getByText("A hidden needle.")).toBeHidden();
+    await expect(md.locator("summary")).toHaveAttribute("tabindex", "-1");
+    await md.locator("summary").click();
+    await expect(md.getByText("A hidden needle.")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(md.getByText("A hidden needle.")).toBeHidden();
+    // Find opens the fold that holds its match.
+    await page.keyboard.press("ControlOrMeta+f");
+    await page.getByTestId("conversation-find-input").fill("needle");
+    await expect(md.getByText("A hidden needle.")).toBeInViewport();
+  });
+
+  test("shows no letters of a tag that is still arriving", async ({ page }) => {
+    await openIntegrated(page);
+    const say = (text: string) =>
+      agent(page, `f.emit("${H}", { type: "text", block: "s", parent: null, text: ${JSON.stringify(text)}, done: false });`);
+    await agent(page, `f.startTurn("${H}");`);
+    await say("Press <kb");
+    const md = page.getByTestId("markdown");
+    await expect(md).toHaveText("Press");
+    await say("d>Cmd</kbd> now");
+    await expect(md.locator("kbd")).toHaveText("Cmd");
+    await expect(md).toHaveText("Press Cmd now");
+  });
+
+  test("draws every fold of a plan open, with no way to shut it", async ({ page }) => {
+    await openIntegrated(page);
+    const text = "<details>\n<summary>Cleanup</summary>\n\nDelete the old tables.\n\n</details>\n\n<details><summary>Then</summary>Push to main.";
+    await agent(
+      page,
+      `f.startTurn("${H}"); f.emit("${H}", { type: "plan", call: null, parent: null, text: ${JSON.stringify(text)}, steps: [] });`,
+    );
+    const plan = page.getByTestId("plan");
+    await expect(plan.getByText("Delete the old tables.")).toBeVisible();
+    await expect(plan.getByText("Push to main.")).toBeVisible();
+    await expect(plan.locator("details, summary")).toHaveCount(0);
+    await plan.getByText("Cleanup").click();
+    await plan.getByText("Then", { exact: true }).click();
+    await expect(plan.getByText("Delete the old tables.")).toBeVisible();
+    await expect(plan.getByText("Push to main.")).toBeVisible();
+  });
+
+  test("hides no paragraph behind a bare < while a reply streams", async ({ page }) => {
+    await openIntegrated(page);
+    await agent(page, `f.startTurn("${H}");`);
+    await agent(
+      page,
+      `f.emit("${H}", { type: "text", block: "s", parent: null, text: "It stops if a <b then ends.\\n\\nThe second paragraph.", done: false });`,
+    );
+    const md = page.getByTestId("markdown");
+    await expect(md.getByText("It stops if a <b then ends.")).toBeVisible();
+    await expect(md.getByText("The second paragraph.")).toBeVisible();
+  });
+
+  test("keeps an agent's images in shape and its headings to their block, and draws only web links", async ({ page }) => {
+    await openIntegrated(page);
+    // An image of one pixel, written into its address.
+    const pixel = "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+    const said = [
+      `<img src="${pixel}" alt="square" width="4096" height="4096">`,
+      "",
+      "<h1>",
+      "",
+      "Plain words after it.",
+      "",
+      "[the usage](#usage), [write](mailto:a@b.c) and [google.com](https://example.com/a)",
+    ].join("\n");
+    await agent(page, `f.turn("${H}", ${JSON.stringify(said)});`);
+    const md = page.getByTestId("markdown");
+    const image = md.getByAltText("square");
+    await expect(image).toBeVisible();
+    const box = (await image.boundingBox())!;
+    expect(box.width).toBeGreaterThan(100);
+    expect(box.width).toBeLessThanOrEqual((await md.boundingBox())!.width);
+    expect(Math.abs(box.width - box.height)).toBeLessThan(1);
+    await expect(md.locator("h1")).toHaveText("");
+    await expect(md.locator("h1 p")).toHaveCount(0);
+    await expect(md.getByText("Plain words after it.")).toBeVisible();
+    await expect(md.locator("a")).toHaveCount(1);
+    await expect(md.locator("a")).toHaveText("google.com");
+    await expect(md).toContainText("the usage, write and google.com");
+    await expect(md.locator(".goes")).toHaveCSS("unicode-bidi", "isolate");
+  });
+
   test("shows the sessions the agent started, each with a way to open it", async ({ page }) => {
     // Terminal sessions by default here, and one integrated session started
     // the other way from the agent pane.
