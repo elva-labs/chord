@@ -430,11 +430,12 @@
 
   /** A session's own menu, from a right click on its row or the menu key
       on the row under the cursor: marking it unread, or read, the session
-      reopened the other way where its agent runs both ways, and stopping
-      it. It opens upwards near the
+      reopened the other way where its agent runs both ways, the chat that
+      started it, and stopping it. It opens upwards near the
       pane's foot, and its keyboard cursor walks the items while it is
-      open. */
-  let sessionMenu = $state<{ key: string; up: boolean } | null>(null);
+      open. `fixed` places it by the window for a row in the chats foot,
+      which scrolls and would cut a menu hung from the row. */
+  let sessionMenu = $state<{ key: string; up: boolean; fixed: string | null } | null>(null);
   let sessionMenuAt = $state(0);
   /** The row whose menu offers its notes: one that keeps any, found as
       the menu opens. */
@@ -527,6 +528,10 @@
     ];
   });
 
+  /** About how tall a session's menu stands at its longest, which is
+      enough to tell whether it fits under its row. */
+  const SESSION_MENU_TALL = 260;
+
   function openSessionMenu(key: string, e: MouseEvent | null) {
     e?.preventDefault();
     const row = nav?.querySelector<HTMLElement>(`[data-row="${CSS.escape(`session:${key}`)}"]`) ?? null;
@@ -535,10 +540,19 @@
       row !== null && tree !== null && tree !== undefined
         ? row.getBoundingClientRect().bottom > tree.getBoundingClientRect().bottom - 90
         : false;
+    let fixed: string | null = null;
+    if (row !== null && row.closest('[data-testid="chats-foot"]') !== null) {
+      const at = row.getBoundingClientRect();
+      const right = `right: ${window.innerWidth - at.right}px`;
+      fixed =
+        at.bottom + 4 + SESSION_MENU_TALL > window.innerHeight
+          ? `position: fixed; ${right}; top: auto; bottom: ${window.innerHeight - at.top + 2}px`
+          : `position: fixed; ${right}; top: ${at.bottom + 4}px; bottom: auto`;
+    }
     menuOpen = false;
     sortOpen = false;
     projectMenu = null;
-    sessionMenu = { key, up };
+    sessionMenu = { key, up, fixed };
     sessionMenuAt = 0;
     sessionMenuNotes = null;
     const session = byKey(key);
@@ -1926,7 +1940,14 @@
 <!-- A session's own menu, under its row, or over it near the pane's foot. -->
 {#snippet sessionMenuFor(key: string)}
   {#if sessionMenu?.key === key}
-    <div class="menu session-menu" data-card class:up={sessionMenu.up} role="menu" data-testid="session-menu">
+    <div
+      class="menu session-menu"
+      data-card
+      class:up={sessionMenu.up}
+      style={sessionMenu.fixed}
+      role="menu"
+      data-testid="session-menu"
+    >
       {#each sessionItems as item, index (item.id)}
         {#if item.destructive && index > 0}<div class="separator" role="separator"></div>{/if}
         <button
