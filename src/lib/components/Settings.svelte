@@ -372,24 +372,31 @@
     { which: "own", label: "Compact my sessions at", hint: "The sessions you start yourself." },
     { which: "started", label: "Compact started sessions at", hint: "The sessions another session starts." },
   ] as const;
-  let compactProblem = $state<{ which: "own" | "started"; text: string } | null>(null);
+  /** Each row's refusal, kept until a figure in that row is taken. */
+  const compactProblems = $state<Record<"own" | "started", string | null>>({ own: null, started: null });
+
+  /** A figure as the field shows it, empty for Claude Code's default. */
+  function shownTokens(tokens: number | null): string {
+    return tokens === null ? "" : String(tokens);
+  }
 
   /** Sets where a kind of session compacts from what its field holds:
       empty for Claude Code's default, or a whole number in range, with
-      or without separators between its thousands. */
-  function changeCompactAt(which: "own" | "started", text: string) {
-    const trimmed = text.replace(/[\s,_]/g, "");
+      or without separators between its thousands. A figure refused puts
+      the field back to the one kept, under the row's refusal. */
+  function changeCompactAt(which: "own" | "started", field: HTMLInputElement) {
+    const trimmed = field.value.replace(/[\s,_]/g, "");
     const tokens = trimmed === "" ? null : /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
     if (tokens !== null && !fitsCompactAt(tokens)) {
-      compactProblem = {
-        which,
-        text: `A whole number of tokens from ${FEWEST_COMPACT_AT.toLocaleString("en")} to ${MOST_COMPACT_AT.toLocaleString("en")}, or empty for Claude Code's default.`,
-      };
+      compactProblems[which] =
+        `${field.value.trim()} is not taken: a whole number of tokens from ${FEWEST_COMPACT_AT.toLocaleString("en")} to ${MOST_COMPACT_AT.toLocaleString("en")}, or empty for Claude Code's default.`;
+      field.value = shownTokens(compactAt[which]);
       return;
     }
-    compactProblem = null;
+    compactProblems[which] = null;
     if (which === "own") setOwnCompactAt(tokens);
     else setStartedCompactAt(tokens);
+    field.value = shownTokens(tokens);
   }
 
   /** What new sessions of an agent start on, as its row says it. */
@@ -995,7 +1002,7 @@
                 <UnreadEntries field={["ownCompactAt", "startedCompactAt"]} />
                 <div class="s-card">
                   {#each COMPACT_ROWS as row (row.which)}
-                    <div class="s-row" class:problem={compactProblem?.which === row.which}>
+                    <div class="s-row" class:problem={compactProblems[row.which] !== null}>
                       <label class="s-name" for="compact-at-{row.which}">{row.label}<small>{row.hint}</small></label>
                       <div class="s-ctl">
                         <input
@@ -1006,16 +1013,19 @@
                           spellcheck="false"
                           autocomplete="off"
                           placeholder="Default"
-                          value={compactAt[row.which] ?? ""}
-                          onchange={(e) => changeCompactAt(row.which, e.currentTarget.value)}
-                          aria-invalid={compactProblem?.which === row.which}
+                          value={shownTokens(compactAt[row.which])}
+                          onchange={(e) => changeCompactAt(row.which, e.currentTarget)}
+                          aria-invalid={compactProblems[row.which] !== null}
+                          aria-describedby={compactProblems[row.which] === null ? undefined : `compact-at-${row.which}-problem`}
                           data-testid="compact-at-{row.which}"
                         />
                         <span class="s-fixed">tokens</span>
                       </div>
                     </div>
-                    {#if compactProblem?.which === row.which}
-                      <p class="s-problem" data-testid="compact-at-problem">{compactProblem.text}</p>
+                    {#if compactProblems[row.which] !== null}
+                      <p class="s-problem" id="compact-at-{row.which}-problem" data-testid="compact-at-{row.which}-problem">
+                        {compactProblems[row.which]}
+                      </p>
                     {/if}
                   {/each}
                 </div>

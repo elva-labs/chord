@@ -716,16 +716,30 @@ test("compacts started sessions at 150,000 and the user's own at the agent's def
   await expect(own).toHaveAttribute("placeholder", "Default");
   await expect(started).toHaveValue("150000");
 
-  // Below the fewest Claude Code takes is refused and nothing is kept.
+  // Below the fewest Claude Code takes is refused, nothing is kept, and the
+  // field goes back to the figure kept under the row's own refusal.
+  const ownProblem = page.getByTestId("compact-at-own-problem");
+  const startedProblem = page.getByTestId("compact-at-started-problem");
   await own.fill("50000");
   await own.press("Enter");
-  await expect(page.getByTestId("compact-at-problem")).toContainText("from 100,000 to 1,000,000");
+  await expect(ownProblem).toContainText("50000 is not taken");
+  await expect(ownProblem).toContainText("from 100,000 to 1,000,000");
+  await expect(own).toHaveValue("");
+  await expect(own).toHaveAttribute("aria-describedby", "compact-at-own-problem");
+  // A figure taken in the other row leaves this row's refusal.
+  await started.fill("200000");
+  await started.press("Enter");
+  await expect(started).toHaveValue("200000");
+  await expect.poll(file).toMatchObject({ startedCompactAt: 200000 });
+  await expect(ownProblem).toBeVisible();
+  await expect(startedProblem).toHaveCount(0);
   await own.fill("40k");
   await own.press("Enter");
-  await expect(page.getByTestId("compact-at-problem")).toBeVisible();
+  await expect(ownProblem).toContainText("40k is not taken");
   await own.fill("400,000");
   await own.press("Enter");
-  await expect(page.getByTestId("compact-at-problem")).toHaveCount(0);
+  await expect(ownProblem).toHaveCount(0);
+  await expect(own).not.toHaveAttribute("aria-describedby");
   await expect.poll(file).toMatchObject({ ownCompactAt: 400000 });
   await started.fill("");
   await started.press("Enter");
