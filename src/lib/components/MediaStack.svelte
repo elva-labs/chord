@@ -16,6 +16,9 @@
   }
 
   let { item }: Props = $props();
+
+  /** The row as the list has it now: its copies arrive after it does. */
+  let copies = $derived((media.items.find((row) => row.id === item.id) ?? item).copies);
 </script>
 
 <div class="stack" data-testid="media-stack">
@@ -24,6 +27,7 @@
       <h3 title={file}>{lastSegment(file)}</h3>
       <MediaFile
         path={file}
+        copy={copies?.[file] ?? null}
         alt={item.caption ?? lastSegment(file)}
         root={item.project}
         reload="{item.at}:{changes.treeReads}:{changes.shownReads}"

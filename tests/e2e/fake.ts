@@ -1565,10 +1565,11 @@ export async function installFakeCore(
           return () => {};
         },
         // One pixel of PNG for any image asked for; a PDF as itself; a
-        // path with "missing" in it is not there.
+        // path with "missing" in it, or one a test put in `__gone`, is not
+        // there.
         readMedia: async (path: string) => {
-          if (path.includes("missing"))
-            throw new Error(`could not read ${path}: No such file`);
+          const away = (window as unknown as { __gone?: string[] }).__gone ?? [];
+          if (path.includes("missing") || away.includes(path)) throw "this file is gone";
           if (path.endsWith(".pdf"))
             return { mime: "application/pdf", data: "JVBERi0=", size: 5 };
           if (path.endsWith(".md")) {
@@ -1600,6 +1601,23 @@ export async function installFakeCore(
             data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
             size: 70,
           };
+        },
+        // Each file asked for is kept as `/kept/<n>/<name>`; the paths
+        // forgotten are listed in `__forgotten`.
+        keepMedia: async (files: string[]) => {
+          const w = window as unknown as { __copies?: number };
+          return files.map((file) => {
+            w.__copies = (w.__copies ?? 0) + 1;
+            return `/kept/${w.__copies}/${file.split("/").pop()}`;
+          });
+        },
+        forgetMedia: async (files: string[]) => {
+          const w = window as unknown as { __forgotten?: string[] };
+          (w.__forgotten ??= []).push(...files);
+        },
+        mediaGone: async (files: string[]) => {
+          const away = (window as unknown as { __gone?: string[] }).__gone ?? [];
+          return files.map((file) => file.includes("missing") || away.includes(file));
         },
         // A document's image is one a test put in `__images` by the path the
         // document names it by, and is not there otherwise. Each read is

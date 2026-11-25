@@ -8,10 +8,13 @@
  * The agent's request names files and where the agent runs; the session on
  * that directory, in the project it is under, is the one the files belong
  * to, or the project itself when no session is. The list names files on
- * disk rather than keeping copies, so a file the agent later removes shows
- * as gone rather than stale, and it survives a restart the way session
- * names do. A session that goes on from its notes under a new conversation
- * keeps listing what its earlier conversations presented.
+ * disk and shows them as they are now, and it survives a restart the way
+ * session names do. A file outside the project and the session's worktree
+ * also has a copy kept for it, which is shown only once the file is gone;
+ * a copy lasts as long as its row. A row whose files are gone with no copy
+ * says so and can be removed. A session that goes on from its notes under
+ * a new conversation keeps listing what its earlier conversations
+ * presented.
  */
 
 import { Tokenizer, type TokenizerCallbacks } from "htmlparser2";
@@ -30,9 +33,9 @@ import { runnable } from "$lib/bang";
 import { core, type Media, type PresentRequest } from "$lib/core";
 import { wholeLineageOf } from "$lib/goingOn.svelte";
 import { forProject, sessions } from "$lib/sessions.svelte";
-import { held, projectFor, relativeTo, sessionFor } from "$lib/show.svelte";
+import { held, projectFor, relativeTo, sessionFor, within } from "$lib/show.svelte";
 import { activate, workspace } from "$lib/workspace.svelte";
-import { showMedia } from "$lib/files.svelte";
+import { closeViewer, files as viewer, showMedia } from "$lib/files.svelte";
 import { revealed, shown } from "$lib/unseen";
 
 export interface MediaItem {
@@ -48,7 +51,13 @@ export interface MediaItem {
   caption: string | null;
   /** Seconds since the epoch, of the latest call for these files. */
   at: number;
+  /** The copy kept of a file, by the file's path, on the same machine.
+      Only files outside the project have one. */
+  copies?: Record<string, string>;
 }
+
+/** The core's words for a file that is not there. */
+const GONE = "this file is gone";
 
 const KEY = "chord.media";
 /** The most items kept in all. A session's media is never dropped for
@@ -62,6 +71,12 @@ export const media = $state({
       id: what draws a page again when it is presented again, however
       soon. Not kept across a restart. */
   calls: {} as Record<string, number>,
+  /** The rows whose files are all gone with no copy to show, by id, as
+      last looked. */
+  gone: {} as Record<string, boolean>,
+  /** Counts the reads that found a file gone: the rows are then looked at
+      again. */
+  missed: 0,
 });
 
 let loaded = false;
@@ -172,7 +187,9 @@ export function presented(request: PresentRequest, now = Date.now()) {
     (candidate) =>
       candidate.owner === owner && sameFiles(candidate.files, request.files),
   );
+  const carried = again?.copies;
   const item: MediaItem = {
+    ...(carried === undefined ? {} : { copies: { ...carried } }),
     id:
       again?.id ??
       `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -188,8 +205,14 @@ export function presented(request: PresentRequest, now = Date.now()) {
   }
   media.items.push(item);
   media.calls[item.id] = (media.calls[item.id] ?? 0) + 1;
+  delete media.gone[item.id];
   trim();
   save();
+  const worktree = sessionFor(request)?.worktree ?? null;
+  const outside = request.files.filter(
+    (file) => !within(file, project) && !(worktree !== null && within(file, worktree)),
+  );
+  if (outside.length > 0) void keepCopies(item.id, outside);
   const open = () => {
     if (workspace.active !== project) activate(project);
     showMedia(item);
@@ -214,7 +237,118 @@ function trim() {
     drop.add(item.id);
     extra -= 1;
   }
+  for (const item of media.items) if (drop.has(item.id)) forget(Object.values(item.copies ?? {}));
   media.items = media.items.filter((item) => !drop.has(item.id));
+}
+
+/** Copies the files a row holds from outside its project. A file the core
+    made no copy of keeps the one it had. */
+async function keepCopies(id: string, files: string[]) {
+  const call = media.calls[id];
+  let kept: (string | null)[];
+  try {
+    kept = await core().keepMedia(files);
+  } catch {
+    // A machine whose core keeps no copies: the files are shown live.
+    return;
+  }
+  const made = kept.filter((copy): copy is string => copy !== null);
+  const item = media.items.find((candidate) => candidate.id === id);
+  // A later call for these files, or the row's removal, leaves these
+  // copies with no row to belong to.
+  if (item === undefined || media.calls[id] !== call) {
+    forget(made);
+    return;
+  }
+  if (made.length === 0) return;
+  const copies = { ...item.copies };
+  const replaced: string[] = [];
+  files.forEach((file, i) => {
+    const copy = kept[i];
+    if (copy === null || copy === undefined) return;
+    if (copies[file] !== undefined) replaced.push(copies[file]);
+    copies[file] = copy;
+  });
+  item.copies = copies;
+  save();
+  forget(replaced);
+}
+
+/** Removes copies no row holds any longer. */
+function forget(copies: string[]) {
+  if (copies.length === 0) return;
+  void core()
+    .forgetMedia(copies)
+    .catch(() => {});
+}
+
+/** The latest look for gone rows: an earlier one's answer is dropped. */
+let look = 0;
+
+/** Finds which of the rows have every file gone and no copy of any. */
+export async function lookForGone(items: MediaItem[]) {
+  const current = ++look;
+  // One question for each project, so each goes to a single machine.
+  const asked = new Map<string, Set<string>>();
+  const rows = items.map((item) => ({
+    id: item.id,
+    project: item.project,
+    // What each file could be shown from.
+    places: item.files.map((file) => {
+      const copy = item.copies?.[file];
+      return copy === undefined ? [file] : [file, copy];
+    }),
+  }));
+  for (const row of rows) {
+    const paths = asked.get(row.project) ?? new Set<string>();
+    for (const path of row.places.flat()) paths.add(path);
+    asked.set(row.project, paths);
+  }
+  const gone = new Map<string, Set<string>>();
+  await Promise.all(
+    [...asked].map(async ([project, paths]) => {
+      const list = [...paths];
+      try {
+        const answers = await core().mediaGone(list);
+        gone.set(project, new Set(list.filter((_, i) => answers[i] === true)));
+      } catch {
+        // Not known: the rows stay as they are.
+      }
+    }),
+  );
+  if (current !== look) return;
+  for (const row of rows) {
+    const missing = gone.get(row.project);
+    if (missing === undefined) continue;
+    if (row.places.every((places) => places.every((path) => missing.has(path))))
+      media.gone[row.id] = true;
+    else delete media.gone[row.id];
+  }
+}
+
+/** Takes a row off the list, with the same files' rows from the earlier
+    conversations it stands for, and their copies. */
+export function removeItem(item: MediaItem) {
+  const line = ownersOf(item.owner);
+  const active = sessions.all.find((session) => session.key === sessions.active);
+  if (active !== undefined && active.id !== null && ownersOf(active.id).has(item.owner))
+    for (const owner of ownersOf(active.id)) line.add(owner);
+  const key = filesKey(item.files);
+  const drop = media.items.filter(
+    (candidate) =>
+      candidate.id === item.id ||
+      (filesKey(candidate.files) === key &&
+        (line.has(candidate.owner) ||
+          (active !== undefined && candidate.token === active.token))),
+  );
+  const ids = new Set(drop.map((candidate) => candidate.id));
+  for (const candidate of drop) {
+    forget(Object.values(candidate.copies ?? {}));
+    delete media.gone[candidate.id];
+  }
+  media.items = media.items.filter((candidate) => !ids.has(candidate.id));
+  save();
+  if (viewer.media !== null && ids.has(viewer.media.id)) closeViewer();
 }
 
 /** A call from the list, opened in the viewer again. */
@@ -231,6 +365,8 @@ export type Loaded =
   | { mime: string; page: string }
   /** A Mermaid diagram's source, drawn in the window. */
   | { mime: string; diagram: string }
+  /** The file is not there, and no copy of it is. */
+  | { gone: true }
   | { error: string };
 
 /** Where a link or an image in a document may point: the web, mail, or a
@@ -1368,11 +1504,28 @@ async function readImages(
     `root` draws the images it names by a path relative to itself from the
     project, and stops reading them once `stale` says the file is no
     longer wanted; one outside it, or with no project, draws only those
-    from the web or written in it. */
+    from the web or written in it. When the file is gone, the `copy` kept
+    of it is read in its place. */
 export async function load(
   path: string,
   root: string | null = null,
   stale: () => boolean = () => false,
+  copy: string | null = null,
+): Promise<Loaded & { from?: string }> {
+  const found = await loadAt(path, root, stale);
+  if (!("gone" in found)) return found;
+  if (copy !== null) {
+    const kept = await loadAt(copy, null, stale);
+    if (!("gone" in kept)) return { ...kept, from: copy };
+  }
+  media.missed += 1;
+  return found;
+}
+
+async function loadAt(
+  path: string,
+  root: string | null,
+  stale: () => boolean,
 ): Promise<Loaded> {
   try {
     const found: Media = await core().readMedia(path);
@@ -1392,7 +1545,7 @@ export async function load(
     }
     return { mime: found.mime, url: `data:${found.mime};base64,${found.data}` };
   } catch (error) {
-    return { error: String(error) };
+    return String(error).endsWith(GONE) ? { gone: true } : { error: String(error) };
   }
 }
 
@@ -1401,4 +1554,6 @@ export function resetMedia() {
   loaded = true;
   media.items = [];
   media.calls = {};
+  media.gone = {};
+  media.missed = 0;
 }
