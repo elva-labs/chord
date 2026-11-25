@@ -19,6 +19,7 @@ import {
   type PluginViewEvent,
 } from "$lib/core";
 import { attention } from "$lib/attention.svelte";
+import { isChatsFolder } from "$lib/chats.svelte";
 import { closeViewer, files, showPluginView } from "$lib/files.svelte";
 import { wentOnFrom } from "$lib/goingOn.svelte";
 import { tell } from "$lib/notify.svelte";
@@ -119,10 +120,11 @@ export function dataArrived(event: PluginViewDataEvent) {
   };
 }
 
-/** The page a plugin has for the project on screen, if it sent one. */
+/** The page a plugin has for the project on screen, if it sent one. A chat
+    in front has no project, so there is none. */
 export function viewOf(key: string): PluginPage | null {
   const project = workspace.active;
-  if (project === null) return null;
+  if (project === null || isChatsFolder(project)) return null;
   return pageAt(key, project);
 }
 

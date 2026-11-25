@@ -61,6 +61,7 @@ import {
 } from "$lib/sessions.svelte";
 import { offeredChats, openResume, pickChat, resume } from "$lib/resume.svelte";
 import {
+  activate,
   chatClosed,
   chatInFront,
   goTo,
@@ -77,6 +78,9 @@ import { projects, resetProjects } from "$lib/projects.svelte";
 import { changesVisible, layout, terminalVisible, toggleTerminal } from "$lib/layout.svelte";
 import { projectFor } from "$lib/show.svelte";
 import { ownerOnScreen } from "$lib/terminals.svelte";
+import { ownerOnScreen as browserOwner } from "$lib/browser.svelte";
+import { listed as listedSections, pluginSections } from "$lib/pluginSections.svelte";
+import { pluginViews, viewOf } from "$lib/pluginView.svelte";
 
 const DIR = "/home/ada/.chord/chats";
 const A = "/home/ada/dev/one";
@@ -400,6 +404,22 @@ describe("a chat on screen", () => {
     chatClosed(chat.key);
     expect(workspace.active).toBe(B);
     expect(sessions.active).toBeNull();
+  });
+
+  it("in front with no chat picked gives plugins and the browser no project", () => {
+    const page = { key: "local/board", source: "local", plugin: "board", project: DIR, width: "wide" as const, html: "" };
+    pluginViews.pages = [page];
+    pluginSections.sections = [
+      { key: "local/board/todo", source: "local", plugin: "board", section: "todo", project: DIR, session: null, rows: [] } as unknown as (typeof pluginSections.sections)[number],
+    ];
+    activate(DIR);
+    expect(listedSections()).toEqual([]);
+    expect(viewOf("local/board")).toBeNull();
+    expect(browserOwner()).toBeNull();
+    activate(A);
+    expect(browserOwner()).toEqual({ kind: "project", path: A });
+    pluginViews.pages = [];
+    pluginSections.sections = [];
   });
 
   it("closed with no project open, leaves nothing in front", () => {

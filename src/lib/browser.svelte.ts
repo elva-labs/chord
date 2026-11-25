@@ -27,6 +27,7 @@ import {
   type BrowserSnapshot,
   type BrowserTab,
 } from "$lib/core";
+import { isChatsFolder } from "$lib/chats.svelte";
 import { activeSession, byKey } from "$lib/sessions.svelte";
 import { workspace } from "$lib/workspace.svelte";
 
@@ -68,11 +69,12 @@ export function sameOwner(
 }
 
 /** Whose tabs the window is showing: the session on screen, else the
-    project on screen, else nobody's. */
+    project on screen, else nobody's. The chats folder in front with no
+    chat picked is no project, so the tabs are nobody's. */
 export function ownerOnScreen(): BrowserOwner | null {
   const session = activeSession();
   if (session !== null) return { kind: "session", key: session.key };
-  if (workspace.active !== null)
+  if (workspace.active !== null && !isChatsFolder(workspace.active))
     return { kind: "project", path: workspace.active };
   return null;
 }

@@ -656,7 +656,7 @@
   // attaches to a file that exists, so it is asked again once that is true.
   $effect(() => {
     const watching = root;
-    const hooked = isInstalled(workspace.active);
+    const hooked = !isChatsFolder(workspace.active) && isInstalled(workspace.active);
     untrack(() => {
       if (hooked && watching !== null) watch(watching);
     });

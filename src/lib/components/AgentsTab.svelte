@@ -45,6 +45,7 @@
     SHIPPED,
     shippedAgents,
   } from "$lib/agents.svelte";
+  import { isChatsFolder } from "$lib/chats.svelte";
   import { installed } from "$lib/harness.svelte";
   import { HARNESS_LABELS, modelFromKey, modelKey, modelLabel, offeredHarnesses, offeredModels } from "$lib/models";
   import { askCodexCatalog } from "$lib/modelCatalog.svelte";
@@ -52,7 +53,9 @@
   import { effortName } from "$lib/settingChoices";
   import { workspace } from "$lib/workspace.svelte";
 
-  const project = $derived(workspace.active);
+  /** The project the tab is about: none with a chat in front, which
+      belongs to no project. */
+  const project = $derived(isChatsFolder(workspace.active) ? null : workspace.active);
 
   // The installed agents are read again each time the tab opens, and for
   // each project made active while it is open.
