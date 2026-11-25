@@ -714,7 +714,7 @@ test("compacts started sessions at 150,000 and the user's own at the agent's def
   const started = page.getByTestId("compact-at-started");
   await expect(own).toHaveValue("");
   await expect(own).toHaveAttribute("placeholder", "Default");
-  await expect(started).toHaveValue("150000");
+  await expect(started).toHaveValue("150,000");
 
   // Below the fewest Claude Code takes is refused, nothing is kept, and the
   // field goes back to the figure kept under the row's own refusal.
@@ -729,7 +729,7 @@ test("compacts started sessions at 150,000 and the user's own at the agent's def
   // A figure taken in the other row leaves this row's refusal.
   await started.fill("200000");
   await started.press("Enter");
-  await expect(started).toHaveValue("200000");
+  await expect(started).toHaveValue("200,000");
   await expect.poll(file).toMatchObject({ startedCompactAt: 200000 });
   await expect(ownProblem).toBeVisible();
   await expect(startedProblem).toHaveCount(0);
@@ -749,7 +749,7 @@ test("compacts started sessions at 150,000 and the user's own at the agent's def
   await expect(page.locator(AGENT)).toBeVisible();
   await page.keyboard.press(`${MOD}+,`);
   await page.getByTestId("settings-tab-sessions").click();
-  await expect(page.getByTestId("compact-at-own")).toHaveValue("400000");
+  await expect(page.getByTestId("compact-at-own")).toHaveValue("400,000");
   await expect(page.getByTestId("compact-at-started")).toHaveValue("");
 });
 

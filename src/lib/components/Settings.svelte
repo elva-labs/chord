@@ -375,9 +375,10 @@
   /** Each row's refusal, kept until a figure in that row is taken. */
   const compactProblems = $state<Record<"own" | "started", string | null>>({ own: null, started: null });
 
-  /** A figure as the field shows it, empty for Claude Code's default. */
+  /** A figure as the field shows it, with separators between its
+      thousands, and empty for Claude Code's default. */
   function shownTokens(tokens: number | null): string {
-    return tokens === null ? "" : String(tokens);
+    return tokens === null ? "" : tokens.toLocaleString("en");
   }
 
   /** Sets where a kind of session compacts from what its field holds:
