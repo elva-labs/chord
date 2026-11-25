@@ -563,6 +563,19 @@ describe("plugins' commands", () => {
     expect(plugged("").map((item) => item.label)).toEqual(["Pull requests"]);
   });
 
+  it("leaves out one offered only at other times, and one spaced apart", () => {
+    overview(A, [
+      "Turn word wrap on",
+      "Go back to an earlier message",
+      "Preview  file",
+      "New  session",
+      "New session\tin api",
+      "Newsletter",
+    ]);
+    workspace.active = A;
+    expect(plugged("").map((item) => item.label)).toEqual(["Newsletter"]);
+  });
+
   it("goes when the plugin sends an empty list", () => {
     overview();
     workspace.active = A;
