@@ -62,7 +62,8 @@
     startSession,
     workspace,
   } from "$lib/workspace.svelte";
-  import { childrenOf, conducting, isAsking, ownFor, parentOf, stateWord } from "$lib/orchestrator.svelte";
+  import { chatLine, chatOf, chatStarted, childrenOf, conducting, isAsking, ownFor, parentOf, stateWord } from "$lib/orchestrator.svelte";
+  import { isChat } from "$lib/chats.svelte";
   import { BRINGS_BACK, heldNow, holdWords, listed, reopenEnds } from "$lib/sessionMoves.svelte";
   import { folderShown, folderToRead, startsIn } from "$lib/orchestratorFolder.svelte";
   import {
@@ -1677,9 +1678,15 @@
   {@const resumes = resumesWords(session)}
   {@const resumesSaid =
     resumes !== null && !folded && session.note === null && kids.length === 0 && news.length === 0}
+  <!-- A chat's sessions are drawn in their own projects: its row says
+       how many run and where. -->
+  {@const chatSaid = isChat(session) && session.note === null && news.length === 0 ? chatLine(session) : null}
+  <!-- The chat that started a session drawn in its own project. -->
+  {@const byChat = chatOf(session)}
   {@const line = folded
     ? startedWords(kids)
     : (session.note ??
+      chatSaid ??
       (kids.length > 0 || news.length > 0
         ? startedWords(kids)
         : resumesSaid
@@ -1701,7 +1708,8 @@
       class="row line"
       class:two={line !== null || marks.length > 0}
       tabindex="-1"
-      onclick={() => choose(session.key)}
+      onclick={(e) =>
+        choose(byChat !== null && (e.target as Element).closest(".chat-tag") !== null ? byChat.key : session.key)}
       oncontextmenu={(e) => openSessionMenu(session.key, e)}
       title={rowName(session) ?? "New session"}
       data-testid="session-row"
@@ -1722,6 +1730,11 @@
           class:unread={session.unread || isAsking(session)}
           class:unnamed={rowName(session) === null}>{rowName(session) ?? "New session"}</span
         >
+        {#if byChat !== null}
+          <span class="chat-tag" title="Started by the chat {shownName(byChat)}" data-testid="chat-tag"
+            ><Icon name="chat" size={11} /></span
+          >
+        {/if}
         <span class="when" data-testid="session-when">{since(lastChanged(session), now)}</span>
       </span>
       {#if line !== null || marks.length > 0}
@@ -1733,7 +1746,9 @@
             class="note"
             class:asking={owned
               ? session.needs === "permission"
-              : subsSaid !== null
+              : chatSaid !== null
+                ? chatStarted(session).some(isAsking)
+                : subsSaid !== null
                 ? drawnSubs.some((one) => one.state === "asking")
                 : kids.some(isAsking)}
             class:first-say={news.length > 0}
@@ -1745,7 +1760,9 @@
               ? "session-note"
               : resumesSaid
                 ? "session-resumes"
-                : subsSaid !== null
+                : chatSaid !== null
+                  ? "chat-started"
+                  : subsSaid !== null
                   ? "subagent-summary"
                   : "orchestrator-summary"}>{line}</span
           >
@@ -1780,6 +1797,16 @@
                   class="dot mini"
                   class:live={isLive(kid)}
                   class:working={conducting(kid)}
+                  class:permission={kid.needs === "permission"}
+                ></span>{/each}
+            </span>
+          {:else if chatSaid !== null}
+            <span class="meta" data-testid="started-dots">
+              {#each chatStarted(session) as kid (kid.key)}<span
+                  class="dot mini"
+                  class:live={isLive(kid)}
+                  class:working={conducting(kid)}
+                  class:unread={kid.unread}
                   class:permission={kid.needs === "permission"}
                 ></span>{/each}
             </span>
@@ -3151,6 +3178,26 @@
   .first .label,
   .second .note {
     flex: 1;
+  }
+
+  /* The chat a session drawn in its project was started by: a small
+     bubble after its name that goes to the chat. */
+  .chat-tag {
+    flex: none;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    margin-left: 6px;
+    padding: 0 3px;
+    border: 1px solid var(--accent-soft);
+    border-radius: var(--radius-tag);
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  .chat-tag:hover {
+    border-color: var(--accent);
   }
 
   /* The model, or a folded starter's dots, at the second line's end. */

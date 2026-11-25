@@ -9,6 +9,10 @@
  * on a rail from its dot, wherever they run, and speak up only when one of
  * them needs a permission. The place to go is the session that started
  * them, not the session it started.
+ *
+ * A chat belongs to no project, so the sessions a chat starts are drawn in
+ * their own projects as rows of their own, each tagged with the chat that
+ * started it, and the chat's row says where they run.
  */
 
 import { dirsOf } from "$lib/accounts.svelte";
@@ -25,6 +29,7 @@ import {
 } from "$lib/conductor.svelte";
 import { handleOf, linkFor, send as sendIntegrated } from "$lib/integrated.svelte";
 import { lastSegment } from "$lib/paths";
+import { isChatsFolder } from "$lib/chats.svelte";
 import { isLive, lastChanged, shownName, sessions, since, statusLabel, type Session } from "$lib/sessions.svelte";
 import { shown } from "$lib/unseen";
 import { projectLabel, workspace } from "$lib/workspace.svelte";
@@ -57,6 +62,7 @@ const tree = $derived.by(() => {
   const children = new Map<string, Session[]>();
   const started = new Map<string, Session[]>();
   const own = new Map<string, Session[]>();
+  const chats = new Map<string, Session>();
   for (const session of sessions.all) {
     const id = startedFor(session.key);
     if (id !== null) {
@@ -64,7 +70,11 @@ const tree = $derived.by(() => {
       if (list === undefined) started.set(id, [session]);
       else list.push(session);
     }
-    const parent = id === null ? null : starterOf(session, id);
+    let parent = id === null ? null : starterOf(session, id);
+    if (parent !== null && isChatsFolder(parent.project) && !isChatsFolder(session.project)) {
+      chats.set(session.key, parent);
+      parent = null;
+    }
     if (parent === null) {
       const list = own.get(session.project);
       if (list === undefined) own.set(session.project, [session]);
@@ -76,7 +86,7 @@ const tree = $derived.by(() => {
     if (list === undefined) children.set(parent.key, [session]);
     else list.push(session);
   }
-  return { parents, children, started, own };
+  return { parents, children, started, own, chats };
 });
 
 /** The row a starter's token names, other than the session's own. */
@@ -177,6 +187,28 @@ export function childrenOf(session: Session): Session[] {
     hangs under that one instead, whichever project it runs in. */
 export function ownFor(project: string): Session[] {
   return tree.own.get(project) ?? [];
+}
+
+/** The chat that started a session drawn in its own project, while the
+    window has that chat. */
+export function chatOf(session: Session): Session | null {
+  return tree.chats.get(session.key) ?? null;
+}
+
+/** The line under a chat's name while sessions it started run: how many,
+    and the one project they run in or how many projects. Null while none
+    does. */
+export function chatLine(chat: Session): string | null {
+  const live = startedRows(chat).filter(isLive);
+  if (live.length === 0) return null;
+  const places = new Set(live.map((session) => session.project));
+  if (places.size === 1) return `${live.length} in ${projectLabel(live[0].project)}`;
+  return `${live.length} in ${places.size} projects`;
+}
+
+/** The live sessions a chat started, for the dots beside its line. */
+export function chatStarted(chat: Session): Session[] {
+  return startedRows(chat).filter(isLive);
 }
 
 drawnWith({ ownFor, childrenOf, parentOf });
@@ -462,4 +494,6 @@ export function cleanQuestion(trees: LeftTree[]): Question {
 
 // A session another started goes on after a usage limit as its starter's
 // choice says.
-parentsFrom(parentOf);
+// A session a chat started goes by the chat's choice, as one hanging
+// under its starter does.
+parentsFrom((session) => parentOf(session) ?? chatOf(session));

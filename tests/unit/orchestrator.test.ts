@@ -4,6 +4,9 @@ import {
   NAME_SHOWN,
   boardOf,
   canSend,
+  chatLine,
+  chatOf,
+  chatStarted,
   cleanQuestion,
   cleanWorktrees,
   childrenOf,
@@ -47,11 +50,14 @@ import {
   type Session,
 } from "$lib/sessions.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
+import { resetChats } from "$lib/chats.svelte";
+import { followed } from "$lib/autoResume.svelte";
 
 /** The project the starters in these tests run in. */
 const LEAD = "/home/ada/dev/lead";
 const A = "/home/ada/dev/one";
 const B = "/home/ada/dev/two";
+const CHATS = "/home/ada/.chord/chats";
 
 /** What worktrees each project has, and what a test asked to be
     removed. */
@@ -140,6 +146,7 @@ beforeEach(() => {
   fake.written = [];
   leftBehind.trees = [];
   leftBehind.loading = false;
+  resetChats(CHATS);
 });
 
 describe("a project's sessions", () => {
@@ -174,6 +181,54 @@ describe("a project's sessions", () => {
     conductor.startedBy[session.key] = "sid-gone";
     expect(parentOf(session)).toBeNull();
     expect(keys(ownFor(A))).toEqual([session.key]);
+  });
+});
+
+describe("the sessions a chat starts", () => {
+  it("are drawn in their own projects as rows of their own, tagged with the chat", () => {
+    const chat = live(CHATS, "pty-1", "sid-1");
+    const one = startedIn(A, chat, "pty-2", "sid-2");
+    const two = startedIn(A, chat, "pty-3", "sid-3");
+    expect(keys(ownFor(A))).toEqual([one.key, two.key]);
+    expect(keys(ownFor(CHATS))).toEqual([chat.key]);
+    expect(parentOf(one)).toBeNull();
+    expect(childrenOf(chat)).toEqual([]);
+    expect(chatOf(one)?.key).toBe(chat.key);
+    expect(chatOf(chat)).toBeNull();
+    expect(keys(startedRows(chat))).toEqual([one.key, two.key]);
+  });
+
+  it("hang under a chat that started another chat, as any started session does", () => {
+    const chat = live(CHATS, "pty-1", "sid-1");
+    const other = startedIn(CHATS, chat, "pty-2", "sid-2");
+    expect(parentOf(other)?.key).toBe(chat.key);
+    expect(chatOf(other)).toBeNull();
+  });
+
+  it("are counted on the chat's row with where they run, only while live", () => {
+    const chat = live(CHATS, "pty-1", "sid-1");
+    expect(chatLine(chat)).toBeNull();
+    const one = startedIn(A, chat, "pty-2", "sid-2");
+    startedIn(A, chat, "pty-3", "sid-3");
+    expect(chatLine(chat)).toBe("2 in one");
+    startedIn(B, chat, "pty-4", "sid-4");
+    expect(chatLine(chat)).toBe("3 in 2 projects");
+    one.status = "exited";
+    expect(chatLine(chat)).toBe("2 in 2 projects");
+    expect(chatStarted(chat)).toHaveLength(2);
+  });
+
+  it("go by the chat's choice to go on after a usage limit", () => {
+    const chat = live(CHATS, "pty-1", "sid-1");
+    const one = startedIn(A, chat, "pty-2", "sid-2");
+    expect(followed(one)?.key).toBe(chat.key);
+  });
+
+  it("leave a project starter's sessions hanging under it", () => {
+    const lead = live(LEAD, "pty-1", "sid-1");
+    const helper = startedIn(A, lead, "pty-2", "sid-2");
+    expect(parentOf(helper)?.key).toBe(lead.key);
+    expect(chatOf(helper)).toBeNull();
   });
 });
 
