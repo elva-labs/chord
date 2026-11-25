@@ -134,6 +134,9 @@ async function walk(page: Page, key: string, times: number) {
   const names: (string | null)[] = [];
   for (let at = 0; at < times; at++) {
     await page.keyboard.press(key);
+    // The app moves a Tab that WebKit left in place a timer's turn after
+    // the press: the place is read once that turn has passed.
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
     const name = await holder(page);
     names.push(name);
     if (name !== null) await expect.poll(() => ringed(page), { message: `the ring on ${name}` }).toBe(true);
