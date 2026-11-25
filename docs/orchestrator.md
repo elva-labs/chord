@@ -244,8 +244,10 @@ The start's answer says which model the session runs on.
 
 A session another started also compacts its conversation once its context
 reaches 150,000 tokens, through Claude Code's own setting for when it
-compacts, since every turn reads the whole context. The user's own
-sessions keep the harness's default. There is no setting for either.
+compacts, since every turn reads the whole context. It keeps Claude Code's
+prompt cache for five minutes, whose writes cost less than an hour's,
+unless the user set a lifetime of their own. The user's own sessions keep
+the harness's default for both. There is no setting for either.
 
 A start can name an account, by the name it has in the settings, or
 Default, in any case, for the harnesses' own login, for work the user asked

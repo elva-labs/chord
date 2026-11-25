@@ -195,6 +195,9 @@ export interface SpawnOptions {
       on its own, for an agent that takes one. Its own default when left
       out. */
   compactAt?: number;
+  /** How long Claude Code keeps its prompt cache, `5m` or `1h`, where the
+      user set no lifetime of their own. Its own default when left out. */
+  cacheTtl?: "5m" | "1h";
   /** For a Claude Code conversation resumed in a terminal while it is held
       at the point it went back to (`integratedHeld`): the user agreed to
       bring back what that point left out, which the terminal shows and
@@ -263,6 +266,8 @@ export interface IntegratedStartOptions {
   afresh?: boolean;
   /** The context at which the agent compacts on its own, as for `spawn`. */
   compactAt?: number;
+  /** How long Claude Code keeps its prompt cache, as for `spawn`. */
+  cacheTtl?: "5m" | "1h";
   /** Whether the session starts reading only: the agent's own tools that
       change files are refused whatever the mode allows. */
   readsOnly?: boolean;

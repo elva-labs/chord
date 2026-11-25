@@ -1927,6 +1927,8 @@ export interface Told {
   afresh?: boolean;
   /** The context at which the agent compacts on its own. */
   compactAt?: number;
+  /** How long the agent keeps its prompt cache. */
+  cacheTtl?: "5m" | "1h";
 }
 
 /** The context, in tokens, at which a session another session started
@@ -1935,6 +1937,13 @@ export interface Told {
     oldest turns word for word. The user's own sessions keep the agent's
     default. */
 export const STARTED_CONTEXT = 150_000;
+
+/** How long a session another session started keeps its prompt cache, on
+    an agent that takes one: its turns follow one another while it works
+    and it seldom waits long on anyone, so the cheaper five-minute cache
+    write is the one that pays. The user's own sessions keep the agent's
+    default. */
+export const STARTED_CACHE = "5m";
 
 /**
  * What the agent behind a starting row is told of its workflow, the same
@@ -1974,7 +1983,9 @@ export function toldFor(session: Session): Told {
           startOnly: startsOnly(session.workflow),
         }),
     ...(afresh ? { afresh: true } : {}),
-    ...(session.agent === "claude-code" && starterOf(session.key) !== null ? { compactAt: STARTED_CONTEXT } : {}),
+    ...(session.agent === "claude-code" && starterOf(session.key) !== null
+      ? { compactAt: STARTED_CONTEXT, cacheTtl: STARTED_CACHE }
+      : {}),
   };
 }
 

@@ -34,6 +34,7 @@ A session started by another session:
 
 - runs one model below its starter's when nothing names a model, the starter is a Claude Code conversation above Sonnet, and the step is not a review. Opus runs under Fable and Sonnet under Opus. The start's answer says the model.
 - compacts at 150,000 tokens of context. Claude Code sessions you start yourself keep the harness's default.
+- keeps its Claude Code prompt cache for five minutes, through `CLAUDE_CODE_PROMPT_CACHE_TTL=5m`, when it is resumed too. Writing a cache for five minutes costs less than writing one for an hour, and a started session's turns seldom wait long on each other. Sessions you start yourself keep the harness's default, which is an hour on a subscription. Chord leaves the variable out where you set a lifetime yourself: the variable or `ENABLE_PROMPT_CACHING_1H` in your environment or in the `env` of a Claude Code settings file, or `promptCacheTtl` in one. Going on from notes judges each conversation by the lifetime its last request actually used, so a started session is cold five minutes after it.
 - is put away once its work is over and five minutes have passed with nothing open on it, so finished rows do not pile up. A line from its starter brings it back where it ran.
 - is reported to its starter together with others. While the starter's cache is warm, reports are held about half a minute and at most two minutes. Once it is cold, a wake waits until none of its sessions is working, or twenty minutes. A wait or a message from you is never held.
 

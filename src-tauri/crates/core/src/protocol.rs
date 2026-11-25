@@ -121,6 +121,8 @@ struct SpawnParams {
     afresh: bool,
     #[serde(default)]
     compact_at: Option<u64>,
+    #[serde(default)]
+    cache_ttl: Option<String>,
     /// The user agreed to bring back what a conversation held at the point
     /// it went back to left out.
     #[serde(default)]
@@ -169,6 +171,8 @@ struct IntegratedStartParams {
     afresh: bool,
     #[serde(default)]
     compact_at: Option<u64>,
+    #[serde(default)]
+    cache_ttl: Option<String>,
     #[serde(default)]
     reads_only: bool,
     /// The agent session id of the session that started this one.
@@ -707,6 +711,7 @@ pub fn dispatch(
                 p.start_only,
                 p.afresh,
                 p.compact_at,
+                p.cache_ttl.as_deref(),
                 p.bring_back,
                 p.starter.as_deref(),
                 p.made_worktree,
@@ -733,6 +738,7 @@ pub fn dispatch(
                 p.start_only,
                 p.afresh,
                 p.compact_at,
+                p.cache_ttl.as_deref(),
                 p.reads_only,
                 p.starter.as_deref(),
                 p.made_worktree,
@@ -1668,6 +1674,21 @@ mod tests {
             Some("The user declined the change.")
         );
         std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn the_cache_lifetime_is_optional_in_a_start() {
+        let spawn: SpawnParams = parse(
+            json!({ "agent": "claude-code", "project": "/p", "cols": 80, "rows": 24, "cacheTtl": "5m" }),
+        )
+        .unwrap();
+        assert_eq!(spawn.cache_ttl.as_deref(), Some("5m"));
+        let start: IntegratedStartParams =
+            parse(json!({ "agent": "claude-code", "project": "/p", "cacheTtl": "5m" })).unwrap();
+        assert_eq!(start.cache_ttl.as_deref(), Some("5m"));
+        let start: IntegratedStartParams =
+            parse(json!({ "agent": "claude-code", "project": "/p" })).unwrap();
+        assert_eq!(start.cache_ttl, None);
     }
 
     #[test]

@@ -152,6 +152,7 @@ struct Run {
     start_only: bool,
     afresh: bool,
     compact_at: Option<u64>,
+    cache_ttl: Option<String>,
     reads_only: bool,
     /// The agent's id of the session that started this one, if one did.
     starter: Option<String>,
@@ -640,7 +641,9 @@ impl Core {
     /// `mode` is the mode the conversation last ran in where the window
     /// knows it, by the name its integrated sessions offer it under.
     /// `compact_at` is the context, in tokens, at which an agent that takes
-    /// one compacts the conversation on its own. `profile` is the Codex
+    /// one compacts the conversation on its own, and `cache_ttl` how long
+    /// Claude Code keeps its prompt cache, `5m` or `1h`, where the user set
+    /// no lifetime of their own. `profile` is the Codex
     /// profile a Codex session runs under, by the name of one found in the
     /// account's Codex home.
     #[allow(clippy::too_many_arguments)]
@@ -660,6 +663,7 @@ impl Core {
         start_only: bool,
         afresh: bool,
         compact_at: Option<u64>,
+        cache_ttl: Option<&str>,
         bring_back: bool,
         starter: Option<&str>,
         made_worktree: bool,
@@ -687,6 +691,7 @@ impl Core {
             start_only,
             afresh,
             compact_at,
+            cache_ttl,
             bring_back,
             &env::environment().vars,
         )?;
@@ -772,6 +777,7 @@ impl Core {
         start_only: bool,
         afresh: bool,
         compact_at: Option<u64>,
+        cache_ttl: Option<&str>,
         bring_back: bool,
         vars: &HashMap<String, String>,
     ) -> Result<Prepared, String> {
@@ -863,7 +869,7 @@ impl Core {
         let prompt = prompt.filter(|prompt| !prompt.trim().is_empty());
         let prompt = first_prompt(prompt, through_cmd, &mut files, self.home.as_deref())?;
         let model = model.filter(|model| !model.trim().is_empty());
-        let spending = self.spending(agent, project, config_dir, model, vars);
+        let spending = self.spending(agent, project, config_dir, model, cache_ttl, vars);
         let ctx = LaunchCtx {
             project,
             env: vars,
@@ -945,6 +951,7 @@ impl Core {
         start_only: bool,
         afresh: bool,
         compact_at: Option<u64>,
+        cache_ttl: Option<&str>,
         reads_only: bool,
         starter: Option<&str>,
         made_worktree: bool,
@@ -967,6 +974,7 @@ impl Core {
             start_only,
             afresh,
             compact_at,
+            cache_ttl: cache_ttl.map(str::to_string),
             reads_only,
             starter: starter
                 .filter(|starter| !starter.trim().is_empty())
@@ -1067,7 +1075,14 @@ impl Core {
         );
         let joining = self.engage(&run, project, session.as_deref())?;
         let model = model.filter(|model| !model.trim().is_empty());
-        let spending = self.spending(agent, project, config_dir, model, &environment.vars);
+        let spending = self.spending(
+            agent,
+            project,
+            config_dir,
+            model,
+            run.cache_ttl.as_deref(),
+            &environment.vars,
+        );
         let launch = crate::integrated::Launch {
             project,
             env: &environment.vars,
@@ -1429,6 +1444,7 @@ impl Core {
         project: &Path,
         config_dir: Option<&str>,
         model: Option<&str>,
+        cache_ttl: Option<&str>,
         vars: &HashMap<String, String>,
     ) -> Vec<(String, String)> {
         if agent != crate::claude_stream::AGENT {
@@ -1440,7 +1456,7 @@ impl Core {
             }
             None => Vec::new(),
         };
-        adapter::claude_spending(vars, &settings, model)
+        adapter::claude_spending(vars, &settings, model, cache_ttl)
     }
 
     /// The settings a session of `agent` is given for the Codex profile
@@ -3291,6 +3307,7 @@ mod tests {
                     true,
                     false,
                     None,
+                    None,
                     false,
                     &vars,
                 )
@@ -3307,10 +3324,11 @@ mod tests {
         );
     }
 
-    /// A Claude Code session, fresh or resumed, searches tools unless the
-    /// user's settings for it say how; a Codex one is given nothing.
+    /// A Claude Code session, fresh or resumed, searches tools, and keeps
+    /// its cache for the lifetime its start names, unless the user's
+    /// settings for it say how; a Codex one is given neither.
     #[test]
-    fn a_claude_code_session_searches_tools_unless_its_settings_say_otherwise() {
+    fn a_claude_code_session_spends_fewer_tokens_unless_its_settings_say_otherwise() {
         let home = Scratch::new("api-tool-search");
         let project = home.join("project");
         std::fs::create_dir_all(project.join(".claude")).unwrap();
@@ -3319,7 +3337,11 @@ mod tests {
         crate::executable::write(bin.join("claude"), b"#!/bin/sh\n").unwrap();
         crate::executable::write(bin.join("codex"), b"#!/bin/sh\n").unwrap();
         let vars = HashMap::from([("PATH".to_string(), bin.to_string_lossy().to_string())]);
-        let search = |agent: &str, session: Option<&str>, config_dir: Option<&str>| {
+        let given = |agent: &str,
+                     session: Option<&str>,
+                     config_dir: Option<&str>,
+                     cache_ttl: Option<&str>,
+                     var: &str| {
             core_at(&home)
                 .prepare(
                     agent,
@@ -3336,15 +3358,32 @@ mod tests {
                     false,
                     false,
                     None,
+                    cache_ttl,
                     false,
                     &vars,
                 )
                 .unwrap()
                 .command
-                .get_env(adapter::TOOL_SEARCH_VAR)
+                .get_env(var)
                 .map(|value| value.to_string_lossy().to_string())
         };
+        let search = |agent: &str, session: Option<&str>, config_dir: Option<&str>| {
+            given(agent, session, config_dir, None, adapter::TOOL_SEARCH_VAR)
+        };
+        let cache = |agent: &str, session: Option<&str>, cache_ttl: Option<&str>| {
+            given(agent, session, None, cache_ttl, adapter::CACHE_TTL_VAR)
+        };
         assert_eq!(search("claude-code", None, None).as_deref(), Some("true"));
+        assert_eq!(
+            cache("claude-code", None, Some("5m")).as_deref(),
+            Some("5m")
+        );
+        assert_eq!(
+            cache("claude-code", Some("old"), Some("5m")).as_deref(),
+            Some("5m")
+        );
+        assert_eq!(cache("claude-code", None, None), None);
+        assert_eq!(cache("codex", None, Some("5m")), None);
         assert_eq!(
             search("claude-code", Some("old"), None).as_deref(),
             Some("true")
@@ -3366,11 +3405,12 @@ mod tests {
         // Set in the project's.
         std::fs::write(
             project.join(".claude").join("settings.json"),
-            r#"{"env":{"ENABLE_TOOL_SEARCH":"false"}}"#,
+            r#"{"env":{"ENABLE_TOOL_SEARCH":"false"},"promptCacheTtl":"1h"}"#,
         )
         .unwrap();
         assert_eq!(search("claude-code", None, None), None);
         assert_eq!(search("claude-code", Some("old"), None), None);
+        assert_eq!(cache("claude-code", Some("old"), Some("5m")), None);
     }
 
     #[test]
@@ -3390,6 +3430,7 @@ mod tests {
             Some("1. Direct the work."),
             true,
             false,
+            None,
             None,
             false,
             None,
@@ -3539,6 +3580,7 @@ mod tests {
                 false,
                 false,
                 None,
+                None,
                 bring_back,
                 &vars,
             )
@@ -3602,6 +3644,7 @@ mod tests {
                 false,
                 false,
                 None,
+                None,
                 false,
                 &vars,
             )
@@ -3644,6 +3687,7 @@ mod tests {
                     None,
                     false,
                     false,
+                    None,
                     None,
                     false,
                     None,
@@ -3695,6 +3739,7 @@ mod tests {
             start_only: false,
             afresh: false,
             compact_at: None,
+            cache_ttl: None,
             reads_only: false,
             starter: None,
             made_worktree: false,
@@ -3759,6 +3804,7 @@ mod tests {
             start_only: false,
             afresh: false,
             compact_at: None,
+            cache_ttl: None,
             reads_only: false,
             starter: None,
             made_worktree: false,
@@ -3908,6 +3954,7 @@ mod tests {
                 Some("1. Direct the work."),
                 true,
                 false,
+                None,
                 None,
                 false,
                 None,

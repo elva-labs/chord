@@ -98,6 +98,7 @@ import {
   started as cameUp,
   titled,
   typed,
+  STARTED_CACHE,
   STARTED_CONTEXT,
   originOf,
   toldFor,
@@ -1668,12 +1669,14 @@ describe("a start in the caller's own project", () => {
     expect(originOf(later)).toEqual({});
   });
 
-  it("caps the context of a session it starts, and leaves the caller's own to the agent", async () => {
+  it("caps the context and the cache of a session it starts, and leaves the caller's own to the agent", async () => {
     const caller = live(A, "pty-caller", "caller-1");
     heard("caller-1");
     const row = await unasked({ project: A }, "sid-1");
     expect(toldFor(row).compactAt).toBe(STARTED_CONTEXT);
     expect(toldFor(caller).compactAt).toBeUndefined();
+    expect(toldFor(row).cacheTtl).toBe(STARTED_CACHE);
+    expect(toldFor(caller).cacheTtl).toBeUndefined();
   });
 
   it("is the project of a caller that runs in a worktree of it", async () => {

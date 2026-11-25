@@ -424,6 +424,18 @@ const NO_TOOL_SEARCH: &[&str] = &[
     "claude-3-7-sonnet",
 ];
 
+/// The variable Claude Code reads its prompt cache's lifetime from, `5m`
+/// or `1h`.
+pub const CACHE_TTL_VAR: &str = "CLAUDE_CODE_PROMPT_CACHE_TTL";
+
+/// The lifetimes Claude Code takes for its prompt cache.
+pub const CACHE_TTLS: &[&str] = &["5m", "1h"];
+
+/// What else says how long Claude Code's prompt cache lasts, below
+/// [`CACHE_TTL_VAR`]: a variable for the hour, and a setting of its own.
+const CACHE_TTL_ASKED: &str = "ENABLE_PROMPT_CACHING_1H";
+const CACHE_TTL_SETTING: &str = "promptCacheTtl";
+
 /// The variable Claude Code reads the model from when it is given none.
 const MODEL_VAR: &str = "ANTHROPIC_MODEL";
 
@@ -470,15 +482,17 @@ fn managed_settings() -> Vec<PathBuf> {
 }
 
 /// What Claude Code is given in its environment so a session spends fewer
-/// tokens: tool search on. A variable the user set, in `vars` or in the
-/// `env` of one of the `settings` files, is theirs and left alone. Tool
-/// search is left out on a model Claude Code does not search tools on:
-/// the one the session runs on where it names one, else the one the user
-/// set.
+/// tokens: tool search on, and the prompt cache's lifetime where
+/// `cache_ttl` names one. A variable the user set, in `vars` or in the
+/// `env` of one of the `settings` files, is theirs and left alone, and so
+/// is a lifetime they asked for any other way. Tool search is left out on
+/// a model Claude Code does not search tools on: the one the session runs
+/// on where it names one, else the one the user set.
 pub fn claude_spending(
     vars: &HashMap<String, String>,
     settings: &[Map<String, Value>],
     model: Option<&str>,
+    cache_ttl: Option<&str>,
 ) -> Vec<(String, String)> {
     let in_settings = |var: &str| {
         settings.iter().find_map(|file| {
@@ -509,6 +523,16 @@ pub fn claude_spending(
     let mut added = Vec::new();
     if searches && !set(TOOL_SEARCH_VAR) {
         added.push((TOOL_SEARCH_VAR.to_string(), "true".to_string()));
+    }
+    let ttl_set = set(CACHE_TTL_VAR)
+        || set(CACHE_TTL_ASKED)
+        || settings
+            .iter()
+            .any(|file| file.contains_key(CACHE_TTL_SETTING));
+    if let Some(ttl) = cache_ttl.filter(|ttl| CACHE_TTLS.contains(ttl)) {
+        if !ttl_set {
+            added.push((CACHE_TTL_VAR.to_string(), ttl.to_string()));
+        }
     }
     added
 }
@@ -2366,39 +2390,78 @@ mod tests {
     fn claude_code_searches_tools_unless_the_user_or_the_model_says_otherwise() {
         let on = vec![(TOOL_SEARCH_VAR.to_string(), "true".to_string())];
         let none = HashMap::new();
-        assert_eq!(claude_spending(&none, &[], None), on);
-        assert_eq!(claude_spending(&none, &[], Some("opus")), on);
-        assert_eq!(claude_spending(&none, &[], Some("claude-opus-4-1")), on);
+        assert_eq!(claude_spending(&none, &[], None, None), on);
+        assert_eq!(claude_spending(&none, &[], Some("opus"), None), on);
+        assert_eq!(
+            claude_spending(&none, &[], Some("claude-opus-4-1"), None),
+            on
+        );
 
         // The user's own value, in the environment or in a settings file,
         // whatever it says.
         let theirs = HashMap::from([(TOOL_SEARCH_VAR.to_string(), "auto:5".to_string())]);
-        assert_eq!(claude_spending(&theirs, &[], None), []);
+        assert_eq!(claude_spending(&theirs, &[], None, None), []);
         let file = settings(json!({ "env": { "ENABLE_TOOL_SEARCH": "false" } }));
-        assert_eq!(claude_spending(&none, &[file], None), []);
+        assert_eq!(claude_spending(&none, &[file], None, None), []);
         let elsewhere = settings(json!({ "env": { "OTHER": "1" }, "ENABLE_TOOL_SEARCH": "x" }));
-        assert_eq!(claude_spending(&none, &[elsewhere], None), on);
+        assert_eq!(claude_spending(&none, &[elsewhere], None, None), on);
 
         // A model that does not search tools, named for the session, in
         // the environment, or in a settings file.
         assert_eq!(
-            claude_spending(&none, &[], Some("claude-3-5-haiku-20241022")),
+            claude_spending(&none, &[], Some("claude-3-5-haiku-20241022"), None),
             []
         );
         assert_eq!(
             claude_spending(
                 &none,
                 &[],
-                Some("us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+                Some("us.anthropic.claude-3-7-sonnet-20250219-v1:0"),
+                None
             ),
             []
         );
         let old = HashMap::from([("ANTHROPIC_MODEL".to_string(), "claude-3-opus".to_string())]);
-        assert_eq!(claude_spending(&old, &[], None), []);
+        assert_eq!(claude_spending(&old, &[], None, None), []);
         let file = settings(json!({ "model": "claude-3-5-sonnet-latest" }));
-        assert_eq!(claude_spending(&none, std::slice::from_ref(&file), None), []);
+        assert_eq!(
+            claude_spending(&none, std::slice::from_ref(&file), None, None),
+            []
+        );
         // The model the session names wins over the user's.
-        assert_eq!(claude_spending(&old, &[file], Some("sonnet")), on);
+        assert_eq!(claude_spending(&old, &[file], Some("sonnet"), None), on);
+    }
+
+    #[test]
+    fn a_started_claude_code_session_keeps_its_cache_for_the_lifetime_asked_unless_the_user_set_one(
+    ) {
+        let none = HashMap::new();
+        let short = (CACHE_TTL_VAR.to_string(), "5m".to_string());
+        let lifetime = |vars: &HashMap<String, String>, files: &[Map<String, Value>]| {
+            claude_spending(vars, files, None, Some("5m"))
+                .into_iter()
+                .find(|(var, _)| var == CACHE_TTL_VAR)
+        };
+        assert_eq!(lifetime(&none, &[]), Some(short.clone()));
+        // The user's own session is given none, and nor is a lifetime
+        // Claude Code does not take.
+        assert!(claude_spending(&none, &[], None, None)
+            .iter()
+            .all(|(var, _)| var != CACHE_TTL_VAR));
+        assert_eq!(claude_spending(&none, &[], None, Some("2h")).len(), 1);
+
+        // A lifetime the user set, in the environment, in a settings
+        // file's environment, or as Claude Code's own setting.
+        for var in [CACHE_TTL_VAR, "ENABLE_PROMPT_CACHING_1H"] {
+            let theirs = HashMap::from([(var.to_string(), "1".to_string())]);
+            assert_eq!(lifetime(&theirs, &[]), None, "{var}");
+            let file = settings(json!({ "env": { var: "1h" } }));
+            assert_eq!(lifetime(&none, &[file]), None, "{var}");
+        }
+        let file = settings(json!({ "promptCacheTtl": "1h" }));
+        assert_eq!(lifetime(&none, &[file]), None);
+        let elsewhere = settings(json!({ "env": { "OTHER": "1" } }));
+        assert_eq!(lifetime(&none, &[elsewhere]), Some(short));
     }
 
     #[test]
@@ -2426,7 +2489,10 @@ mod tests {
     fn claude_code_is_given_the_variables_that_spend_fewer_tokens() {
         let dir = fake_claude("adapter-spending");
         let vars = vars_with_path(&dir);
-        let spending = [(TOOL_SEARCH_VAR.to_string(), "true".to_string())];
+        let spending = [
+            (TOOL_SEARCH_VAR.to_string(), "true".to_string()),
+            (CACHE_TTL_VAR.to_string(), "5m".to_string()),
+        ];
         let ctx = LaunchCtx {
             project: Path::new("/tmp"),
             env: &vars,
@@ -2455,6 +2521,7 @@ mod tests {
         ] {
             let Surface::Pty(command) = surface;
             assert_eq!(command.get_env(TOOL_SEARCH_VAR), Some("true".as_ref()));
+            assert_eq!(command.get_env(CACHE_TTL_VAR), Some("5m".as_ref()));
         }
     }
 
