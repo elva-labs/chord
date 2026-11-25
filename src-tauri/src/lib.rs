@@ -1346,6 +1346,103 @@ async fn read_media(
     .await
 }
 
+/// Sends a command about presented files to the machine they are on: the
+/// files of one call are all on the one the first is on.
+async fn media_routed<T, F>(
+    core: Arc<Core>,
+    remotes: Arc<Remotes>,
+    files: Vec<String>,
+    method: &'static str,
+    local: F,
+) -> Result<(Route, Value), String>
+where
+    T: Serialize + Send + 'static,
+    F: FnOnce(&Core, &[String]) -> Result<T, String> + Send + 'static,
+{
+    let to = route(files.first().map_or("", String::as_str));
+    let there: Vec<String> = files
+        .iter()
+        .map(|file| match route(file) {
+            Route::Local(rest) | Route::Remote { rest, .. } => rest,
+        })
+        .collect();
+    let answer = match &to {
+        Route::Local(_) => blocking(move || local(&core, &there).and_then(value)).await?,
+        Route::Remote { host, .. } => {
+            let host = host.clone();
+            blocking(move || {
+                remotes
+                    .connection(&host)?
+                    .call(method, json!({ "files": there }))
+            })
+            .await?
+        }
+    };
+    Ok((to, answer))
+}
+
+/// Keeps a copy of each presented file where it is, and names the copies
+/// as the window names paths.
+#[tauri::command]
+async fn keep_media(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    files: Vec<String>,
+) -> Result<Value, String> {
+    let (to, mut kept) = media_routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        files,
+        "keep_media",
+        |core, files| core.keep_media(files),
+    )
+    .await?;
+    if let Route::Remote { host, .. } = to {
+        for copy in kept.as_array_mut().into_iter().flatten() {
+            if let Some(path) = copy.as_str() {
+                *copy = Value::String(with_host(&host, path));
+            }
+        }
+    }
+    Ok(kept)
+}
+
+/// Removes kept copies whose rows are gone, where they are.
+#[tauri::command]
+async fn forget_media(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    files: Vec<String>,
+) -> Result<(), String> {
+    media_routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        files,
+        "forget_media",
+        |core, files| core.forget_media(files),
+    )
+    .await
+    .map(|_| ())
+}
+
+/// Which of the presented files are no longer where they were.
+#[tauri::command]
+async fn media_gone(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    files: Vec<String>,
+) -> Result<Value, String> {
+    media_routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        files,
+        "media_gone",
+        |core, files| Ok(core.media_gone(files)),
+    )
+    .await
+    .map(|(_, gone)| gone)
+}
+
 /// An image a Markdown document names by a path relative to itself, read
 /// in the document's project where the project is.
 #[tauri::command]
@@ -2646,6 +2743,9 @@ pub fn run() {
             welcome::about_info,
             agent_detect,
             read_media,
+            keep_media,
+            forget_media,
+            media_gone,
             read_document_image,
             notes_kept,
             notes_briefing,

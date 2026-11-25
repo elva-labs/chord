@@ -34,6 +34,7 @@ pub mod integrated;
 pub mod known;
 pub mod limits;
 pub mod mcp;
+pub mod media_copies;
 pub mod migrate;
 pub mod notes;
 pub mod page_files;
