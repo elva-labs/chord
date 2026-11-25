@@ -1835,6 +1835,14 @@ async fn orchestrator_dir(core: State<'_, Arc<Core>>) -> Result<String, String> 
     blocking(move || core.orchestrator_dir()).await
 }
 
+/// The `chats` folder under the workbench's home, where conversations that
+/// belong to no project run. Made when asked for.
+#[tauri::command]
+async fn chats_dir(core: State<'_, Arc<Core>>) -> Result<String, String> {
+    let core = Arc::clone(&core);
+    blocking(move || core.chats_dir()).await
+}
+
 /// A worktree of the project, on a branch of the same name, made where the
 /// project is.
 #[tauri::command]
@@ -2734,6 +2742,7 @@ pub fn run() {
             browser_answer,
             settings_answer,
             orchestrator_dir,
+            chats_dir,
             controls_centre,
             cursor_in_window,
             worktree_add,

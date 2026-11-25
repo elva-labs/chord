@@ -86,6 +86,10 @@ export const DIRECT = {
     reports the past sessions a test gives it. */
 export const ORCHESTRATOR_FOLDER = "/home/ada/.chord/orchestrator";
 
+/** The `chats` folder under the workbench's home, where the fake runs every
+    chat and reports the past chats a test gives it. */
+export const CHATS_FOLDER = "/home/ada/.chord/chats";
+
 /** A settings file with no workflows at all, for tests of starting and
     directing sessions as a session with none does. */
 export const NO_WORKFLOW = {
@@ -276,6 +280,17 @@ export async function installFakeCore(
       agent?: string;
       cwd?: string | null;
     }[];
+    /** Past chats the core reports for the `chats` folder, as for the
+        first project. */
+    chatTranscripts?: {
+      id: string;
+      modified: number;
+      size: number;
+      title: string | null;
+      configDir?: string;
+      agent?: string;
+      cwd?: string | null;
+    }[];
   } = {},
 ) {
   // The scripted integrated session, as `window.__integrated`, for a test
@@ -288,7 +303,7 @@ export async function installFakeCore(
     `window.__integrated = (${fakeIntegrated.toString()})(${JSON.stringify(integratedOptions)});`,
   );
   await page.addInitScript(
-    ({ open, opened, fixture, settings, settingsFile, styles, stylesFile, transcripts, agents, integrable, active, used, held, buildAndReview, direct, orchestratorFolder, orchestratorTranscripts }) => {
+    ({ open, opened, fixture, settings, settingsFile, styles, stylesFile, transcripts, agents, integrable, active, used, held, buildAndReview, direct, orchestratorFolder, orchestratorTranscripts, chatsFolder, chatTranscripts }) => {
       const state = { fixture, changed: null as unknown, opened };
       (window as unknown as Record<string, unknown>).__fixture = state;
       const remotes = { reachable: new Set(["lab", "ada@lab"]) };
@@ -347,9 +362,16 @@ export async function installFakeCore(
       };
 
       // The past sessions the core finds in a folder: the test's for the
-      // first project and for the orchestrator folder, none elsewhere.
+      // first project, the orchestrator folder and the chats folder, none
+      // elsewhere.
       const pastIn = (project: string) =>
-        project === open[0] ? transcripts : project === orchestratorFolder ? orchestratorTranscripts : [];
+        project === open[0]
+          ? transcripts
+          : project === orchestratorFolder
+            ? orchestratorTranscripts
+            : project === chatsFolder
+              ? chatTranscripts
+              : [];
 
       // The core's side of leaving with unsaved edits: what the window last
       // said, and the questions asked. A test quits through `__quit` and
@@ -1379,6 +1401,7 @@ export async function installFakeCore(
         worktreeAdd: async (project: string, name: string) =>
           `${project}/.claude/worktrees/${name}`,
         orchestratorDir: async () => orchestratorFolder,
+        chatsDir: async () => chatsFolder,
         // The worktrees a test has put under a project, in __worktrees by
         // project; removing one takes it out of the list.
         worktrees: async (project: string) => {
@@ -2243,6 +2266,8 @@ export async function installFakeCore(
       direct: DIRECT,
       orchestratorFolder: ORCHESTRATOR_FOLDER,
       orchestratorTranscripts: options.orchestratorTranscripts ?? [],
+      chatsFolder: CHATS_FOLDER,
+      chatTranscripts: options.chatTranscripts ?? [],
     },
   );
 }

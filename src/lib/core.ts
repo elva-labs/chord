@@ -2332,6 +2332,9 @@ export interface Core {
   /** The `orchestrator` folder under the workbench's home, which the
       sessions pane lists while it holds past sessions. Nothing makes it. */
   orchestratorDir(): Promise<string>;
+  /** The `chats` folder under the workbench's home, where conversations
+      that belong to no project run. The core makes it when asked. */
+  chatsDir(): Promise<string>;
   /** The worktrees the app made under a project, with what is in them. */
   worktrees(project: string): Promise<Worktree[]>;
   /** Removes one of those and its branch, and what the hooks put in each
@@ -2912,6 +2915,7 @@ const tauriCore: Core = {
   worktreeAdd: (project, name, accounts) =>
     invoke<string>("worktree_add", { project, name, accounts }),
   orchestratorDir: () => invoke<string>("orchestrator_dir"),
+  chatsDir: () => invoke<string>("chats_dir"),
   worktrees: (project) => invoke<Worktree[]>("worktrees", { project }),
   worktreeRemove: (project, name, accounts) =>
     invoke<void>("worktree_remove", { project, name, accounts }),
@@ -3346,6 +3350,9 @@ const detachedCore: Core = {
     throw new Error("no core");
   },
   async orchestratorDir() {
+    throw new Error("no core");
+  },
+  async chatsDir() {
     throw new Error("no core");
   },
   async worktrees() {

@@ -2356,6 +2356,20 @@ impl Core {
         Ok(dir.to_string_lossy().to_string())
     }
 
+    /// The folder named `chats` under the workbench's home, where every
+    /// conversation that belongs to no project runs. It is made when asked
+    /// for, since an agent needs a folder to start in.
+    pub fn chats_dir(&self) -> Result<String, String> {
+        let dir = self
+            .home
+            .as_deref()
+            .map(chats_path)
+            .ok_or("no home directory")?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+        Ok(dir.to_string_lossy().to_string())
+    }
+
     /// A worktree of the project, on a branch of the same name, for a
     /// session to work in without touching the branch the user is on.
     /// Answers with where it is.
@@ -2524,6 +2538,11 @@ impl Core {
 /// Where the `orchestrator` folder sits under a home directory.
 fn orchestrator_path(home: &Path) -> PathBuf {
     crate::home::dir(home).join("orchestrator")
+}
+
+/// Where the `chats` folder sits under a home directory.
+fn chats_path(home: &Path) -> PathBuf {
+    crate::home::dir(home).join("chats")
 }
 
 /// The mode an integrated session is started in: the one the window named,
@@ -3176,6 +3195,15 @@ mod tests {
             home.join(".chord").join("orchestrator")
         );
         assert!(!PathBuf::from(&dir).exists());
+    }
+
+    #[test]
+    fn the_chats_folder_is_named_and_made_when_asked_for() {
+        let home = Scratch::new("api-chats-folder");
+        let dir = core_at(&home).chats_dir().unwrap();
+        assert_eq!(PathBuf::from(&dir), home.join(".chord").join("chats"));
+        assert!(PathBuf::from(&dir).is_dir());
+        assert_eq!(core_at(&home).chats_dir().unwrap(), dir);
     }
 
     /// A session resumed in the folder an earlier version ran orchestrators
