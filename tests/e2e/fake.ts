@@ -280,6 +280,11 @@ export async function installFakeCore(
       agent?: string;
       cwd?: string | null;
     }[];
+    /** The files in the `chats` folder the core says the workbench did
+        not write. */
+    chatsForeign?: string[];
+    /** Why the core cannot use the `chats` folder, when it cannot. */
+    chatsError?: string;
     /** Past chats the core reports for the `chats` folder, as for the
         first project. */
     chatTranscripts?: {
@@ -303,7 +308,7 @@ export async function installFakeCore(
     `window.__integrated = (${fakeIntegrated.toString()})(${JSON.stringify(integratedOptions)});`,
   );
   await page.addInitScript(
-    ({ open, opened, fixture, settings, settingsFile, styles, stylesFile, transcripts, agents, integrable, active, used, held, buildAndReview, direct, orchestratorFolder, orchestratorTranscripts, chatsFolder, chatTranscripts }) => {
+    ({ open, opened, fixture, settings, settingsFile, styles, stylesFile, transcripts, agents, integrable, active, used, held, buildAndReview, direct, orchestratorFolder, orchestratorTranscripts, chatsFolder, chatsForeign, chatsError, chatTranscripts }) => {
       const state = { fixture, changed: null as unknown, opened };
       (window as unknown as Record<string, unknown>).__fixture = state;
       const remotes = { reachable: new Set(["lab", "ada@lab"]) };
@@ -1401,7 +1406,10 @@ export async function installFakeCore(
         worktreeAdd: async (project: string, name: string) =>
           `${project}/.claude/worktrees/${name}`,
         orchestratorDir: async () => orchestratorFolder,
-        chatsDir: async () => chatsFolder,
+        chatsDir: async () => {
+          if (chatsError !== null) throw chatsError;
+          return { dir: chatsFolder, foreign: chatsForeign };
+        },
         // The worktrees a test has put under a project, in __worktrees by
         // project; removing one takes it out of the list.
         worktrees: async (project: string) => {
@@ -2267,6 +2275,8 @@ export async function installFakeCore(
       orchestratorFolder: ORCHESTRATOR_FOLDER,
       orchestratorTranscripts: options.orchestratorTranscripts ?? [],
       chatsFolder: CHATS_FOLDER,
+      chatsForeign: options.chatsForeign ?? [],
+      chatsError: options.chatsError ?? null,
       chatTranscripts: options.chatTranscripts ?? [],
     },
   );

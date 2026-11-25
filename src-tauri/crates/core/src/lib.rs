@@ -11,6 +11,7 @@ pub mod adapter;
 pub mod agents;
 pub mod api;
 pub mod browser;
+pub mod chats;
 pub mod claude_history;
 pub mod claude_stream;
 pub mod client;

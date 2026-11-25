@@ -112,6 +112,45 @@ test.describe("the chats line", () => {
   });
 });
 
+test.describe("the chats folder", () => {
+  test("names the files in it the workbench did not write, and shows it on request", async ({ page }) => {
+    await installFakeCore(page, {
+      open: [PROJECT],
+      settings: NO_WORKFLOW,
+      chatsForeign: [".claude/settings.json", "CLAUDE.md"],
+    });
+    await page.goto("/");
+    const notice = page.getByTestId("chats-notice");
+    await expect(notice).toContainText(".claude/settings.json, CLAUDE.md");
+    await expect(line(page)).toBeVisible();
+    await page.getByTestId("chats-notice-reveal").click();
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __revealed?: string[] }).__revealed ?? []))
+      .toEqual([CHATS_FOLDER]);
+    await page.getByTestId("chats-notice-dismiss").click();
+    await expect(notice).toHaveCount(0);
+  });
+
+  test("says nothing when it holds only what the workbench wrote", async ({ page }) => {
+    await begin(page);
+    await expect(page.getByTestId("chats-notice")).toHaveCount(0);
+  });
+
+  test("says why chats are off when the core cannot use it", async ({ page }) => {
+    await installFakeCore(page, {
+      open: [PROJECT],
+      settings: NO_WORKFLOW,
+      chatsError: `${CHATS_FOLDER} is a link, not a folder`,
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("chats-notice").locator("p")).toHaveText(
+      `Chats are off: ${CHATS_FOLDER} is a link, not a folder.`,
+    );
+    await expect(page.getByTestId("chats-notice-reveal")).toHaveCount(0);
+    await expect(line(page)).toHaveCount(0);
+  });
+});
+
 test.describe("a new chat", () => {
   test("starts from the tray's plus with one Enter, and is the conversation alone", async ({ page }) => {
     await begin(page);

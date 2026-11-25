@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /** Where the core says the chats folder is, and how often it was asked. */
 const fake = {
   dir: "/home/ada/.chord/chats" as string | null,
+  foreign: [] as string[],
   asked: 0,
   titles: [] as string[],
 };
@@ -13,8 +14,8 @@ vi.mock("$lib/core", () => ({
       {
         async chatsDir() {
           fake.asked += 1;
-          if (fake.dir === null) throw new Error("no core");
-          return fake.dir;
+          if (fake.dir === null) throw "/home/ada/.chord/chats is a link, not a folder";
+          return { dir: fake.dir, foreign: fake.foreign };
         },
         async projectInfo(path: string) {
           return { path, name: path.split("/").at(-1)!, repository: path, isGit: true };
@@ -94,6 +95,7 @@ beforeEach(() => {
   resetSessions();
   localStorage.clear();
   fake.dir = DIR;
+  fake.foreign = [];
   fake.asked = 0;
   fake.titles = [];
   resetChats(DIR);
@@ -113,14 +115,24 @@ describe("chats", () => {
     expect(isChatsFolder(DIR)).toBe(true);
     expect(isChatsFolder(A)).toBe(false);
     expect(isChatsFolder(null)).toBe(false);
+    expect(chats.error).toBeNull();
+    expect(chats.foreign).toEqual([]);
   });
 
-  it("are nowhere when the core cannot say", async () => {
+  it("are nowhere when the core cannot use the folder, which says why", async () => {
     resetChats();
     fake.dir = null;
     expect(await load()).toBeNull();
     expect(isChatsFolder(DIR)).toBe(false);
     expect(chatCount()).toBe(0);
+    expect(chats.error).toBe("/home/ada/.chord/chats is a link, not a folder");
+  });
+
+  it("keep the files in the folder the workbench did not write, to name", async () => {
+    resetChats();
+    fake.foreign = [".claude/settings.json", "CLAUDE.md"];
+    expect(await load()).toBe(DIR);
+    expect(chats.foreign).toEqual([".claude/settings.json", "CLAUDE.md"]);
   });
 
   it("are the sessions in the folder, never a project's", () => {

@@ -1836,9 +1836,10 @@ async fn orchestrator_dir(core: State<'_, Arc<Core>>) -> Result<String, String> 
 }
 
 /// The `chats` folder under the workbench's home, where conversations that
-/// belong to no project run. Made when asked for.
+/// belong to no project run, with the files in it the workbench did not
+/// write. Made when asked for.
 #[tauri::command]
-async fn chats_dir(core: State<'_, Arc<Core>>) -> Result<String, String> {
+async fn chats_dir(core: State<'_, Arc<Core>>) -> Result<chord_core::chats::Chats, String> {
     let core = Arc::clone(&core);
     blocking(move || core.chats_dir()).await
 }

@@ -2357,17 +2357,18 @@ impl Core {
     }
 
     /// The folder named `chats` under the workbench's home, where every
-    /// conversation that belongs to no project runs. It is made when asked
-    /// for, since an agent needs a folder to start in.
-    pub fn chats_dir(&self) -> Result<String, String> {
-        let dir = self
-            .home
-            .as_deref()
-            .map(chats_path)
-            .ok_or("no home directory")?;
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
-        Ok(dir.to_string_lossy().to_string())
+    /// conversation that belongs to no project runs, and what is in it that
+    /// the workbench did not write and that reaches every chat. It is made
+    /// when asked for, since an agent needs a folder to start in, and an
+    /// error says it cannot be used.
+    pub fn chats_dir(&self) -> Result<crate::chats::Chats, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        let dir = crate::chats::path(home);
+        crate::chats::make(&dir)?;
+        Ok(crate::chats::Chats {
+            foreign: crate::chats::foreign(home, &dir),
+            dir: dir.to_string_lossy().to_string(),
+        })
     }
 
     /// A worktree of the project, on a branch of the same name, for a
@@ -2538,11 +2539,6 @@ impl Core {
 /// Where the `orchestrator` folder sits under a home directory.
 fn orchestrator_path(home: &Path) -> PathBuf {
     crate::home::dir(home).join("orchestrator")
-}
-
-/// Where the `chats` folder sits under a home directory.
-fn chats_path(home: &Path) -> PathBuf {
-    crate::home::dir(home).join("chats")
 }
 
 /// The mode an integrated session is started in: the one the window named,
@@ -3200,10 +3196,11 @@ mod tests {
     #[test]
     fn the_chats_folder_is_named_and_made_when_asked_for() {
         let home = Scratch::new("api-chats-folder");
-        let dir = core_at(&home).chats_dir().unwrap();
-        assert_eq!(PathBuf::from(&dir), home.join(".chord").join("chats"));
-        assert!(PathBuf::from(&dir).is_dir());
-        assert_eq!(core_at(&home).chats_dir().unwrap(), dir);
+        let chats = core_at(&home).chats_dir().unwrap();
+        assert_eq!(PathBuf::from(&chats.dir), home.join(".chord").join("chats"));
+        assert!(PathBuf::from(&chats.dir).is_dir());
+        assert!(chats.foreign.is_empty());
+        assert_eq!(core_at(&home).chats_dir().unwrap(), chats);
     }
 
     /// A session resumed in the folder an earlier version ran orchestrators

@@ -21,9 +21,16 @@ import {
   type Session,
 } from "$lib/sessions.svelte";
 
-/** The folder, and whether the tray of recent chats is open under the
-    chats line. */
-export const chats = $state<{ dir: string | null; tray: boolean }>({ dir: null, tray: false });
+/** The folder, whether the tray of recent chats is open under the chats
+    line, and what the window says of the folder once: why the core could
+    not use it, or the files in it the workbench did not write that reach
+    every chat. */
+export const chats = $state<{
+  dir: string | null;
+  tray: boolean;
+  error: string | null;
+  foreign: string[];
+}>({ dir: null, tray: false, error: null, foreign: [] });
 
 /** How many chats the tray lists before the row that opens the rest. */
 export const RECENT = 5;
@@ -35,13 +42,20 @@ let asked: Promise<string | null> | null = null;
 export const chatsKnown: Promise<string | null> = new Promise((resolve) => (knowDir = resolve));
 
 /** Asks the core for the folder, which it makes when missing. Asked once:
-    a later call has the same answer. */
+    a later call has the same answer. Without a folder there are no chats,
+    and the core's reason is kept for the window to say. */
 export function load(): Promise<string | null> {
   asked ??= Promise.resolve()
     .then(() => core().chatsDir())
     .then(
-      (dir) => (typeof dir === "string" && dir !== "" ? dir : null),
-      () => null,
+      (folder) => {
+        chats.foreign = folder.foreign ?? [];
+        return typeof folder.dir === "string" && folder.dir !== "" ? folder.dir : null;
+      },
+      (error: unknown) => {
+        chats.error = error instanceof Error ? error.message : String(error);
+        return null;
+      },
     )
     .then((dir) => {
       chats.dir = dir;
@@ -132,5 +146,7 @@ export function chatMark(
 export function resetChats(dir: string | null = null) {
   chats.dir = dir;
   chats.tray = false;
+  chats.error = null;
+  chats.foreign = [];
   asked = dir === null ? null : Promise.resolve(dir);
 }

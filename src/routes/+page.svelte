@@ -20,6 +20,7 @@
   import ConductAsk from "$lib/components/ConductAsk.svelte";
   import LeaveAsk from "$lib/components/LeaveAsk.svelte";
   import RefusalBanner from "$lib/components/RefusalBanner.svelte";
+  import ChatsNotice from "$lib/components/ChatsNotice.svelte";
   import SettingsAsk from "$lib/components/SettingsAsk.svelte";
   import UserStyles from "$lib/components/UserStyles.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
@@ -1340,6 +1341,7 @@
 <AsksSaid />
 <LeaveAsk />
 <RefusalBanner />
+<ChatsNotice />
 <UserStyles />
 
 <style>

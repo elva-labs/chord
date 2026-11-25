@@ -1782,6 +1782,25 @@ trust the folder as it does any folder, and a chat runs in the permission
 mode its settings choose. The [settings tools](settings.md) and the tools
 to show and present work as in any session.
 
+### The chats folder
+
+Every chat shares the one folder, so whatever is in it reaches every chat.
+The workbench writes only its hooks there. Each time the app starts, the
+core looks in the folder, and when it holds anything else that can change
+what an agent does, such as an instruction file like `CLAUDE.md` or
+`AGENTS.md`, a server file, the harnesses' own settings or hooks that are
+not the workbench's, the window says so once and names the files. Show
+folder opens the folder; nothing in it is removed, and what to keep is
+yours to decide. The permissions Claude Code keeps when you allow
+something in a chat are not counted. As in any folder, an instruction file
+in a folder above it, such as `CLAUDE.md` in your home, reaches every chat
+as well, and trusting your home or the workbench's home trusts the chats
+folder with it.
+
+The folder is readable by you alone. When a link or a file stands where
+the folder should be, or the folder cannot be made, there are no chats,
+and the window says why.
+
 ### Sessions a chat starts
 
 A chat has the same tools to start and direct sessions as any session.
