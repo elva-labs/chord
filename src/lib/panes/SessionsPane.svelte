@@ -1463,13 +1463,20 @@
       the width its column still has. */
   let drawnFolded = $derived(!compact.on && !sessionsDrawnOpen());
 
-  /** Picking a project brings it forward. In compact mode that is done with
-      the pane, which goes back with the keyboard, as picking a session
-      does. */
+  /** Picking a project brings it forward and leaves the pane and the
+      keyboard here, to pick one of its sessions from. */
   function pickProject(path: string) {
     bringForward(path);
-    if (compact.on) peekSessions(false);
   }
+
+  // A project coming forward with no session starts the cursor over on its
+  // header, wherever the keyboard is by then.
+  $effect(() => {
+    void screenProject;
+    untrack(() => {
+      if (sessions.active === null) cursor = null;
+    });
+  });
 
   /** A press that began in the pane and is not yet let go: a click, or a
       drag of a scroll bar or a selection. */

@@ -11,6 +11,7 @@ const SESSIONS = "[data-testid='sessions-slot'] section[data-pane='sessions']";
 const AGENT = "section[data-pane='agent']";
 const CHANGES = "section[data-pane='changes']";
 const MOD = "ControlOrMeta";
+const OTHER = "/home/ada/dev/other";
 /** How long the pointer is away before the pane goes, as the app has it. */
 const AWAY_AFTER = 400;
 
@@ -47,8 +48,8 @@ async function slidOut(page: Page) {
   await expect(page.locator(SESSIONS)).toBeHidden();
 }
 
-async function start(page: Page, settings: Record<string, unknown> = {}) {
-  await installFakeCore(page, { settings: { compact: true, keys: { "focus.sessions": BOUND }, ...settings } });
+async function start(page: Page, settings: Record<string, unknown> = {}, open?: string[]) {
+  await installFakeCore(page, { open, settings: { compact: true, keys: { "focus.sessions": BOUND }, ...settings } });
   await page.goto("/");
   await expect(page.locator(AGENT)).toBeVisible();
   await slidOut(page);
@@ -56,10 +57,12 @@ async function start(page: Page, settings: Record<string, unknown> = {}) {
 
 /** Brings the pane in by the bound chord and starts a session from it, so
     there is a row to pick; the pane goes as the session starts. */
-async function startSession(page: Page) {
+async function startSession(page: Page, several = false) {
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
   await page.getByTestId("new-session").click();
+  // With several projects open it asks which: Enter takes the one in front.
+  if (several) await page.keyboard.press("Enter");
   await startNew(page);
   await slidOut(page);
 }
@@ -193,14 +196,37 @@ test("picking a session sends the pane back, the keyboard in its agent", async (
   await slidOut(page);
   await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
 
-  // Picking the project sends it back too, the keyboard where it was.
-  await page.keyboard.press(`${MOD}+3`);
-  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
+});
+
+test("picking a project leaves the pane in, to pick one of its sessions from", async ({ page }) => {
+  await start(page, {}, [PROJECT, OTHER]);
+  await startSession(page, true);
   await page.keyboard.press(PRESS_BOUND);
   await slidIn(page);
+  await page.locator(`${SESSIONS} [data-row="project:${OTHER}"]`).click();
+  await expect(page.locator(AGENT)).toContainText("No session open in other.");
   await page.locator(`${SESSIONS} [data-row="project:${PROJECT}"]`).click();
+  await expect(page.locator(AGENT)).toContainText("No session open in demo.");
+  await slidIn(page);
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
+
+  // Down from the project's header is its session, and Enter opens it.
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
   await slidOut(page);
-  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "changes");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
+  await expect(page.locator(AGENT)).not.toContainText("No session open");
+});
+
+test("goes to a project from the palette with the pane slid in", async ({ page }) => {
+  await start(page, {}, [PROJECT, OTHER]);
+  await startSession(page, true);
+  await page.keyboard.press(`${MOD}+p`);
+  await page.keyboard.type("other");
+  await page.keyboard.press("Enter");
+  await slidIn(page);
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
+  await expect(page.locator(AGENT)).toContainText("No session open in other.");
 });
 
 test("goes to a session from the palette without showing the pane", async ({ page }) => {
@@ -303,7 +329,6 @@ for (const look of ["modern", "terminal"] as const)
   });
 
 test("stands under a question asked over the agent", async ({ page }) => {
-  const OTHER = "/home/ada/dev/other";
   await page.setViewportSize({ width: 706, height: 800 });
   await installFakeCore(page, {
     open: [PROJECT, OTHER],

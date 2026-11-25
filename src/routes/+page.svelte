@@ -433,8 +433,9 @@
   $effect.pre(() => {
     const key = sessions.active;
     untrack(() => {
-      // Picked from the peeked pane, or started there: the pane goes back.
-      peekSessions(false);
+      // A session picked from the peeked pane, or started there, sends the
+      // pane back. With none on screen it stays, to pick one from.
+      if (key !== null) peekSessions(false);
       switchViewer(key, () => (key === null ? undefined : switched(key)));
     });
   });

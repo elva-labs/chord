@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PROJECT, installFakeCore, startNew, sessionRowOf } from "./fake";
 
+const OTHER = "/home/ada/dev/other";
+
 /**
  * A session's row menu marks it unread, and an unread row read: the row is
  * drawn as one that went unread by itself, with the line it last showed
@@ -16,14 +18,18 @@ const row = (page: Page, name: string) =>
   sessionRowOf(page, Number(name.replace("session ", "")));
 
 /** Two terminal sessions, the second on screen. */
-async function two(page: Page) {
-  await installFakeCore(page, { open: [PROJECT], settings: { chime: true } });
+async function two(page: Page, open: string[] = [PROJECT]) {
+  await installFakeCore(page, { open, settings: { chime: true } });
   await page.goto("/");
-  await page.getByTestId("new-session").click();
-  await startNew(page);
+  const newSession = async () => {
+    await page.getByTestId("new-session").click();
+    // With several projects open it asks which: Enter takes the one in front.
+    if (open.length > 1) await page.keyboard.press("Enter");
+    await startNew(page);
+  };
+  await newSession();
   await expect(row(page, "session 1")).toContainText("running");
-  await page.getByTestId("new-session").click();
-  await startNew(page);
+  await newSession();
   await expect(page.locator(ROW)).toHaveCount(2);
 }
 
@@ -190,4 +196,32 @@ test("ends the mark on screen when the user writes to it, and announces news wit
       page.evaluate(() => (window as unknown as { __notified?: { body: string }[] }).__notified?.at(-1)?.body),
     )
     .toBe("Background job done.");
+});
+
+test("leaves an unread session unread when its project is clicked", async ({ page }) => {
+  await two(page, [PROJECT, OTHER]);
+  const first = row(page, "session 1");
+  const header = (path: string) => page.locator(`[data-row="project:${path}"]`);
+  const agent = page.locator("section[data-pane='agent']");
+  // Both sessions go unread while another project is in front.
+  await header(OTHER).click();
+  await expect(agent).toContainText("No session open in other.");
+  await hook(page, "session-1", "stop", "First done.");
+  await hook(page, "session-2", "stop", "Second done.");
+  await expect(page.getByTestId("waiting-readout")).toHaveText(/2 waiting/);
+
+  await header(PROJECT).click();
+  await expect(agent).toContainText("No session open in demo.");
+  await expect(first.locator(".dot")).toHaveClass(/unread/);
+  await expect(row(page, "session 2").locator(".dot")).toHaveClass(/unread/);
+  await expect(page.getByTestId("waiting-readout")).toHaveText(/2 waiting/);
+
+  // The keyboard is on the header: Down to a row, Enter opens that one.
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "sessions");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("status-bar")).toHaveAttribute("data-focus", "agent");
+  await expect(agent).not.toContainText("No session open");
+  await expect(page.locator(`${ROW} .dot.unread`)).toHaveCount(1);
+  await expect(page.getByTestId("waiting-readout")).toHaveText(/1 waiting/);
 });

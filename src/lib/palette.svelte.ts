@@ -1029,14 +1029,13 @@ export function stepBack() {
 /** Gives the keyboard to the sessions pane, which a project with no session
     has instead of a terminal. Called once the page has reacted to the
     project coming forward, which puts a peeked pane back. A folded pane is
-    opened first, or while reviewing peeked over the agent so the viewer
-    stays. A window too narrow for the pane leaves it folded, as the user
-    set it, and the keyboard goes to the agent pane, which has no session to
-    give it to and takes it itself. So does compact mode, where going to a
-    project leaves the pane where it is, out of sight. */
+    opened first, or peeked over the panes beside it in compact mode and
+    while reviewing, so the viewer stays. A window too narrow for the pane
+    leaves it folded, as the user set it, and the keyboard goes to the agent
+    pane, which has no session to give it to and takes it itself. */
 function keyboardToSessions() {
-  if (!sessionsShown() && !compact.on) {
-    if (layout.mode === "reviewing") peekSessions(true);
+  if (!sessionsShown()) {
+    if (compact.on || layout.mode === "reviewing") peekSessions(true);
     else if (!layout.sessionsForced) unfoldSessions();
   }
   focusPane(sessionsShown() ? "sessions" : "agent");

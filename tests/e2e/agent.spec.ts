@@ -1404,13 +1404,17 @@ test.describe("several projects", () => {
     await running(page);
     await page.evaluate(() => window.__fake.emit("pty-1", "work in one"));
     await expect.poll(() => buffer(page)).toContain("work in one");
+    const inOne = await page.locator("[data-row^='session:']").getAttribute("data-row");
 
     await page.locator(SESSIONS).getByText("two", { exact: true }).click();
     await startHere(page);
     await expect.poll(() => spawnCount(page)).toBe(2);
     expect(await killed(page)).toEqual([]);
 
+    // The project comes forward with no session; its row brings it back.
     await page.locator(SESSIONS).getByText("one", { exact: true }).click();
+    await expect(page.locator(AGENT)).toContainText("No session open in one.");
+    await page.locator(`${SESSIONS} [data-row="${inOne}"]`).click();
     await expect.poll(() => buffer(page)).toContain("work in one");
     expect(await killed(page)).toEqual([]);
     expect(await spawnCount(page)).toBe(2);

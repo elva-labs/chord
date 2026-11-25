@@ -334,9 +334,10 @@ pane is bound to, slides it in with the keyboard in it, on the session on
 screen; <kbd>Cmd</kbd><kbd>B</kbd> does the same. <kbd>Esc</kbd> or the
 shortcut again sends it back and gives the keyboard to the pane that had it.
 Picking a session sends it back with the keyboard in that session's
-agent, as a pick does anywhere; picking a project sends it back with the
-keyboard where it was. Going to a session or project from the palette
-leaves the pane where it is, out of sight.
+agent, as a pick does anywhere; picking a project leaves it in, to pick one
+of the project's sessions from. Going to a session from the palette leaves
+the pane where it is, out of sight, and going to a project slides it in with
+the keyboard in it.
 
 What the pane would tell is not lost while it is out of sight. The status
 bar counts the sessions waiting for you, as it always does.
