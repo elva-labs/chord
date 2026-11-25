@@ -24,6 +24,7 @@ import {
   GATHER,
   GATHER_MOST,
   COLD_AFTER,
+  COLD_AFTER_STARTED,
   COLD_MOST,
   wakeHeld,
   WAKE_QUIET,
@@ -2846,6 +2847,28 @@ describe("waking an idle starter", () => {
     await wakeGoes();
     expect(typedInto("pty-0")).toContain("Still at work: sid-3.");
     expect(typedInto("pty-0")).toContain("Session sid-2 stopped working.");
+  });
+
+  it("takes a Claude Code starter another session started for cold once its five-minute cache has lapsed", async () => {
+    const starter = own(A, "pty-0", "caller-1");
+    exact("caller-1", "prompt");
+    exact("caller-1", "stop");
+    flushSync();
+    const one = atWork("pty-1", "sid-1");
+    atWork("pty-2", "sid-2");
+    await vi.advanceTimersByTimeAsync(COLD_AFTER_STARTED);
+    stops(one);
+    await vi.advanceTimersByTimeAsync(GATHER_MOST * 2);
+    expect(typedInto("pty-0")).toBe("");
+    expect(wakeHeld(starter)).toBe("cold");
+
+    // The user's own starter, rested as long, is still warm.
+    const mine = idleStarter("caller-9", "pty-9");
+    const three = atWork("pty-3", "sid-3", "caller-9");
+    atWork("pty-4", "sid-4", "caller-9");
+    await vi.advanceTimersByTimeAsync(COLD_AFTER_STARTED);
+    stops(three);
+    expect(wakeHeld(mine)).toBe("gathering");
   });
 
   it("wakes a cold starter a moment after the last of its sessions is done", async () => {

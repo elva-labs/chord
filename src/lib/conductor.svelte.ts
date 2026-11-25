@@ -165,12 +165,16 @@ export const WAKE_AFTER = 3000;
 export const GATHER = 30_000;
 export const GATHER_MOST = 120_000;
 /** How long a starter has rested when its prompt cache has lapsed, by
-    agent, so a wake reads its whole conversation again at full price: a
-    Claude Code conversation's cache lasts an hour, and Codex's, which it
-    does not record, is taken to last an hour too. A cold starter's wake
-    waits until nothing it started is at work, and at most COLD_MOST after
-    the first came to rest. */
+    agent, so a wake reads its whole conversation again at full price,
+    each a little short of the cache's lifetime: a Claude Code
+    conversation's cache lasts an hour, and Codex's, which it does not
+    record, is taken to last an hour too. A Claude Code starter that
+    another session started is told to keep its cache for STARTED_CACHE,
+    five minutes, so it is cold after COLD_AFTER_STARTED. A cold starter's
+    wake waits until nothing it started is at work, and at most COLD_MOST
+    after the first came to rest. */
 export const COLD_AFTER: Record<HarnessId, number> = { "claude-code": 58 * 60_000, codex: 58 * 60_000 };
+export const COLD_AFTER_STARTED = 4 * 60_000;
 export const COLD_MOST = 20 * 60_000;
 /** How long the user's keys in a starter's terminal have been still
     before the workbench types into it. */
@@ -2325,7 +2329,9 @@ function wakeNews(starter: Session): Session[] {
 /** Whether a starter has rested long enough for its prompt cache to have
     lapsed. */
 function cold(starter: Session, now: number): boolean {
-  return now - (restingSince.get(starter.key) ?? now) >= COLD_AFTER[starter.agent];
+  const after =
+    starter.agent === "claude-code" && startedFor(starter.key) !== null ? COLD_AFTER_STARTED : COLD_AFTER[starter.agent];
+  return now - (restingSince.get(starter.key) ?? now) >= after;
 }
 
 /**
