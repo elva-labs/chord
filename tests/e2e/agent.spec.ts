@@ -259,6 +259,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
           fake.writesTo.push({ ptyId: id, data });
         },
         orchestratorDir: async () => "/home/ada/.chord/orchestrator",
+        chatsDir: async () => "/home/ada/.chord/chats",
         resize: async (_id: string, cols: number, rows: number) => {
           fake.resizes.push({ cols, rows });
         },

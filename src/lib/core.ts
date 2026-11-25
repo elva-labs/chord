@@ -72,6 +72,14 @@ export interface AboutInfo {
 }
 
 /** What the app found on the machine, in the order it is shown. */
+/** The chats folder, and the files in it, as paths inside it, that the
+    workbench did not write and that can change what an agent does there:
+    instruction files, the agents' settings, hooks or servers not its own. */
+export interface ChatsFolder {
+  dir: string;
+  foreign: string[];
+}
+
 export interface Setup {
   checks: SetupCheck[];
   /** False when the login shell could not be read, so a program that was
@@ -2380,6 +2388,11 @@ export interface Core {
   /** The `orchestrator` folder under the workbench's home, which the
       sessions pane lists while it holds past sessions. Nothing makes it. */
   orchestratorDir(): Promise<string>;
+  /** The `chats` folder under the workbench's home, where conversations
+      that belong to no project run, with the files in it the workbench did
+      not write that can change what an agent does there. The core makes
+      it when asked, and refuses a link or a file in its place. */
+  chatsDir(): Promise<ChatsFolder>;
   /** The worktrees the app made under a project, with what is in them. */
   worktrees(project: string): Promise<Worktree[]>;
   /** Removes one of those and its branch, and what the hooks put in each
@@ -2971,6 +2984,7 @@ const tauriCore: Core = {
   worktreeAdd: (project, name, accounts) =>
     invoke<string>("worktree_add", { project, name, accounts }),
   orchestratorDir: () => invoke<string>("orchestrator_dir"),
+  chatsDir: () => invoke<ChatsFolder>("chats_dir"),
   worktrees: (project) => invoke<Worktree[]>("worktrees", { project }),
   worktreeRemove: (project, name, accounts) =>
     invoke<void>("worktree_remove", { project, name, accounts }),
@@ -3419,6 +3433,10 @@ const detachedCore: Core = {
   },
   async orchestratorDir() {
     throw new Error("no core");
+  },
+  // With no core there is no folder, and nothing wrong to say of it.
+  async chatsDir() {
+    return { dir: "", foreign: [] };
   },
   async worktrees() {
     return [];

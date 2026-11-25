@@ -2395,6 +2395,21 @@ impl Core {
         Ok(dir.to_string_lossy().to_string())
     }
 
+    /// The folder named `chats` under the workbench's home, where every
+    /// conversation that belongs to no project runs, and what is in it that
+    /// the workbench did not write and that reaches every chat. It is made
+    /// when asked for, since an agent needs a folder to start in, and an
+    /// error says it cannot be used.
+    pub fn chats_dir(&self) -> Result<crate::chats::Chats, String> {
+        let home = self.home.as_deref().ok_or("no home directory")?;
+        let dir = crate::chats::path(home);
+        crate::chats::make(&dir)?;
+        Ok(crate::chats::Chats {
+            foreign: crate::chats::foreign(home, &dir),
+            dir: dir.to_string_lossy().to_string(),
+        })
+    }
+
     /// A worktree of the project, on a branch of the same name, for a
     /// session to work in without touching the branch the user is on.
     /// Answers with where it is.
@@ -3215,6 +3230,16 @@ mod tests {
             home.join(".chord").join("orchestrator")
         );
         assert!(!PathBuf::from(&dir).exists());
+    }
+
+    #[test]
+    fn the_chats_folder_is_named_and_made_when_asked_for() {
+        let home = Scratch::new("api-chats-folder");
+        let chats = core_at(&home).chats_dir().unwrap();
+        assert_eq!(PathBuf::from(&chats.dir), home.join(".chord").join("chats"));
+        assert!(PathBuf::from(&chats.dir).is_dir());
+        assert!(chats.foreign.is_empty());
+        assert_eq!(core_at(&home).chats_dir().unwrap(), chats);
     }
 
     /// A session resumed in the folder an earlier version ran orchestrators

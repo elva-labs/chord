@@ -4,6 +4,8 @@ import { attention } from "$lib/attention.svelte";
 import { chordFor, describe as spell, resetKeys } from "$lib/keys.svelte";
 import {
   ATTENTION_LABEL,
+  askingChat,
+  beginChat,
   closePalette,
   commandItems,
   goToItems,
@@ -41,6 +43,7 @@ import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/w
 import { pickProfile, profileToStart, readProfiles, resetProfiles } from "$lib/codexProfiles.svelte";
 import { paletteChanged, resetPluginPalette } from "$lib/pluginPalette.svelte";
 import { flash } from "$lib/flash.svelte";
+import { resetChats } from "$lib/chats.svelte";
 
 /** The Codex profiles the core lists, for any account. */
 const listed = vi.hoisted(() => ({ profiles: [] as unknown[] }));
@@ -85,6 +88,7 @@ beforeEach(() => {
   resetPalette();
   resetAccounts();
   resetProfiles();
+  resetChats();
   listed.profiles = [];
   resetPluginPalette();
   picks.made = [];
@@ -258,6 +262,62 @@ describe("go to", () => {
     expect(paletteItems().some((item) => item.kind === "session")).toBe(true);
     openCommands();
     expect(paletteItems().some((item) => item.kind === "session")).toBe(false);
+  });
+});
+
+describe("chats in go to", () => {
+  const CHATS = "/home/ada/.chord/chats";
+  const groups = (items: PaletteItem[]) => items.map((item) => `${item.kind}:${item.group}`);
+
+  beforeEach(() => {
+    resetChats(CHATS);
+    create(A).changedAt = 3000;
+    const open = create(CHATS);
+    open.changedAt = 2500;
+    open.title = "Plan the export rework";
+    sessions.history[CHATS] = [
+      { id: "old", modified: 2, size: 1, title: "Invoice export formats", agent: "claude-code", account: null },
+    ];
+  });
+
+  it("stand in a group of their own between the sessions and the projects, past chats too", () => {
+    expect(groups(goToItems(""))).toEqual([
+      "session:Sessions",
+      "session:Chats",
+      "past:Chats",
+      "project:Projects",
+      "project:Projects",
+      "project:Projects",
+    ]);
+    const [open, past] = goToItems("").filter((item) => item.group === "Chats");
+    expect(open).toMatchObject({ label: "Plan the export rework", project: "chat" });
+    expect(past).toMatchObject({ label: "Invoice export formats" });
+    expect(projectPaths(goToItems(""))).not.toContain(CHATS);
+  });
+
+  it("match on their name, and all of them on the word chat", () => {
+    expect(goToItems("export").map((item) => item.label)).toEqual([
+      "Plan the export rework",
+      "Invoice export formats",
+    ]);
+    expect(goToItems("chat").filter((item) => item.group !== "Chats")).toEqual([]);
+    expect(goToItems("chat")).toHaveLength(2);
+  });
+
+  it("resume a past chat in front when picked, not as a project", () => {
+    const past = goToItems("formats")[0];
+    const outcome = pickItem(past);
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all.find((session) => session.resumedFrom === "old")).toMatchObject({ project: CHATS });
+    expect(workspace.active).toBe(CHATS);
+    expect(workspace.open.map(({ path }) => path)).not.toContain(CHATS);
+  });
+
+  it("start a new chat on a chat held alone", () => {
+    expect(pickItem(goToItems("formats")[0], true)).toEqual({ type: "stay" });
+    expect(palette.mode).toBe("new");
+    expect(palette.steps).toEqual([{ kind: "project", path: CHATS }]);
   });
 });
 
@@ -760,6 +820,68 @@ function start() {
 /** Lets the reads of profiles under way be heard, and a start they held
     go on. */
 const heard = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("a new chat", () => {
+  const CHATS = "/home/ada/.chord/chats";
+
+  it("is offered with its chord once the chats folder is known, a project open or not", () => {
+    expect(commandItems("new chat")).toEqual([]);
+    resetChats(CHATS);
+    const item = commandItems("new chat")[0];
+    expect(item).toMatchObject({ kind: "command", label: "New chat", chord: spell(chordFor("chat.new")) });
+    workspace.open = [];
+    workspace.active = null;
+    expect(commandItems("new chat").map((each) => each.label)).toEqual(["New chat"]);
+  });
+
+  it("is not offered while no agent is ready", () => {
+    resetChats(CHATS);
+    harnesses.availability = "missing";
+    const item = commandItems("new chat")[0];
+    expect(pickable(item)).toBe(false);
+    expect(pickItem(item)).toEqual({ type: "stay" });
+  });
+
+  it("offers its defaults on one line, with no project asked, and starts on Enter in the chats folder", () => {
+    resetChats(CHATS);
+    expect(beginChat()).toEqual({ type: "stay" });
+    expect(askingChat()).toBe(true);
+    expect(palette.ready).toBe(true);
+    const items = stepItems("");
+    expect(items.map((item) => item.kind)).toEqual(["ready"]);
+    expect(items[0].kind === "ready" && items[0].detail).toBe("no project");
+    const outcome = pickItem(items[0]);
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: CHATS, agent: "claude-code", workflow: null });
+    expect(workspace.open.map(({ path }) => path)).not.toContain(CHATS);
+  });
+
+  it("follows no workflow, whatever the default", () => {
+    resetChats(CHATS);
+    adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
+    expect(stepsLeft([{ kind: "project", path: CHATS }])).toEqual([]);
+    beginChat();
+    const outcome = pickItem(stepItems("")[0]);
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: CHATS, workflow: null });
+  });
+
+  it("goes back to the commands it came from, never to a project question", () => {
+    resetChats(CHATS);
+    openCommands();
+    expect(choose("New chat").type).toBe("stay");
+    expect(askingChat()).toBe(true);
+    stepBack();
+    expect(palette.mode).toBe("commands");
+    expect(palette.steps).toEqual([]);
+  });
+
+  it("does nothing while the chats folder is not known", () => {
+    expect(beginChat()).toEqual({ type: "stay" });
+    expect(palette.open).toBe(false);
+  });
+});
 
 describe("how a new session runs", () => {
   const quick = () => ({

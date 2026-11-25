@@ -29,6 +29,7 @@ import {
   type PluginRow,
   type PluginSectionEvent,
 } from "$lib/core";
+import { isChatsFolder } from "$lib/chats.svelte";
 import { workspace } from "$lib/workspace.svelte";
 import { activeSession } from "$lib/sessions.svelte";
 import { sayError } from "$lib/flash.svelte";
@@ -216,10 +217,10 @@ function shownSession(project: string): string | null {
 /** The sections of the project on screen and of the session on screen,
     plugin by plugin and section by section, so the order under the tree
     does not move as rows arrive. A session's section hides the project's
-    of the same name. */
+    of the same name. A chat in front has no project, so none are listed. */
 export function listed(): PluginSection[] {
   const project = workspace.active;
-  if (project === null) return [];
+  if (project === null || isChatsFolder(project)) return [];
   const session = shownSession(project);
   const mine = pluginSections.sections.filter(
     (section) =>

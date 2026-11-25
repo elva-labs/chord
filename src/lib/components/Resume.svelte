@@ -4,14 +4,16 @@
   import { harnessTag, installed } from "$lib/harness.svelte";
   import { lastSegment } from "$lib/paths";
   import { returnFocus } from "$lib/layout.svelte";
-  import { closeResume, offered, pickResume, resume } from "$lib/resume.svelte";
-  import { ago, hasName, historyLabel } from "$lib/sessions.svelte";
+  import { chatCount, isChatsFolder } from "$lib/chats.svelte";
+  import { closeResume, offered, offeredChats, pickChat, pickResume, resume } from "$lib/resume.svelte";
+  import { ago, hasName, historyLabel, rowName, shownName } from "$lib/sessions.svelte";
   import { workspace } from "$lib/workspace.svelte";
 
   /**
    * The sessions to resume, over the workbench like the settings: a filter
    * with the keyboard in it, the sessions under it, Enter or a click on one
-   * starts it, Escape closes.
+   * starts it, Escape closes. Over the chats folder it is every chat,
+   * open or past, by name.
    */
 
   let dialog: HTMLDivElement;
@@ -26,13 +28,23 @@
     return returnFocus;
   });
 
-  let rows = $derived(offered());
+  let chatsMode = $derived(isChatsFolder(resume.project));
+  let rows = $derived(chatsMode ? [] : offered());
+  let chatList = $derived(chatsMode ? offeredChats() : []);
+  let shown = $derived(chatsMode ? chatList.length : rows.length);
   let project = $derived(workspace.open.find((open) => open.path === resume.project));
-  let heading = $derived(
+  let counted = $derived(
     [rows.length, resume.agent === null ? null : harnessTag(resume.agent), rows.length === 1 ? "session" : "sessions", "to resume"]
       .filter((part) => part !== null)
       .join(" "),
   );
+  let heading = $derived(chatsMode ? `Chats: all ${chatCount()}` : `${project?.name ?? ""}: ${counted}`);
+
+  function pick(index: number) {
+    if (chatsMode) {
+      if (chatList[index] !== undefined) pickChat(chatList[index]);
+    } else if (rows[index] !== undefined) pickResume(rows[index]);
+  }
 
   /** Every agent's sessions together say whose each is, when there is more
       than one agent to tell apart. */
@@ -40,7 +52,7 @@
 
   // The cursor stays within whatever the filter leaves.
   $effect(() => {
-    if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1);
+    if (cursor >= shown) cursor = Math.max(0, shown - 1);
   });
 
   function onKeydown(e: KeyboardEvent) {
@@ -51,13 +63,13 @@
         closeResume();
         return;
       case "ArrowDown":
-        cursor = Math.min(cursor + 1, Math.max(0, rows.length - 1));
+        cursor = Math.min(cursor + 1, Math.max(0, shown - 1));
         break;
       case "ArrowUp":
         cursor = Math.max(cursor - 1, 0);
         break;
       case "Enter":
-        if (rows[cursor] !== undefined) pickResume(rows[cursor]);
+        pick(cursor);
         break;
       default:
         return;
@@ -90,40 +102,62 @@
     data-testid="resume"
   >
     <header>
-      <h2 id="resume-title">{project?.name ?? ""}: {heading}</h2>
+      <h2 id="resume-title">{heading}</h2>
       <button class="tool" onclick={closeResume} data-testid="resume-close">Esc</button>
     </header>
     <div class="body">
       <input
         bind:this={field}
         bind:value={resume.query}
-        placeholder="filter by name or worktree"
+        placeholder={chatsMode ? "filter by name" : "filter by name or worktree"}
         autocomplete="off"
         spellcheck="false"
         aria-label="Filter"
         data-testid="resume-filter"
       />
-      <div class="list" role="listbox" aria-label="Sessions to resume">
-        {#each rows as entry, index (entry.id)}
-          <button
-            class="row"
-            class:cursor={index === cursor}
-            role="option"
-            aria-selected={index === cursor}
-            tabindex="-1"
-            onclick={() => pickResume(entry)}
-            title={historyLabel(entry)}
-            data-testid="resume-row"
-          >
-            <span class="label" class:unnamed={!hasName(entry)}>{historyLabel(entry)}</span>
-            {#if entry.cwd}<span class="where" title={entry.cwd} data-testid="session-where">{lastSegment(entry.cwd)}</span>{/if}
-            {#if entry.account !== null}<span class="where" title="account: {entry.account}" data-testid="resume-account">{entry.account}</span>{/if}
-            {#if mixed}<span class="where" data-testid="resume-agent">{harnessTag(entry.agent)}</span>{/if}
-            <span class="state">{ago(entry.modified)}</span>
-          </button>
+      <div class="list" role="listbox" aria-label={chatsMode ? "Chats" : "Sessions to resume"}>
+        {#if chatsMode}
+          {#each chatList as entry, index (entry.kind === "row" ? `row:${entry.session.key}` : `past:${entry.transcript.id}`)}
+            {@const named = entry.kind === "row" ? rowName(entry.session) !== null : hasName(entry.transcript)}
+            {@const name = entry.kind === "row" ? shownName(entry.session) : historyLabel(entry.transcript)}
+            <button
+              class="row"
+              class:cursor={index === cursor}
+              role="option"
+              aria-selected={index === cursor}
+              tabindex="-1"
+              onclick={() => pick(index)}
+              title={name}
+              data-testid="resume-chat"
+            >
+              <span class="label" class:unnamed={!named}>{name}</span>
+              <span class="state">{ago(Math.floor(entry.at / 1000))}</span>
+            </button>
+          {:else}
+            <p class="note">Nothing matches.</p>
+          {/each}
         {:else}
-          <p class="note">Nothing matches.</p>
-        {/each}
+          {#each rows as entry, index (entry.id)}
+            <button
+              class="row"
+              class:cursor={index === cursor}
+              role="option"
+              aria-selected={index === cursor}
+              tabindex="-1"
+              onclick={() => pickResume(entry)}
+              title={historyLabel(entry)}
+              data-testid="resume-row"
+            >
+              <span class="label" class:unnamed={!hasName(entry)}>{historyLabel(entry)}</span>
+              {#if entry.cwd}<span class="where" title={entry.cwd} data-testid="session-where">{lastSegment(entry.cwd)}</span>{/if}
+              {#if entry.account !== null}<span class="where" title="account: {entry.account}" data-testid="resume-account">{entry.account}</span>{/if}
+              {#if mixed}<span class="where" data-testid="resume-agent">{harnessTag(entry.agent)}</span>{/if}
+              <span class="state">{ago(entry.modified)}</span>
+            </button>
+          {:else}
+            <p class="note">Nothing matches.</p>
+          {/each}
+        {/if}
       </div>
     </div>
   </div>

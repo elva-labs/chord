@@ -38,9 +38,12 @@ export const hook = $state({
 let loaded = false;
 /** Projects brought to the answer since the window opened. */
 const applied = new Set<string>();
-/** Projects inside a batch that has not finished applying them: they read
-    the answer as it stands when the batch gets to them. */
+/** Projects inside a batch still asking what is on disk: they read the
+    answer as it stands when the batch gets to them. */
 const batching = new Set<string>();
+/** The last bringing of each project to the answer: the next one of the
+    same project runs after it, and so reads what it left on disk. */
+const bringing = new Map<string, Promise<void>>();
 /** Projects on other machines still on their way, by host: they are asked
     about together with the rest of their machine once all have arrived or
     been given up, and ask for nothing themselves meanwhile. */
@@ -184,8 +187,20 @@ export async function check(project: string) {
 
 /** Brings a project to the answer: installs or removes as wanted, and does
     nothing to one already there. One that wants the hooks and has them out
-    of date is installed again, which brings them up to date. */
-export async function apply(project: string) {
+    of date is installed again, which brings them up to date. Two calls for
+    one project run in turn, never side by side. `fresh` reads what is on
+    disk again first. */
+export function apply(project: string, fresh = false): Promise<void> {
+  const turn = (bringing.get(project) ?? Promise.resolve()).then(() => bring(project, fresh));
+  bringing.set(project, turn);
+  return turn;
+}
+
+async function bring(project: string, fresh: boolean) {
+  if (fresh) {
+    delete hook.installed[project];
+    outdated.delete(project);
+  }
   hook.busy = true;
   hook.error = null;
   try {
@@ -207,11 +222,7 @@ export async function apply(project: string) {
     in every account's state, so each project is read again and brought
     to the answer. */
 export async function reapply(projects: string[]) {
-  for (const project of projects) {
-    delete hook.installed[project];
-    outdated.delete(project);
-    await apply(project);
-  }
+  for (const project of projects) await apply(project, true);
 }
 
 /** Whether an enabled plugin listens for commands changed, and with it
@@ -286,10 +297,8 @@ async function applyMany(projects: string[]) {
     // Not knowing is not an error worth showing, as with one project.
     for (const project of projects) learn(project, null);
   }
-  for (const project of projects) {
-    await apply(project);
-    batching.delete(project);
-  }
+  for (const project of projects) batching.delete(project);
+  for (const project of projects) await apply(project);
 }
 
 /** The answer for every project, applied to the ones open now. */
@@ -314,6 +323,7 @@ export function reset() {
   loaded = true;
   applied.clear();
   batching.clear();
+  bringing.clear();
   waiting.clear();
   hook.starting = false;
   hook.everywhere = false;

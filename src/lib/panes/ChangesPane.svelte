@@ -124,6 +124,7 @@
   import { activeProject, followedWorktree, goTo, projectLabel, watchRoot, workspace } from "$lib/workspace.svelte";
   import { putAway } from "$lib/popover";
   import { isOrchestratorFolder } from "$lib/orchestratorFolder.svelte";
+  import { isChatsFolder } from "$lib/chats.svelte";
   import {
     DEFAULT,
     MIN,
@@ -669,7 +670,7 @@
   // attaches to a file that exists, so it is asked again once that is true.
   $effect(() => {
     const watching = root;
-    const hooked = isInstalled(workspace.active);
+    const hooked = !isChatsFolder(workspace.active) && isInstalled(workspace.active);
     untrack(() => {
       if (hooked && watching !== null) watch(watching);
     });
@@ -756,9 +757,12 @@
   let asking = $derived(started.filter(isAsking).length);
   let paneMeta = $derived(worktree === null ? undefined : `worktree ${worktree}`);
   /** While editing the pane is named for the project, heading the tree's
-      column, and the editor's tabs head the column beside it. */
+      column, and the editor's tabs head the column beside it. With no
+      project in front, or with a chat, it is Files over an empty tree. */
   let paneTitle = $derived.by(() => {
-    if (editing) return workspace.active === null ? "Files" : projectLabel(workspace.active);
+    if (editing) {
+      return workspace.active === null || isChatsFolder(workspace.active) ? "Files" : projectLabel(workspace.active);
+    }
     return "Changes";
   });
   let titleWidth = $derived.by(() => {

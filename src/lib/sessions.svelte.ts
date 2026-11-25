@@ -26,6 +26,7 @@ import { persist } from "$lib/persist";
 import { identifiedZoom } from "$lib/zoom.svelte";
 import { HARNESSES, harnessLabel, harnessProfile, installed } from "$lib/harness.svelte";
 import { attention } from "$lib/attention.svelte";
+import { isChat } from "$lib/chats.svelte";
 import { hostOf } from "$lib/remote.svelte";
 import { closeOwner } from "$lib/browser.svelte";
 import { handOver, sessionClosed as closeShells } from "$lib/terminals.svelte";
@@ -1200,6 +1201,12 @@ function closed(project: string): HistoryEntry[] {
   );
 }
 
+/** Every past session of a project not open as a row, however old and
+    whoever ran it. */
+export function everyPast(project: string): HistoryEntry[] {
+  return closed(project);
+}
+
 /** Whether a past session is listed under its project: one this app ran,
     and not left unchanged for longer than past sessions stay listed. */
 function listed(project: string, transcript: HistoryEntry): boolean {
@@ -1404,9 +1411,10 @@ export function label(session: Session): string {
 }
 
 /** A session as the user reads it, in a row, a tooltip, a notice or a
-    dialog: what its row reads as, else "New session". */
+    dialog: what its row reads as, else "New chat" for a chat and "New
+    session" for any other. */
 export function shownName(session: Session): string {
-  return rowName(session) ?? "New session";
+  return rowName(session) ?? (isChat(session) ? "New chat" : "New session");
 }
 
 /** A session as the user reads it where the text alone says who: an ask,

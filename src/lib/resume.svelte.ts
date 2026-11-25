@@ -6,8 +6,12 @@
  * that opens a dialog with a filter over them, every agent's together. Picking one starts it as a
  * live session, in the worktree it ran in when it had one, under the
  * account it ran under.
+ *
+ * Opened over the chats folder it lists every chat, open or past, however
+ * old, with a filter by name; picking one puts it in front.
  */
 
+import { chatRows, pastChats, type ChatEntry } from "$lib/chats.svelte";
 import { treeMadeFor } from "$lib/conductor.svelte";
 import type { HarnessId } from "$lib/core";
 import { focusPane } from "$lib/layout.svelte";
@@ -16,9 +20,12 @@ import { touch } from "$lib/projects.svelte";
 import {
   create,
   historyLabel,
+  lastChanged,
   outsideFor,
+  shownName,
   type HistoryEntry,
 } from "$lib/sessions.svelte";
+import { goTo, resumeChat } from "$lib/workspace.svelte";
 
 export const resume = $state({
   open: false,
@@ -40,16 +47,21 @@ export function closeResume() {
   resume.open = false;
 }
 
+/** The words of the query, each to be found in what a row holds. */
+function queryWords(): string[] {
+  return resume.query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word !== "");
+}
+
 /** What the dialog lists: the project's outside sessions, the agent's or
     every agent's, newest first, narrowed to the ones holding every word of the query in
     their name, their id or the worktree they ran in. */
 export function offered(): HistoryEntry[] {
   if (resume.project === null) return [];
   const all = outsideFor(resume.project, resume.agent);
-  const words = resume.query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((word) => word !== "");
+  const words = queryWords();
   if (words.length === 0) return all;
   return all.filter((entry) => {
     const text = [
@@ -62,6 +74,30 @@ export function offered(): HistoryEntry[] {
       .toLowerCase();
     return words.every((word) => text.includes(word));
   });
+}
+
+/** What the dialog lists over the chats folder: every chat, open as a
+    row or past, the latest first, narrowed to the ones holding every word
+    of the query in their name. */
+export function offeredChats(): ChatEntry[] {
+  const all: ChatEntry[] = [
+    ...chatRows().map((session): ChatEntry => ({ kind: "row", session, at: lastChanged(session) })),
+    ...pastChats().map((transcript): ChatEntry => ({ kind: "past", transcript, at: transcript.modified * 1000 })),
+  ].sort((a, b) => b.at - a.at);
+  const words = queryWords();
+  if (words.length === 0) return all;
+  return all.filter((entry) => {
+    const text = (entry.kind === "row" ? shownName(entry.session) : historyLabel(entry.transcript)).toLowerCase();
+    return words.every((word) => text.includes(word));
+  });
+}
+
+/** Puts the chat in front, resumed when it is a past one, and closes. */
+export function pickChat(entry: ChatEntry) {
+  if (entry.kind === "row") goTo(entry.session.key);
+  else resumeChat(entry.transcript);
+  closeResume();
+  focusPane("agent");
 }
 
 /** Starts the session as a live one and closes. */

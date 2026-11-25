@@ -302,6 +302,28 @@ describe("starting", () => {
     expect(isInstalled(A) && isInstalled(B)).toBe(true);
   });
 
+  it("installs once in a project whose answer turns on while it is asked about", async () => {
+    hook.starting = false;
+    hook.everywhere = false;
+    ensure(A);
+    adoptHooks({ everywhere: true, overrides: {} }, [A]);
+    await vi.waitFor(() => expect(isInstalled(A)).toBe(true));
+    await apply(A);
+    expect(state.calls).toEqual([`status:${A}`, `install:${A}`]);
+  });
+
+  it("installs in a project whose answer turns on as its batch gets to it", async () => {
+    hook.starting = true;
+    hook.everywhere = false;
+    startChecks(() => [A]);
+    // The first moment the batch's answer is in.
+    for (let tick = 0; tick < 50 && !isKnown(A); tick++) await Promise.resolve();
+    expect(isKnown(A)).toBe(true);
+    adoptHooks({ everywhere: true, overrides: {} }, [A]);
+    await vi.waitFor(() => expect(isInstalled(A)).toBe(true));
+    expect(state.calls).toEqual([`many:${A}`, `install:${A}`]);
+  });
+
   it("asks for a project opened afterwards by itself", async () => {
     hook.starting = true;
     hook.everywhere = false;

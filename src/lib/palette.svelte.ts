@@ -50,10 +50,13 @@ import {
 } from "$lib/workflows.svelte";
 import {
   defaultAgent,
+  hasName,
+  historyLabel,
   otherWay,
   rowName,
   sessions,
   waitingOnYou,
+  type HistoryEntry,
   type Session,
 } from "$lib/sessions.svelte";
 import {
@@ -62,6 +65,7 @@ import {
   onScreen,
   pick,
   projectLabel,
+  resumeChat,
   startSession,
   workspace,
 } from "$lib/workspace.svelte";
@@ -69,6 +73,7 @@ import { liveUnder } from "$lib/projects.svelte";
 import { startsIn } from "$lib/orchestratorFolder.svelte";
 import { unfoldSessions } from "$lib/viewers.svelte";
 import { reduced } from "$lib/motion";
+import { chatRows, chats, isChat, isChatsFolder, pastChats } from "$lib/chats.svelte";
 import { canGoBack, openBack } from "$lib/rewind.svelte";
 import { compact } from "$lib/compact.svelte";
 import { browser } from "$lib/browser.svelte";
@@ -102,12 +107,17 @@ import { paletteCommands, pickPluginCommand, type PluginCommand } from "$lib/plu
  * runs under, where the account has any. Each answer becomes a chip, and a
  * step with nothing to choose is not asked. The session starts on the last
  * answer.
+ *
+ * A new chat is a new session in the chats folder: the defaults' line
+ * reads as the chat it starts, with no project to ask or show, and Change
+ * asks the same questions after it.
  */
 
 export type Mode = "goto" | "commands" | "new";
 
 export type CommandId =
   | "new"
+  | "newChat"
   | "newHere"
   | "newOther"
   | "open"
@@ -148,6 +158,16 @@ export type PaletteItem =
       group: string;
       session: Session;
       project: string;
+      when: string;
+    }
+  | {
+      /** A past chat, which picking resumes. */
+      kind: "past";
+      id: string;
+      label: string;
+      unnamed: boolean;
+      group: string;
+      transcript: HistoryEntry;
       when: string;
     }
   | {
@@ -222,10 +242,12 @@ export type Outcome =
   | { type: "perform"; action: Action };
 
 const JUMP = ACTIONS.find(({ key }) => key === "session.attention")!;
+const CHAT = ACTIONS.find(({ key }) => key === "chat.new")!;
 
 export const ATTENTION_LABEL = JUMP.label;
 
 export const SESSIONS = "Sessions";
+export const CHATS = "Chats";
 export const PROJECTS = "Projects";
 
 export const palette = $state({
@@ -424,13 +446,48 @@ function wrapCommand(): PaletteItem | null {
   };
 }
 
-/** The sessions and the projects a query leaves, in that order, then the
-    command for the file in the viewer when something is typed that it
-    matches, first when the text is the start of its name: go to lists no
-    commands otherwise. */
+/** The chats a query leaves, open and past, the latest changed first. A
+    chat matches on its name and on the word chat, which lists them all. */
+function chatItems(query: string, now: number): PaletteItem[] {
+  const rows = chatRows().map((session) => ({
+    at: session.changedAt,
+    item: {
+      kind: "session",
+      id: `session:${session.key}`,
+      label: rowName(session) ?? "New chat",
+      unnamed: rowName(session) === null,
+      group: CHATS,
+      session,
+      project: "chat",
+      when: since(session.changedAt, now),
+    } satisfies PaletteItem,
+  }));
+  const past = pastChats().map((transcript) => ({
+    at: transcript.modified * 1000,
+    item: {
+      kind: "past",
+      id: `past:${transcript.id}`,
+      label: historyLabel(transcript),
+      unnamed: !hasName(transcript),
+      group: CHATS,
+      transcript,
+      when: since(transcript.modified * 1000, now),
+    } satisfies PaletteItem,
+  }));
+  return [...rows, ...past]
+    .sort((a, b) => b.at - a.at)
+    .map(({ item }): PaletteItem => item)
+    .filter((item) => matches(`${item.label} chat`, query));
+}
+
+/** The sessions, the chats and the projects a query leaves, in that order,
+    then the command for the file in the viewer when something is typed
+    that it matches, first when the text is the start of its name: go to
+    lists no commands otherwise. */
 export function goToItems(query: string): PaletteItem[] {
   const now = Date.now();
-  const rows = [...sessions.all]
+  const rows = sessions.all
+    .filter((session) => !isChat(session))
     .sort((a, b) => b.changedAt - a.changedAt)
     .map((session): PaletteItem => ({
       kind: "session",
@@ -447,6 +504,7 @@ export function goToItems(query: string): PaletteItem[] {
         item.kind === "session" &&
         matches(`${item.label} ${item.project}`, query),
     );
+  const talks = chatItems(query, now);
   const projects = projectsByUse()
     .map((path): PaletteItem => ({
       kind: "project",
@@ -465,7 +523,7 @@ export function goToItems(query: string): PaletteItem[] {
     view !== null &&
     shown.length > 0 &&
     view.label.toLowerCase().startsWith(query.trim().toLowerCase());
-  if (sessions.all.length === 0 && workspace.open.length === 0) {
+  if (sessions.all.length === 0 && workspace.open.length === 0 && pastChats().length === 0) {
     const open: PaletteItem = {
       kind: "command",
       id: "command:open",
@@ -476,7 +534,7 @@ export function goToItems(query: string): PaletteItem[] {
     };
     return [...(matches(open.label, query) ? [open] : []), ...shown];
   }
-  return first ? [...shown, ...rows, ...projects] : [...rows, ...projects, ...shown];
+  return first ? [...shown, ...rows, ...talks, ...projects] : [...rows, ...talks, ...projects, ...shown];
 }
 
 /** The commands a query leaves: the jump to who needs you, then the ones
@@ -494,13 +552,13 @@ export function commandItems(query: string): PaletteItem[] {
       .length,
     chord: describe(chordFor("session.attention")),
   };
-  const command = (id: CommandId, label: string): PaletteItem => ({
+  const command = (id: CommandId, label: string, chord = ""): PaletteItem => ({
     kind: "command",
     id: `command:${id}`,
     label,
     group: null,
     command: id,
-    chord: "",
+    chord,
   });
   // Nothing new starts in the orchestrator folder, so with it on screen
   // only New session is offered, which asks for the project.
@@ -510,6 +568,7 @@ export function commandItems(query: string): PaletteItem[] {
   const wrapping = wrapCommand();
   const commands: PaletteItem[] = [
     ...(workspace.open.length === 0 ? [] : [command("new", COMMAND_LABELS.new)]),
+    ...(chats.dir === null ? [] : [command("newChat", CHAT.label, describe(chordFor("chat.new")))]),
     ...(here === null
       ? []
       : [command("newHere", `${COMMAND_LABELS.new} in ${projectLabel(here)}`)]),
@@ -538,7 +597,7 @@ export function commandItems(query: string): PaletteItem[] {
   ];
   const actions = ACTIONS.filter(
     ({ key }) =>
-      key !== "palette" && key !== "session.attention" && key !== "editor.wrap",
+      key !== "palette" && key !== "session.attention" && key !== "editor.wrap" && key !== "chat.new",
   ).map(({ key, label }): PaletteItem => ({
     kind: "action",
     id: `action:${key}`,
@@ -738,10 +797,10 @@ function projectChoices(): PaletteItem[] {
     one it starts under unless another is picked says why: it is the
     project's, or the one picked there last. */
 function accountChoices(project: string): PaletteItem[] {
-  if (!isOpen(project)) return [];
+  if (!startable(project)) return [];
   const group = "Under which account";
   const own = accountToStart(project);
-  const why = lastPicked(project) === undefined ? "this project's" : "last picked";
+  const why = lastPicked(project) !== undefined ? "last picked" : isChatsFolder(project) ? "default" : "this project's";
   return [null, ...names()].map((account): PaletteItem => ({
     kind: "choice",
     id: `account:${account ?? ""}`,
@@ -829,16 +888,28 @@ function readyLine(path: string, steps: Step[]): string {
   ].join(" · ");
 }
 
-/** The defaults' line, and Change under it where there is a choice. */
+/** What a new chat starts on, beside its line: the model and that it is
+    in no project. */
+function chatDetail(path: string, steps: Step[]): string {
+  const agent = harnessOfSteps(steps, path);
+  const account = accountOfSteps(steps, path);
+  const model = modelToStart(agent, account) ?? defaultModelOf(agent, account);
+  const named = model === null ? null : (catalogName(agent, model, account, hostOf(path)) ?? model);
+  return named === null ? "no project" : `${named}, no project`;
+}
+
+/** The defaults' line, and Change under it where there is a choice. A
+    chat's line is what it runs on, with the model beside it. */
 function readyItems(path: string): PaletteItem[] {
   const steps = defaultsFor(path);
+  const chat = isChatsFolder(path);
   const ready: PaletteItem = {
     kind: "ready",
     id: "ready",
-    label: "New session",
+    label: chat ? readyLine(path, steps) : "New session",
     group: null,
     steps,
-    detail: readyLine(path, steps),
+    detail: chat ? chatDetail(path, steps) : readyLine(path, steps),
   };
   const change: PaletteItem = { kind: "change", id: "change", label: "Change", group: null };
   return steps.length > 1 ? [ready, change] : [ready];
@@ -879,7 +950,7 @@ export function stepItems(
 ): PaletteItem[] {
   const asking = nextStep(steps);
   const project = projectOfSteps(steps);
-  if (asking !== "project" && (project === null || !isOpen(project)))
+  if (asking !== "project" && (project === null || !startable(project)))
     return [];
   if (palette.ready && project !== null)
     return query.trim() === "" ? readyItems(project) : readySearch(project, query);
@@ -908,8 +979,12 @@ export function paletteItems(): PaletteItem[] {
     does not, and neither does a new session while no agent is ready. */
 export function pickable(item: PaletteItem): boolean {
   if (item.kind === "attention") return item.waiting > 0;
+  if (item.kind === "past") return isReady();
   if (item.kind === "command")
-    return isReady() || (item.command !== "new" && item.command !== "newHere" && item.command !== "newOther");
+    return (
+      isReady() ||
+      (item.command !== "new" && item.command !== "newChat" && item.command !== "newHere" && item.command !== "newOther")
+    );
   return true;
 }
 
@@ -939,9 +1014,10 @@ export function startingId(): string | null {
   return null;
 }
 
-/** Whether a project is still open. */
-function isOpen(path: string): boolean {
-  return workspace.open.some((project) => project.path === path);
+/** Whether a new session can still start in a folder: a project still
+    open, or the chats folder. */
+function startable(path: string): boolean {
+  return isChatsFolder(path) || workspace.open.some((project) => project.path === path);
 }
 
 /** Starts a session on the answers given: under the workflow picked, or
@@ -953,7 +1029,7 @@ function isOpen(path: string): boolean {
     names none of its own. A project that has closed meanwhile gets none. */
 function startOn(steps: Step[], picked: boolean) {
   const path = projectOfSteps(steps);
-  if (path === null || !isOpen(path)) return;
+  if (path === null || !startable(path)) return;
   const account = steps.find((step) => step.kind === "account");
   if (picked && account !== undefined) pickAccount(path, account.account);
   const profile = steps.find((step) => step.kind === "profile");
@@ -980,7 +1056,7 @@ let holds = 0;
     session asks no profile, or its account's list is known. */
 function onceProfilesHeard(steps: Step[], again: () => Outcome): Outcome | null {
   const project = projectOfSteps(steps);
-  if (project === null || !isOpen(project) || !installed().includes("codex")) return null;
+  if (project === null || !startable(project) || !installed().includes("codex")) return null;
   if (steps.some((step) => step.kind === "profile" || step.kind === "workflow")) return null;
   if (harnessOfSteps(steps, project) !== "codex") return null;
   const account = accountOfSteps(steps, project);
@@ -1010,7 +1086,7 @@ function onceProfilesHeard(steps: Step[], again: () => Outcome): Outcome | null 
     to the defaults' line instead. */
 function answer(steps: Step[]): Outcome {
   const project = projectOfSteps(steps);
-  if (project !== null && isOpen(project) && installed().includes("codex"))
+  if (project !== null && startable(project) && installed().includes("codex"))
     void readProfiles(project, accountOfSteps(steps, project));
   return goOn(steps);
 }
@@ -1055,6 +1131,23 @@ export function openNew(path: string | null) {
   beginNew(path);
 }
 
+/** Starts asking for a new chat: its defaults' line, which one Enter
+    starts. Nothing while the chats folder is not known. */
+export function beginChat(): Outcome {
+  if (chats.dir === null) return { type: "stay" };
+  return beginNew(chats.dir);
+}
+
+/** The palette on a new chat's line, from a button or a key outside it. */
+export function openChat() {
+  beginChat();
+}
+
+/** Whether the palette is asking for a new chat. */
+export function askingChat(): boolean {
+  return palette.mode === "new" && isChatsFolder(projectOfSteps(palette.steps));
+}
+
 /** Goes back a step: from the questions Change asked, the last answer is
     taken back, and with none given the defaults' line is offered again.
     From that line, go to is where the question came from when it was asked
@@ -1078,7 +1171,9 @@ export function stepBack() {
     palette.query = palette.came;
     return;
   }
-  const only = workspace.open.length === 1;
+  // A chat's folder is never asked for, so there is no question to go
+  // back to.
+  const only = workspace.open.length === 1 || isChatsFolder(projectOfSteps(palette.steps));
   if (palette.steps.length > 0 && !only) {
     palette.steps = [];
     palette.ready = false;
@@ -1115,6 +1210,12 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       return {
         type: "close",
         then: () => void (goTo(item.session.key) && focusPane("agent")),
+      };
+    case "past":
+      if (alone) return beginChat();
+      return {
+        type: "close",
+        then: () => void (resumeChat(item.transcript) !== null && focusPane("agent")),
       };
     case "project":
       if (alone) return beginNew(item.path);
@@ -1165,6 +1266,8 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       switch (item.command) {
         case "new":
           return beginNew(null);
+        case "newChat":
+          return beginChat();
         case "newHere":
           return beginNew(onScreen());
         case "newOther": {

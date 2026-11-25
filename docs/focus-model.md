@@ -42,7 +42,8 @@ may hold <kbd>Ctrl</kbd> on macOS too. The default preset:
 | <kbd>Cmd</kbd><kbd>W</kbd>                                              | Close what is in front: see [closing](#closing-what-is-in-front) |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>T</kbd>                              | Cycle theme: light, dark, system                            |
 | <kbd>Cmd</kbd><kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd>                | Zoom the terminal, or the editor, that has focus in, out, or back |
-| <kbd>Cmd</kbd><kbd>P</kbd>                                              | Go to a session or project                                  |
+| <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>C</kbd>                              | A new chat, in no project; <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> off macOS, where <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd> copies in a terminal |
+| <kbd>Cmd</kbd><kbd>P</kbd>                                              | Go to a session, chat or project                            |
 | <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>                              | Open the command palette                                    |
 | <kbd>Cmd</kbd><kbd>,</kbd>                                              | Open the settings                                           |
 

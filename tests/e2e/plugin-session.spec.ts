@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, columnsAtRest, installFakeCore, startNew, sessionRowOf } from "./fake";
+import { CHATS_FOLDER, PROJECT, columnsAtRest, installFakeCore, startNew, sessionRowOf } from "./fake";
 
 /**
  * What a plugin shows for one session: a section in the changes pane only
@@ -483,8 +483,11 @@ test("brings the hooks up to date at once when a plugin that hears commands is t
   await page.waitForFunction(() => "__pluginHears" in window);
   type Hooks = { __hookCalls?: { kind: string; project: string }[]; __hookStatus?: unknown };
   const calls = () => page.evaluate(() => (window as unknown as Hooks).__hookCalls ?? []);
-  // The hooks are wanted, so the project is brought to them first.
-  await expect.poll(calls).toEqual([{ kind: "install", project: PROJECT }]);
+  // The hooks are wanted, so the project and the chats folder are brought
+  // to them first, each once.
+  const both = [CHATS_FOLDER, PROJECT].map((project) => ({ kind: "install", project }));
+  const sorted = async () => (await calls()).sort((a, b) => a.project.localeCompare(b.project));
+  await expect.poll(sorted).toEqual(both);
 
   // The hooks on disk lack the shell hook the plugin now needs.
   const hears = (hears: boolean, outdated: boolean) =>
@@ -498,7 +501,7 @@ test("brings the hooks up to date at once when a plugin that hears commands is t
       { hears, outdated },
     );
   await hears(true, true);
-  await expect.poll(calls).toEqual([{ kind: "install", project: PROJECT }]);
+  await expect.poll(sorted).toEqual(both);
 
   // Already as wanted, nothing is written.
   await hears(false, false);

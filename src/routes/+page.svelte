@@ -15,11 +15,12 @@
   import Resume from "$lib/components/Resume.svelte";
   import { closeResume, resume } from "$lib/resume.svelte";
   import Palette from "$lib/components/Palette.svelte";
-  import { closePalette, openCommands, openGoTo, palette } from "$lib/palette.svelte";
+  import { askingChat, closePalette, openChat, openCommands, openGoTo, palette } from "$lib/palette.svelte";
   import AsksSaid from "$lib/components/AsksSaid.svelte";
   import ConductAsk from "$lib/components/ConductAsk.svelte";
   import LeaveAsk from "$lib/components/LeaveAsk.svelte";
   import RefusalBanner from "$lib/components/RefusalBanner.svelte";
+  import ChatsNotice from "$lib/components/ChatsNotice.svelte";
   import SettingsAsk from "$lib/components/SettingsAsk.svelte";
   import UserStyles from "$lib/components/UserStyles.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
@@ -34,6 +35,7 @@
   import { handle as browserRequested } from "$lib/browserTools.svelte";
   import { handle as settingsRequested, settingsAsk } from "$lib/settingsTools.svelte";
   import { folderToRead, load as loadOrchestratorFolder } from "$lib/orchestratorFolder.svelte";
+  import { chats, isChatsFolder, load as loadChats } from "$lib/chats.svelte";
   import { core } from "$lib/core";
   import { ensure as ensureHooks, hearsChanged } from "$lib/hook.svelte";
   import {
@@ -124,6 +126,7 @@
     exact,
     followCwd,
     followHistory,
+    loadHistory,
     refreshHistory,
     identified,
     nextNeedingYou,
@@ -152,7 +155,7 @@
     ownerOnScreen as shellOwner,
     terminals,
   } from "$lib/terminals.svelte";
-  import { goTo, hookedProjects, settleFolder, workspace } from "$lib/workspace.svelte";
+  import { chatClosed, goTo, hookedProjects, settleFolder, workspace } from "$lib/workspace.svelte";
   import {
     CONTROLS_INSET,
     DEFAULT,
@@ -388,13 +391,17 @@
       })
       .then((unlisten) => offs.push(unlisten));
     void loadOrchestratorFolder().then(settleFolder);
+    void loadChats().then((dir) => {
+      if (dir !== null) void loadHistory(dir);
+    });
     offs.push(followCwd());
     offs.push(
       followHistory(() => {
         const dir = folderToRead();
         const open = workspace.open.map((project) => project.path);
         const due = untrack(() => historyDue(open, workspace.active));
-        return dir === null ? due : [...due, dir];
+        const extra = [dir, chats.dir].filter((path): path is string => path !== null && !due.includes(path));
+        return [...due, ...extra];
       }),
     );
     offs.push(followFocus());
@@ -453,9 +460,22 @@
     });
   });
 
-  // The changes pane has nothing to show until a project is open.
+  // The changes pane has nothing to show until a project is open, and a
+  // chat shows only what its agent presents.
   $effect(() => {
     layout.noProject = workspace.active === null;
+    layout.chat = isChatsFolder(workspace.active);
+  });
+
+  // A chat closed on screen takes the chats out of the front with it.
+  let lastShown = untrack(() => sessions.active);
+  $effect(() => {
+    const key = sessions.active;
+    untrack(() => {
+      const was = lastShown;
+      lastShown = key;
+      if (key === null) chatClosed(was);
+    });
   });
 
   // The browser shows the tabs of the session on screen, or of the project
@@ -517,14 +537,16 @@
   });
 
   // The File menu's items that cannot act are greyed out: Save without a
-  // file in front to save, the new files and New Shell without a project.
+  // file in front to save, the new files and New Shell without a project,
+  // and with a chat in front, which has no files or shells of its own.
   // Close can always act: with nothing smaller in front it is the window's.
+  let projectInFront = $derived(workspace.active !== null && !isChatsFolder(workspace.active));
   $effect(() => {
     void core()
       .menuEnabled({
-        "file.new": workspace.active !== null,
-        "file.untitled": workspace.active !== null,
-        "terminal.new": workspace.active !== null,
+        "file.new": projectInFront,
+        "file.untitled": projectInFront,
+        "terminal.new": projectInFront,
         "file.save": editing && canSaveInFront(),
         "file.close": true,
       })
@@ -1021,10 +1043,10 @@
         focusStatus();
         break;
       case "newFile":
-        newFile();
+        if (projectInFront) newFile();
         break;
       case "newUntitled":
-        newUntitled();
+        if (projectInFront) newUntitled();
         break;
       case "findInFile":
         findInFile();
@@ -1062,7 +1084,8 @@
         toggleScope();
         break;
       case "toggleTerminal":
-        toggleTerminal();
+        if (layout.chat) say("A chat has no terminal");
+        else toggleTerminal();
         break;
       case "openSettings":
         openSettings();
@@ -1086,6 +1109,10 @@
         break;
       case "attention":
         nextSession();
+        break;
+      case "newChat":
+        if (palette.open && askingChat()) closePalette();
+        else openChat();
         break;
       case "zoom":
         zoomTerminal(action.step);
@@ -1327,6 +1354,7 @@
 <AsksSaid />
 <LeaveAsk />
 <RefusalBanner />
+<ChatsNotice />
 <UserStyles />
 
 <style>

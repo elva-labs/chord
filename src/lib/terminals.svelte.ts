@@ -4,6 +4,7 @@ import { claim } from "$lib/exits";
 import { hideTerminal } from "$lib/layout.svelte";
 import { activeSession, byKey as sessionByKey, shownName } from "$lib/sessions.svelte";
 import { projectLabel, workspace } from "$lib/workspace.svelte";
+import { isChatsFolder } from "$lib/chats.svelte";
 
 /**
  * The shells in the terminal panel.
@@ -114,8 +115,9 @@ function sameOwner(a: ShellOwner | null, b: ShellOwner | null): boolean {
 }
 
 /** Whose shells the panel shows: the session on screen, else the project on
-    screen, else nobody's. */
+    screen, else nobody's. A chat has no shells. */
 export function ownerOnScreen(): ShellOwner | null {
+  if (isChatsFolder(workspace.active)) return null;
   const session = activeSession();
   if (session !== null) return { project: session.project, session: session.key };
   if (workspace.active !== null) return { project: workspace.active, session: null };

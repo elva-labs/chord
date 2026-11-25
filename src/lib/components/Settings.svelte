@@ -287,8 +287,9 @@
       the palette in use has an image, which is what the row's end says. */
   let backgroundOpen = $state(Object.hasOwn(theme.backgrounds ?? {}, theme.palette));
 
-  /** The projects the hooks answer covers: the open ones, and the
-      orchestrator folder while the sessions pane lists it. */
+  /** The projects the hooks answer covers: the open ones, the
+      orchestrator folder while the sessions pane lists it, and the chats
+      folder. */
   let hooked = $derived(hookedProjects());
 
   /** How many of them have a word of their own. */

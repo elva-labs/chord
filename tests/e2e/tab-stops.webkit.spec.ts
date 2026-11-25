@@ -134,6 +134,9 @@ async function walk(page: Page, key: string, times: number) {
   const names: (string | null)[] = [];
   for (let at = 0; at < times; at++) {
     await page.keyboard.press(key);
+    // The app moves a Tab that WebKit left in place a timer's turn after
+    // the press: the place is read once that turn has passed.
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
     const name = await holder(page);
     names.push(name);
     if (name !== null) await expect.poll(() => ringed(page), { message: `the ring on ${name}` }).toBe(true);
@@ -169,6 +172,7 @@ for (const platform of PLATFORMS)
       "sessions-nav",
       "Resize projects and sessions",
       "start-agent",
+      "start-chat",
       "Resize changes",
       "toggle-right",
       "mode-agent",
@@ -672,7 +676,7 @@ for (const platform of PLATFORMS)
     await open(page, 660, platform);
     await expect(page.locator("section[data-pane='changes']")).toHaveCount(0);
     await expect(page.getByTestId("unfold-sessions")).toBeDisabled();
-    await page.getByTestId("start-agent").focus();
+    await page.getByTestId("start-chat").focus();
     // Once round the window: the agent pane alone, its header then its
     // body, with no sessions and no search. Past the last stop the
     // browser's own window has the keyboard for one press.
@@ -683,6 +687,7 @@ for (const platform of PLATFORMS)
       "mode-agent",
       ...platform.controls,
       "start-agent",
+      "start-chat",
     ];
     expect(await walk(page, "Tab", round.length)).toEqual(round);
 

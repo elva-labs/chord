@@ -488,6 +488,57 @@ fn remove_entries(settings: &mut Map<String, Value>, event: &str, home: &Path) {
     }
 }
 
+/// Whether one of the files the hooks write in a folder, named as in
+/// [`FILES`], holds anything they do not write there: an entry of the
+/// user's or another tool's, a setting, another server. The permissions in
+/// Claude Code's local settings are not counted, since Claude Code keeps
+/// there what the user allowed in answer to its own prompts. A file that
+/// is not there holds nothing, and one that cannot be read holds more.
+pub(crate) fn holds_more_than_ours(home: &Path, folder: &Path, file: &str) -> bool {
+    let path = folder.join(file);
+    if file == CODEX_CONFIG {
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) => return error.kind() != std::io::ErrorKind::NotFound,
+        };
+        let Ok(mut document) = parse_codex(&text) else {
+            return true;
+        };
+        let daemon = daemon_path(home).to_string_lossy().to_string();
+        if let Some(servers) = document
+            .get_mut("mcp_servers")
+            .and_then(toml_edit::Item::as_table_like_mut)
+        {
+            let ours = servers
+                .get(CODEX_SERVER_KEY)
+                .and_then(toml_edit::Item::as_table_like)
+                .is_some_and(|server| runs_daemon(server, &daemon));
+            if ours {
+                servers.remove(CODEX_SERVER_KEY);
+            }
+            if servers.is_empty() {
+                document.remove("mcp_servers");
+            }
+        }
+        return !document.as_table().is_empty();
+    }
+    let Ok(mut settings) = read_for_writing(&path) else {
+        return true;
+    };
+    let events: Vec<String> = settings
+        .get("hooks")
+        .and_then(Value::as_object)
+        .map(|hooks| hooks.keys().cloned().collect())
+        .unwrap_or_default();
+    for event in &events {
+        remove_entries(&mut settings, event, home);
+    }
+    if file == CLAUDE_LOCAL {
+        settings.remove("permissions");
+    }
+    !settings.is_empty()
+}
+
 fn session_entry(home: &Path) -> Value {
     json!({ "hooks": [{ "type": "command", "command": activity_command(home) }] })
 }

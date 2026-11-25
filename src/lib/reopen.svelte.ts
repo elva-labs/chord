@@ -227,13 +227,16 @@ export function reopen(
   /** The orchestrator folder once it is known: its sessions are on record
       like any project's, though it is never an open project. */
   conductor: Promise<string | null> | null = null,
+  /** The chats folder once it is known, which is the same. */
+  chatsFolder: Promise<string | null> | null = null,
 ): () => void {
   const { open, active } = read();
   // What an earlier version kept of an open session's starts under the
   // folder it called from is that session's from here.
   carryOver(open);
-  let conductorDir: string | null = null;
-  const here = (project: string) => isOpen(project) || (conductorDir !== null && project === conductorDir);
+  const folders = [conductor, chatsFolder].filter((folder) => folder !== null);
+  const known = new Set<string>();
+  const here = (project: string) => isOpen(project) || known.has(project);
   const bring = (entry: Open) => {
     if (!here(entry.project)) return;
     if (sessions.all.some((session) => session.id === entry.id)) return;
@@ -281,11 +284,11 @@ export function reopen(
     restoredInFront();
   };
 
-  // A session in a folder that is not open may be in the orchestrator
-  // folder, which is known only once the core says where it is: it stays
+  // A session in a folder that is not open may be in the orchestrator or
+  // chats folder, each known only once the core says where it is: it stays
   // on record until then.
   const waiting = open.filter(
-    (entry) => !isOpen(entry.project) && (arriving.has(entry.project) || conductor !== null),
+    (entry) => !isOpen(entry.project) && (arriving.has(entry.project) || folders.length > 0),
   );
   let held = $state(waiting);
   for (const entry of open) bring(entry);
@@ -293,13 +296,18 @@ export function reopen(
   startup.settled = true;
 
   let stopped = false;
-  if (conductor !== null)
-    void conductor.then((dir) => {
+  let unsettled = folders.length;
+  for (const folder of folders)
+    void folder.then((dir) => {
       if (stopped) return;
-      conductorDir = dir;
+      unsettled -= 1;
+      if (dir !== null) known.add(dir);
       const theirs = held.filter((entry) => entry.project === dir);
-      held = held.filter((entry) => entry.project !== dir && arriving.has(entry.project));
+      held = held.filter(
+        (entry) => entry.project !== dir && (arriving.has(entry.project) || unsettled > 0),
+      );
       for (const entry of theirs) bring(entry);
+      if (dir !== null && workspace.active === dir) front(dir);
     });
   for (const [project, arrived] of arriving) {
     const settle = () => {

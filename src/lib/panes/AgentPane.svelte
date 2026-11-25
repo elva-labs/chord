@@ -49,9 +49,12 @@
   import { conductor, dismissRefusal, runStanding, workflowTag } from "$lib/conductor.svelte";
   import { pick, projectLabel, workspace } from "$lib/workspace.svelte";
   import { startsIn } from "$lib/orchestratorFolder.svelte";
-  import { openNew } from "$lib/palette.svelte";
+  import { openChat, openNew } from "$lib/palette.svelte";
+  import { chordFor, describe } from "$lib/keys.svelte";
   import { openSetup } from "$lib/settings.svelte";
   import { sizeOf } from "$lib/zoom.svelte";
+  import { chats, isChat, isChatsFolder } from "$lib/chats.svelte";
+  import Icon from "$lib/components/conversation/Icon.svelte";
 
   let current = $derived(activeSession());
   let blocked = $derived(unavailableReason());
@@ -85,19 +88,25 @@
   const leaving = (session: Session) =>
     session.kind === "terminal" && session.status === "running" && reopeningRow(session.key);
 
-  // An integrated session's header names it.
+  /** Whether the session on screen is a chat, whose header is its mark and
+      its name, whatever way it runs. */
+  let chat = $derived(current !== null && isChat(current));
+
+  // An integrated session's header names it, as a chat's does.
   let title = $derived(
     current === null
       ? "Agent"
-      : integrated
-        ? (rowName(current) ?? "New session")
-        : `Agent · ${harnessLabel(current.agent)}`,
+      : chat
+        ? (rowName(current) ?? "New chat")
+        : integrated
+          ? (rowName(current) ?? "New session")
+          : `Agent · ${harnessLabel(current.agent)}`,
   );
 
   /** The model a terminal session runs on, by its full display name: the
-      header is the only place a terminal session says it. A conversation
-      says its model on the composer. */
-  let model = $derived(current === null || integrated ? null : sessionModelName(current));
+      header is the only place a terminal session says it, a chat's aside.
+      A conversation says its model on the composer. */
+  let model = $derived(current === null || integrated || chat ? null : sessionModelName(current));
 
   /** The workflow the session on screen is part of, and its place in it. */
   let tag = $derived(current === null ? null : workflowTag(current));
@@ -194,7 +203,17 @@
   {/if}
 {/snippet}
 
-<Pane id="agent" {title} meta={model ?? undefined} head={tag !== null ? head : undefined}>
+{#snippet chatMark()}
+  <span data-testid="chat-mark"><Icon name="chat" size={13} /></span>
+{/snippet}
+
+<Pane
+  id="agent"
+  {title}
+  meta={model ?? undefined}
+  mark={chat ? chatMark : undefined}
+  head={tag !== null ? head : undefined}
+>
   <div class="wrap" bind:this={wrap}>
     <!-- Stands ahead of the empty state, so a screen reader hears it come. -->
     <p class="sr" role="status" data-testid="empty-said">{emptySaid}</p>
@@ -269,12 +288,25 @@
       <div class="empty" data-testid="agent-status">
         <p class="message">No session open in {projectLabel(workspace.active)}.</p>
       </div>
+    {:else if current === null && isChatsFolder(workspace.active)}
+      <!-- The chats in front with none picked: a chat comes on screen only
+           when the user picks one or starts one here. -->
+      <div class="empty" data-testid="agent-status">
+        <p class="message">No chat open.</p>
+        <button class="primary" onclick={startAnother} data-testid="start-agent">New chat</button>
+      </div>
     {:else if current === null}
+      <!-- A project with no session offers a chat too, quietly. -->
       <div class="empty" data-testid="agent-status">
         <p class="message">No session open in {projectLabel(workspace.active)}.</p>
-        <button class="primary" onclick={startAnother} data-testid="start-agent"
-          >New session</button
-        >
+        <div class="starts">
+          <button class="primary" onclick={startAnother} data-testid="start-agent">New session</button>
+          {#if chats.dir !== null}
+            <button class="quiet" onclick={openChat} data-testid="start-chat"
+              >New chat <kbd>{describe(chordFor("chat.new"))}</kbd></button
+            >
+          {/if}
+        </div>
       </div>
     {:else if leaving(current)}
       <div class="overlay" data-testid="agent-status">
@@ -452,6 +484,35 @@
     border-color: var(--accent);
     background: var(--accent);
     color: var(--surface);
+  }
+
+  .starts {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Beside the way to a session, the way to a chat stays quiet. */
+  button.quiet {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-color: transparent;
+    background: none;
+    color: var(--ink-2);
+  }
+
+  button.quiet:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  button.quiet kbd {
+    font-family: var(--chrome);
+    font-size: 10.5px;
+    line-height: 15px;
+    color: var(--ink-3);
   }
 
   button:disabled {

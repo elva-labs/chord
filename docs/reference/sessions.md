@@ -1712,6 +1712,121 @@ a session listed under a project. The past sessions of several projects are
 listed from one read of an account's directory, and Codex's index is opened
 once for all of them.
 
+## Chats
+
+A chat is a conversation with an agent that belongs to no project. Every
+chat runs in one folder, `chats` under the workbench's home, which the core
+makes the first time a chat needs it. The folder is never a project: it is
+not listed among the projects in the sessions pane or the palette, never
+folds under Inactive, takes no place in the projects' order, has no project
+menu, cannot be closed as a project and is not offered on the welcome. A
+chat never moves into a project.
+
+### The chats line
+
+The sessions pane ends in one line for chats, pinned below the projects so
+it never scrolls away. It reads `Chats` with the number of chats, open and
+past, as in `Chats · 12`, and while it is closed it carries a mark when a
+chat is asking for a permission, has changed since you last looked, or is
+at work, in that order. A + for a new chat shows on the line while the
+pointer or the keyboard's cursor is on it. In compact mode the line is the
+same, and the folded column shows the chats' mark.
+
+A click on the line opens a tray under it: the five chats changed last,
+open or past, the newest first, a + for a new chat, and, when there are
+more, a row such as `7 more from before…`. That row opens a list of every
+chat, headed `Chats: all 12`, with a filter that takes what you type
+against a chat's name; Enter or a click opens the chat. With no chats at
+all, the tray says so. Picking a chat closes the tray, and the chat on
+screen keeps its row under the closed line.
+
+### A chat on screen
+
+A chat on screen is its conversation alone. The changes pane and the
+terminal panel stay away, except that the right side opens while the agent
+presents or shows something; asking for the terminal says that a chat has
+none. The header shows the chat's mark and its name, with no model. The
+status bar says Chat where a project's branch would be, and the account the
+chat runs under when [accounts](#accounts) are set up. Closing the chat on
+screen with none to take its place puts the open project you last used in
+front, with no session opened.
+
+A chat is a session like any other in everything else: it is marked
+unread, working and waiting like a row in a project, counts toward the
+sessions waiting for you, sends the same notifications, can be renamed,
+stopped and closed, keeps [notes](#notes), and is named in the question
+asked before closing or quitting while it runs. A chat in front at quit
+comes back in front, and open chats come back as rows to resume, as
+[after a restart](#after-a-restart) describes. Chats are local only; a
+remote machine has none.
+
+### Starting a chat
+
+New chat is a command in the palette, the key <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>C</kbd>
+on macOS and <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> elsewhere, where
+<kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd> copies in a terminal, and the
+tray's +. A project with no session offers it too, quietly beside New
+session. Each opens the palette on a `New chat` chip and one line that says
+what the chat starts on, as `Claude Code`, with the model and `no project`
+beside it, and <kbd>Enter</kbd> starts it. Change picks another harness or
+account, as for a new session. The key can be changed in the settings with
+the others.
+
+The first chat starts on the app's defaults; later ones start on what the
+last chat was started with. A chat runs under the account last picked for a
+chat, and before any is picked, under the account the settings give every
+project, or the harness's own login with none. A chat follows no workflow.
+It runs in Chord or in a terminal as the setting for its harness says.
+
+A chat gets no more than a project's session does. The hooks answer covers
+the chats folder as it covers an open project, the harness asks once to
+trust the folder as it does any folder, and a chat runs in the permission
+mode its settings choose. The [settings tools](settings.md) and the tools
+to show and present work as in any session.
+
+A chat can start sessions in the open projects with the tools any session
+has. Such a session is drawn in its own project with a chat mark on its
+row. A click on the mark, or Go to chat in the row's menu, opens the chat
+that started it.
+
+### The chats folder
+
+Every chat shares the one folder, so whatever is in it reaches every chat.
+The workbench writes only its hooks there. Each time the app starts, the
+core looks in the folder, and when it holds anything else that can change
+what an agent does, such as an instruction file like `CLAUDE.md` or
+`AGENTS.md`, a server file, the harnesses' own settings or hooks that are
+not the workbench's, the window says so once and names the files. Show
+folder opens the folder; nothing in it is removed, and what to keep is
+yours to decide. The permissions Claude Code keeps when you allow
+something in a chat are not counted. As in any folder, an instruction file
+in a folder above it, such as `CLAUDE.md` in your home, reaches every chat
+as well, and trusting your home or the workbench's home trusts the chats
+folder with it.
+
+The folder is readable by you alone. When a link or a file stands where
+the folder should be, or the folder cannot be made, there are no chats,
+and the window says why.
+
+### Sessions a chat starts
+
+A chat has the same tools to start and direct sessions as any session.
+Its own folder is not a project, so a start in a project is asked about as
+a start in another project is, and once allowed there, starts in that
+project are not asked about again. Each session it starts runs in its
+project and is drawn there as a row of its own, with a small chat tag that
+goes to the chat. The chat's row says how many it has running and where,
+with a dot for each, and the conversation lists them with Open, as for any
+session that starts others.
+
+### Finding a chat
+
+Every past chat stays resumable, however old: from the tray, the list of
+older chats, or <kbd>Cmd</kbd><kbd>P</kbd>, which lists the chats in a
+group of their own between Sessions and Projects, open and past, the one
+changed last first, each marked `chat`. Typing `chat` lists them all.
+Picking a past chat resumes it in front.
+
 ## Live updates
 
 The changes pane learns that the tree moved in one of two ways, chosen per
