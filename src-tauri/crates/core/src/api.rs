@@ -411,6 +411,21 @@ impl Core {
         )
     }
 
+    /// A command a plugin put in the palette, picked for a project. It comes
+    /// back once the plugin has the line; what the plugin did about it, or
+    /// that it failed or never answered, arrives as the plugin's notice.
+    pub fn plugin_palette_pick(
+        &self,
+        source: &str,
+        plugin: &str,
+        command: &str,
+        project: &str,
+        session: Option<&str>,
+    ) -> Result<(), String> {
+        self.plugins()?
+            .palette_pick(source, plugin, command, project, session)
+    }
+
     /// A message from a plugin's page to the plugin. It comes back as soon
     /// as the plugin has the line: an answer, if there is one, arrives as
     /// the plugin's own event.

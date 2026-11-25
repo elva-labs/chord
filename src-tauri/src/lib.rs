@@ -2488,6 +2488,37 @@ async fn plugin_action(
     .await
 }
 
+/// A command a plugin put in the palette, picked; the plugin runs where
+/// the project is.
+#[tauri::command]
+async fn plugin_palette_pick(
+    core: State<'_, Arc<Core>>,
+    remotes: State<'_, Arc<Remotes>>,
+    source: String,
+    plugin: String,
+    command: String,
+    project: String,
+    session: Option<String>,
+) -> Result<Value, String> {
+    let (s, p, c, t) = (
+        source.clone(),
+        plugin.clone(),
+        command.clone(),
+        session.clone(),
+    );
+    routed(
+        Arc::clone(&core),
+        Arc::clone(&remotes),
+        route(&project),
+        "plugin_palette_pick",
+        move |rest| {
+            json!({ "source": source, "plugin": plugin, "command": command, "project": rest, "session": session })
+        },
+        move |core, project| core.plugin_palette_pick(&s, &p, &c, project, t.as_deref()),
+    )
+    .await
+}
+
 /// A message from a plugin's page to the plugin, which runs where the
 /// project is.
 #[tauri::command]
@@ -2852,6 +2883,7 @@ pub fn run() {
             plugin_enable,
             plugin_projects,
             plugin_action,
+            plugin_palette_pick,
             plugin_view_message,
             plugin_sent,
             plugin_start_settled,

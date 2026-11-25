@@ -74,6 +74,7 @@
   } from "$lib/plugins.svelte";
   import ActionInput from "$lib/components/ActionInput.svelte";
   import { cancelAction, noticed as pluginNoticed, pluginSections, sectionChanged } from "$lib/pluginSections.svelte";
+  import { paletteChanged as pluginPaletteChanged } from "$lib/pluginPalette.svelte";
   import { markChanged } from "$lib/pluginMarks.svelte";
   import { dataArrived as pluginViewData, pluginNotified, viewChanged as pluginViewChanged } from "$lib/pluginView.svelte";
   import { pluginSendAsked, pluginStartAsked, takeDownCardsOf } from "$lib/pluginSessions.svelte";
@@ -322,6 +323,9 @@
       .then((unlisten) => offs.push(unlisten));
     core()
       .onPluginHears(() => void hearsChanged(hookedProjects()))
+      .then((unlisten) => offs.push(unlisten));
+    core()
+      .onPluginPalette((event) => pluginPaletteChanged(event))
       .then((unlisten) => offs.push(unlisten));
     core()
       .onPluginView((event) => pluginViewChanged(event))

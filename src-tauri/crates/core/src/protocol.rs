@@ -531,6 +531,17 @@ struct PluginProjectsParams {
 }
 
 #[derive(Deserialize)]
+struct PluginPalettePickParams {
+    source: String,
+    plugin: String,
+    command: String,
+    project: String,
+    /// The token of the session on screen, when it is the project's.
+    #[serde(default)]
+    session: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct PluginActionParams {
     source: String,
     plugin: String,
@@ -1048,6 +1059,17 @@ pub fn dispatch(
             )?;
             Ok(Value::Null)
         }
+        "plugin_palette_pick" => {
+            let p: PluginPalettePickParams = parse(params)?;
+            core.plugin_palette_pick(
+                &p.source,
+                &p.plugin,
+                &p.command,
+                &p.project,
+                p.session.as_deref(),
+            )?;
+            Ok(Value::Null)
+        }
         "plugin_view_message" => {
             let p: PluginViewMessageParams = parse(params)?;
             core.plugin_view_message(&p.source, &p.plugin, &p.project, &p.payload, p.acted)?;
@@ -1488,6 +1510,30 @@ mod tests {
         )
         .expect_err("an action needs every name");
         assert!(error.contains("bad parameters"), "{error}");
+    }
+
+    #[test]
+    fn a_palette_command_of_a_plugin_is_a_method_of_its_own() {
+        let core = core();
+        let error = dispatch(
+            &core,
+            "plugin_palette_pick",
+            json!({ "source": "s", "plugin": "p" }),
+            no_output,
+        )
+        .expect_err("a pick names the command and the project");
+        assert!(error.contains("bad parameters"), "{error}");
+        let picked = dispatch(
+            &core,
+            "plugin_palette_pick",
+            json!({ "source": "s", "plugin": "p", "command": "overview", "project": "/one" }),
+            no_output,
+        )
+        .expect_err("no such plugin is running");
+        assert!(
+            picked.contains("not running") || picked.contains("no home directory"),
+            "{picked}"
+        );
     }
 
     #[test]

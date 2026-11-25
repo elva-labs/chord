@@ -1062,6 +1062,9 @@ export interface PluginInfo {
   /** The beginnings of the shell commands the plugin is told of when a
       session runs one. */
   commands: string[];
+  /** The ids of the commands the plugin may put in the command palette,
+      which are the user's to pick and not shell commands. */
+  palette: string[];
   enabled: boolean;
   state: "off" | "building" | "starting" | "running" | "stopped" | "failed";
   detail: string | null;
@@ -1168,11 +1171,39 @@ export interface PluginNotifyEvent {
   target: string | null;
 }
 
-/** What went wrong when an action ran, for the plugin's sections to say. */
+/** What went wrong when an action or a palette command ran, for the
+    plugin's sections to say. */
 export interface PluginNoticeEvent {
   source: string;
   plugin: string;
   text: string;
+  /** The label of the palette command the notice is about, when it is. */
+  command?: string;
+}
+
+/** One command a plugin puts in the palette. */
+export interface PluginPaletteCommand {
+  id: string;
+  label: string;
+}
+
+/** A plugin's commands for the palette in one project; none is the
+    plugin's commands gone from it. */
+export interface PluginPaletteEvent {
+  source: string;
+  plugin: string;
+  project: string;
+  commands: PluginPaletteCommand[];
+}
+
+/** A plugin's palette command, picked for a project. */
+export interface PluginPalettePickRequest {
+  source: string;
+  plugin: string;
+  command: string;
+  project: string;
+  /** The token of the session on screen, when it is the project's. */
+  session?: string | null;
 }
 
 /** An action taken on a section's header or on one of its rows. */
@@ -2174,6 +2205,15 @@ export interface Core {
   /** Takes an action on a section's header or row. Rejects with the reason
       when the plugin is not running. */
   pluginAction(request: PluginActionRequest): Promise<void>;
+  /** A plugin's commands for the palette in a project, new, changed or
+      gone. */
+  onPluginPalette(
+    handler: (event: PluginPaletteEvent) => void,
+  ): Promise<() => void>;
+  /** Tells a plugin one of its palette commands was picked. Rejects with
+      the reason when the plugin is not running or has no such command;
+      what goes wrong later arrives as the plugin's notice. */
+  pluginPalettePick(request: PluginPalettePickRequest): Promise<void>;
   /** A plugin's page for a project, new or gone. */
   onPluginView(handler: (event: PluginViewEvent) => void): Promise<() => void>;
   /** A message from a plugin for its open page. */
@@ -2792,6 +2832,13 @@ const tauriCore: Core = {
     );
   },
   pluginAction: (request) => invoke<void>("plugin_action", { ...request }),
+  async onPluginPalette(handler) {
+    return listen<PluginPaletteEvent>("plugin_palette", (event) =>
+      handler(event.payload),
+    );
+  },
+  pluginPalettePick: (request) =>
+    invoke<void>("plugin_palette_pick", { ...request }),
   async onPluginView(handler) {
     return listen<PluginViewEvent>("plugin_view", (event) =>
       handler(event.payload),
@@ -3245,6 +3292,12 @@ const detachedCore: Core = {
     return () => {};
   },
   async pluginAction() {
+    throw new Error("no core");
+  },
+  async onPluginPalette() {
+    return () => {};
+  },
+  async pluginPalettePick() {
     throw new Error("no core");
   },
   async onPluginView() {

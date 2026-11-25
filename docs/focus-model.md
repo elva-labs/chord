@@ -176,6 +176,13 @@ action does what its shortcut does. The first entry goes to
 the next session that needs you, as <kbd>Cmd</kbd><kbd>.</kbd> does (see
 [sessions](reference/sessions.md#active-and-inactive)). It shows how many are waiting, and with none it
 cannot be picked.
+After the app's come the commands the enabled
+[plugins](plugins.md#palette-commands) put there for the project on screen,
+each with the plugin's name beside it and found by that name as well as its
+label. None are listed while no project is on screen, and none can take a
+label the app's own commands use. Picking one puts the palette away and tells
+the plugin, which opens its page, an address or a new session's card; when
+the plugin is not running or does not answer, the status bar says so.
 
 **A new session** is asked for in the same field. It is the one way a session
 is started: the + in the sessions pane, a project's New session, the agent

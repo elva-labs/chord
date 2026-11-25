@@ -21,6 +21,7 @@ import {
   toggleOpen,
 } from "$lib/pluginSections.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
+import { flash } from "$lib/flash.svelte";
 
 const taken: PluginActionRequest[] = [];
 let refuse: string | null = null;
@@ -246,6 +247,13 @@ describe("a notice", () => {
     expect(noticeOf(listed()[0])).toBe("second");
     vi.advanceTimersByTime(NOTICE_MS);
     expect(noticeOf(listed()[0])).toBeNull();
+  });
+
+  it("is said in the status bar too when it is about a palette command", () => {
+    sectionChanged(event());
+    noticed({ source: "src-1", plugin: "github", text: "the github plugin did not answer", command: "Pull request overview" });
+    expect(flash.text).toBe("Pull request overview: the github plugin did not answer");
+    expect(noticeOf(listed()[0])).toBe("the github plugin did not answer");
   });
 
   it("belongs to the plugin that said it and not to another", () => {

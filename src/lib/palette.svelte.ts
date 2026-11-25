@@ -72,6 +72,7 @@ import { reduced } from "$lib/motion";
 import { canGoBack, openBack } from "$lib/rewind.svelte";
 import { compact } from "$lib/compact.svelte";
 import { browser } from "$lib/browser.svelte";
+import { paletteCommands, pickPluginCommand, type PluginCommand } from "$lib/pluginPalette.svelte";
 
 /**
  * The palette: one field over the workbench in two lists. Go to narrows the
@@ -84,6 +85,11 @@ import { browser } from "$lib/browser.svelte";
  * or when it was last used. An action is listed with its chord. Going to
  * the next session that needs you leads the commands, since it is what the
  * palette is opened for most.
+ *
+ * The plugins' commands for the project on screen follow the app's, each
+ * with its plugin's name beside it and matched by that name too. A plugin
+ * cannot take a label the app's commands use: a command that would read as
+ * one of the app's is left out.
  *
  * A new session asks for the project when it is not known, then offers
  * one line: the session it would start, on the agent it used last and the
@@ -177,6 +183,16 @@ export type PaletteItem =
       group: null;
       action: ActionKey;
       chord: string;
+    }
+  | {
+      /** A command a plugin put in the palette. */
+      kind: "plugin";
+      id: string;
+      label: string;
+      group: null;
+      /** The plugin's name, drawn beside the label. */
+      detail: string;
+      command: PluginCommand;
     }
   | {
       /** The session the defaults start, which Enter takes. */
@@ -514,12 +530,47 @@ export function commandItems(query: string): PaletteItem[] {
     action: key,
     chord: describe(chordFor(key)),
   }));
-  return [attention, ...commands, ...actions].filter((item) =>
+  const app = [attention, ...commands, ...actions];
+  const taken = new Set(app.map((item) => item.label.toLowerCase()));
+  const plugins = paletteCommands()
+    .filter((command) => !shadows(command.label, taken))
+    .map((command): PaletteItem => ({
+      kind: "plugin",
+      id: `plugin:${JSON.stringify([command.source, command.plugin, command.command])}`,
+      label: command.label,
+      group: null,
+      detail: command.plugin,
+      command,
+    }));
+  return [...app, ...plugins].filter((item) =>
     matches(
-      `${item.label} ${item.kind === "attention" ? item.detail : ""}`,
+      `${item.label} ${item.kind === "attention" || item.kind === "plugin" ? item.detail : ""}`,
       query,
     ),
   );
+}
+
+/** The labels of the app's commands that are offered only at times, which
+    a plugin's command can never take either. */
+const APP_LABELS = [
+  "New session",
+  "Go back to an earlier message",
+  "Preview file",
+  "Show source",
+  "Turn word wrap on",
+  "Turn word wrap off",
+  "Open project",
+  "Open remote project",
+  "Check setup",
+  "Show welcome",
+  ...ACTIONS.map(({ label }) => label),
+].map((label) => label.toLowerCase());
+
+/** Whether a plugin's label reads as one of the app's commands: one listed
+    now, one offered at other times, or a new session in some project. */
+function shadows(label: string, taken: Set<string>): boolean {
+  const lower = label.toLowerCase();
+  return taken.has(lower) || APP_LABELS.includes(lower) || lower.startsWith("new session ");
 }
 
 /** The question a new session asks next given the answers so far, or null
@@ -1146,5 +1197,9 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       }
     case "action":
       return { type: "perform", action: actionFor(item.action) };
+    case "plugin": {
+      const command = item.command;
+      return { type: "close", then: () => void pickPluginCommand(command) };
+    }
   }
 }
