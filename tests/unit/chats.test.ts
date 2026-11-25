@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fake = {
   dir: "/home/ada/.chord/chats" as string | null,
   asked: 0,
+  titles: [] as string[],
 };
 
 vi.mock("$lib/core", () => ({
@@ -14,6 +15,12 @@ vi.mock("$lib/core", () => ({
           fake.asked += 1;
           if (fake.dir === null) throw new Error("no core");
           return fake.dir;
+        },
+        async projectInfo(path: string) {
+          return { path, name: path.split("/").at(-1)!, repository: path, isGit: true };
+        },
+        async setWindowTitle(title: string) {
+          fake.titles.push(title);
         },
       },
       {
@@ -38,7 +45,18 @@ import {
   recentChats,
   resetChats,
 } from "$lib/chats.svelte";
-import { create, reset as resetSessions, sessions, type HistoryEntry } from "$lib/sessions.svelte";
+import { activeSession, create, forProject, reset as resetSessions, sessions, type HistoryEntry } from "$lib/sessions.svelte";
+import {
+  chatInFront,
+  hookedProjects,
+  openPath,
+  projectLabel,
+  reset as resetWorkspace,
+  restore,
+  startSession,
+  workspace,
+} from "$lib/workspace.svelte";
+import { projects, resetProjects } from "$lib/projects.svelte";
 
 const DIR = "/home/ada/.chord/chats";
 const A = "/home/ada/dev/one";
@@ -58,7 +76,11 @@ beforeEach(() => {
   localStorage.clear();
   fake.dir = DIR;
   fake.asked = 0;
+  fake.titles = [];
   resetChats(DIR);
+  resetWorkspace();
+  resetProjects();
+  workspace.open = [{ path: A, name: "one", repository: A, isGit: true }];
 });
 
 describe("chats", () => {
@@ -145,5 +167,47 @@ describe("chats", () => {
     const work = create(A, null, "claude-code", null, null, null, null);
     work.unread = true;
     expect(chatMark()).toBeNull();
+  });
+});
+
+describe("the chats folder in the window", () => {
+  it("is called Chats, and is in front without being an open project", () => {
+    expect(projectLabel(DIR)).toBe("Chats");
+    startSession(DIR);
+    expect(forProject(DIR)).toHaveLength(1);
+    expect(workspace.active).toBe(DIR);
+    expect(chatInFront()).toBe(true);
+    expect(workspace.open.map((project) => project.path)).toEqual([A]);
+    expect(fake.titles.at(-1)).toBe("Chats — Chord");
+  });
+
+  it("is never used as a project, so never sorted or split among them", () => {
+    startSession(DIR);
+    expect(projects.used[DIR]).toBeUndefined();
+    startSession(A);
+    expect(projects.used[A]).toBeDefined();
+  });
+
+  it("opened by its path puts the latest chat in front and stays out of the open projects", async () => {
+    const chat = create(DIR, null, "claude-code", null, null, null, null);
+    expect(await openPath(DIR)).toBe(true);
+    expect(workspace.open.map((project) => project.path)).toEqual([A]);
+    expect(workspace.active).toBe(DIR);
+    expect(activeSession()).toBe(chat);
+  });
+
+  it("takes the hooks answer the open projects take", () => {
+    expect(hookedProjects()).toEqual([A, DIR]);
+    resetChats();
+    expect(hookedProjects()).toEqual([A]);
+  });
+
+  it("is in front again after a restart when a chat was, and never opened among the projects", async () => {
+    resetChats();
+    workspace.open = [];
+    localStorage.setItem("chord.workspace", JSON.stringify({ open: [A, DIR], active: DIR }));
+    await restore();
+    expect(workspace.open.map((project) => project.path)).toEqual([A]);
+    expect(workspace.active).toBe(DIR);
   });
 });

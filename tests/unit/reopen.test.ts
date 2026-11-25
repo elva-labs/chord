@@ -582,6 +582,35 @@ describe("coming back", () => {
     expect(record().open.map((kept) => kept.id).sort()).toEqual(["conductor", "two"]);
   });
 
+  it("brings back chats once the chats folder is known, the chat on screen in front", async () => {
+    const ORCHESTRATOR = "/home/ada/.chord/orchestrator";
+    const CHATS = "/home/ada/.chord/chats";
+    onRecord([entry(CHATS, "chat"), entry(ORCHESTRATOR, "conductor"), entry("/gone", "one"), entry(A, "two")], "chat");
+    workspace.active = CHATS;
+    let knowFolder: (dir: string | null) => void = () => {};
+    let knowChats: (dir: string | null) => void = () => {};
+    stop = reopen(
+      new Map(),
+      new Promise((resolve) => (knowFolder = resolve)),
+      new Promise((resolve) => (knowChats = resolve)),
+    );
+    expect(sessions.all.map((session) => session.id)).toEqual(["two"]);
+    knowFolder(ORCHESTRATOR);
+    await Promise.resolve();
+    await Promise.resolve();
+    // A session in a folder not open stays on record while the chats
+    // folder is not known yet: it may be a chat.
+    flushSync();
+    expect(record().open.map((kept) => kept.id).sort()).toEqual(["chat", "conductor", "one", "two"]);
+    knowChats(CHATS);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sessions.all.map((session) => session.id)).toEqual(["two", "conductor", "chat"]);
+    expect(activeSession()?.id).toBe("chat");
+    flushSync();
+    expect(record().open.map((kept) => kept.id).sort()).toEqual(["chat", "conductor", "two"]);
+  });
+
   it("leaves out a session whose project is not open", () => {
     onRecord([entry("/gone", "one"), entry(A, "two")], null);
     stop = reopen();

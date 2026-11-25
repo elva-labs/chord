@@ -39,6 +39,7 @@
   import { loadUsed } from "$lib/projects.svelte";
   import { reopen, settleWhen } from "$lib/reopen.svelte";
   import { dirKnown } from "$lib/orchestratorFolder.svelte";
+  import { chatsKnown } from "$lib/chats.svelte";
   import { listenIntegrated } from "$lib/integrated.svelte";
   import { followOpenRequests, restore, workspace } from "$lib/workspace.svelte";
   import { followTabStops } from "$lib/tabStops";
@@ -103,7 +104,7 @@
     let arrivals: ReadonlyMap<string, Promise<void>> = new Map();
     const restored = Promise.all([restore(), listening]).then(([arriving]) => {
       arrivals = arriving;
-      if (!closed) stopReopen = reopen(arriving, dirKnown);
+      if (!closed) stopReopen = reopen(arriving, dirKnown, chatsKnown);
     });
     const startHooks = () => startChecks(open, arrivals);
     void restored.then(startHooks, startHooks);

@@ -33,8 +33,8 @@ export const chatsKnown: Promise<string | null> = new Promise((resolve) => (know
 /** Asks the core for the folder, which it makes when missing. Asked once:
     a later call has the same answer. */
 export function load(): Promise<string | null> {
-  asked ??= core()
-    .chatsDir()
+  asked ??= Promise.resolve()
+    .then(() => core().chatsDir())
     .then(
       (dir) => (typeof dir === "string" && dir !== "" ? dir : null),
       () => null,

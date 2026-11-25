@@ -34,6 +34,7 @@
   import { handle as browserRequested } from "$lib/browserTools.svelte";
   import { handle as settingsRequested, settingsAsk } from "$lib/settingsTools.svelte";
   import { folderToRead, load as loadOrchestratorFolder } from "$lib/orchestratorFolder.svelte";
+  import { chats, load as loadChats } from "$lib/chats.svelte";
   import { core } from "$lib/core";
   import { ensure as ensureHooks, hearsChanged } from "$lib/hook.svelte";
   import {
@@ -123,6 +124,7 @@
     exact,
     followCwd,
     followHistory,
+    loadHistory,
     refreshHistory,
     identified,
     nextNeedingYou,
@@ -375,13 +377,17 @@
       })
       .then((unlisten) => offs.push(unlisten));
     void loadOrchestratorFolder().then(settleFolder);
+    void loadChats().then((dir) => {
+      if (dir !== null) void loadHistory(dir);
+    });
     offs.push(followCwd());
     offs.push(
       followHistory(() => {
         const dir = folderToRead();
         const open = workspace.open.map((project) => project.path);
         const due = untrack(() => historyDue(open, workspace.active));
-        return dir === null ? due : [...due, dir];
+        const extra = [dir, chats.dir].filter((path): path is string => path !== null && !due.includes(path));
+        return [...due, ...extra];
       }),
     );
     offs.push(followFocus());

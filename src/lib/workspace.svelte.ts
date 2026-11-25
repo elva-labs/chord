@@ -24,6 +24,7 @@ import {
   reopenFolder,
   startsIn,
 } from "$lib/orchestratorFolder.svelte";
+import { chats, isChatsFolder, load as loadChats } from "$lib/chats.svelte";
 
 /**
  * The projects this window has open.
@@ -95,6 +96,7 @@ export function followedWorktree(): string | null {
  * `spike/main-truck`.
  */
 export function projectLabel(path: string): string {
+  if (isChatsFolder(path)) return "Chats";
   const project = workspace.open.find((candidate) => candidate.path === path);
   if (project === undefined) return lastSegment(path);
   const others = workspace.open.filter(
@@ -129,6 +131,7 @@ export function isOpen(path: string): boolean {
 export async function openPath(path: string): Promise<boolean> {
   workspace.error = null;
   if (isOrchestratorFolder(path)) return showFolder(path);
+  if (isChatsFolder(path)) return showChats(path);
 
   const already = workspace.open.find((project) => project.path === path);
   if (already !== undefined) {
@@ -139,6 +142,7 @@ export async function openPath(path: string): Promise<boolean> {
   try {
     const info = await core().projectInfo(path);
     if (isOrchestratorFolder(info.path)) return showFolder(info.path);
+    if (isChatsFolder(info.path)) return showChats(info.path);
     if (!isOpen(info.path)) workspace.open.push(info);
     bringForward(info.path);
     return true;
@@ -153,6 +157,13 @@ export async function openPath(path: string): Promise<boolean> {
     pane, in front, closed or not. */
 function showFolder(path: string): boolean {
   reopenFolder();
+  bringForward(path);
+  return true;
+}
+
+/** The chats folder is never one of the open projects: opening it puts
+    the latest chat in front, as the chats line does. */
+function showChats(path: string): boolean {
   bringForward(path);
   return true;
 }
@@ -175,11 +186,17 @@ export function activate(path: string) {
 
   save();
   const project = workspace.open.find((candidate) => candidate.path === path);
-  if (project !== undefined) {
+  if (project !== undefined || isChatsFolder(path)) {
     core()
-      .setWindowTitle(`${projectLabel(project.path)} — Chord`)
+      .setWindowTitle(`${projectLabel(path)} — Chord`)
       .catch(() => {});
   }
+}
+
+/** Whether a chat is in front: the chats folder is the project on
+    screen, which it never is as an open project. */
+export function chatInFront(): boolean {
+  return isChatsFolder(workspace.active);
 }
 
 /** The user brought a project forward, from the sessions pane, go to or
@@ -206,13 +223,15 @@ export function onScreen(): string | null {
   return drawnIn(session);
 }
 
-/** The projects the hooks answer covers: the open ones, and the
-    orchestrator folder while the sessions pane lists it, which takes the
-    same answer and may have a word of its own like any project. */
+/** The projects the hooks answer covers: the open ones, the
+    orchestrator folder while the sessions pane lists it, and the chats
+    folder, each of which takes the same answer and may have a word of its
+    own like any project. */
 export function hookedProjects(): string[] {
   const paths = workspace.open.map((project) => project.path);
   const folder = folderShown(onScreen());
   if (folder !== null && !paths.includes(folder)) paths.push(folder);
+  if (chats.dir !== null && !paths.includes(chats.dir)) paths.push(chats.dir);
   return paths;
 }
 
@@ -491,14 +510,14 @@ export async function restore(): Promise<Map<string, Promise<void>>> {
   }));
 
   const insert = (info: ProjectInfo) => {
-    if (isOpen(info.path) || isOrchestratorFolder(info.path)) return;
+    if (isOpen(info.path) || isOrchestratorFolder(info.path) || isChatsFolder(info.path)) return;
     const open = workspace.open.map((project) => project.path);
     workspace.open.splice(placeAmong(open, info.path, paths), 0, info);
   };
   const front = () => {
     if (!untouched()) return;
     let target: string | null = null;
-    if (wanted !== null && isOpen(wanted)) {
+    if (wanted !== null && (isOpen(wanted) || isChatsFolder(wanted))) {
       if (workspace.active !== wanted) target = wanted;
     } else if (localIn && workspace.active === null) {
       target = workspace.open[0]?.path ?? null;
@@ -522,7 +541,11 @@ export async function restore(): Promise<Map<string, Promise<void>>> {
   }
 
   const here = asked.filter((entry) => !remote(entry.path));
+  // The chats folder is known before the local projects go in, so it is
+  // never opened among them and a chat in front at the quit is in front again.
+  const chatsAsked = loadChats();
   const local = await Promise.all(here.map((entry) => entry.info));
+  await chatsAsked;
   if (restores !== mine) return arriving;
   for (const info of local) if (info !== null) insert(info);
   for (const entry of here) state.pending.delete(entry.path);
