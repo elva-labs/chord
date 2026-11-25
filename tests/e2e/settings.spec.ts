@@ -347,7 +347,8 @@ test("records a chord of one's own", async ({ page }) => {
   await page.keyboard.press(`${MOD}+,`);
   await page.getByTestId("chord-view").click();
   await page.keyboard.press(`${MOD}+Shift+ArrowRight`);
-  await expect(page.getByTestId("chord-view")).toHaveText("Ctrl+Shift+Right");
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
+  await expect(page.getByTestId("chord-view")).toHaveText(mac ? "⌘⇧→" : "Ctrl+Shift+Right");
   await expect(page.getByTestId("settings-tab-keys")).toHaveAttribute(
     "aria-current",
     "page",

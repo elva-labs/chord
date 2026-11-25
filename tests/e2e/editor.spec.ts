@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, WITH_WORKFLOW, columnsAtRest, foldedWidth, installFakeCore, sessionRowOf, startNew } from "./fake";
+import { PROJECT, WITH_WORKFLOW, asLinux, columnsAtRest, foldedWidth, installFakeCore, sessionRowOf, startNew } from "./fake";
 
 /**
  * Editor mode: the file tree and an editor in the middle, the agent on the
@@ -30,13 +30,6 @@ async function flip(page: Page) {
     window's own buttons, Windows and Linux: nothing on macOS. */
 async function controlsRoom(page: Page) {
   return page.evaluate(() => (/Win|Linux/.test(navigator.platform) ? 60 : 0));
-}
-
-/** Makes the page take itself for Linux, where the app draws the window's
-    own buttons. Its chords are then Ctrl's, so a test run this way on a Mac
-    clicks rather than presses them. */
-async function asLinux(page: Page) {
-  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" }));
 }
 
 async function open(page: Page, width: number) {
@@ -125,14 +118,18 @@ test.describe("the editing shape", () => {
 });
 
 /** Where the corner in a pane's header should end: the pane's padding
-    before the window's own buttons where the app draws them, else before
-    the header's end. */
+    before the window's own buttons where the app draws them. Without them,
+    on the card's right edge in the modern look, and the pane's padding
+    before the header's end in the terminal look. */
 async function cornerEdge(page: Page, pane: string) {
   return page.evaluate((pane) => {
     const header = document.querySelector(`${pane} > header`)!;
     const pad = parseFloat(getComputedStyle(header).getPropertyValue("--pane-pad"));
     const controls = header.querySelector("[data-testid='window-controls']");
-    return (controls ?? header).getBoundingClientRect()[controls ? "left" : "right"] - pad;
+    if (controls) return controls.getBoundingClientRect().left - pad;
+    if (document.documentElement.dataset.look === "modern")
+      return document.querySelector(`${pane} > .body`)!.getBoundingClientRect().right;
+    return header.getBoundingClientRect().right - pad;
   }, pane);
 }
 
@@ -151,7 +148,7 @@ async function switchStandsStill(page: Page) {
 
 test.describe("the switch", () => {
   test("stands where the window's own buttons begin on Linux and Windows, in both modes", async ({ page }) => {
-    await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" }));
+    await asLinux(page);
     await open(page, 1728);
     await expect(page.locator(`${FILES} [data-testid='window-controls']`)).toBeVisible();
     await switchStandsStill(page);

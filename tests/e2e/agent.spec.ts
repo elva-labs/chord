@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { BUILD_AND_REVIEW, paletteChoice, sessionBox, sessionRowOf, startNew, startWith } from "./fake";
+import { BUILD_AND_REVIEW, foldedWidth, paletteChoice, sessionBox, sessionRowOf, startNew, startWith } from "./fake";
 
 /**
  * Sessions, driven by a fake core.
@@ -1629,7 +1629,8 @@ test.describe("two projects of one name", () => {
     await expect(prefix).toHaveText("spike/");
     await expect(prefix).toBeVisible();
     await page.keyboard.press(`${MOD}+b`);
-    await expect.poll(async () => (await page.locator(SESSIONS).boundingBox())!.width).toBeLessThan(60);
+    const folded = await foldedWidth(page);
+    await expect.poll(async () => (await page.locator(SESSIONS).boundingBox())!.width).toBeLessThanOrEqual(folded + 1);
     await expect(prefix).toBeHidden();
     const name = page.locator(`[data-row="project:${SPIKE}"] .name`);
     const column = (await page.locator(SESSIONS).boundingBox())!;

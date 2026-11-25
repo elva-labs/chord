@@ -186,6 +186,13 @@ export async function foldedWidth(page: Page): Promise<number> {
     .evaluate((frame) => parseFloat(getComputedStyle(frame).getPropertyValue("--folded")));
 }
 
+/** Makes the pages loaded from here on take themselves for Linux, where the
+    app draws the window's own buttons. The app's chords there are Ctrl's, so
+    such a page is sent `Control`, whatever the machine running the test. */
+export async function asLinux(page: Page) {
+  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" }));
+}
+
 /** Waits until the columns and the terminal panel are at rest: none waits
     to move or is on its way, so each has the size the layout asks for, and
     the grid reads the same two frames apart, so a new window size has been

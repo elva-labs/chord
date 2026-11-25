@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, SETTINGS_FILE, columnsAtRest, foldedWidth, installFakeCore, startNew, sessionBox, sessionRowOf } from "./fake";
+import { PROJECT, SETTINGS_FILE, asLinux, columnsAtRest, foldedWidth, installFakeCore, startNew, sessionBox, sessionRowOf } from "./fake";
 
 const SESSIONS = "section[data-pane='sessions']";
 const AGENT = "section[data-pane='agent']";
@@ -2249,6 +2249,13 @@ test.describe("the search field", () => {
 // Off macOS the window is undecorated: the controls are the app's, at the end
 // of whichever pane is rightmost, and the settings have a button in the bar.
 test.describe("the window's own controls", () => {
+  /** The page again as one whose window the app draws the controls of. */
+  async function drawingItsControls(page: Page) {
+    await asLinux(page);
+    await page.reload();
+    await expect(page.locator(AGENT)).toBeVisible();
+  }
+
   // macOS places its traffic lights where the window says the leftmost
   // header's middle is, and a look sets the header's height.
   test("are told where the header's middle is, and again when the look changes", async ({
@@ -2282,10 +2289,11 @@ test.describe("the window's own controls", () => {
   });
 
   test("sit at the rightmost header and follow it", async ({ page }) => {
+    await drawingItsControls(page);
     await expect(
       page.locator(`${CHANGES} [data-testid='window-controls']`),
     ).toBeVisible();
-    await page.keyboard.press(`${MOD}+\\`);
+    await page.keyboard.press("Control+\\");
     await expect(page.locator(CHANGES)).toBeHidden();
     await expect(
       page.locator(`${AGENT} [data-testid='window-controls']`),
@@ -2293,6 +2301,7 @@ test.describe("the window's own controls", () => {
   });
 
   test("drive the window through the core", async ({ page }) => {
+    await drawingItsControls(page);
     const controls = page.locator(`${CHANGES} [data-testid='window-controls']`);
     await controls.getByRole("button", { name: "Minimize" }).click();
     await controls.getByRole("button", { name: "Maximize" }).click();
@@ -2334,6 +2343,7 @@ test.describe("the window's own controls", () => {
   test("put a menu button at the start of the sessions pane's header that asks the core for the native menu", async ({
     page,
   }) => {
+    await drawingItsControls(page);
     await page.locator(`${SESSIONS} [data-testid='app-menu']`).click();
     expect(
       await page.evaluate(
@@ -2343,7 +2353,7 @@ test.describe("the window's own controls", () => {
       ),
     ).toEqual(["menu"]);
     // Folded, the column keeps it, on the ground in its header row.
-    await page.keyboard.press(`${MOD}+b`);
+    await page.keyboard.press("Control+b");
     const menu = page.locator(`${SESSIONS} [data-testid='app-menu']`);
     await expect(menu).toBeVisible();
     await expect(page.locator(`${AGENT} [data-testid='app-menu']`)).toHaveCount(0);
