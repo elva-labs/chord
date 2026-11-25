@@ -370,5 +370,13 @@ test.describe("sessions a chat starts", () => {
     await expect(page.getByTestId("chat-readout")).toHaveCount(0);
     await project.getByTestId("chat-tag").click();
     await chatOnScreen(page);
+
+    // The row's menu goes back to the chat as well, which the keyboard reaches.
+    await page.getByTestId("open-started").click();
+    await expect(page.getByTestId("chat-readout")).toHaveCount(0);
+    await project.getByTestId("session-row").click({ button: "right" });
+    await expect(page.getByTestId("session-menu-chat")).toHaveText("Go to chat");
+    await page.getByTestId("session-menu-chat").click();
+    await chatOnScreen(page);
   });
 });

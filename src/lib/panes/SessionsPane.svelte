@@ -447,6 +447,7 @@
     const other = otherWayFor(session);
     const live = isLive(session);
     const wentOnNow = wholeOf(session);
+    const byChat = chatOf(session);
     return [
       session.unread
         ? {
@@ -503,6 +504,17 @@
               title: "Open the brief and notes this conversation keeps, in the viewer",
               disabled: false,
               run: () => void showNotes(session),
+            },
+          ]),
+      ...(byChat === null
+        ? []
+        : [
+            {
+              id: "session-menu-chat",
+              label: "Go to chat",
+              title: `Open the chat that started it, ${shownName(byChat)}`,
+              disabled: false,
+              run: () => choose(byChat.key),
             },
           ]),
       {

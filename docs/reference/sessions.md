@@ -1782,6 +1782,11 @@ trust the folder as it does any folder, and a chat runs in the permission
 mode its settings choose. The [settings tools](settings.md) and the tools
 to show and present work as in any session.
 
+A chat can start sessions in the open projects with the tools any session
+has. Such a session is drawn in its own project with a chat mark on its
+row. A click on the mark, or Go to chat in the row's menu, opens the chat
+that started it.
+
 ### The chats folder
 
 Every chat shares the one folder, so whatever is in it reaches every chat.
