@@ -324,9 +324,18 @@
     core()
       .onPluginHears(() => void hearsChanged(hookedProjects()))
       .then((unlisten) => offs.push(unlisten));
-    core()
-      .onPluginPalette((event) => pluginPaletteChanged(event))
-      .then((unlisten) => offs.push(unlisten));
+    // A core that cannot give this listener, or fails to, leaves the ones
+    // after it in place: the palette then lists the app's commands alone.
+    try {
+      core()
+        .onPluginPalette((event) => pluginPaletteChanged(event))
+        .then(
+          (unlisten) => offs.push(unlisten),
+          () => {},
+        );
+    } catch {
+      // Nothing to listen to.
+    }
     core()
       .onPluginView((event) => pluginViewChanged(event))
       .then((unlisten) => offs.push(unlisten));

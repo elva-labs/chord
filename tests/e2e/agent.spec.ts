@@ -293,6 +293,8 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
         pluginAction: async () => {},
         onPluginView: async () => () => {},
         onPluginViewData: async () => () => {},
+        onPluginPalette: async () => () => {},
+        pluginPalettePick: async () => {},
         pluginViewMessage: async () => {},
         onRunChanged: async () => () => {},
         onSessionEnded: async (handler: (ended: unknown) => void) => {
