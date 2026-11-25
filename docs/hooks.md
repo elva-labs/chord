@@ -206,7 +206,7 @@ line. A file git has not changed opens as it is.
 
 The third tool, `present`, is for what the agent made or found to look at:
 one or more images, PDFs, Markdown documents, HTML pages or Mermaid
-diagrams, with a caption, each where it is on disk rather than a copy. The call opens in the changes pane's viewer,
+diagrams, with a caption, each named by its path. The call opens in the changes pane's viewer,
 where a file would: every file of it down the viewer under its name, an
 image at width, a PDF in its own frame, a document rendered, a page in a
 frame of its own that can run its scripts and load the files in its
@@ -264,10 +264,23 @@ what differs. The rows are the file
 tree's to walk: the arrows run off the end of the tree onto them, Enter
 opens a call, and Left and Right fold and unfold the section as they close
 and open a folder;
-the list names the files where they are rather than keeping copies, so one
-the agent later removes shows as gone. Files are read where the agent runs,
-a remote included, up to eight megabytes each. Video is not among the kinds
-taken yet.
+Files are read where the agent runs, a remote included, up to eight
+megabytes each. Video is not among the kinds taken yet.
+
+A file presented from outside the session's project and worktree, a temp
+folder's say, also has a copy kept in `~/.chord/media`, on the machine the
+file is on. The file itself is shown as long as it is there, and the copy
+once it is gone. Presenting the file again makes the copy again, and the
+copy goes when its row goes. A file in the project or the worktree has no
+copy. A page's copy takes with it the files in its folder that the page and
+its stylesheets name outright, of the kinds a page may load, up to 64 of
+them and 64 MB in all; what a script works out as it runs is not copied, and
+is listed under the copy as not loaded.
+
+A row whose files are all gone, with no copy of any, reads "This file is
+gone", or "These files are gone", and has a Remove button; <kbd>Delete</kbd>
+removes it from the keyboard. In the viewer, each file of a row that is gone
+says so under its name.
 
 An HTML page is drawn in a frame inside a frame, both sandboxed: its own
 scripts run, but it has no origin, no storage, no forms, no popups and no
