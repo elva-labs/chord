@@ -2937,7 +2937,7 @@ async function startFitted(
   const taken = candidate !== null && !you && nameTaken(candidate, session.key);
   const called = candidate !== null && !you && !taken ? candidate : null;
   if (called !== null) session.title = called;
-  if (looking !== null && byKey(looking) !== null) sessions.active = looking;
+  sessions.active = looking;
 
   const id = await idFor(session.key);
   if (id === null) {
@@ -3576,6 +3576,9 @@ async function resumeSession(
     const now = byId(id);
     const left = now !== null && now.status === "dormant" ? now : null;
     const plugin = now !== null && left === null ? pluginStartOf(now.key) : null;
+    // The row of an ended session the user is reading is replaced where
+    // it is.
+    const reading = now !== null && left === null && sessions.active === now.key;
     if (now !== null && left === null) close(now.key, true);
     const looking = sessions.active;
     const given = prompt === null ? null : `${oneLine(prompt)} ${outcomeAsk(agent)}`;
@@ -3606,7 +3609,7 @@ async function resumeSession(
     }
     if (session.title === null && entry.name !== null) session.title = entry.name;
     if (now !== null && left === null) handOver(now.key, { project, session: session.key });
-    if (looking !== null && byKey(looking) !== null) sessions.active = looking;
+    sessions.active = reading ? session.key : looking;
 
     const trouble = await cameUp(session.key);
     if (trouble !== null) return refused(trouble);

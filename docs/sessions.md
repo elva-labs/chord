@@ -26,6 +26,10 @@ When the agent leaves a line for you, it shows under the row's name, with the mo
 
 How well the dot keeps up depends on the harness and on whether [hooks](hooks.md) are on: [what a row says](reference/sessions.md#what-a-row-says) has the detail.
 
+## Picking a project
+
+A click on a project's header, or a pick of it in go to, puts the project in front without opening a session, so nothing unread is read by looking. Pick a session from its rows, or ask for a new one. The session already on screen stays when it is drawn under that project. The [reference](reference/sessions.md) has the detail.
+
 ## Active and inactive
 
 A project you have not used for a week folds under Inactive at the foot of the pane. A project with a session running or waiting for you stays in the list. The span is a [setting](settings.md#sessions). See [active and inactive](reference/sessions.md#active-and-inactive).

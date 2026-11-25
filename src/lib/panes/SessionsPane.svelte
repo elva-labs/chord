@@ -1463,13 +1463,20 @@
       the width its column still has. */
   let drawnFolded = $derived(!compact.on && !sessionsDrawnOpen());
 
-  /** Picking a project brings it forward. In compact mode that is done with
-      the pane, which goes back with the keyboard, as picking a session
-      does. */
+  /** Picking a project brings it forward and leaves the pane and the
+      keyboard here, to pick one of its sessions from. */
   function pickProject(path: string) {
     bringForward(path);
-    if (compact.on) peekSessions(false);
   }
+
+  // A project coming forward with no session starts the cursor over on its
+  // header, wherever the keyboard is by then.
+  $effect(() => {
+    void screenProject;
+    untrack(() => {
+      if (sessions.active === null) cursor = null;
+    });
+  });
 
   /** A press that began in the pane and is not yet let go: a click, or a
       drag of a scroll bar or a selection. */
@@ -1548,9 +1555,26 @@
   const PEEK_AFTER = 200;
   const UNPEEK_AFTER = 300;
 
+  // Outside compact mode, where the edge does this, a peeked pane goes back
+  // once the keyboard leaves it with the pointer elsewhere: the pointer left
+  // while the keyboard held the pane there, and no other leave follows. A
+  // question in the pane holds it.
+  let keyboardWas = layout.focus;
+  $effect(() => {
+    const focus = layout.focus;
+    const left = keyboardWas === "sessions" && focus !== "sessions";
+    keyboardWas = focus;
+    untrack(() => {
+      if (!left || compact.on || !layout.sessionsPeek || pointerIn) return;
+      if (reopenQuestion !== null || editor.closing !== null) return;
+      peekSessions(false);
+    });
+  });
+
   // The pointer resting on the folded column peeks the pane over the pane
   // beside it where it peeks, and leaving the pane puts it back, unless the keyboard
-  // is in it: then Escape, Enter or the focus chord put it back. A wait for
+  // is in it: then it stays until Escape, Enter, the focus chord or the
+  // keyboard leaving it. A wait for
   // either ends once the pane peeks or goes back some other way, a click or
   // a chord, so a peek put away is not brought back by a pointer that came
   // to the column before it. A press in the pane is noted while it lasts,

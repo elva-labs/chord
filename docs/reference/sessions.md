@@ -96,11 +96,13 @@ changes pane, the terminal and the window's title still follow it, since
 that is the repository the session works in.
 
 Bringing a project forward, by a click on its header, a pick in go to or
-opening it again, shows a session drawn under it: the one on screen when it
-is one, else its newest. A project whose only sessions hang under a starter
-in another project has none drawn under it, so it is shown with no session
-and the keyboard in the pane, and is itself the project on screen, with its
-past sessions and its Earlier line.
+opening it, opens no session: the agent pane says no session is open in it,
+over New session, and nothing is marked read. The pane lists the project's
+sessions to pick one from. A click on its header leaves the keyboard in the
+pane with the cursor on that header, so Down walks to a row and Enter opens
+it. The one exception is a session already on screen and drawn under the
+project, which stays on screen. A project closed while it is in front leaves
+the next one in front the same way.
 
 ## Active and inactive
 
@@ -185,16 +187,15 @@ on. When the project that was in front is one of those still waiting, the
 first project open is put in front meanwhile, with no session selected, and
 the one that was in front takes its place when it appears, with the session
 that was on screen, unless another project or session has been chosen by
-then. If its machine cannot be reached and no session has been chosen, the
-project in front selects its most recent session.
+then. If its machine cannot be reached, the project in front stays with no
+session selected.
 
 The sessions that were open when the app quit come back as rows in their
 projects, in the order they had and under the names they had, with nothing
 running behind them. Their dot is yellow. The session that was on screen
 starts at once, through the harness's resume command, and each of the others
-starts when it is selected. Bringing a project forward selects its most
-recent session, so that one starts too; asking for a new session in it does
-not, as the project's header describes above. A session closed by hand
+starts when it is selected, so bringing a project forward starts none. With
+no session on screen at the quit, none is put there. A session closed by hand
 before the quit stays closed, and a session whose project did not open
 again is left out. A session another session started comes back under its
 starter, where it stood among the others, with the starter folded or

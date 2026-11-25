@@ -334,13 +334,18 @@ describe("what picking does in go to", () => {
     expect(sessions.active).toBe(first.key);
   });
 
-  it("brings a project forward", () => {
-    create(B);
+  it("brings a project forward with no session, its unread one still unread", () => {
+    const waiting = create(B);
+    waiting.unread = true;
+    select(create(A).key);
+    workspace.active = A;
     const item = goToItems("").find((candidate) => candidate.kind === "project" && candidate.path === B)!;
     const outcome = pickItem(item);
     expect(outcome.type).toBe("close");
     if (outcome.type === "close") outcome.then();
     expect(workspace.active).toBe(B);
+    expect(sessions.active).toBeNull();
+    expect(waiting.unread).toBe(true);
   });
 
   // A project whose only session hangs under a starter in another project
@@ -367,13 +372,13 @@ describe("what picking does in go to", () => {
     expect(onScreen()).toBe(C);
     expect(Date.now() - projects.used[C]).toBeLessThan(1000);
 
-    // A session of its own drawn under it is the one shown.
+    // Nor is a session of its own drawn under it opened.
     const own = create(C);
     started(own.key, "pty-3", "own-1");
     activate(A);
     const again = pickItem(row(C));
     if (again.type === "close") again.then();
-    expect(sessions.active).toBe(own.key);
+    expect(sessions.active).toBeNull();
   });
 
   // The session on screen hangs under its starter's project from another

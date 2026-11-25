@@ -11,7 +11,6 @@ import {
   closeProject,
   ownerGone,
   create,
-  forProject,
   select,
   sessions,
   type Session,
@@ -168,13 +167,11 @@ export function settleFolder() {
   save();
 }
 
+/** Puts a project in front with no session on screen: only the user's
+    pick of a session opens one, so nothing is read on their behalf. */
 export function activate(path: string) {
   workspace.active = path;
-  // Follow the project with its own most recent session rather than leaving
-  // the pane pointed at another project's terminal.
-  const own = forProject(path);
-  if (own.length > 0) sessions.active = own[own.length - 1].key;
-  else sessions.active = null;
+  sessions.active = null;
 
   save();
   const project = workspace.open.find((candidate) => candidate.path === path);
@@ -186,25 +183,15 @@ export function activate(path: string) {
 }
 
 /** The user brought a project forward, from the sessions pane, go to or
-    by opening it again: it is in front and counts as used. What it shows
-    is a session drawn under it: the one on screen when that is one, else
-    its newest. A session that hangs under its starter in another project
-    is drawn there, so a project whose only sessions are such is shown with
-    none, and is itself the project on screen. The session on screen stays
-    when it hangs under this project from another one: the project in front
-    stays the one that session runs in. */
+    by opening it: it counts as used. The session on screen stays when it is
+    drawn under this project, and the project in front stays the one that
+    session runs in. Otherwise the project is in front with no session. A
+    session that hangs under its starter in another project is drawn there,
+    so bringing the project it runs in forward takes it off the screen. */
 export function bringForward(path: string) {
   const current = sessions.active === null ? null : byKey(sessions.active);
-  if (current !== null && current.project !== path && drawnIn(current) === path) {
-    touch(path);
-    return;
-  }
-  if (workspace.active !== path) activate(path);
+  if (current === null || drawnIn(current) !== path) activate(path);
   touch(path);
-  const drawnHere = (session: Session) => session.project === path && drawnIn(session) === path;
-  if (current !== null && drawnHere(current)) return;
-  const own = forProject(path).filter(drawnHere);
-  sessions.active = own.length > 0 ? own[own.length - 1].key : null;
 }
 
 /** The project on screen, as the sessions pane and the palette both mean
@@ -429,17 +416,6 @@ export function untouched(): boolean {
     !chosen &&
     restoring.placed.project === workspace.active &&
     restoring.placed.session === sessions.active
-  );
-}
-
-/** Whether the project stored in front is still waiting for its machine,
-    with nothing chosen since. */
-export function frontPending(): boolean {
-  return (
-    restoring !== null &&
-    restoring.wanted !== null &&
-    restoring.pending.has(restoring.wanted) &&
-    untouched()
   );
 }
 

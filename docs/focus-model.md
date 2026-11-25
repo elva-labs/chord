@@ -148,12 +148,13 @@ last used, the most recently used
 first. <kbd>Enter</kbd> on a session shows it and puts the keyboard in its
 agent, as a click on its row does. On a project it brings the project forward
 and counts it as used, as [sessions](reference/sessions.md#active-and-inactive) orders
-them, showing a session drawn under it as a click on its header does, with
-the keyboard in that session or, for a project with none, in the sessions
-pane. A sessions pane that is folded opens for that, or peeks over
-the agent while reviewing, so the viewer stays, and in a window too narrow for
-the pane, or in compact mode, it stays as the user set it and the keyboard
-goes to the agent pane's New session button. <kbd>Cmd</kbd><kbd>Enter</kbd> on either asks for a new
+them, opening no session, as a click on its header does, with the keyboard in
+the sessions pane, on the project. The project of the session on screen
+leaves that session there, with the keyboard in its agent. A sessions pane that is folded opens for
+that, or peeks over the panes beside it while reviewing, so the viewer stays,
+and in compact mode. In a window too narrow for the pane it stays folded, and
+the keyboard goes to the agent pane, on its New session button when no session
+is on screen. <kbd>Cmd</kbd><kbd>Enter</kbd> on either asks for a new
 session in that project, on its line of defaults, as below. A <kbd>&gt;</kbd> typed as the first character
 switches to the commands, with the rest of what was typed. Go to lists no
 commands, except that once something is typed the command for the file in the

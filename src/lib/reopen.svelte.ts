@@ -14,7 +14,6 @@ import {
   type Session,
 } from "$lib/sessions.svelte";
 import {
-  frontPending,
   isOpen,
   restoredInFront,
   untouched,
@@ -270,19 +269,12 @@ export function reopen(
     if (row.kind === "integrated" && entry.handle)
       void reattach(row.key, entry.handle, entry.spoken ?? true);
   };
-  // The session on screen at the quit, when its project is the one in front
-  // and nothing else is on screen; otherwise the project's most recent, as
-  // bringing a project forward does. While the project or the session on
-  // screen at the quit waits for its machine, the project in front meanwhile
-  // gets none.
+  // The session on screen at the quit comes back once its project is in
+  // front, while nothing else is on screen. No other session is opened in
+  // its place.
   const front = (project: string | null) => {
     if (project === null || activeSession() !== null) return;
-    const own = forProject(project);
-    const waits =
-      frontPending() || held.some((entry) => entry.id === active);
-    const wanted =
-      own.find((session) => session.id === active) ??
-      (waits ? undefined : own.at(-1));
+    const wanted = forProject(project).find((session) => session.id === active);
     if (wanted === undefined) return;
     sessions.active = wanted.key;
     restoredOnScreen(wanted.key);
@@ -316,7 +308,6 @@ export function reopen(
       held = held.filter((entry) => entry.project !== project);
       for (const entry of theirs) bring(entry);
       if (workspace.active === project) front(project);
-      else if (!isOpen(project)) front(workspace.active);
     };
     void arrived.then(settle, settle);
   }

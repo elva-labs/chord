@@ -48,7 +48,7 @@ import {
   since,
   started,
 } from "$lib/sessions.svelte";
-import { activate, close, goTo, onScreen, openPath, reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
+import { activate, bringForward, close, goTo, onScreen, openPath, reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 10, 13, 12);
@@ -327,6 +327,63 @@ describe("a session hanging under its starter", () => {
     activate("/there");
     sessions.active = own.key;
     expect(onScreen()).toBe("/there");
+  });
+});
+
+// Only the user's pick of a session opens one, so nothing is read for them.
+describe("bringing a project forward", () => {
+  function three() {
+    workspace.open.push(
+      { path: "/here", name: "here", repository: "/here", isGit: true },
+      { path: "/there", name: "there", repository: "/there", isGit: true },
+    );
+    const here = create("/here");
+    started(here.key, "pty-1", "here-1");
+    const there = create("/there");
+    started(there.key, "pty-2", "there-1");
+    there.unread = true;
+    return { here, there };
+  }
+
+  it("opens no session, and leaves an unread one unread", () => {
+    const { here, there } = three();
+    goTo(here.key);
+    bringForward("/there");
+    expect(workspace.active).toBe("/there");
+    expect(sessions.active).toBeNull();
+    expect(there.unread).toBe(true);
+    // Picked again with nothing on screen, it still opens none.
+    bringForward("/there");
+    expect(sessions.active).toBeNull();
+  });
+
+  it("keeps the session on screen when its own project is picked", () => {
+    const { here } = three();
+    const second = create("/here");
+    goTo(here.key);
+    bringForward("/here");
+    expect(sessions.active).toBe(here.key);
+    expect(sessions.active).not.toBe(second.key);
+  });
+
+  it("opens none for a project opened by its path", async () => {
+    const { here, there } = three();
+    goTo(here.key);
+    await openPath("/there");
+    expect(sessions.active).toBeNull();
+    await openPath("/new");
+    expect(workspace.active).toBe("/new");
+    expect(sessions.active).toBeNull();
+    expect(there.unread).toBe(true);
+  });
+
+  it("is what closing the project in front leaves the next one with", () => {
+    const { here, there } = three();
+    goTo(here.key);
+    close("/here");
+    expect(workspace.active).toBe("/there");
+    expect(sessions.active).toBeNull();
+    expect(there.unread).toBe(true);
   });
 });
 

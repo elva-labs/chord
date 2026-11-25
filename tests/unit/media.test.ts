@@ -17,6 +17,7 @@ import {
 import { closeViewer, files } from "$lib/files.svelte";
 import { layout } from "$lib/layout.svelte";
 import {
+  sessions,
   create,
   located,
   reset as resetSessions,
@@ -174,9 +175,10 @@ describe("whose media it is", () => {
 
 describe("presenting", () => {
   it("keeps the files on the session, brings the project forward and opens them in the viewer", () => {
-    workspace.active = "/two";
     const session = create("/one");
     started(session.key, "pty-1", "s1");
+    // Another project is in front than the one the files are in.
+    workspace.active = "/two";
     presented(
       request(["/one/a.png", "/one/b.pdf"], "/one", "Shots.", session.token),
       1_700_000_000_000,
@@ -186,7 +188,8 @@ describe("presenting", () => {
     expect(layout.mode).toBe("reviewing");
     expect(itemsFor("s1")).toHaveLength(1);
     expect(itemsFor("s1")[0].caption).toBe("Shots.");
-    expect(listed()).toHaveLength(1);
+    // Bringing the project forward opens no session.
+    expect(sessions.active).toBeNull();
   });
 
   it("keeps the files on a session the user is not looking at, and opens them on switching", () => {
