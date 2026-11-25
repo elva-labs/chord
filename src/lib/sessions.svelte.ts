@@ -1200,6 +1200,12 @@ function closed(project: string): HistoryEntry[] {
   );
 }
 
+/** Every past session of a project not open as a row, however old and
+    whoever ran it. */
+export function everyPast(project: string): HistoryEntry[] {
+  return closed(project);
+}
+
 /** Whether a past session is listed under its project: one this app ran,
     and not left unchanged for longer than past sessions stay listed. */
 function listed(project: string, transcript: HistoryEntry): boolean {
