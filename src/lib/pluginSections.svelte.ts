@@ -31,7 +31,7 @@ import {
 } from "$lib/core";
 import { workspace } from "$lib/workspace.svelte";
 import { activeSession } from "$lib/sessions.svelte";
-import { say as flash } from "$lib/flash.svelte";
+import { sayError } from "$lib/flash.svelte";
 
 /** A section as one project has it. */
 export interface PluginSection {
@@ -167,7 +167,7 @@ export function sectionChanged(event: PluginSectionEvent) {
     command's label, since the palette that would have shown it is gone. */
 export function noticed(event: PluginNoticeEvent) {
   say(pluginOf(event), event.text);
-  if (event.command !== undefined) flash(`${event.command}: ${event.text}`);
+  if (event.command !== undefined) sayError(`${event.command}: ${event.text}`);
 }
 
 function say(plugin: string, text: string) {

@@ -14,7 +14,7 @@
  */
 
 import { core, type PluginPaletteEvent } from "$lib/core";
-import { say } from "$lib/flash.svelte";
+import { sayError } from "$lib/flash.svelte";
 import { activeSession } from "$lib/sessions.svelte";
 import { workspace } from "$lib/workspace.svelte";
 
@@ -86,7 +86,7 @@ export async function pickPluginCommand(command: PluginCommand) {
           : null,
     });
   } catch (error) {
-    say(`${command.label}: ${String(error)}`);
+    sayError(`${command.label}: ${String(error)}`);
   }
 }
 

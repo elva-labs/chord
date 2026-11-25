@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FLASH_MS, flash, hold, letGo, resetFlash, say } from "$lib/flash.svelte";
+import { FLASH_MS, errorMs, flash, hold, letGo, resetFlash, say, sayError } from "$lib/flash.svelte";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -33,6 +33,23 @@ describe("a word in the status bar", () => {
     vi.advanceTimersByTime(0);
     expect(flash.text).toBe("x");
     vi.advanceTimersByTime(FLASH_MS);
+    expect(flash.text).toBeNull();
+  });
+});
+
+describe("an error in the status bar", () => {
+  it("stays long enough to read, longer the longer it is, up to a cap", () => {
+    expect(errorMs("x")).toBeGreaterThanOrEqual(4000);
+    expect(errorMs("x".repeat(60))).toBeGreaterThan(errorMs("x"));
+    expect(errorMs("x".repeat(1000))).toBe(8000);
+  });
+
+  it("outlasts an ordinary word and then goes by itself", () => {
+    const text = "Pull request overview: the github plugin did not answer";
+    sayError(text);
+    vi.advanceTimersByTime(FLASH_MS * 2);
+    expect(flash.text).toBe(text);
+    vi.advanceTimersByTime(errorMs(text));
     expect(flash.text).toBeNull();
   });
 });
