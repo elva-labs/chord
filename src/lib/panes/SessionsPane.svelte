@@ -1331,10 +1331,14 @@
         e.preventDefault();
         return;
       case "Escape":
-        // Closes the menu, then puts a peeked pane back, and goes no
-        // further: Escape elsewhere is the agent's, or closes the viewer.
+        // Closes the menu, then the chats tray with the cursor on its line,
+        // then puts a peeked pane back, and goes no further: Escape
+        // elsewhere is the agent's, or closes the viewer.
         if (menuOpen) menuOpen = false;
-        else if (layout.sessionsPeek) peekSessions(false);
+        else if (chats.tray) {
+          chats.tray = false;
+          cursor = "chats";
+        } else if (layout.sessionsPeek) peekSessions(false);
         else return;
         e.stopPropagation();
         break;

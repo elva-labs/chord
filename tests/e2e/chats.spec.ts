@@ -83,6 +83,20 @@ test.describe("the chats line", () => {
     await expect(foot(page).getByTestId("past-session")).toHaveCount(0);
   });
 
+  test("closes its tray on Escape, the cursor back on the line", async ({ page }) => {
+    await begin(page);
+    await line(page).click();
+    await expect(foot(page).getByTestId("past-session")).toHaveCount(5);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await expect(line(page)).not.toHaveClass(/cursor/);
+
+    await page.keyboard.press("Escape");
+    await expect(line(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(foot(page).getByTestId("past-session")).toHaveCount(0);
+    await expect(line(page)).toHaveClass(/cursor/);
+  });
+
   test("says there are none yet with no chats at all", async ({ page }) => {
     await begin(page, []);
     await expect(page.getByTestId("chats-count")).toHaveCount(0);
