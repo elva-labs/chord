@@ -11,23 +11,36 @@
    * sees one of them change where it is.
    */
 
+  const KEPT = "The file was removed. This is the copy taken when it was presented.";
+
   interface Props {
     item: MediaItem;
   }
 
   let { item }: Props = $props();
+
+  /** The row as the list has it now: its copies arrive after it does. */
+  let copies = $derived((media.items.find((row) => row.id === item.id) ?? item).copies);
+
+  /** The files shown from their copy. */
+  let kept = $state<Record<string, boolean>>({});
 </script>
 
 <div class="stack" data-testid="media-stack">
   {#each item.files as file (file)}
     <section class="file" data-testid="media-file">
-      <h3 title={file}>{lastSegment(file)}</h3>
+      <h3 title={kept[file] ? `${file}\n${KEPT}` : file}>
+        <span class="name">{lastSegment(file)}</span>
+        {#if kept[file]}<span class="kept" data-testid="media-kept">· kept copy</span>{/if}
+      </h3>
       <MediaFile
         path={file}
+        copy={copies?.[file] ?? null}
         alt={item.caption ?? lastSegment(file)}
         root={item.project}
         reload="{item.at}:{changes.treeReads}:{changes.shownReads}"
         again="{item.at}:{media.calls[item.id] ?? 0}"
+        onshown={(copy) => (kept[file] = copy)}
       />
     </section>
   {/each}
@@ -56,8 +69,18 @@
     text-transform: var(--label-case);
     font-weight: 500;
     color: var(--ink-3);
+    display: flex;
+    gap: 0.5ch;
+    white-space: nowrap;
+  }
+
+  /* A long name gives way, so what follows it stays in view. */
+  .name {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+
+  .kept {
+    flex: none;
   }
 </style>

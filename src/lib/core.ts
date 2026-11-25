@@ -2256,6 +2256,14 @@ export interface Core {
   goingOn(options: GoingOnOptions): Promise<GoingOn>;
   /** Reads an image or a PDF for the window, wherever the path is. */
   readMedia(path: string): Promise<Media>;
+  /** Keeps a copy of each file, where the files are, and gives each copy's
+      path in the order asked, or null where none was made. A page's copy
+      has with it the files of its folder that its markup names. */
+  keepMedia(files: string[], project: string): Promise<(string | null)[]>;
+  /** Removes copies `keepMedia` made; any other path is left alone. */
+  forgetMedia(files: string[]): Promise<void>;
+  /** Whether each file is not there. */
+  mediaGone(files: string[]): Promise<boolean[]>;
   /** An image a Markdown document names by a path relative to itself,
       read in the document's project where the project is: `root` is the
       project, `document` the document's path in it and `file` the image's
@@ -2855,6 +2863,10 @@ const tauriCore: Core = {
     invoke<void>("usage_log", { project, token, entry, transcript: transcript ?? null }),
   goingOn: (options) => invoke<GoingOn>("going_on", { ...options }),
   readMedia: (path) => invoke<Media>("read_media", { path }),
+  keepMedia: (files, project) =>
+    invoke<(string | null)[]>("keep_media", { files, project }),
+  forgetMedia: (files) => invoke<void>("forget_media", { files }),
+  mediaGone: (files) => invoke<boolean[]>("media_gone", { files }),
   readDocumentImage: (root, document, file) =>
     invoke<Media>("read_document_image", { root, document, file }),
   fileInfo: (path) => invoke<FileInfo>("file_info", { path }),
@@ -3301,6 +3313,13 @@ const detachedCore: Core = {
   },
   async readMedia() {
     throw new Error("no core");
+  },
+  async keepMedia() {
+    throw new Error("no core");
+  },
+  async forgetMedia() {},
+  async mediaGone(files) {
+    return files.map(() => false);
   },
   async readDocumentImage() {
     throw new Error("no core");

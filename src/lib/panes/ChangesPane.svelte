@@ -67,7 +67,12 @@
     stopStarted,
   } from "$lib/conductor.svelte";
   import { isInstalled } from "$lib/hook.svelte";
-  import { listed as presentedFor, openItem } from "$lib/media.svelte";
+  import {
+    listed as presentedFor,
+    lookForGone,
+    media,
+    openItem,
+  } from "$lib/media.svelte";
   import {
     boardOf,
     canSend,
@@ -158,6 +163,15 @@
   let field = $state<HTMLInputElement | null>(null);
   let menuOpen = $state(false);
   let presented = $derived(presentedFor());
+
+  // What is gone comes off the list: looked for when the list changes, the
+  // files may have moved, or a read finds one gone.
+  $effect(() => {
+    files.treeReads;
+    files.shownReads;
+    media.missed;
+    void lookForGone(presented);
+  });
   /** The tree's column, for turning a drag into a share of it. */
   let columnHeight = $state(0);
 

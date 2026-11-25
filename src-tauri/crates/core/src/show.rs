@@ -702,13 +702,31 @@ pub fn file_info(path: &Path) -> Result<FileInfo, String> {
     })
 }
 
+/// What reading a presented file that is no longer there fails with, which
+/// the window says in its own words.
+pub const GONE: &str = "this file is gone";
+
+/// Whether an error says nothing is at the path any more, rather than that
+/// something there could not be read.
+pub fn is_gone(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
+}
+
 pub fn read_media(path: &Path) -> Result<Media, String> {
     use base64::Engine;
     let mime = media_type(path)
         .ok_or_else(|| format!("{} is not an image, a PDF or a document", path.display()))?;
-    let size = std::fs::metadata(path)
-        .map_err(|e| format!("could not read {}: {e}", path.display()))?
-        .len();
+    let failed = |e: std::io::Error| {
+        if is_gone(&e) {
+            GONE.to_string()
+        } else {
+            format!("could not read {}: {e}", path.display())
+        }
+    };
+    let size = std::fs::metadata(path).map_err(failed)?.len();
     if size > MEDIA_CAP {
         return Err(format!(
             "{} is {} MB, more than the {} MB shown here",
@@ -717,8 +735,7 @@ pub fn read_media(path: &Path) -> Result<Media, String> {
             MEDIA_CAP / (1024 * 1024)
         ));
     }
-    let bytes =
-        std::fs::read(path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let bytes = std::fs::read(path).map_err(failed)?;
     Ok(Media {
         mime: mime.to_string(),
         data: base64::engine::general_purpose::STANDARD.encode(bytes),
@@ -1120,9 +1137,7 @@ mod tests {
         let text = dir.join("a.txt");
         std::fs::write(&text, "hello").unwrap();
         assert!(read_media(&text).unwrap_err().contains("not an image"));
-        assert!(read_media(&dir.join("missing.png"))
-            .unwrap_err()
-            .contains("could not read"));
+        assert_eq!(read_media(&dir.join("missing.png")).unwrap_err(), GONE);
     }
 
     #[test]

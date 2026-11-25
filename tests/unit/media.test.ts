@@ -5,6 +5,8 @@ import {
   listed,
   load,
   loadMedia,
+  lookForGone,
+  SETTLE,
   media,
   openItem,
   ownerFor,
@@ -45,6 +47,17 @@ const project = vi.hoisted(() => ({
   files: new Map<string, { size: number; wait: number }>(),
 }));
 
+/** The core's side of the kept copies: what was asked for, and which paths
+    are not there. */
+const disk = vi.hoisted(() => ({
+  away: new Set<string>(),
+  kept: [] as string[][],
+  forgotten: [] as string[],
+  copies: 0,
+  asked: [] as string[][],
+  offline: false,
+}));
+
 vi.mock("$lib/core", () => ({
   core: () => ({
     async setWindowTitle() {},
@@ -57,7 +70,8 @@ vi.mock("$lib/core", () => ({
     async readMedia(path: string) {
       const written = project.documents.get(path);
       if (written !== undefined) return { mime: "text/markdown", data: btoa(written), size: written.length };
-      if (path.includes("missing")) throw new Error(`could not read ${path}`);
+      if (path.includes("missing") || disk.away.has(path)) throw "this file is gone";
+      if (path.includes("locked")) throw `could not read ${path}: Permission denied`;
       if (path.endsWith("README.md"))
         return { mime: "text/markdown", data: btoa(project.readme), size: project.readme.length };
       if (path.endsWith(".md"))
@@ -75,6 +89,20 @@ vi.mock("$lib/core", () => ({
         data: "AAAA",
         size: 3,
       };
+    },
+    async keepMedia(files: string[], project: string) {
+      disk.kept.push(files);
+      return files.map((file) =>
+        file.startsWith(`${project}/`) ? null : `/kept/${++disk.copies}/${file.split("/").pop()}`,
+      );
+    },
+    async forgetMedia(files: string[]) {
+      disk.forgotten.push(...files);
+    },
+    async mediaGone(files: string[]) {
+      disk.asked.push(files);
+      if (disk.offline) throw "the host is unreachable";
+      return files.map((file) => disk.away.has(file));
     },
     async readDocumentImage(root: string, document: string, file: string) {
       project.reads.push({ root, document, file });
@@ -449,8 +477,9 @@ describe("presenting", () => {
       url: "data:image/png;base64,AAAA",
       mime: "image/png",
     });
-    const gone = await load("/one/missing.png");
-    expect("error" in gone && gone.error).toContain("could not read");
+    expect(await load("/one/missing.png")).toEqual({ gone: true });
+    const locked = await load("/one/locked.png");
+    expect("error" in locked && locked.error).toContain("Permission denied");
   });
 });
 
@@ -1325,5 +1354,201 @@ describe("a tag half arrived", () => {
       box.innerHTML = renderSaid(arrived(text.slice(0, length)));
       expect(box.textContent, text.slice(0, length)).not.toContain("<");
     }
+  });
+});
+
+describe("copies of files from outside the project", () => {
+  beforeEach(() => {
+    disk.away.clear();
+    disk.kept.length = 0;
+    disk.forgotten.length = 0;
+    disk.copies = 0;
+    disk.asked.length = 0;
+    disk.offline = false;
+  });
+
+  const kept = () => new Promise((done) => setTimeout(done, 0));
+
+  /** A look run to its end, the wait before the second asking included. */
+  const looked = async (items = media.items) => {
+    vi.useFakeTimers();
+    try {
+      const done = lookForGone(items);
+      await vi.advanceTimersByTimeAsync(SETTLE);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+  const listedFiles = () => media.items.map((item) => item.files);
+
+  it("stores where the core copied each file", async () => {
+    presented(request(["/one/a.png", "/tmp/b.png"]));
+    await kept();
+    expect(disk.kept).toEqual([["/one/a.png", "/tmp/b.png"]]);
+    expect(media.items[0].copies).toEqual({ "/tmp/b.png": "/kept/1/b.png" });
+    resetMedia();
+    loadMedia();
+    expect(media.items[0].copies).toEqual({ "/tmp/b.png": "/kept/1/b.png" });
+  });
+
+  it("holds no copy for a file the core made none of", async () => {
+    presented(request(["/one/a.png"]));
+    await kept();
+    expect(media.items[0].copies).toBeUndefined();
+  });
+
+  it("replaces a row's copy when the files are presented again", async () => {
+    presented(request(["/tmp/b.png"]));
+    await kept();
+    presented(request(["/tmp/b.png"]));
+    expect(media.items[0].copies).toEqual({ "/tmp/b.png": "/kept/1/b.png" });
+    await kept();
+    expect(media.items[0].copies).toEqual({ "/tmp/b.png": "/kept/2/b.png" });
+    expect(disk.forgotten).toEqual(["/kept/1/b.png"]);
+  });
+
+  it("forgets a copy that a later call has overtaken", async () => {
+    presented(request(["/tmp/b.png"]));
+    presented(request(["/tmp/b.png"]));
+    await kept();
+    expect(disk.forgotten).toEqual(["/kept/1/b.png"]);
+    expect(media.items[0].copies).toEqual({ "/tmp/b.png": "/kept/2/b.png" });
+  });
+
+  it("shows the file while it is there, the copy once it is gone", async () => {
+    expect(await load("/tmp/b.png", null, undefined, "/kept/1/b.png")).not.toHaveProperty("from");
+    disk.away.add("/tmp/b.png");
+    expect(await load("/tmp/b.png", null, undefined, "/kept/1/b.png")).toMatchObject({
+      mime: "image/png",
+      from: "/kept/1/b.png",
+    });
+    disk.away.add("/kept/1/b.png");
+    expect(await load("/tmp/b.png", null, undefined, "/kept/1/b.png")).toEqual({ gone: true });
+  });
+
+  it("removes a row only once no file or copy of it is left", async () => {
+    presented(request(["/tmp/b.png"]));
+    await kept();
+    disk.away.add("/tmp/b.png");
+    await looked();
+    expect(listedFiles()).toEqual([["/tmp/b.png"]]);
+    disk.away.add("/kept/1/b.png");
+    openItem(media.items[0]);
+    await looked();
+    expect(listedFiles()).toEqual([]);
+    expect(disk.forgotten).toEqual(["/kept/1/b.png"]);
+    // The viewer keeps what it opened, and says its file is gone.
+    expect(Reflect.get(files.media ?? {}, "files")).toEqual(["/tmp/b.png"]);
+    loadMedia();
+    expect(media.items).toEqual([]);
+  });
+
+  it("takes the gone files off a row that has others", async () => {
+    presented(request(["/one/a.png", "/one/c.png"]));
+    await kept();
+    const id = media.items[0].id;
+    disk.away.add("/one/c.png");
+    await looked();
+    expect(media.items[0]).toMatchObject({
+      id,
+      files: ["/one/a.png"],
+      dropped: ["/one/c.png"],
+    });
+    // The same call again brings the whole row back.
+    disk.away.clear();
+    presented(request(["/one/a.png", "/one/c.png"]));
+    expect(media.items).toHaveLength(1);
+    expect(media.items[0]).toMatchObject({ id, files: ["/one/a.png", "/one/c.png"] });
+    expect(media.items[0].dropped).toBeUndefined();
+  });
+
+  it("keeps a file that is back by the second asking", async () => {
+    presented(request(["/one/a.png"]));
+    disk.away.add("/one/a.png");
+    vi.useFakeTimers();
+    try {
+      const done = lookForGone(media.items);
+      await vi.advanceTimersByTimeAsync(SETTLE / 2);
+      disk.away.clear();
+      await vi.advanceTimersByTimeAsync(SETTLE);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(listedFiles()).toEqual([["/one/a.png"]]);
+  });
+
+  it("leaves a row presented again while it waits", async () => {
+    presented(request(["/one/a.png"]));
+    disk.away.add("/one/a.png");
+    vi.useFakeTimers();
+    try {
+      const done = lookForGone(media.items);
+      await vi.advanceTimersByTimeAsync(SETTLE / 2);
+      presented(request(["/one/a.png"]));
+      const asked = disk.asked.length;
+      const missed = media.missed;
+      await vi.advanceTimersByTimeAsync(SETTLE);
+      await done;
+      expect(disk.asked.length).toBe(asked);
+      expect(media.missed).toBeGreaterThan(missed);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(listedFiles()).toEqual([["/one/a.png"]]);
+  });
+
+  it("does not look at a row whose copy is still being made", async () => {
+    presented(request(["/tmp/b.png"]));
+    disk.away.add("/tmp/b.png");
+    await looked();
+    expect(listedFiles()).toEqual([["/tmp/b.png"]]);
+    expect(disk.asked).toEqual([]);
+  });
+
+  it("leaves every row while its machine cannot be asked", async () => {
+    presented(request(["/one/a.png"]));
+    disk.away.add("/one/a.png");
+    disk.offline = true;
+    await looked();
+    expect(listedFiles()).toEqual([["/one/a.png"]]);
+  });
+
+  it("removes the earlier conversations' rows for gone files, and keeps one with its copy", async () => {
+    localStorage.setItem("chord.wentOn", JSON.stringify({ b: "a", c: "a" }));
+    resetGoingOn();
+    const session = create("/one");
+    for (const [i, id] of ["a", "b", "c"].entries()) {
+      started(session.key, "pty-1", id);
+      presented(request(["/tmp/x.png"], "/one", id, session.token), 1_700_000_001_000 + i * 1000);
+    }
+    await kept();
+    const rows = () => media.items.map((item) => item.caption).sort();
+    const left = media.items.find((item) => item.caption === "a")!.copies!["/tmp/x.png"];
+    disk.away.add("/tmp/x.png");
+    for (const item of media.items)
+      if (item.caption !== "a") disk.away.add(item.copies!["/tmp/x.png"]);
+    await looked(itemsFor("c"));
+    expect(rows()).toEqual(["a"]);
+    disk.away.add(left);
+    await looked(itemsFor("c"));
+    expect(rows()).toEqual([]);
+  });
+
+  it("forgets the copies of rows dropped for the list's limit", () => {
+    for (let i = 0; i < 1000; i++)
+      media.items.push({
+        id: `old-${i}`,
+        owner: "project:/two",
+        project: "/two",
+        files: [`/tmp/${i}.png`],
+        caption: null,
+        at: i,
+        copies: { [`/tmp/${i}.png`]: `/kept/old/${i}.png` },
+      });
+    presented(request(["/one/a.png"]));
+    expect(media.items).toHaveLength(1000);
+    expect(disk.forgotten).toEqual(["/kept/old/0.png"]);
   });
 });

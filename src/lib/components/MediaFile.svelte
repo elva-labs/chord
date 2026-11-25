@@ -10,7 +10,8 @@
    * a PDF in its own frame, a document rendered, a page in a frame of its
    * own, a diagram drawn. The file is read again whenever `reload` changes,
    * and what is shown is replaced only when the file differs, so an edit
-   * shows as it is now and an unchanged image stays still.
+   * shows as it is now and an unchanged image stays still. A file that is
+   * gone shows the copy kept of it, or says it is gone.
    */
 
   interface Props {
@@ -18,6 +19,8 @@
     path: string;
     /** What an image is called when it cannot be shown. */
     alt: string;
+    /** The copy to show when the file is gone. */
+    copy?: string | null;
     /** The project the file is in, on the same machine: a document draws
         the images it names in it. */
     root?: string | null;
@@ -29,11 +32,13 @@
         anew, even when the page itself is the same, so screenshots made
         again under the same names show. */
     again?: string;
+    /** Told whether what is shown is the copy, each time that is drawn. */
+    onshown?: (kept: boolean) => void;
   }
 
-  let { path, alt, root = null, reload = "", again = "" }: Props = $props();
+  let { path, alt, copy = null, root = null, reload = "", again = "", onshown }: Props = $props();
 
-  let loaded = $state<Loaded | null>(null);
+  let loaded = $state<(Loaded & { from?: string }) | null>(null);
 
   /** The diagram drawn, when the file is one: the SVG, or why not. */
   let drawn = $state<{ svg: string } | { error: string } | null>(null);
@@ -45,14 +50,16 @@
   $effect(() => {
     const file = path;
     const project = root;
+    const kept = copy;
     reload;
     const current = ++read;
-    void load(file, project, () => current !== read).then((result) => {
+    void load(file, project, () => current !== read, kept).then((result) => {
       if (current !== read) return;
       const before = untrack(() => loaded);
       if (before !== null && JSON.stringify(before) === JSON.stringify(result)) return;
       loaded = result;
       drawn = null;
+      onshown?.(result.from !== undefined);
       if ("diagram" in result) {
         void renderDiagram(result.diagram).then((picture) => {
           if (current !== read) return;
@@ -74,6 +81,8 @@
 
 {#if loaded === null}
   <p class="empty">Reading…</p>
+{:else if "gone" in loaded}
+  <p class="empty" data-testid="media-gone">This file is gone</p>
 {:else if "error" in loaded}
   <p class="empty" data-testid="media-error">{loaded.error}</p>
 {:else if "html" in loaded}
@@ -83,7 +92,7 @@
     {@html loaded.html}
   </div>
 {:else if "page" in loaded}
-  <MediaPage html={loaded.page} title={alt} page={path} {again} />
+  <MediaPage html={loaded.page} title={alt} page={loaded.from ?? path} {again} />
 {:else if "diagram" in loaded}
   {#if drawn === null}
     <p class="empty">Drawing…</p>

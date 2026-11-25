@@ -614,8 +614,12 @@ a divider to drag above them when one is open; the share and the folds are
 remembered, and the open ones share the height.
 
 **Media** is what the agent has presented for the session on screen, one
-row per set of files under its caption, opening in the viewer. **Sessions
-it started** follows it while the session on screen has started sessions
+row per set of files under its caption, opening in the viewer. A row shows
+its files as they are now, or the copy kept of one presented from outside the
+project's own checkout once the file is gone. A file gone with no copy leaves
+its row, and a row left with no file leaves the list;
+[present](../hooks.md) says what is copied and when the list looks.
+**Sessions it started** follows it while the session on screen has started sessions
 of its own, has been allowed to start more in a project without being
 asked, or has worktrees its starts left behind: a row for each session,
 with the controls to stop

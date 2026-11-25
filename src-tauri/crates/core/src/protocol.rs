@@ -408,6 +408,17 @@ struct RunWaiveParams {
 }
 
 #[derive(Deserialize)]
+struct MediaFilesParams {
+    files: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct MediaKeepParams {
+    files: Vec<String>,
+    project: PathBuf,
+}
+
+#[derive(Deserialize)]
 struct NotesForgetParams {
     tokens: Vec<String>,
 }
@@ -1096,6 +1107,18 @@ pub fn dispatch(
             });
             core.usage_log(&p.token, p.entry, transcript)?;
             Ok(Value::Null)
+        }
+        "keep_media" => {
+            let p: MediaKeepParams = parse(params)?;
+            value(core.keep_media(&p.files, &p.project)?)
+        }
+        "forget_media" => {
+            let p: MediaFilesParams = parse(params)?;
+            value(core.forget_media(&p.files)?)
+        }
+        "media_gone" => {
+            let p: MediaFilesParams = parse(params)?;
+            value(core.media_gone(&p.files))
         }
         "read_media" => {
             let p: PathParams = parse(params)?;
