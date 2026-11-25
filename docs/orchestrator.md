@@ -249,8 +249,11 @@ Code's own setting for when it compacts, since every turn reads the whole
 context. The user's own sessions keep Claude Code's default unless the
 user set a figure for them there too. A started session keeps Claude
 Code's prompt cache for five minutes, whose writes cost less than an
-hour's, unless the user set a lifetime of their own; the user's own
-sessions keep the harness's default, and there is no setting for it.
+hour's, unless the user set a lifetime of their own. That covers its own
+conversation: its subagents keep Claude Code's default, which reads
+`CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`. On an API key, Bedrock or Vertex
+the default is already five minutes, so nothing changes there. The user's
+own sessions keep the harness's default, and there is no setting for it.
 
 A start can name an account, by the name it has in the settings, or
 Default, in any case, for the harnesses' own login, for work the user asked
@@ -510,8 +513,8 @@ and one for a call answered early that is now done, counted from when the
 window saw it done. While others are still at work, it waits
 thirty seconds after the last for more to come along, and never more than
 two minutes after the first. A starter that has rested long enough for its
-prompt cache to lapse, an hour for Claude Code and Codex alike,
-would read its conversation again at full price, so its wake waits until
+prompt cache to lapse, an hour for Claude Code and Codex alike and
+four minutes for a Claude Code session another started, would read its conversation again at full price, so its wake waits until
 none of its sessions is at work, or twenty minutes after the first came to
 rest. While a wake is held so, the pointer text on the row's not heard yet
 mark says when it goes. A message from the user carries everything
