@@ -4,6 +4,8 @@ import { attention } from "$lib/attention.svelte";
 import { chordFor, describe as spell, resetKeys } from "$lib/keys.svelte";
 import {
   ATTENTION_LABEL,
+  askingChat,
+  beginChat,
   closePalette,
   commandItems,
   goToItems,
@@ -39,6 +41,7 @@ import "$lib/orchestrator.svelte";
 import { resetFolder } from "$lib/orchestratorFolder.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 import { pickProfile, profileToStart, readProfiles, resetProfiles } from "$lib/codexProfiles.svelte";
+import { resetChats } from "$lib/chats.svelte";
 
 /** The Codex profiles the core lists, for any account. */
 const listed = vi.hoisted(() => ({ profiles: [] as unknown[] }));
@@ -77,6 +80,7 @@ beforeEach(() => {
   resetPalette();
   resetAccounts();
   resetProfiles();
+  resetChats();
   listed.profiles = [];
   // No workflows unless a test has some.
   resetWorkflows();
@@ -659,6 +663,68 @@ function start() {
 /** Lets the reads of profiles under way be heard, and a start they held
     go on. */
 const heard = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("a new chat", () => {
+  const CHATS = "/home/ada/.chord/chats";
+
+  it("is offered with its chord once the chats folder is known, a project open or not", () => {
+    expect(commandItems("new chat")).toEqual([]);
+    resetChats(CHATS);
+    const item = commandItems("new chat")[0];
+    expect(item).toMatchObject({ kind: "command", label: "New chat", chord: spell(chordFor("chat.new")) });
+    workspace.open = [];
+    workspace.active = null;
+    expect(commandItems("new chat").map((each) => each.label)).toEqual(["New chat"]);
+  });
+
+  it("is not offered while no agent is ready", () => {
+    resetChats(CHATS);
+    harnesses.availability = "missing";
+    const item = commandItems("new chat")[0];
+    expect(pickable(item)).toBe(false);
+    expect(pickItem(item)).toEqual({ type: "stay" });
+  });
+
+  it("offers its defaults on one line, with no project asked, and starts on Enter in the chats folder", () => {
+    resetChats(CHATS);
+    expect(beginChat()).toEqual({ type: "stay" });
+    expect(askingChat()).toBe(true);
+    expect(palette.ready).toBe(true);
+    const items = stepItems("");
+    expect(items.map((item) => item.kind)).toEqual(["ready"]);
+    expect(items[0].kind === "ready" && items[0].detail).toBe("no project");
+    const outcome = pickItem(items[0]);
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: CHATS, agent: "claude-code", workflow: null });
+    expect(workspace.open.map(({ path }) => path)).not.toContain(CHATS);
+  });
+
+  it("follows no workflow, whatever the default", () => {
+    resetChats(CHATS);
+    adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
+    expect(stepsLeft([{ kind: "project", path: CHATS }])).toEqual([]);
+    beginChat();
+    const outcome = pickItem(stepItems("")[0]);
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: CHATS, workflow: null });
+  });
+
+  it("goes back to the commands it came from, never to a project question", () => {
+    resetChats(CHATS);
+    openCommands();
+    expect(choose("New chat").type).toBe("stay");
+    expect(askingChat()).toBe(true);
+    stepBack();
+    expect(palette.mode).toBe("commands");
+    expect(palette.steps).toEqual([]);
+  });
+
+  it("does nothing while the chats folder is not known", () => {
+    expect(beginChat()).toEqual({ type: "stay" });
+    expect(palette.open).toBe(false);
+  });
+});
 
 describe("how a new session runs", () => {
   const quick = () => ({

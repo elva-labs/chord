@@ -15,7 +15,7 @@
   import Resume from "$lib/components/Resume.svelte";
   import { closeResume, resume } from "$lib/resume.svelte";
   import Palette from "$lib/components/Palette.svelte";
-  import { closePalette, openCommands, openGoTo, palette } from "$lib/palette.svelte";
+  import { askingChat, closePalette, openChat, openCommands, openGoTo, palette } from "$lib/palette.svelte";
   import AsksSaid from "$lib/components/AsksSaid.svelte";
   import ConductAsk from "$lib/components/ConductAsk.svelte";
   import LeaveAsk from "$lib/components/LeaveAsk.svelte";
@@ -1093,6 +1093,10 @@
         break;
       case "attention":
         nextSession();
+        break;
+      case "newChat":
+        if (palette.open && askingChat()) closePalette();
+        else openChat();
         break;
       case "zoom":
         zoomTerminal(action.step);

@@ -107,7 +107,7 @@
   import { isStartedFolded, setStartedFolded } from "$lib/startedFolds.svelte";
   import { compact } from "$lib/compact.svelte";
   import { shown } from "$lib/unseen";
-  import { openGoTo, openNew } from "$lib/palette.svelte";
+  import { openChat, openGoTo, openNew } from "$lib/palette.svelte";
   import { profileToStartHeard } from "$lib/codexProfiles.svelte";
   import { openSettings } from "$lib/settings.svelte";
   import { chordFor, describe } from "$lib/keys.svelte";
@@ -648,12 +648,10 @@
     openNew(null);
   }
 
-  /** A new chat, in front, typed into at once. */
+  /** The palette's new chat, whose defaults one Enter starts. */
   function newChat() {
     if (!isReady() || chats.dir === null) return;
-    chats.tray = false;
-    startSession(chats.dir);
-    focusPane("agent");
+    openChat();
   }
 
   /** What the sessions a session started are doing, in words, each counted
@@ -2618,7 +2616,7 @@
       past={chatPast}
       older={olderChats}
       onNew={newChat}
-      newTitle="New chat"
+      newTitle={`New chat ${describe(chordFor("chat.new"))}`}
     />
   {/if}
   </div>

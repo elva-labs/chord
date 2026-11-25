@@ -327,6 +327,7 @@ describe("the chords that differ by platform", () => {
     const table: Record<string, unknown> = { ...PRESETS.default };
     delete table["terminal.new"];
     delete table["focus.status"];
+    delete table["chat.new"];
     return table as Record<string, ReturnType<typeof chord>>;
   };
 
@@ -375,6 +376,29 @@ describe("the chords that differ by platform", () => {
     // Each group stands together, once.
     const groups = ACTIONS.map(({ group }) => group).filter((group, at, all) => group !== all[at - 1]);
     expect(new Set(groups).size).toBe(groups.length);
+  });
+});
+
+describe("a new chat's chord", () => {
+  it("is Shift+C on macOS in both presets, and Shift+M elsewhere, where Ctrl+Shift+C copies in a terminal", () => {
+    for (const name of ["default", "vim"] as const) {
+      resetKeys({ mac: true });
+      applyPreset(name);
+      expect(chordFor("chat.new")).toEqual(chord("c", true));
+      expect(tableProblem(PRESETS[name])).toBeNull();
+      resetKeys({ mac: false });
+      applyPreset(name);
+      expect(chordFor("chat.new")).toEqual(chord("m", true));
+      expect(tableProblem(PRESETS[name])).toBeNull();
+    }
+  });
+
+  it("is given to a stored table that never had it", () => {
+    const table: Record<string, unknown> = { ...PRESETS.default };
+    delete table["chat.new"];
+    adoptKeys(table as Record<string, ReturnType<typeof chord>>);
+    expect(chordFor("chat.new")).toEqual(PRESETS.default["chat.new"]);
+    expect(keys.preset).toBe("default");
   });
 });
 

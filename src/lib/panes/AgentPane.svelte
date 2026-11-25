@@ -49,10 +49,11 @@
   import { conductor, dismissRefusal, runStanding, workflowTag } from "$lib/conductor.svelte";
   import { pick, projectLabel, workspace } from "$lib/workspace.svelte";
   import { startsIn } from "$lib/orchestratorFolder.svelte";
-  import { openNew } from "$lib/palette.svelte";
+  import { openChat, openNew } from "$lib/palette.svelte";
+  import { chordFor, describe } from "$lib/keys.svelte";
   import { openSetup } from "$lib/settings.svelte";
   import { sizeOf } from "$lib/zoom.svelte";
-  import { isChat } from "$lib/chats.svelte";
+  import { chats, isChat, isChatsFolder } from "$lib/chats.svelte";
   import Icon from "$lib/components/conversation/Icon.svelte";
 
   let current = $derived(activeSession());
@@ -287,12 +288,23 @@
       <div class="empty" data-testid="agent-status">
         <p class="message">No session open in {projectLabel(workspace.active)}.</p>
       </div>
+    {:else if current === null && isChatsFolder(workspace.active)}
+      <div class="empty" data-testid="agent-status">
+        <p class="message">No chat open.</p>
+        <button class="primary" onclick={startAnother} data-testid="start-agent">New chat</button>
+      </div>
     {:else if current === null}
+      <!-- A project with no session offers a chat too, quietly. -->
       <div class="empty" data-testid="agent-status">
         <p class="message">No session open in {projectLabel(workspace.active)}.</p>
-        <button class="primary" onclick={startAnother} data-testid="start-agent"
-          >New session</button
-        >
+        <div class="starts">
+          <button class="primary" onclick={startAnother} data-testid="start-agent">New session</button>
+          {#if chats.dir !== null}
+            <button class="quiet" onclick={openChat} data-testid="start-chat"
+              >New chat <kbd>{describe(chordFor("chat.new"))}</kbd></button
+            >
+          {/if}
+        </div>
       </div>
     {:else if leaving(current)}
       <div class="overlay" data-testid="agent-status">
@@ -470,6 +482,35 @@
     border-color: var(--accent);
     background: var(--accent);
     color: var(--surface);
+  }
+
+  .starts {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Beside the way to a session, the way to a chat stays quiet. */
+  button.quiet {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-color: transparent;
+    background: none;
+    color: var(--ink-2);
+  }
+
+  button.quiet:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  button.quiet kbd {
+    font-family: var(--chrome);
+    font-size: 10.5px;
+    line-height: 15px;
+    color: var(--ink-3);
   }
 
   button:disabled {
