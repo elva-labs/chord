@@ -9,6 +9,7 @@
     closingSave,
     editor,
     unsavedNames,
+    ownerSettled,
   } from "$lib/editor.svelte";
   import { harnessLabel, isReady } from "$lib/harness.svelte";
   import { accountLabel, accountOf, accountToStart, hasAccounts } from "$lib/accounts.svelte";
@@ -99,7 +100,7 @@
     type ProjectSort,
   } from "$lib/layout.svelte";
   import { lastUsed, splitProjects, steady, touch } from "$lib/projects.svelte";
-  import { unfoldSessions } from "$lib/viewers.svelte";
+  import { unfoldSessions, viewerSettled } from "$lib/viewers.svelte";
   import { isStartedFolded, setStartedFolded } from "$lib/startedFolds.svelte";
   import { compact } from "$lib/compact.svelte";
   import { shown } from "$lib/unseen";
@@ -498,7 +499,7 @@
               label: "Show notes",
               title: "Open the brief and notes this conversation keeps, in the viewer",
               disabled: false,
-              run: () => void openNotes(session),
+              run: () => void showNotes(session),
             },
           ]),
       {
@@ -1207,6 +1208,21 @@
   function choose(key: string) {
     if (!goTo(key)) return;
     focusPane("agent");
+  }
+
+  /** Show notes picks the session's row, then opens its notes over what
+      the switch put in the viewer. A session left from the last quit starts
+      its agent once it is on screen, so its notes open with no switch. */
+  async function showNotes(session: Session) {
+    const { key } = session;
+    if (key === sessions.active || session.status === "dormant") {
+      await openNotes(session);
+      return;
+    }
+    choose(key);
+    await tick();
+    await Promise.all([viewerSettled(), ownerSettled()]);
+    await openNotes(session, () => sessions.active === key);
   }
 
   /** A past session resumes where it ran: in its worktree when it had

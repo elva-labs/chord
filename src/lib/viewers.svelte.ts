@@ -189,8 +189,24 @@ export async function sessionShown(key: string | null) {
   await restore(viewed.get(key) ?? null);
 }
 
+/** The last switch's viewer, until everything it opens there is open. */
+let settling: Promise<void> = Promise.resolve();
+
+/** Shows the viewer of the session switched to, then runs `then`, which
+    opens what else that session has waiting. */
+export function switchViewer(key: string | null, then: () => void | Promise<void>) {
+  settling = sessionShown(key).then(then);
+}
+
+/** Resolves once the last switch has the viewer as it will leave it, so
+    what is opened after it stays. A switch that failed resolves too. */
+export function viewerSettled(): Promise<void> {
+  return settling.catch(() => {});
+}
+
 /** Test seam. */
 export function resetViewers() {
+  settling = Promise.resolve();
   viewed.clear();
   shown = null;
   parked = null;

@@ -27,11 +27,12 @@ export async function hasNotes(owner: NotesOwner): Promise<boolean> {
 }
 
 /** Opens the session's open items, brief and notes in the viewer, written
-    out afresh as a document, in place of whatever the viewer shows. */
-export async function openNotes(owner: NotesOwner): Promise<boolean> {
+    out afresh as a document, in place of whatever the viewer shows.
+    Nothing is shown when `wanted` says no by the time they are read. */
+export async function openNotes(owner: NotesOwner, wanted: () => boolean = () => true): Promise<boolean> {
   try {
     const kept = await core().notesKept(owner.project, owner.token, true);
-    if (kept.page === null) return false;
+    if (kept.page === null || !wanted()) return false;
     showMedia({
       id: `notes:${owner.token}`,
       owner: `notes:${owner.token}`,

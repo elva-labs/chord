@@ -1621,6 +1621,15 @@ export async function ownerShown() {
   if (owner === next) await showInViewer();
 }
 
+/** The last owner's tabs on their way to the screen. */
+let following: Promise<void> = Promise.resolve();
+
+/** Resolves once the tab of whoever came on screen last is in the viewer,
+    so what is opened after it stays. A switch that failed resolves too. */
+export function ownerSettled(): Promise<void> {
+  return following.catch(() => {});
+}
+
 /** Keeps `ownerShown` called as the session or project on screen
     changes, the tabs of one that goes let go, and the core told whether
     anything is unsaved. Runs in an effect root: call once, from the page. */
@@ -1628,7 +1637,9 @@ export function followOwner() {
   $effect(() => {
     sessions.active;
     workspace.active;
-    untrack(() => void ownerShown());
+    untrack(() => {
+      following = ownerShown();
+    });
   });
   onOwnerGone(ownerGone);
   tellUnsaved();
