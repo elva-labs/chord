@@ -1181,6 +1181,9 @@ describe("the HTML a reply may draw", () => {
       "[<kbd></kbd>google.com](https://evil.example)",
       '<a href="https://evil.example"><img src="data:image/png;base64,AA==" alt="google.com"></a>',
       '<a href="https://evil.example"><details><summary>google.com</summary>other words</details></a>',
+      '<div><a href="https://evil.example"><details><summary>click</summary>google.com</details></a></div>',
+      '<div><a href="https://evil.example"><details><summary>click</summary><b>google</b>.com</details></a></div>',
+      '<div><a href="https://evil.example"><details><summary>click</summary>go here<b>google.com</b></details></a></div>',
       '<a href="https://example.com"><a href="https://evil.example">google.com</a></a>',
       "[![google.com](data:image/png;base64,AA==)](https://evil.example)",
     ]) {

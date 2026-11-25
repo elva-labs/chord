@@ -302,24 +302,35 @@ function unnamed(href: string, title: string | null | undefined, text: string): 
   return `<a href="${escapeAttribute(href)}" title="${escapeAttribute(title ?? "")}" rel="noopener noreferrer">${text}</a>`;
 }
 
-/** What a link reads as: its text, and its text with each image's words in
-    it. What a fold shut inside it hides is no part of either. */
-function readings(link: Element): [string, string] {
-  let text = "";
-  let withImages = "";
-  const visit = (node: Node) => {
-    if (node instanceof Text) {
-      text += node.data;
-      withImages += node.data;
-    } else if (node instanceof Element) {
-      if (node.tagName === "IMG") withImages += node.getAttribute("alt") ?? "";
-      const shut = node.tagName === "DETAILS" && !node.hasAttribute("open");
-      for (const child of node.childNodes)
-        if (!shut || (child instanceof Element && child.tagName === "SUMMARY")) visit(child);
-    }
+/** Everything a link may read as: its words with every fold inside it as
+    it is drawn, and what each shut fold holds, together and a child at a
+    time, which shows once it opens. Each is read without and with its
+    images' words. */
+function readings(link: Element): string[] {
+  const out: string[] = [];
+  const read = (nodes: Node[]) => {
+    let text = "";
+    let withImages = "";
+    const visit = (node: Node) => {
+      if (node instanceof Text) {
+        text += node.data;
+        withImages += node.data;
+      } else if (node instanceof Element) {
+        if (node.tagName === "IMG") withImages += node.getAttribute("alt") ?? "";
+        const children = [...node.childNodes];
+        if (node.tagName !== "DETAILS" || node.hasAttribute("open")) return children.forEach(visit);
+        const summary = (child: Node) => child instanceof Element && child.tagName === "SUMMARY";
+        const hidden = children.filter((child) => !summary(child));
+        children.filter(summary).forEach(visit);
+        read(hidden);
+        for (const child of hidden) read([child]);
+      }
+    };
+    nodes.forEach(visit);
+    out.push(text, withImages);
   };
-  visit(link);
-  return [text, withImages];
+  read([link]);
+  return out;
 }
 
 /** A block of a reply with where each of its links goes said as `anchor`
