@@ -772,10 +772,29 @@ shows is chosen by the kind of each call and the shape of what it carries,
 the same for every harness. What the agent wrote is drawn as
 Markdown, its code and tables included, and grows in place while it streams,
 with a caret where the next words come. An image the agent names by an
-address is shown as a link to it rather than fetched. The thread stays at
+address in Markdown is shown as a link to it rather than fetched. The thread stays at
 its foot while new content comes, and where the user scrolled to otherwise,
 with a button back down; only the user's own scrolling stops it following,
 and sending a message takes it to its foot.
+
+HTML in what the agent wrote, its thinking, its plans and a subagent's words
+included, draws the same elements as in a [presented
+document](../hooks.md#the-agents-tools): a paragraph, block or heading aligned, a link, a
+line break, a rule, details that fold open, keys, subscript and
+superscript, bold, italics, code, an image and a picture. A key is drawn as
+a key cap. An image or a picture's source is drawn only when the image is
+written into its address, as a `data:` image, so nothing is fetched and no
+file of the project is read; any other shows as the text of its tag. A tag
+that is not one of these, or that carries anything more than they need,
+shows as the text it is, so a script, a style, a frame, a form or an event
+handler never runs, and HTML cannot make a code block's Copy or a command's
+Run. A link written in HTML says where it goes as one written in Markdown
+does. A fold the agent opened with a block of HTML holds the blocks after it
+up to its closing tag or the end of the message; a closing tag inside a list
+or a quote does not close one opened outside it. A fold's summary is part of
+the thread's arrow walk and opens with a click, <kbd>Enter</kbd> or
+<kbd>Space</kbd>. While a reply streams, a tag that has only half arrived at
+its end is held back until it is whole, outside code.
 
 The user's own message is drawn with the little Markdown a message uses: a
 quote of lines that start with `>`, lists of lines that start with `*`, `-`
@@ -822,7 +841,8 @@ stays open while it is out of view. A selection keeps what it lies in
 drawn while the view is no more than a long stretch away. While a reply
 streams, the blocks before its last are drawn once and kept, and only the
 last is drawn again as words come, so a long reply streams as a short one
-does and a selection in what it has already said holds.
+does and a selection in what it has already said holds. While an element of
+its HTML is open across blocks, everything it holds counts as the last.
 
 What the agent did between two things it said folds into one line, such as
 Worked for 3m, changed 3 files, ran 1 command, which opens into the steps:
@@ -909,7 +929,8 @@ they changed. Stepping brings the current match into the middle of the
 view and stops the thread following its foot, drawing its turn if it is
 not drawn and opening the fold and the step that hold it; they close
 again when find moves on or the bar closes, unless the user opened or
-closed them meanwhile. It glides from near and is there at once from
+closed them meanwhile. A fold the agent wrote in HTML that holds the
+match opens too, and stays open. It glides from near and is there at once from
 further than a screen away, or always where the system asks for less
 motion. Closing the bar leaves the thread where it is and lets go of
 what find read.

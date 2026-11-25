@@ -244,6 +244,72 @@ test.describe("an integrated session", () => {
     await expect(md.locator("table td").first()).toHaveText("a.ts");
   });
 
+  test("draws an agent's kbd as a key, and its other safe HTML, and fetches nothing", async ({ page }) => {
+    const fetched: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("tracker.example")) fetched.push(request.url());
+    });
+    await openIntegrated(page);
+    const said = [
+      "Press <kbd>Cmd</kbd> to go.",
+      "",
+      '<img src="https://tracker.example/a.png" onerror="window.__ran = true">',
+      "",
+      "<script>window.__ran = true</script>",
+      "",
+      "<details>",
+      "<summary>More</summary>",
+      "",
+      "A hidden needle.",
+      "",
+      "</details>",
+    ].join("\n");
+    await agent(page, `f.turn("${H}", ${JSON.stringify(said)});`);
+    const md = page.getByTestId("markdown");
+    const key = md.locator("kbd");
+    await expect(key).toHaveText("Cmd");
+    await expect(key).toBeVisible();
+    await expect(key).toHaveCSS("border-bottom-width", "2px");
+    await expect(key).toHaveCSS("border-top-style", "solid");
+    // The key stands in the line of its sentence.
+    const line = (await md.locator("p").first().boundingBox())!;
+    const box = (await key.boundingBox())!;
+    expect(box.width).toBeLessThan(line.width / 2);
+    expect(box.y).toBeGreaterThanOrEqual(line.y - 2);
+    expect(box.y + box.height).toBeLessThanOrEqual(line.y + line.height + 2);
+    await expect(md).not.toContainText("<kbd>");
+    // The rest is its letters.
+    await expect(md).toContainText('<img src="https://tracker.example/a.png"');
+    await expect(md).toContainText("<script>window.__ran = true</script>");
+    await expect(md.locator("img, script")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __ran?: boolean }).__ran)).toBeUndefined();
+    expect(fetched).toEqual([]);
+    // A fold opens at a click on its summary, which is no Tab stop.
+    await expect(md.getByText("A hidden needle.")).toBeHidden();
+    await expect(md.locator("summary")).toHaveAttribute("tabindex", "-1");
+    await md.locator("summary").click();
+    await expect(md.getByText("A hidden needle.")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(md.getByText("A hidden needle.")).toBeHidden();
+    // Find opens the fold that holds its match.
+    await page.keyboard.press("ControlOrMeta+f");
+    await page.getByTestId("conversation-find-input").fill("needle");
+    await expect(md.getByText("A hidden needle.")).toBeInViewport();
+  });
+
+  test("shows no letters of a tag that is still arriving", async ({ page }) => {
+    await openIntegrated(page);
+    const say = (text: string) =>
+      agent(page, `f.emit("${H}", { type: "text", block: "s", parent: null, text: ${JSON.stringify(text)}, done: false });`);
+    await agent(page, `f.startTurn("${H}");`);
+    await say("Press <kb");
+    const md = page.getByTestId("markdown");
+    await expect(md).toHaveText("Press");
+    await say("d>Cmd</kbd> now");
+    await expect(md.locator("kbd")).toHaveText("Cmd");
+    await expect(md).toHaveText("Press Cmd now");
+  });
+
   test("shows the sessions the agent started, each with a way to open it", async ({ page }) => {
     // Terminal sessions by default here, and one integrated session started
     // the other way from the agent pane.

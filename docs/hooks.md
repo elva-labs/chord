@@ -240,8 +240,9 @@ images from the web or from the project, never both. A link or a text
 style left open closes at the end of its block, and an element opened
 inside a hundred others shows as its text. A tag that is not one of these, or that carries anything more than
 they need, shows as the text it is, so a script, a style, a frame, a
-form or an event handler never runs. HTML in a conversation always shows
-as its text. What was presented stays on the media
+form or an event handler never runs. What an agent says in a conversation
+draws the same HTML, with fewer images; see
+[sessions](reference/sessions.md#sessions-in-chord). What was presented stays on the media
 list of the session whose token the call names, or of the project when the
 call names no session the window knows, a section under the file tree with a
 divider to drag and a header that folds it away, one row per set of files
