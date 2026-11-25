@@ -169,6 +169,7 @@ for (const platform of PLATFORMS)
       "sessions-nav",
       "Resize projects and sessions",
       "start-agent",
+      "start-chat",
       "Resize changes",
       "toggle-right",
       "mode-agent",
@@ -672,7 +673,7 @@ for (const platform of PLATFORMS)
     await open(page, 660, platform);
     await expect(page.locator("section[data-pane='changes']")).toHaveCount(0);
     await expect(page.getByTestId("unfold-sessions")).toBeDisabled();
-    await page.getByTestId("start-agent").focus();
+    await page.getByTestId("start-chat").focus();
     // Once round the window: the agent pane alone, its header then its
     // body, with no sessions and no search. Past the last stop the
     // browser's own window has the keyboard for one press.
@@ -683,6 +684,7 @@ for (const platform of PLATFORMS)
       "mode-agent",
       ...platform.controls,
       "start-agent",
+      "start-chat",
     ];
     expect(await walk(page, "Tab", round.length)).toEqual(round);
 
