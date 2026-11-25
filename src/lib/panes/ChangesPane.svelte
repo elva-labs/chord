@@ -72,7 +72,6 @@
     lookForGone,
     media,
     openItem,
-    removeItem,
   } from "$lib/media.svelte";
   import {
     boardOf,
@@ -165,8 +164,8 @@
   let menuOpen = $state(false);
   let presented = $derived(presentedFor());
 
-  // Which rows have nothing left to show, looked at again when the list
-  // changes, the files may have moved, or a read finds one gone.
+  // What is gone comes off the list: looked for when the list changes, the
+  // files may have moved, or a read finds one gone.
   $effect(() => {
     files.treeReads;
     files.shownReads;
@@ -302,12 +301,6 @@
       if (entry.kind === "started-head") {
         if (!deleting) return false;
         askStopAll();
-        return true;
-      }
-      if (entry.kind === "media") {
-        const item = presented[entry.index];
-        if (!deleting || item === undefined || !media.gone[item.id]) return false;
-        removeItem(item);
         return true;
       }
       if (entry.kind !== "started") return false;
@@ -1236,48 +1229,26 @@
               {#if layout.mediaOpen}
                 <ul class="rows">
                   {#each presented as item (item.id)}
-                    {@const gone = media.gone[item.id] === true}
-                    <li class="presented" class:gone class:cursor={cursorId === rowIdOf(item.id)}>
-                      <div class="row-box">
-                        <button
-                          id={rowIdOf(item.id)}
-                          class="media-row"
-                          class:on={files.media?.id === item.id}
-                          class:cursor={cursorId === rowIdOf(item.id)}
-                          tabindex="-1"
-                          onpointerdown={(e) => e.preventDefault()}
-                          onclick={() => {
-                            sectionCursor = sectionEntries.findIndex((entry) => entry.id === rowIdOf(item.id));
-                            openItem(item);
-                          }}
-                          title={item.files.join("\n")}
-                          data-testid="media-item"
+                    <li>
+                      <button
+                        id={rowIdOf(item.id)}
+                        class="media-row"
+                        class:on={files.media?.id === item.id}
+                        class:cursor={cursorId === rowIdOf(item.id)}
+                        tabindex="-1"
+                        onpointerdown={(e) => e.preventDefault()}
+                        onclick={() => {
+                          sectionCursor = sectionEntries.findIndex((entry) => entry.id === rowIdOf(item.id));
+                          openItem(item);
+                        }}
+                        title={item.files.join("\n")}
+                        data-testid="media-item"
+                      >
+                        <span class="media-caption">{item.caption ?? lastSegment(item.files[0])}</span>
+                        <span class="media-meta"
+                          >{item.files.length === 1 ? lastSegment(item.files[0]) : `${item.files.length} files`} · {ago(item.at)}</span
                         >
-                          <span class="media-caption">{item.caption ?? lastSegment(item.files[0])}</span>
-                          {#if gone}
-                            <span class="media-meta" data-testid="media-item-gone">
-                              {item.files.length === 1 ? "This file is gone" : "These files are gone"}
-                            </span>
-                          {:else}
-                            <span class="media-meta">
-                              {item.files.length === 1 ? lastSegment(item.files[0]) : `${item.files.length} files`} · {ago(item.at)}
-                            </span>
-                          {/if}
-                        </button>
-                        {#if gone}
-                          <span class="actions">
-                            <button
-                              class="icon word"
-                              tabindex="-1"
-                              onpointerdown={(e) => e.preventDefault()}
-                              onclick={() => removeItem(item)}
-                              aria-label="Remove {item.caption ?? lastSegment(item.files[0])}"
-                              title="Remove from the list (Delete)"
-                              data-testid="media-remove">Remove</button
-                            >
-                          </span>
-                        {/if}
-                      </div>
+                      </button>
                     </li>
                   {/each}
                 </ul>
@@ -2417,24 +2388,6 @@
     cursor: default;
   }
 
-  /* A gone row keeps its Remove in view, in room of its own beside the
-     words, so it lays no fill over the row. */
-  .presented.gone .media-row {
-    padding-right: 60px;
-  }
-
-  .presented.gone:hover .media-row {
-    background: var(--surface-2);
-  }
-
-  .presented.gone .actions,
-  :global(:root[data-cards]) .presented.gone .actions {
-    padding-left: 0;
-    background: none;
-    mask-image: none;
-    opacity: 1;
-  }
-
   /* The line to type into a session, under the row it goes to. */
   .send {
     display: block;
@@ -2517,7 +2470,6 @@
   }
 
   /* Inside the cursor's ring, so the ring stays whole under them. */
-  .sections.keyed .presented.cursor .actions,
   .sections.keyed .started.cursor .actions {
     top: 1px;
     right: 1px;

@@ -1602,11 +1602,14 @@ export async function installFakeCore(
             size: 70,
           };
         },
-        // Each file asked for is kept as `/kept/<n>/<name>`; the paths
-        // forgotten are listed in `__forgotten`.
-        keepMedia: async (files: string[]) => {
+        // Each file asked for outside the project is kept as
+        // `/kept/<n>/<name>`; the paths forgotten are listed in
+        // `__forgotten`.
+        keepMedia: async (files: string[], project: string) => {
           const w = window as unknown as { __copies?: number };
           return files.map((file) => {
+            const inside = file.startsWith(`${project}/`) && !file.includes("/worktrees/");
+            if (inside) return null;
             w.__copies = (w.__copies ?? 0) + 1;
             return `/kept/${w.__copies}/${file.split("/").pop()}`;
           });

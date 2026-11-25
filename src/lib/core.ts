@@ -2259,7 +2259,7 @@ export interface Core {
   /** Keeps a copy of each file, where the files are, and gives each copy's
       path in the order asked, or null where none was made. A page's copy
       has with it the files of its folder that its markup names. */
-  keepMedia(files: string[]): Promise<(string | null)[]>;
+  keepMedia(files: string[], project: string): Promise<(string | null)[]>;
   /** Removes copies `keepMedia` made; any other path is left alone. */
   forgetMedia(files: string[]): Promise<void>;
   /** Whether each file is not there. */
@@ -2863,7 +2863,8 @@ const tauriCore: Core = {
     invoke<void>("usage_log", { project, token, entry, transcript: transcript ?? null }),
   goingOn: (options) => invoke<GoingOn>("going_on", { ...options }),
   readMedia: (path) => invoke<Media>("read_media", { path }),
-  keepMedia: (files) => invoke<(string | null)[]>("keep_media", { files }),
+  keepMedia: (files, project) =>
+    invoke<(string | null)[]>("keep_media", { files, project }),
   forgetMedia: (files) => invoke<void>("forget_media", { files }),
   mediaGone: (files) => invoke<boolean[]>("media_gone", { files }),
   readDocumentImage: (root, document, file) =>

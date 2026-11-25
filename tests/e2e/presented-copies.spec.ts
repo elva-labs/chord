@@ -3,7 +3,8 @@ import { PROJECT, installFakeCore } from "./fake";
 
 /**
  * A presented file from outside the project has a copy kept, shown once the
- * file is gone. A row with nothing left to show says so and can be removed.
+ * file is gone. A file gone with no copy comes off its row, and a row with
+ * no file left goes.
  * The fake core keeps a copy as `/kept/<n>/<name>`, and a file is gone when
  * its path is in `__gone` or has "missing" in it.
  */
@@ -52,6 +53,7 @@ test("shows the copy once the file is gone, and says so once both are", async ({
   await openList(page);
   const image = page.getByTestId("media-file").locator("img");
   await expect(image).toBeVisible();
+  await expect(page.getByTestId("media-kept")).toHaveCount(0);
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("chord.media")))
     .toContain("/kept/1/shot.png");
@@ -61,74 +63,73 @@ test("shows the copy once the file is gone, and says so once both are", async ({
   await row(page, "A shot.").getByTestId("media-item").click();
   await expect(image).toBeVisible();
   await expect(page.getByTestId("media-gone")).toHaveCount(0);
-  await expect(page.getByTestId("media-remove")).toHaveCount(0);
-
-  await goneNow(page, [OUTSIDE, "/kept/1/shot.png"]);
-  await page.getByRole("button", { name: "Close the viewer" }).click();
-  await row(page, "A shot.").getByTestId("media-item").click();
-  await expect(page.getByTestId("media-gone")).toHaveText("This file is gone");
-  await expect(row(page, "A shot.").getByTestId("media-item-gone")).toBeVisible();
-});
-
-test("a gone row says so and is removed by its button", async ({ page }) => {
-  await present(page, [`${PROJECT}/shots/kept.png`], "Still here.");
-  await present(page, [`${PROJECT}/shots/missing.png`], "Deleted since.");
-  await openList(page);
-  const gone = row(page, "Deleted since.");
-  await expect(gone.getByTestId("media-item-gone")).toHaveText("This file is gone");
-  await expect(page.getByTestId("media-gone")).toHaveText("This file is gone");
-  await expect(page.getByTestId("viewer")).not.toContainText("could not read");
-  await expect(row(page, "Still here.").getByTestId("media-remove")).toHaveCount(0);
-
-  // The button is in view without the pointer, inside its row, clear of
-  // the words.
-  const remove = gone.getByTestId("media-remove");
-  await expect(remove).toBeVisible();
-  await expect(remove.locator("..")).toHaveCSS("opacity", "1");
-  const [button, whole, words] = await Promise.all(
-    [remove, gone, gone.getByTestId("media-item-gone")].map(async (part) => (await part.boundingBox())!),
+  const kept = page.getByTestId("media-kept");
+  await expect(kept).toHaveText("· kept copy");
+  await expect(kept.locator("..")).toHaveAttribute(
+    "title",
+    /The file was removed\. This is the copy taken when it was presented\./,
   );
-  expect(button.x + button.width).toBeLessThanOrEqual(whole.x + whole.width + 0.5);
-  expect(button.y).toBeGreaterThanOrEqual(whole.y - 0.5);
-  expect(button.y + button.height).toBeLessThanOrEqual(whole.y + whole.height + 0.5);
-  const text = await gone.getByTestId("media-item-gone").evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    return range.getBoundingClientRect().right;
-  });
-  expect(words.x).toBeLessThan(button.x);
-  expect(text).toBeLessThanOrEqual(button.x);
+  // On the name's line, after the name and inside the file's section.
+  const [name, label, section] = await Promise.all(
+    [
+      kept.locator("..").locator("span").first(),
+      kept,
+      page.getByTestId("media-file"),
+    ].map(async (part) => (await part.boundingBox())!),
+  );
+  expect(Math.abs(label.y - name.y)).toBeLessThan(1);
+  expect(label.x).toBeGreaterThanOrEqual(name.x + name.width);
+  expect(label.x + label.width).toBeLessThanOrEqual(section.x + section.width + 0.5);
 
-  await remove.click();
-  await expect(page.getByTestId("media-item")).toHaveCount(1);
-  await expect(page.getByTestId("media-stack")).toHaveCount(0);
-});
-
-test("removing a gone row forgets its copy", async ({ page }) => {
-  await present(page, [OUTSIDE], "A shot.");
-  await openList(page);
-  await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("chord.media")))
-    .toContain("/kept/1/shot.png");
   await goneNow(page, [OUTSIDE, "/kept/1/shot.png"]);
   await page.getByRole("button", { name: "Close the viewer" }).click();
   await row(page, "A shot.").getByTestId("media-item").click();
-  await row(page, "A shot.").getByTestId("media-remove").click();
+  // The viewer says so, and the row goes by itself, its copy forgotten.
+  await expect(page.getByTestId("media-gone")).toHaveText("This file is gone");
   await expect(page.getByTestId("media-section")).toHaveCount(0);
+  await expect(page.getByTestId("media-gone")).toBeVisible();
+  await expect(page.getByTestId("viewer")).not.toContainText("could not read");
   expect(await forgotten(page)).toEqual(["/kept/1/shot.png"]);
 });
 
-test("Delete on a gone row under the cursor removes it", async ({ page }) => {
+test("a row whose files are gone leaves the list by itself", async ({ page }) => {
   await present(page, [`${PROJECT}/shots/kept.png`], "Still here.");
   await present(page, [`${PROJECT}/shots/missing.png`], "Deleted since.");
   await openList(page);
-  await expect(row(page, "Deleted since.").getByTestId("media-item-gone")).toBeVisible();
-  // A press on the row puts the cursor on it, with the keyboard in the tree.
-  await page.getByTestId("file-tree").focus();
-  await row(page, "Still here.").getByTestId("media-item").click();
-  await page.keyboard.press("Delete");
-  await expect(page.getByTestId("media-item")).toHaveCount(2);
-  await row(page, "Deleted since.").getByTestId("media-item").click();
-  await page.keyboard.press("Delete");
+  await expect(row(page, "Deleted since.")).toHaveCount(1);
+  await expect(row(page, "Deleted since.")).toHaveCount(0);
   await expect(page.getByTestId("media-item")).toHaveCount(1);
+  await expect(page.getByTestId("media-section")).toContainText("Media (1)");
+  await expect(page.getByTestId("media-gone")).toHaveText("This file is gone");
+});
+
+test("a row from before copies were kept goes at startup", async ({ page }) => {
+  await present(page, [`${PROJECT}/shots/kept.png`], "Still here.");
+  await page.evaluate((project) => {
+    const rows = JSON.parse(localStorage.getItem("chord.media")!);
+    rows.push({
+      ...rows[0],
+      id: "old",
+      files: ["/private/tmp/out/missing.png"],
+      caption: "From last week.",
+      copies: undefined,
+    });
+    localStorage.setItem("chord.media", JSON.stringify(rows));
+  }, PROJECT);
+  await page.reload();
+  await expect(page.getByTestId("shell")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("chord.media")))
+    .not.toContain("From last week.");
+});
+
+test("a row with a file left drops the gone one", async ({ page }) => {
+  await present(page, [`${PROJECT}/shots/kept.png`, `${PROJECT}/shots/missing.png`], "Two shots.");
+  await openList(page);
+  const meta = row(page, "Two shots.").locator(".media-meta");
+  await expect(meta).toContainText("2 files");
+  await expect(meta).toContainText("kept.png");
+  await row(page, "Two shots.").getByTestId("media-item").click();
+  await expect(page.getByTestId("media-file")).toHaveCount(1);
+  await expect(page.getByTestId("media-file").locator("img")).toBeVisible();
 });

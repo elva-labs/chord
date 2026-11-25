@@ -32,9 +32,11 @@
         anew, even when the page itself is the same, so screenshots made
         again under the same names show. */
     again?: string;
+    /** Told whether what is shown is the copy, each time that is drawn. */
+    onshown?: (kept: boolean) => void;
   }
 
-  let { path, alt, copy = null, root = null, reload = "", again = "" }: Props = $props();
+  let { path, alt, copy = null, root = null, reload = "", again = "", onshown }: Props = $props();
 
   let loaded = $state<(Loaded & { from?: string }) | null>(null);
 
@@ -57,6 +59,7 @@
       if (before !== null && JSON.stringify(before) === JSON.stringify(result)) return;
       loaded = result;
       drawn = null;
+      onshown?.(result.from !== undefined);
       if ("diagram" in result) {
         void renderDiagram(result.diagram).then((picture) => {
           if (current !== read) return;

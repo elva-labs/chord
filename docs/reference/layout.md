@@ -615,10 +615,11 @@ remembered, and the open ones share the height.
 
 **Media** is what the agent has presented for the session on screen, one
 row per set of files under its caption, opening in the viewer. A row shows
-its files as they are now, or the copy kept of one presented from outside
-the project once the file is gone. A row with nothing left to show says its
-files are gone and has a Remove button; [present](../hooks.md) says what is
-copied. **Sessions it started** follows it while the session on screen has started sessions
+its files as they are now, or the copy kept of one presented from outside the
+project's own checkout once the file is gone. A file gone with no copy leaves
+its row, and a row left with no file leaves the list;
+[present](../hooks.md) says what is copied and when the list looks.
+**Sessions it started** follows it while the session on screen has started sessions
 of its own, has been allowed to start more in a project without being
 asked, or has worktrees its starts left behind: a row for each session,
 with the controls to stop
@@ -649,8 +650,7 @@ the column. Under the started sessions, <kbd>Enter</kbd> on a project they
 may be started in takes that back, and on the worktrees left behind asks to
 clean them up. On a started session <kbd>Shift</kbd>+<kbd>Enter</kbd> opens
 the line to send it and <kbd>Delete</kbd> asks before stopping it, and
-<kbd>Delete</kbd> on the section's header asks before stopping them all.
-<kbd>Delete</kbd> on a media row whose files are gone removes it. A
+<kbd>Delete</kbd> on the section's header asks before stopping them all; a
 question or a line to send opened there takes the keyboard, and gives it
 back to the tree when it goes. The cursor stays on its row while rows come
 and go around it, and a row that goes leaves it on the one that took its

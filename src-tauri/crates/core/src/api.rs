@@ -2289,11 +2289,16 @@ impl Core {
         crate::show::read_media(path)
     }
 
-    /// Keeps a copy of each presented file, for when it is gone: where
-    /// each copy is, or None for one that was not kept.
-    pub fn keep_media(&self, files: &[String]) -> Result<Vec<Option<String>>, String> {
+    /// Keeps a copy of each presented file outside the project's own
+    /// checkout, for when it is gone: where each copy is, or None for one
+    /// that was not kept.
+    pub fn keep_media(
+        &self,
+        files: &[String],
+        project: &Path,
+    ) -> Result<Vec<Option<String>>, String> {
         let home = self.home.as_deref().ok_or("no home directory")?;
-        crate::media_copies::keep(home, files, home_directory().as_deref())
+        crate::media_copies::keep(home, files, project, home_directory().as_deref())
     }
 
     /// Removes kept copies whose rows are gone.
@@ -2303,7 +2308,7 @@ impl Core {
         Ok(())
     }
 
-    /// Which of the files are no longer there.
+    /// Which of the files are known to be gone.
     pub fn media_gone(&self, files: &[String]) -> Vec<bool> {
         crate::media_copies::gone(files)
     }

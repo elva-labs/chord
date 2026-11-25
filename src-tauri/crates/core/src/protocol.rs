@@ -413,6 +413,12 @@ struct MediaFilesParams {
 }
 
 #[derive(Deserialize)]
+struct MediaKeepParams {
+    files: Vec<String>,
+    project: PathBuf,
+}
+
+#[derive(Deserialize)]
 struct NotesForgetParams {
     tokens: Vec<String>,
 }
@@ -1103,8 +1109,8 @@ pub fn dispatch(
             Ok(Value::Null)
         }
         "keep_media" => {
-            let p: MediaFilesParams = parse(params)?;
-            value(core.keep_media(&p.files)?)
+            let p: MediaKeepParams = parse(params)?;
+            value(core.keep_media(&p.files, &p.project)?)
         }
         "forget_media" => {
             let p: MediaFilesParams = parse(params)?;

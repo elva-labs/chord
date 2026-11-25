@@ -263,24 +263,35 @@ disk, wherever it is, a scratchpad as much as the tree, and redraws only
 what differs. The rows are the file
 tree's to walk: the arrows run off the end of the tree onto them, Enter
 opens a call, and Left and Right fold and unfold the section as they close
-and open a folder;
+and open a folder.
+
 Files are read where the agent runs, a remote included, up to eight
 megabytes each. Video is not among the kinds taken yet.
 
-A file presented from outside the session's project and worktree, a temp
-folder's say, also has a copy kept in `~/.chord/media`, on the machine the
-file is on. The file itself is shown as long as it is there, and the copy
-once it is gone. Presenting the file again makes the copy again, and the
-copy goes when its row goes. A file in the project or the worktree has no
-copy. A page's copy takes with it the files in its folder that the page and
-its stylesheets name outright, of the kinds a page may load, up to 64 of
-them and 64 MB in all; what a script works out as it runs is not copied, and
-is listed under the copy as not loaded.
+A file presented from outside the project's own checkout, a temp folder's or
+a worktree's say, also has a copy kept in `~/.chord/media`, on the machine
+the file is on. A worktree is outside the checkout wherever it is, inside
+the project folder too. The file itself is shown as long as it is there, and
+the copy once it is gone. Presenting the file again makes the copy again,
+and the copy goes when its row goes. A file in the checkout has no copy. A
+page's copy takes with it the files in its folder that the page and its
+stylesheets name outright, of the kinds a page may load, up to 64 of them
+and 16 MB in all; what a script works out as it runs is not copied, and is
+listed under the copy as not loaded. Where the viewer shows a copy, the
+file's name is followed by "kept copy".
 
-A row whose files are all gone, with no copy of any, reads "This file is
-gone", or "These files are gone", and has a Remove button; <kbd>Delete</kbd>
-removes it from the keyboard. In the viewer, each file of a row that is gone
-says so under its name.
+The copies on a machine take no more than 512 MB together. When a new one
+takes them past that, the oldest go, all that one call kept at a time, never
+those just made.
+
+A file that is gone with no copy left comes off its row, and a row left with
+no file leaves the list. The list looks for this when it changes, when the
+tree or a shown file is read again and when the viewer fails to find a file,
+and asks a second time two seconds later, so a file being written anew
+stays. A file that cannot be asked about stays: one its permissions hide,
+one on a drive or volume that is not mounted, and one on a remote host that
+cannot be reached or whose Chord is too old to say. A viewer showing a file
+that has gone stays open and says "This file is gone" under its name.
 
 An HTML page is drawn in a frame inside a frame, both sandboxed: its own
 scripts run, but it has no origin, no storage, no forms, no popups and no

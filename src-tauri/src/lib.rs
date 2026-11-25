@@ -1346,36 +1346,60 @@ async fn read_media(
     .await
 }
 
-/// Sends a command about presented files to the machine they are on: the
-/// files of one call are all on the one the first is on.
+/// The one machine the files are on, and their paths there; an error when
+/// they are on more than one.
+fn one_machine(files: &[String]) -> Result<(Route, Vec<String>), String> {
+    let machine = |to: &Route| match to {
+        Route::Local(_) => None,
+        Route::Remote { host, .. } => Some(host.clone()),
+    };
+    let to = route(files.first().map_or("", String::as_str));
+    let there = files
+        .iter()
+        .map(|file| {
+            let at = route(file);
+            if machine(&at) != machine(&to) {
+                return Err("the files are on more than one machine".to_string());
+            }
+            Ok(match at {
+                Route::Local(rest) | Route::Remote { rest, .. } => rest,
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    Ok((to, there))
+}
+
+/// Names the copies a machine kept as the window names paths.
+fn name_copies(to: &Route, kept: &mut Value) {
+    let Route::Remote { host, .. } = to else {
+        return;
+    };
+    for copy in kept.as_array_mut().into_iter().flatten() {
+        if let Some(path) = copy.as_str() {
+            *copy = Value::String(with_host(host, path));
+        }
+    }
+}
+
+/// Sends a command about presented files to the machine they are on.
 async fn media_routed<T, F>(
     core: Arc<Core>,
     remotes: Arc<Remotes>,
     files: Vec<String>,
     method: &'static str,
+    params: impl FnOnce(Vec<String>) -> Value + Send + 'static,
     local: F,
 ) -> Result<(Route, Value), String>
 where
     T: Serialize + Send + 'static,
     F: FnOnce(&Core, &[String]) -> Result<T, String> + Send + 'static,
 {
-    let to = route(files.first().map_or("", String::as_str));
-    let there: Vec<String> = files
-        .iter()
-        .map(|file| match route(file) {
-            Route::Local(rest) | Route::Remote { rest, .. } => rest,
-        })
-        .collect();
+    let (to, there) = one_machine(&files)?;
     let answer = match &to {
         Route::Local(_) => blocking(move || local(&core, &there).and_then(value)).await?,
         Route::Remote { host, .. } => {
             let host = host.clone();
-            blocking(move || {
-                remotes
-                    .connection(&host)?
-                    .call(method, json!({ "files": there }))
-            })
-            .await?
+            blocking(move || remotes.connection(&host)?.call(method, params(there))).await?
         }
     };
     Ok((to, answer))
@@ -1388,22 +1412,21 @@ async fn keep_media(
     core: State<'_, Arc<Core>>,
     remotes: State<'_, Arc<Remotes>>,
     files: Vec<String>,
+    project: String,
 ) -> Result<Value, String> {
+    // The files are on the project's machine.
+    let (Route::Local(project) | Route::Remote { rest: project, .. }) = route(&project);
+    let there = project.clone();
     let (to, mut kept) = media_routed(
         Arc::clone(&core),
         Arc::clone(&remotes),
         files,
         "keep_media",
-        |core, files| core.keep_media(files),
+        move |files| json!({ "files": files, "project": there }),
+        move |core, files| core.keep_media(files, Path::new(&project)),
     )
     .await?;
-    if let Route::Remote { host, .. } = to {
-        for copy in kept.as_array_mut().into_iter().flatten() {
-            if let Some(path) = copy.as_str() {
-                *copy = Value::String(with_host(&host, path));
-            }
-        }
-    }
+    name_copies(&to, &mut kept);
     Ok(kept)
 }
 
@@ -1419,6 +1442,7 @@ async fn forget_media(
         Arc::clone(&remotes),
         files,
         "forget_media",
+        |files| json!({ "files": files }),
         |core, files| core.forget_media(files),
     )
     .await
@@ -1437,6 +1461,7 @@ async fn media_gone(
         Arc::clone(&remotes),
         files,
         "media_gone",
+        |files| json!({ "files": files }),
         |core, files| Ok(core.media_gone(files)),
     )
     .await
@@ -2916,6 +2941,35 @@ mod tests {
                 ("ada@box".to_string(), vec![(3, "/srv/b".to_string())]),
             ]
         );
+    }
+
+    #[test]
+    fn presented_files_go_to_the_one_machine_they_are_on() {
+        let (to, there) = one_machine(&text(&["ssh://h/tmp/a.png", "ssh://h/tmp/b.png"])).unwrap();
+        assert!(matches!(&to, Route::Remote { host, .. } if host == "h"));
+        assert_eq!(there, ["/tmp/a.png", "/tmp/b.png"]);
+        for mixed in [
+            ["ssh://h/a", "/b"],
+            ["/a", "ssh://h/b"],
+            ["ssh://h/a", "ssh://i/b"],
+        ] {
+            assert!(one_machine(&text(&mixed)).is_err(), "{mixed:?}");
+        }
+    }
+
+    #[test]
+    fn copies_kept_on_a_host_are_named_with_it() {
+        let (to, _) = one_machine(&text(&["ssh://h/tmp/a.png"])).unwrap();
+        let mut kept = json!(["/home/ada/.chord/media/1/0/a.png", null]);
+        name_copies(&to, &mut kept);
+        assert_eq!(
+            kept,
+            json!(["ssh://h/home/ada/.chord/media/1/0/a.png", null])
+        );
+        let (here, _) = one_machine(&text(&["/tmp/a.png"])).unwrap();
+        let mut kept = json!(["/home/ada/a.png"]);
+        name_copies(&here, &mut kept);
+        assert_eq!(kept, json!(["/home/ada/a.png"]));
     }
 
     #[test]
