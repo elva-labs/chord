@@ -40,6 +40,12 @@ Under the live sessions sit the ones you ran in the project lately. Click one to
 
 When the app starts again, the sessions that were open come back as yellow rows, and the one on screen resumes. A session another session started comes back under its starter, and a line sent to it starts it. See [after a restart](reference/sessions.md#after-a-restart).
 
+## Chats
+
+A chat is a conversation with an agent that belongs to no project. One line at the foot of the sessions pane, such as `Chats · 12`, counts them and carries a mark while one asks, waits unread or works. Click it for a tray of the recent chats, a + for a new one and a row that opens a searchable list of every older chat. A chat on screen is its conversation alone, with no changes pane or terminal panel, and the status bar says Chat.
+
+New chat in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>C</kbd> (<kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> off macOS) and the tray's + open the palette on a chat's defaults, and <kbd>Enter</kbd> starts it. A chat can start sessions in projects with the same tools any session has, and those sessions are drawn in their own project with a mark that leads back to the chat. Every past chat can be resumed, from the tray, the list or <kbd>Cmd</kbd><kbd>P</kbd>. See [chats](reference/sessions.md#chats).
+
 ## Following the session
 
 The changes pane follows the session on screen. When the agent moves into a git worktree, the pane shows the changes there and says so in its header. See [following the session](reference/sessions.md#following-the-session).
