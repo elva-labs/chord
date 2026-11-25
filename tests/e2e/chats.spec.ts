@@ -169,6 +169,57 @@ test.describe("a new chat", () => {
   });
 });
 
+test.describe("a chat in front", () => {
+  /** A new chat on screen, started from the tray. */
+  async function newChat(page: Page) {
+    await begin(page);
+    await line(page).click();
+    await page.getByTestId("new-chat-here").click();
+    await startNew(page);
+    await chatOnScreen(page);
+  }
+  const menu = (page: Page) =>
+    page.evaluate(() => (window as unknown as { __menuEnabled?: Record<string, boolean> }).__menuEnabled ?? {});
+  const MOD = process.platform === "darwin" ? "Meta" : "Control";
+
+  test("greys out New File, whose key starts no file", async ({ page }) => {
+    await newChat(page);
+    await expect.poll(async () => (await menu(page))["file.new"]).toBe(false);
+    await page.getByTestId("mode-editor").click();
+    await page.keyboard.press(`${MOD}+Alt+n`);
+    await expect(page.getByTestId("name-field")).toHaveCount(0);
+  });
+
+  test("greys out New Untitled, whose key opens no tab", async ({ page }) => {
+    await newChat(page);
+    await expect.poll(async () => (await menu(page))["file.untitled"]).toBe(false);
+    await page.getByTestId("mode-editor").click();
+    await page.keyboard.press(`${MOD}+n`);
+    await expect(page.getByTestId("editor-tab")).toHaveCount(0);
+  });
+
+  test("greys out New Shell, whose key opens no terminal", async ({ page }) => {
+    await newChat(page);
+    await expect.poll(async () => (await menu(page))["terminal.new"]).toBe(false);
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+t" : "Control+Shift+t");
+    await expect(page.locator("section[data-pane='terminal']")).toBeHidden();
+    // Back in the project, the three can act again.
+    await page.getByTestId("project-head").first().click();
+    await expect.poll(async () => (await menu(page))["terminal.new"]).toBe(true);
+    expect((await menu(page))["file.new"]).toBe(true);
+    expect((await menu(page))["file.untitled"]).toBe(true);
+  });
+
+  test("leaves the editor as it is with no project, never the chats folder's tree", async ({ page }) => {
+    await newChat(page);
+    await page.getByTestId("mode-editor").click();
+    await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "editing");
+    await expect(page.locator("section[data-pane='changes'] > header .title")).toHaveText("Files");
+    await expect(page.getByTestId("file-tree")).not.toContainText("chats");
+    await expect(page.getByTestId("file-tree").getByRole("treeitem")).toHaveCount(0);
+  });
+});
+
 test.describe("past chats", () => {
   test("are all in the older chats list, filtered by name, and resume", async ({ page }) => {
     await begin(page);

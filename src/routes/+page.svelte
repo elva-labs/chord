@@ -523,14 +523,16 @@
   });
 
   // The File menu's items that cannot act are greyed out: Save without a
-  // file in front to save, the new files and New Shell without a project.
+  // file in front to save, the new files and New Shell without a project,
+  // and with a chat in front, which has no files or shells of its own.
   // Close can always act: with nothing smaller in front it is the window's.
+  let projectInFront = $derived(workspace.active !== null && !isChatsFolder(workspace.active));
   $effect(() => {
     void core()
       .menuEnabled({
-        "file.new": workspace.active !== null,
-        "file.untitled": workspace.active !== null,
-        "terminal.new": workspace.active !== null,
+        "file.new": projectInFront,
+        "file.untitled": projectInFront,
+        "terminal.new": projectInFront,
         "file.save": editing && canSaveInFront(),
         "file.close": true,
       })
@@ -1027,10 +1029,10 @@
         focusStatus();
         break;
       case "newFile":
-        newFile();
+        if (projectInFront) newFile();
         break;
       case "newUntitled":
-        newUntitled();
+        if (projectInFront) newUntitled();
         break;
       case "findInFile":
         findInFile();
