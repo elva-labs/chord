@@ -99,7 +99,6 @@ import {
   titled,
   typed,
   STARTED_CACHE,
-  STARTED_CONTEXT,
   originOf,
   toldFor,
   WORK_BYTES,
@@ -122,6 +121,7 @@ import Started from "$lib/components/conversation/Started.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetFolder } from "$lib/orchestratorFolder.svelte";
 import { resetStartAsk, startAsk } from "$lib/startAsk.svelte";
+import { STARTED_CONTEXT, compactAt, resetCompactAt } from "$lib/compactAt.svelte";
 import { heardOffers, resetLastChosen } from "$lib/lastChosen.svelte";
 import { defaultWorkflow, describeWorkflow, reset as resetWorkflows, stepFacts } from "$lib/workflows.svelte";
 import { instructionLines } from "$lib/workflowInstructions";
@@ -374,6 +374,7 @@ beforeEach(() => {
   // A session follows no workflow here unless a test gives it one.
   resetWorkflows();
   resetStartAsk();
+  resetCompactAt();
   resetAccounts();
   resetLastChosen();
   vi.useFakeTimers();
@@ -1677,6 +1678,19 @@ describe("a start in the caller's own project", () => {
     expect(toldFor(caller).compactAt).toBeUndefined();
     expect(toldFor(row).cacheTtl).toBe(STARTED_CACHE);
     expect(toldFor(caller).cacheTtl).toBeUndefined();
+  });
+
+  it("compacts at the figures the settings give, each left to the agent where none is set", async () => {
+    const caller = live(A, "pty-caller", "caller-1");
+    heard("caller-1");
+    const row = await unasked({ project: A }, "sid-1");
+    compactAt.own = 400_000;
+    compactAt.started = 200_000;
+    expect(toldFor(caller).compactAt).toBe(400_000);
+    expect(toldFor(row).compactAt).toBe(200_000);
+    compactAt.started = null;
+    expect(toldFor(row).compactAt).toBeUndefined();
+    expect(toldFor(row).cacheTtl).toBe(STARTED_CACHE);
   });
 
   it("is the project of a caller that runs in a worktree of it", async () => {

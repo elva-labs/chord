@@ -160,6 +160,8 @@ describe("plan", () => {
     expect(() => plan({ notesOn: false })).toThrow(/user's to change/);
     expect(() => plan({ agentsOn: false })).toThrow(/user's to change/);
     expect(() => plan({ agents: [] })).toThrow(/user's to change/);
+    expect(() => plan({ ownCompactAt: 200_000 })).toThrow(/user's to change/);
+    expect(() => plan({ startedCompactAt: null })).toThrow(/user's to change/);
   });
 
   it("reads chords as text, the modifier implied", () => {

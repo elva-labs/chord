@@ -1883,6 +1883,14 @@ export interface Settings {
   /** Whether the editor wraps a long line at its edge. A file from
       before has none, which reads as off. */
   wordWrap?: boolean;
+  /** The context, in tokens, at which the user's own Claude Code sessions
+      compact, or null for the agent's default. A file from before has
+      none, which reads as null. */
+  ownCompactAt?: number | null;
+  /** The context, in tokens, at which a Claude Code session another
+      session started compacts, or null for the agent's default. A file
+      from before has none, which reads as 150,000. */
+  startedCompactAt?: number | null;
 }
 
 /** The conversation a session is about to take up again. */

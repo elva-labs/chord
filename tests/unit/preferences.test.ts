@@ -51,6 +51,8 @@ const DEFAULTS: Settings = {
   compact: false,
   wordWrap: false,
   lastChosen: {},
+  ownCompactAt: null,
+  startedCompactAt: 150_000,
 };
 
 vi.mock("$lib/core", () => ({
@@ -144,6 +146,7 @@ import { loadTheme, setLook, setPalette, setThemes, theme } from "$lib/theme.sve
 import { notify, resetNotify, setChime, setNotifications } from "$lib/notify.svelte";
 import { resetSwitches, setAgentsOn, setNotesOn, switches } from "$lib/switches.svelte";
 import { workspace } from "$lib/workspace.svelte";
+import { compactAt } from "$lib/compactAt.svelte";
 import { unknowWorkflows, workflowsKnown } from "$lib/workflows.svelte";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -709,6 +712,17 @@ describe("adopt", () => {
     expect(state.hookCalls).toEqual([]);
   });
 
+  it("takes a compaction figure that does not fit as the default, and null as the agent's own", () => {
+    adopt({ ...DEFAULTS, ownCompactAt: 99_999, startedCompactAt: 150_000.5 });
+    expect(compactAt.own).toBeNull();
+    expect(compactAt.started).toBe(150_000);
+    adopt({ ...DEFAULTS, ownCompactAt: undefined, startedCompactAt: undefined });
+    expect(compactAt.started).toBe(150_000);
+    adopt({ ...DEFAULTS, ownCompactAt: 1_000_000, startedCompactAt: null });
+    expect(compactAt.own).toBe(1_000_000);
+    expect(compactAt.started).toBeNull();
+  });
+
   it("is what currentSettings reads back", () => {
     const settings: Settings = {
       ...DEFAULTS,
@@ -722,6 +736,8 @@ describe("adopt", () => {
       wordWrap: true,
       lastChosen: { "claude-code": { model: "opus", mode: "acceptEdits" } },
       autoResume: true,
+      ownCompactAt: 120_000,
+      startedCompactAt: null,
     };
     adopt(settings);
     expect(currentSettings()).toEqual(settings);

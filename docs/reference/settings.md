@@ -375,6 +375,20 @@ at the foot of the pane until it is used again, as
 session running or waiting for you stays whatever the span. Never keeps
 every project in the list.
 
+Where Claude Code sessions compact their conversation, in tokens of
+context, under Claude Code context: one figure for the sessions the user
+starts, kept as `ownCompactAt`, and one for those another session starts,
+kept as `startedCompactAt`. The user's own are empty to begin with, which
+leaves it to Claude Code; started ones compact at 150,000, since every turn
+reads the whole context and a started session's work seldom needs its
+oldest turns word for word. A figure is a whole number from 100,000, the
+fewest Claude Code takes, to 1,000,000, and empty is written as null. A
+session takes the figure when it starts or is resumed, through Claude
+Code's `--autocompact` flag, which `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the
+user's own environment outranks. A file from before has neither, which
+reads as the defaults. They are the user's to change, and an agent's
+settings tools refuse them.
+
 ### Keep notes
 
 Whether sessions keep [notes](sessions.md#notes) and go on from them, on

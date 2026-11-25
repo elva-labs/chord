@@ -482,6 +482,16 @@ pub struct Settings {
     /// it run on past it. A file from before has none, which reads as off.
     #[serde(default)]
     pub word_wrap: bool,
+    /// How many tokens of context the user's own Claude Code sessions hold
+    /// before they compact, or None for the harness's own choice. A file
+    /// from before has none, which reads as None.
+    #[serde(default)]
+    pub own_compact_at: Option<u64>,
+    /// How many tokens of context a Claude Code session another session
+    /// starts holds before it compacts, or None for the harness's own
+    /// choice. A file from before has none, which reads as 150,000.
+    #[serde(default = "started_compact_at")]
+    pub started_compact_at: Option<u64>,
     /// The model, the effort and the permission mode the user last chose
     /// for each harness's sessions, by the harness's id, which a new session
     /// on that harness starts on. A file from before has none.
@@ -494,6 +504,34 @@ pub struct Settings {
 
 fn on() -> bool {
     true
+}
+
+/// The fewest tokens a session may compact at: Claude Code takes no fewer.
+pub const FEWEST_COMPACT_AT: u64 = 100_000;
+/// The most tokens a session may compact at: the largest context a model
+/// holds.
+pub const MOST_COMPACT_AT: u64 = 1_000_000;
+
+fn started_compact_at() -> Option<u64> {
+    Some(150_000)
+}
+
+/// A number of tokens to compact at from a value: a whole number from
+/// [`FEWEST_COMPACT_AT`] to [`MOST_COMPACT_AT`], or null for the harness's
+/// own choice.
+fn compact_at(field: &str, value: &Value) -> Result<Option<u64>, String> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    value
+        .as_u64()
+        .filter(|tokens| (FEWEST_COMPACT_AT..=MOST_COMPACT_AT).contains(tokens))
+        .map(Some)
+        .ok_or_else(|| {
+            format!(
+                "{field} is a whole number of tokens from {FEWEST_COMPACT_AT} to {MOST_COMPACT_AT}, or null"
+            )
+        })
 }
 
 impl Default for Settings {
@@ -528,6 +566,8 @@ impl Default for Settings {
             compact: false,
             auto_resume: false,
             word_wrap: false,
+            own_compact_at: None,
+            started_compact_at: started_compact_at(),
             last_chosen: BTreeMap::new(),
             unread_entries: Vec::new(),
         }
@@ -1436,6 +1476,8 @@ fn set_field(settings: &mut Settings, field: &str, value: &Value) -> Result<(), 
             settings.auto_resume = value.as_bool().ok_or("autoResume is true or false")?;
         }
         "wordWrap" => settings.word_wrap = value.as_bool().ok_or("wordWrap is true or false")?,
+        "ownCompactAt" => settings.own_compact_at = compact_at(field, value)?,
+        "startedCompactAt" => settings.started_compact_at = compact_at(field, value)?,
         "lastChosen" => settings.last_chosen = last_chosen(value)?,
         "terminalFont" => settings.terminal_font = one_of(field, value, TERMINAL_FONTS)?,
         "interfaceFont" => settings.interface_font = one_of(field, value, INTERFACE_FONTS)?,
@@ -3457,6 +3499,51 @@ mod tests {
         let next = apply(&Settings::default(), &json!({ "userStyles": true })).unwrap();
         assert!(next.user_styles);
         assert!(apply(&next, &json!({ "userStyles": "yes" })).is_err());
+    }
+
+    #[test]
+    fn started_sessions_compact_at_150_000_and_the_users_own_where_the_agent_says() {
+        let defaults = Settings::default();
+        assert_eq!(defaults.own_compact_at, None);
+        assert_eq!(defaults.started_compact_at, Some(150_000));
+        // A file from before has neither.
+        let before = parse(r#"{ "chime": true }"#).unwrap();
+        assert_eq!(before.own_compact_at, None);
+        assert_eq!(before.started_compact_at, Some(150_000));
+        // Null is the agent's own choice, and is written as null so it
+        // stays one.
+        let cleared = apply(
+            &defaults,
+            &json!({ "ownCompactAt": 400_000, "startedCompactAt": null }),
+        )
+        .unwrap();
+        assert_eq!(cleared.own_compact_at, Some(400_000));
+        assert_eq!(cleared.started_compact_at, None);
+        let text = render(&cleared);
+        let read = parse(&text).unwrap();
+        assert_eq!(read.own_compact_at, Some(400_000));
+        assert_eq!(read.started_compact_at, None);
+        // The ends of the range are taken; past them, a fraction or a
+        // string is not.
+        for tokens in [FEWEST_COMPACT_AT, MOST_COMPACT_AT] {
+            assert!(apply(&defaults, &json!({ "ownCompactAt": tokens })).is_ok());
+        }
+        for odd in [
+            json!(99_999),
+            json!(1_000_001),
+            json!(150_000.5),
+            json!(-150_000),
+            json!("150000"),
+        ] {
+            let refused = apply(&defaults, &json!({ "startedCompactAt": odd })).unwrap_err();
+            assert!(refused.contains("100000 to 1000000"), "{refused}");
+        }
+        // A figure in the file that does not fit is the default, kept as
+        // written.
+        let odd = parse(r#"{ "startedCompactAt": 50000 }"#).unwrap();
+        assert_eq!(odd.started_compact_at, Some(150_000));
+        assert_eq!(odd.unread_entries[0].field, "startedCompactAt");
+        assert!(render(&odd).contains(r#""startedCompactAt": 50000"#));
     }
 
     #[test]

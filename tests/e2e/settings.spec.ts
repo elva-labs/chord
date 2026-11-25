@@ -700,6 +700,45 @@ test("asks before every start only once turned on, and keeps it", async ({ page 
   await expect.poll(file).toMatchObject({ askEveryStart: false });
 });
 
+test("compacts started sessions at 150,000 and the user's own at the agent's default, and keeps a change", async ({
+  page,
+}) => {
+  const file = () =>
+    page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? "{}"),
+      SETTINGS_FILE,
+    );
+  await page.keyboard.press(`${MOD}+,`);
+  await page.getByTestId("settings-tab-sessions").click();
+  const own = page.getByTestId("compact-at-own");
+  const started = page.getByTestId("compact-at-started");
+  await expect(own).toHaveValue("");
+  await expect(own).toHaveAttribute("placeholder", "Default");
+  await expect(started).toHaveValue("150000");
+
+  // Below the fewest Claude Code takes is refused and nothing is kept.
+  await own.fill("50000");
+  await own.press("Enter");
+  await expect(page.getByTestId("compact-at-problem")).toContainText("from 100,000 to 1,000,000");
+  await own.fill("40k");
+  await own.press("Enter");
+  await expect(page.getByTestId("compact-at-problem")).toBeVisible();
+  await own.fill("400,000");
+  await own.press("Enter");
+  await expect(page.getByTestId("compact-at-problem")).toHaveCount(0);
+  await expect.poll(file).toMatchObject({ ownCompactAt: 400000 });
+  await started.fill("");
+  await started.press("Enter");
+  await expect.poll(file).toMatchObject({ startedCompactAt: null });
+
+  await page.reload();
+  await expect(page.locator(AGENT)).toBeVisible();
+  await page.keyboard.press(`${MOD}+,`);
+  await page.getByTestId("settings-tab-sessions").click();
+  await expect(page.getByTestId("compact-at-own")).toHaveValue("400000");
+  await expect(page.getByTestId("compact-at-started")).toHaveValue("");
+});
+
 test.describe("a change the settings file refuses", () => {
   test("is said over the window wherever it was made, and the window shows what is stored", async ({
     page,

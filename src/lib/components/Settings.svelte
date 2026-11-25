@@ -90,6 +90,14 @@
   import { wrap, setWrap } from "$lib/wrap.svelte";
   import { notify, setChime, setNotifications } from "$lib/notify.svelte";
   import { setAskEveryStart, startAsk } from "$lib/startAsk.svelte";
+  import {
+    FEWEST_COMPACT_AT,
+    MOST_COMPACT_AT,
+    compactAt,
+    fitsCompactAt,
+    setOwnCompactAt,
+    setStartedCompactAt,
+  } from "$lib/compactAt.svelte";
   import { setAgentsOn, setNotesOn, switches } from "$lib/switches.svelte";
   import { anyChosen, chosenFor, forget as forgetChosen } from "$lib/lastChosen.svelte";
   import { modelLabel } from "$lib/models";
@@ -358,6 +366,31 @@
   $effect(() => {
     if (accountOverridden > 0) accountOverridesOpen = true;
   });
+
+  /** The rows that say where Claude Code sessions compact. */
+  const COMPACT_ROWS = [
+    { which: "own", label: "Compact my sessions at", hint: "The sessions you start yourself." },
+    { which: "started", label: "Compact started sessions at", hint: "The sessions another session starts." },
+  ] as const;
+  let compactProblem = $state<{ which: "own" | "started"; text: string } | null>(null);
+
+  /** Sets where a kind of session compacts from what its field holds:
+      empty for Claude Code's default, or a whole number in range, with
+      or without separators between its thousands. */
+  function changeCompactAt(which: "own" | "started", text: string) {
+    const trimmed = text.replace(/[\s,_]/g, "");
+    const tokens = trimmed === "" ? null : /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
+    if (tokens !== null && !fitsCompactAt(tokens)) {
+      compactProblem = {
+        which,
+        text: `A whole number of tokens from ${FEWEST_COMPACT_AT.toLocaleString("en")} to ${MOST_COMPACT_AT.toLocaleString("en")}, or empty for Claude Code's default.`,
+      };
+      return;
+    }
+    compactProblem = null;
+    if (which === "own") setOwnCompactAt(tokens);
+    else setStartedCompactAt(tokens);
+  }
 
   /** What new sessions of an agent start on, as its row says it. */
   function chosenLine(agent: HarnessId): string {
@@ -955,6 +988,41 @@
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div class="s-grp">
+                <div class="s-head"><h3 class="s-title">Claude Code context</h3></div>
+                <UnreadEntries field={["ownCompactAt", "startedCompactAt"]} />
+                <div class="s-card">
+                  {#each COMPACT_ROWS as row (row.which)}
+                    <div class="s-row" class:problem={compactProblem?.which === row.which}>
+                      <label class="s-name" for="compact-at-{row.which}">{row.label}<small>{row.hint}</small></label>
+                      <div class="s-ctl">
+                        <input
+                          id="compact-at-{row.which}"
+                          class="s-field s-tokens"
+                          type="text"
+                          inputmode="numeric"
+                          spellcheck="false"
+                          autocomplete="off"
+                          placeholder="Default"
+                          value={compactAt[row.which] ?? ""}
+                          onchange={(e) => changeCompactAt(row.which, e.currentTarget.value)}
+                          aria-invalid={compactProblem?.which === row.which}
+                          data-testid="compact-at-{row.which}"
+                        />
+                        <span class="s-fixed">tokens</span>
+                      </div>
+                    </div>
+                    {#if compactProblem?.which === row.which}
+                      <p class="s-problem" data-testid="compact-at-problem">{compactProblem.text}</p>
+                    {/if}
+                  {/each}
+                </div>
+                <p class="s-after">
+                  Every turn reads the whole context, so a smaller one costs less. Empty leaves it to Claude Code. A session
+                  takes the figure when it starts or is resumed.
+                </p>
               </div>
 
               <div class="s-grp">

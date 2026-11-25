@@ -2899,6 +2899,8 @@ mod tests {
             "chime",
             "askEveryStart",
             "autoResume",
+            "ownCompactAt",
+            "startedCompactAt",
         ] {
             assert!(!properties.contains_key(name), "{name} is the user's alone");
         }

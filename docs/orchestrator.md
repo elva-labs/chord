@@ -243,11 +243,14 @@ default the account runs on, as Claude Code reports it to a conversation.
 The start's answer says which model the session runs on.
 
 A session another started also compacts its conversation once its context
-reaches 150,000 tokens, through Claude Code's own setting for when it
-compacts, since every turn reads the whole context. It keeps Claude Code's
-prompt cache for five minutes, whose writes cost less than an hour's,
-unless the user set a lifetime of their own. The user's own sessions keep
-the harness's default for both. There is no setting for either.
+reaches 150,000 tokens, or the figure the user set under Claude Code
+context in the [settings](reference/settings.md#sessions), through Claude
+Code's own setting for when it compacts, since every turn reads the whole
+context. The user's own sessions keep Claude Code's default unless the
+user set a figure for them there too. A started session keeps Claude
+Code's prompt cache for five minutes, whose writes cost less than an
+hour's, unless the user set a lifetime of their own; the user's own
+sessions keep the harness's default, and there is no setting for it.
 
 A start can name an account, by the name it has in the settings, or
 Default, in any case, for the harnesses' own login, for work the user asked
