@@ -97,6 +97,37 @@ test.describe("the chats line", () => {
     await expect(line(page)).toHaveClass(/cursor/);
   });
 
+  test("shows its + with the cursor on it, as with the pointer", async ({ page }) => {
+    await begin(page);
+    const plus = page.getByTestId("new-chat-here");
+    await expect(plus).toHaveCSS("opacity", "0");
+
+    await line(page).click();
+    await page.keyboard.press("Escape");
+    await expect(line(page)).toHaveClass(/cursor/);
+    await page.mouse.move(0, 0);
+    await expect(plus).toHaveCSS("opacity", "1");
+  });
+
+  test("says its count and its mark in its label", async ({ page }) => {
+    await begin(page);
+    await expect(line(page)).toHaveAccessibleName("Chats, 7");
+
+    await line(page).click();
+    await page.getByTestId("new-chat-here").click();
+    await startNew(page);
+    await chatOnScreen(page);
+    await page.getByTestId("project-head").click();
+    await line(page).click();
+    await foot(page).getByTestId("session-row").click({ button: "right" });
+    // The whole menu, which the scrolling foot does not cut.
+    await expect(page.getByTestId("session-menu")).toBeInViewport({ ratio: 1 });
+    await page.getByTestId("session-menu-unread").click();
+    await line(page).click();
+    await expect(page.getByTestId("chats-mark")).toBeVisible();
+    await expect(line(page)).toHaveAccessibleName("Chats, 8, A chat is waiting for you");
+  });
+
   test("says there are none yet with no chats at all", async ({ page }) => {
     await begin(page, []);
     await expect(page.getByTestId("chats-count")).toHaveCount(0);

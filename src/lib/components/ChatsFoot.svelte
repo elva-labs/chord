@@ -40,6 +40,12 @@
     working: "A chat is at work",
   };
 
+  /** What a screen reader hears for the line: its name, the count and the
+      mark's words, which the mark alone would not say. */
+  let label = $derived(
+    ["Chats", ...(count > 0 ? [String(count)] : []), ...(mark === null ? [] : [MARK_WORDS[mark]])].join(", "),
+  );
+
   // A chat coming in front, however it was picked, closes the tray.
   let shown = sessions.active;
   $effect(() => {
@@ -69,6 +75,7 @@
       onclick={() => (chats.tray = !chats.tray)}
       aria-expanded={chats.tray}
       title={chats.tray ? "Close the chats" : "Show the recent chats"}
+      aria-label={label}
       data-row="chats"
       data-testid="chats-line"
     >
@@ -79,7 +86,7 @@
       <span class="t">Chats</span>
       {#if count > 0}<span class="c" data-testid="chats-count">· {count}</span>{/if}
       {#if mark !== null}
-        <span class="mark {mark}" title={MARK_WORDS[mark]} aria-label={MARK_WORDS[mark]} data-testid="chats-mark"></span>
+        <span class="mark {mark}" title={MARK_WORDS[mark]} data-testid="chats-mark"></span>
       {/if}
     </button>
     <button
@@ -241,6 +248,7 @@
   }
 
   .fhead:hover .plus.hover-only,
+  :global(.nav:focus-within) .line.cursor + .plus.hover-only,
   .plus:focus-visible {
     opacity: 1;
   }

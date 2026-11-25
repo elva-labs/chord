@@ -1728,8 +1728,9 @@ The sessions pane ends in one line for chats, pinned below the projects so
 it never scrolls away. It reads `Chats` with the number of chats, open and
 past, as in `Chats · 12`, and while it is closed it carries a mark when a
 chat is asking for a permission, has changed since you last looked, or is
-at work, in that order. In compact mode the line is the same, and the
-folded column shows the chats' mark.
+at work, in that order. A + for a new chat shows on the line while the
+pointer or the keyboard's cursor is on it. In compact mode the line is the
+same, and the folded column shows the chats' mark.
 
 A click on the line opens a tray under it: the five chats changed last,
 open or past, the newest first, a + for a new chat, and, when there are
