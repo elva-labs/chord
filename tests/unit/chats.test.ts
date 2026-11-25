@@ -35,8 +35,10 @@ vi.mock("$lib/core", () => ({
 import {
   chatCount,
   chatMark,
+  chatOnScreen,
   chatRows,
   chats,
+  footEntries,
   isChat,
   isChatsFolder,
   load,
@@ -45,7 +47,16 @@ import {
   recentChats,
   resetChats,
 } from "$lib/chats.svelte";
-import { activeSession, create, forProject, reset as resetSessions, sessions, type HistoryEntry } from "$lib/sessions.svelte";
+import {
+  activeSession,
+  create,
+  forProject,
+  reset as resetSessions,
+  select,
+  sessions,
+  type HistoryEntry,
+} from "$lib/sessions.svelte";
+import { offeredChats, openResume, pickChat, resume } from "$lib/resume.svelte";
 import {
   chatInFront,
   hookedProjects,
@@ -53,6 +64,7 @@ import {
   projectLabel,
   reset as resetWorkspace,
   restore,
+  resumeChat,
   startSession,
   workspace,
 } from "$lib/workspace.svelte";
@@ -208,6 +220,75 @@ describe("the chats folder in the window", () => {
     localStorage.setItem("chord.workspace", JSON.stringify({ open: [A, DIR], active: DIR }));
     await restore();
     expect(workspace.open.map((project) => project.path)).toEqual([A]);
+    expect(workspace.active).toBe(DIR);
+  });
+});
+
+describe("the chats line", () => {
+  it("holds nothing under it while closed with no chat on screen", () => {
+    create(DIR, null, "claude-code", null, null, null, null);
+    select(create(A, null, "claude-code", null, null, null, null).key);
+    expect(chatOnScreen()).toBeNull();
+    expect(footEntries()).toEqual([]);
+  });
+
+  it("keeps the chat on screen under it while closed", () => {
+    create(DIR, null, "claude-code", null, null, null, null);
+    const on = create(DIR, null, "claude-code", null, null, null, null);
+    select(on.key);
+    expect(chatOnScreen()).toBe(on);
+    expect(footEntries()).toMatchObject([{ kind: "row", session: on }]);
+  });
+
+  it("lists the recent chats while the tray is open", () => {
+    sessions.history[DIR] = Array.from({ length: 7 }, (_, index) => past(`p${index}`, index + 1));
+    create(DIR, null, "claude-code", null, null, null, null);
+    chats.tray = true;
+    expect(footEntries()).toHaveLength(5);
+    expect(olderCount()).toBe(3);
+  });
+});
+
+describe("a past chat", () => {
+  it("resumes in front, under the account it ran under, without opening the folder", () => {
+    const chat = resumeChat({ ...past("a", 3), account: "home" });
+    expect(chat).not.toBeNull();
+    expect(chat!.project).toBe(DIR);
+    expect(chat!.account).toBe("home");
+    expect(workspace.active).toBe(DIR);
+    expect(activeSession()).toBe(chat);
+    expect(workspace.open.map((project) => project.path)).toEqual([A]);
+  });
+
+  it("cannot resume while the folder is unknown", () => {
+    resetChats();
+    expect(resumeChat(past("a", 3))).toBeNull();
+    expect(forProject(DIR)).toEqual([]);
+  });
+});
+
+describe("the older chats", () => {
+  it("list every chat, open or past, the latest first, narrowed by name", () => {
+    sessions.history[DIR] = [past("a", 1), past("b", 30), { ...past("c", 400), title: "Plans for spring" }];
+    const row = create(DIR, null, "claude-code", null, null, null, null);
+    openResume(DIR);
+    expect(offeredChats().map((entry) => (entry.kind === "row" ? entry.session.key : entry.transcript.id))).toEqual([
+      row.key,
+      "a",
+      "b",
+      "c",
+    ]);
+    resume.query = "SPRING plans";
+    expect(offeredChats().map((entry) => (entry.kind === "past" ? entry.transcript.id : null))).toEqual(["c"]);
+  });
+
+  it("put the one picked in front and close", () => {
+    sessions.history[DIR] = [past("a", 1)];
+    openResume(DIR);
+    const [entry] = offeredChats();
+    pickChat(entry);
+    expect(resume.open).toBe(false);
+    expect(activeSession()?.resumedFrom).toBe("a");
     expect(workspace.active).toBe(DIR);
   });
 });

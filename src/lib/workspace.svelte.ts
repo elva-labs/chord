@@ -13,6 +13,7 @@ import {
   create,
   select,
   sessions,
+  type HistoryEntry,
   type Session,
 } from "$lib/sessions.svelte";
 import { closeProject as closeShells } from "$lib/terminals.svelte";
@@ -246,6 +247,15 @@ export function goTo(key: string): boolean {
   select(key);
   touch(drawnIn(session));
   return true;
+}
+
+/** A past chat resumes in front, under the account it ran under. Null
+    while the chats folder is unknown. */
+export function resumeChat(transcript: HistoryEntry): Session | null {
+  const dir = chats.dir;
+  if (dir === null) return null;
+  if (workspace.active !== dir) activate(dir);
+  return create(dir, transcript.id, transcript.agent, null, null, null, transcript.account);
 }
 
 /** Starts a session in a project, brought forward, and gives it the

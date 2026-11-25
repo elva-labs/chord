@@ -11,15 +11,19 @@
 import { core } from "$lib/core";
 import {
   byChange,
+  byKey,
   everyPast,
   forProject,
   isLive,
   lastChanged,
+  sessions,
   type HistoryEntry,
   type Session,
 } from "$lib/sessions.svelte";
 
-export const chats = $state<{ dir: string | null }>({ dir: null });
+/** The folder, and whether the tray of recent chats is open under the
+    chats line. */
+export const chats = $state<{ dir: string | null; tray: boolean }>({ dir: null, tray: false });
 
 /** How many chats the tray lists before the row that opens the rest. */
 export const RECENT = 5;
@@ -94,6 +98,20 @@ export function olderCount(most = RECENT): number {
   return Math.max(0, chatCount() - recentChats(most).length);
 }
 
+/** The chat on screen, if one is. */
+export function chatOnScreen(): Session | null {
+  const session = sessions.active === null ? null : byKey(sessions.active);
+  return session !== null && isChat(session) ? session : null;
+}
+
+/** What the chats line holds under it: the tray's chats while it is open,
+    else the chat on screen, so the chat you are in keeps its row. */
+export function footEntries(most = RECENT): ChatEntry[] {
+  if (chats.tray) return recentChats(most);
+  const on = chatOnScreen();
+  return on === null ? [] : [{ kind: "row", session: on, at: lastChanged(on) }];
+}
+
 /** What the chats line marks while it is closed: a chat asking for a
     permission, one unread, or one at work, in that order. Null when every
     chat is at rest. The caller may say what at work is, as a row's dot
@@ -113,5 +131,6 @@ export function chatMark(
 /** Test seam. */
 export function resetChats(dir: string | null = null) {
   chats.dir = dir;
+  chats.tray = false;
   asked = dir === null ? null : Promise.resolve(dir);
 }

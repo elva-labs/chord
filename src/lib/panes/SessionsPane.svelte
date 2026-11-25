@@ -59,11 +59,13 @@
     onScreen,
     pick,
     projectLabel,
+    resumeChat,
     startSession,
     workspace,
   } from "$lib/workspace.svelte";
   import { chatLine, chatOf, chatStarted, childrenOf, conducting, isAsking, ownFor, parentOf, stateWord } from "$lib/orchestrator.svelte";
-  import { isChat } from "$lib/chats.svelte";
+  import { chats, footEntries, isChat, isChatsFolder, olderCount } from "$lib/chats.svelte";
+  import ChatsFoot from "$lib/components/ChatsFoot.svelte";
   import { BRINGS_BACK, heldNow, holdWords, listed, reopenEnds } from "$lib/sessionMoves.svelte";
   import { folderShown, folderToRead, startsIn } from "$lib/orchestratorFolder.svelte";
   import {
@@ -646,6 +648,14 @@
     openNew(null);
   }
 
+  /** A new chat, in front, typed into at once. */
+  function newChat() {
+    if (!isReady() || chats.dir === null) return;
+    chats.tray = false;
+    startSession(chats.dir);
+    focusPane("agent");
+  }
+
   /** What the sessions a session started are doing, in words, each counted
       once: how many run, how many ask for a permission, and how many are
       done. */
@@ -875,8 +885,33 @@
         if (idle.length < split.inactive.length) out.push({ id: "idle-more", run: () => toggle("idle-more") });
       }
     }
+    if (chats.dir !== null) out.push(...chatsWalk(chats.dir));
     return out;
   });
+
+  /** The chats line and what stands under it: the tray's chats while it
+      is open with the way to the older ones, else the chat on screen. A
+      chat starts no chats, so a row has none under it. */
+  function chatsWalk(dir: string): Row[] {
+    const out: Row[] = [{ id: "chats", run: () => (chats.tray = !chats.tray) }];
+    for (const entry of footEntries()) {
+      if (entry.kind === "row") {
+        const key = entry.session.key;
+        out.push({ id: `session:${key}`, run: () => pickChat(() => choose(key)) });
+      } else {
+        const transcript = entry.transcript;
+        out.push({ id: `past:${transcript.id}`, run: () => pickChat(() => resume(dir, transcript)) });
+      }
+    }
+    if (chats.tray && olderCount() > 0) out.push({ id: "chats-older", run: () => openResume(dir) });
+    return out;
+  }
+
+  /** Picking a chat closes the tray over it. */
+  function pickChat(run: () => void) {
+    chats.tray = false;
+    run();
+  }
 
   /** Every row, a session's subagents right under it. */
   let rows = $derived.by(() => {
@@ -1092,7 +1127,7 @@
       const key = id.slice("session:".length);
       const session = byKey(key);
       if (startedFor(key) === null && session !== null) void closeSessionAsking(session);
-    } else if (id.startsWith("past:") && screenProject !== null) {
+    } else if (id.startsWith("past:") && screenProject !== null && !isChatsFolder(screenProject)) {
       disown(screenProject, id.slice("past:".length));
     }
   }
@@ -1230,6 +1265,10 @@
       one, and under the account it ran under. A worktree the app made for
       it is still its own. */
   function resume(path: string, transcript: HistoryEntry) {
+    if (isChatsFolder(path)) {
+      if (resumeChat(transcript) !== null) focusPane("agent");
+      return;
+    }
     touch(path);
     const session = create(path, transcript.id, transcript.agent, transcript.cwd ?? null, null, null, transcript.account);
     session.madeTree = treeMadeFor(transcript.id, transcript.cwd ?? null);
@@ -2099,7 +2138,7 @@
         >{/if}
       <span class="when">{since(transcript.modified * 1000, now)}</span>
     </button>
-    <span class="actions">
+    {#if !isChatsFolder(path)}<span class="actions">
       <button
         class="icon"
         tabindex="-1"
@@ -2108,8 +2147,35 @@
         title="File with the sessions to resume"
         data-testid="archive-past">↧</button
       >
-    </span>
+    </span>{/if}
   </div>
+{/snippet}
+
+<!-- A chat's row under the chats line: a session's, with its subagents. -->
+{#snippet chatRow(session: Session)}
+  {@render sessionRow(session)}
+  {@render subagents(session, false, false, false)}
+{/snippet}
+
+{#snippet chatPast(transcript: HistoryEntry)}
+  {#if chats.dir !== null}{@render pastRow(chats.dir, transcript)}{/if}
+{/snippet}
+
+<!-- Under the tray's chats, the way to every older one. -->
+{#snippet olderChats(count: number)}
+  <button
+    class="fold tail"
+    class:cursor={current === "chats-older"}
+    tabindex="-1"
+    onclick={() => chats.dir !== null && openResume(chats.dir)}
+    data-row="chats-older"
+    data-testid="older-chats"
+  >
+    <svg class="chev history" viewBox="0 0 16 16" aria-hidden="true"
+      ><path d="M2.8 8a5.2 5.2 0 1 0 1.5-3.7" /><path d="M2.6 2.6v2.6h2.6" /><path d="M8 5.2V8l1.9 1.2" /></svg
+    >
+    <span class="fold-text">{count} more from before…</span>
+  </button>
 {/snippet}
 
 <!-- A project's name, with the part of the path that tells it from
@@ -2543,6 +2609,18 @@
         </div>
       {/if}
   </div>
+  {#if chats.dir !== null}
+    <ChatsFoot
+      {current}
+      atWork={conducting}
+      {chevron}
+      row={chatRow}
+      past={chatPast}
+      older={olderChats}
+      onNew={newChat}
+      newTitle="New chat"
+    />
+  {/if}
   </div>
   <!-- Subagents as they start, said once each, outside the rows, which
        are inert while the pane is folded. -->
