@@ -36,7 +36,9 @@ way; a test that measures the panes after a change waits for it to be gone,
 and for a new window size to have been taken in, before it reads them.
 
 One unit test reads the window configuration and checks the window cannot be
-made narrower than the panes need, since that constraint lives in two files.
+made narrower than the panes need, since that constraint lives in two files. Another
+compares what the tool server puts in an agent's context with a recorded size
+for each kind of session, and fails until a change in size is recorded too.
 
 ## The seam
 

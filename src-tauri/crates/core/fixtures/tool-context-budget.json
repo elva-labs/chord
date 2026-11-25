@@ -1,0 +1,38 @@
+{
+  "conversation": {
+    "instructions": 2811,
+    "tools": 32900
+  },
+  "conversation, orchestrator": {
+    "instructions": 3616,
+    "tools": 32900
+  },
+  "conversation, run lead": {
+    "instructions": 3616,
+    "tools": 35290
+  },
+  "conversation, run member": {
+    "instructions": 2811,
+    "tools": 33575
+  },
+  "conversation, run reviewer": {
+    "instructions": 2811,
+    "tools": 34975
+  },
+  "terminal": {
+    "instructions": 2651,
+    "tools": 32013
+  },
+  "terminal, orchestrator": {
+    "instructions": 3456,
+    "tools": 32013
+  },
+  "terminal, woken": {
+    "instructions": 2772,
+    "tools": 32058
+  },
+  "terminal, woken, orchestrator": {
+    "instructions": 3577,
+    "tools": 32058
+  }
+}
