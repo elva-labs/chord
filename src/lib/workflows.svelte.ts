@@ -11,6 +11,7 @@ import { HARNESS_ORDER, modelLabel, mostCapable, sameModel } from "$lib/models";
 import { core } from "$lib/core";
 import { persist, recovering } from "$lib/persist";
 import { startsOnly } from "$lib/workflowInstructions";
+import { isChatsFolder } from "$lib/chats.svelte";
 
 /**
  * The workflows a session can follow.
@@ -286,8 +287,9 @@ export function stepsGist(workflow: Workflow): string {
 }
 
 /** The workflow a project follows: its own word, else the default. Null
-    is none. */
+    is none, and a chat follows none: it is a conversation alone. */
 export function workflowOf(project: string): Workflow | null {
+  if (isChatsFolder(project)) return null;
   const own = workflows.overrides[project];
   const chosen = own === undefined ? workflows.default : own;
   return workflowNamed(chosen) ?? null;

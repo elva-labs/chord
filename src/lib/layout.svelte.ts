@@ -241,6 +241,10 @@ export const layout = $state({
   /** Whether no project is open, which leaves the changes pane nothing to
       show, so it stays away until one is. */
   noProject: false,
+  /** Whether a chat is in front, which has no project to show: the right
+      side stays away but for what its agent presents or shows, which opens
+      the viewer, and the project terminal stays away throughout. */
+  chat: false,
   agentHidden: false,
   /** The agent pane on the right while editing, shown rather than put
       away by the right pane's toggle. Persisted. */
@@ -445,6 +449,7 @@ export function moving() {
     and reviewing, and always while editing, where it is the middle. */
 export function changesVisible() {
   if (layout.mode === "editing") return true;
+  if (layout.chat && layout.mode !== "reviewing") return false;
   return layout.changesChosen && !layout.changesForced && !layout.noProject;
 }
 
@@ -468,7 +473,7 @@ export function rightPane(): "changes" | "agent" {
 }
 
 export function terminalVisible() {
-  return layout.terminalChosen && !layout.terminalForced;
+  return layout.terminalChosen && !layout.terminalForced && !layout.chat;
 }
 
 /** The pane beside the sessions column: the agent, or the changes pane
@@ -818,6 +823,7 @@ export function setProjectSort(sort: ProjectSort) {
  * pressed from inside the panel most likely wants to land.
  */
 export function toggleTerminal() {
+  if (layout.chat) return;
   layout.terminalChosen = !layout.terminalChosen;
   applyLayout(layout.width, layout.height);
   if (terminalVisible()) layout.focus = "terminal";

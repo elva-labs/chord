@@ -105,6 +105,8 @@ export type Action =
   | { type: "palette" }
   /** The next session waiting on the user. */
   | { type: "attention" }
+  /** The palette, ready to start a chat. */
+  | { type: "newChat" }
   /** The terminal with the keyboard drawn a pixel larger, smaller, or at
       its default size. */
   | { type: "zoom"; step: 1 | -1 | 0 }
@@ -156,6 +158,7 @@ const ACTION_OF: Record<ActionKey, Action> = {
   "session.next": { type: "cycle", direction: 1 },
   "session.previous": { type: "cycle", direction: -1 },
   "session.attention": { type: "attention" },
+  "chat.new": { type: "newChat" },
   "send.now": { type: "sendNow" },
   "zoom.in": { type: "zoom", step: 1 },
   "zoom.out": { type: "zoom", step: -1 },

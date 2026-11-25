@@ -30,6 +30,7 @@ export type ActionKey =
   | "session.next"
   | "session.previous"
   | "session.attention"
+  | "chat.new"
   | "send.now"
   | "review"
   | "view"
@@ -96,6 +97,7 @@ export const ACTIONS: ActionInfo[] = [
   { key: "session.next", label: "Next session or shell", group: "Sessions" },
   { key: "session.previous", label: "Previous session or shell", group: "Sessions" },
   { key: "session.attention", label: "Next session that needs you", group: "Sessions" },
+  { key: "chat.new", label: "New chat", group: "Sessions" },
   { key: "send.now", label: "Send waiting messages now", group: "Sessions" },
   { key: "review", label: "Open or close the file viewer", group: "Changes" },
   { key: "view", label: "Diff, whole file or rendered", group: "Changes" },
@@ -144,6 +146,7 @@ const MACOS: Record<PresetName, Keymap> = {
     "session.next": shifted("ArrowDown"),
     "session.previous": shifted("ArrowUp"),
     "session.attention": plain("."),
+    "chat.new": shifted("c"),
     "send.now": SEND_NOW(true),
     review: plain("d"),
     view: plain("e"),
@@ -179,6 +182,7 @@ const MACOS: Record<PresetName, Keymap> = {
     "session.next": shifted("n"),
     "session.previous": shifted("p"),
     "session.attention": plain("."),
+    "chat.new": shifted("c"),
     "send.now": SEND_NOW(true),
     review: plain("d"),
     view: plain("e"),
@@ -205,9 +209,11 @@ const MACOS: Record<PresetName, Keymap> = {
 
 /** What differs off macOS. Ctrl+T is the process's in a terminal there, so
     a new shell is Ctrl+Shift+T, as in a terminal emulator, and the theme
-    gives Shift+T up for Shift+D. */
+    gives Shift+T up for Shift+D. Ctrl+Shift+C is a terminal's copy there,
+    so a new chat is Ctrl+Shift+M, for message. */
 const ELSEWHERE: Partial<Keymap> = {
   "terminal.new": shifted("t"),
+  "chat.new": shifted("m"),
   theme: shifted("d"),
   "send.now": SEND_NOW(false),
 };

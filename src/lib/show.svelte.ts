@@ -39,6 +39,7 @@ import {
 } from "$lib/sessions.svelte";
 import { create as createShell, ownerOnScreen as shellOwner } from "$lib/terminals.svelte";
 import { activate, watchRoot, workspace } from "$lib/workspace.svelte";
+import { chats, isChatsFolder } from "$lib/chats.svelte";
 
 /** Whether `path` is `root` or under it. */
 export function within(path: string, root: string): boolean {
@@ -55,13 +56,18 @@ export function relativeTo(path: string, root: string): string | null {
 }
 
 /** The open project a request is for: the deepest one either the agent's
-    directory or the file is under. Null when it is for no open project. */
+    directory or the file is under. A file in the chats folder is the
+    chats', and so is one a chat asks for that is under no open project.
+    Null when it is for neither. */
 export function projectFor(request: ShowRequest): string | null {
+  const dir = chats.dir;
+  if (dir !== null && within(request.path, dir)) return dir;
   const candidates = workspace.open
     .map((project) => project.path)
     .filter((path) => within(request.cwd, path) || within(request.path, path))
     .sort((a, b) => b.length - a.length);
-  return candidates[0] ?? null;
+  if (candidates[0] !== undefined) return candidates[0];
+  return dir !== null && within(request.cwd, dir) ? dir : null;
 }
 
 /** Shows the place now, or does nothing for a file outside every open
@@ -133,7 +139,8 @@ export function projectOf(cwd: string): string | null {
     knows opens it beside what is on screen, as one opened by hand. */
 export function terminalRequested(request: TerminalRequest) {
   const project = projectOf(request.cwd);
-  if (project === null) return;
+  // A chat has no project terminal.
+  if (project === null || isChatsFolder(project)) return;
   const open = () => {
     if (workspace.active !== project) activate(project);
     const inside = relativeTo(request.cwd, project);

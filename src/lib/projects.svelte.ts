@@ -3,6 +3,7 @@ import type { ProjectSort } from "$lib/layout.svelte";
 import { lastSegment } from "$lib/paths";
 import { persist } from "$lib/persist";
 import { isLive, sessions, transcriptAt, type Session } from "$lib/sessions.svelte";
+import { isChatsFolder } from "$lib/chats.svelte";
 
 /**
  * The projects as the sessions pane splits and orders them.
@@ -69,6 +70,8 @@ export function setInactiveAfter(value: InactiveAfter) {
     putting a project in front as it opens, nor an agent asking to show
     something in one. */
 export function touch(path: string, now = Date.now()) {
+  // The chats folder is never a project, so it is never used as one.
+  if (isChatsFolder(path)) return;
   projects.used[path] = now;
   saveUsed();
 }

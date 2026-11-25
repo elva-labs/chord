@@ -59,10 +59,13 @@
     onScreen,
     pick,
     projectLabel,
+    resumeChat,
     startSession,
     workspace,
   } from "$lib/workspace.svelte";
-  import { childrenOf, conducting, isAsking, ownFor, parentOf, stateWord } from "$lib/orchestrator.svelte";
+  import { chatLine, chatOf, chatStarted, childrenOf, conducting, isAsking, ownFor, parentOf, stateWord } from "$lib/orchestrator.svelte";
+  import { chats, footEntries, isChat, isChatsFolder, olderCount } from "$lib/chats.svelte";
+  import ChatsFoot from "$lib/components/ChatsFoot.svelte";
   import { BRINGS_BACK, heldNow, holdWords, listed, reopenEnds } from "$lib/sessionMoves.svelte";
   import { folderShown, folderToRead, startsIn } from "$lib/orchestratorFolder.svelte";
   import {
@@ -104,7 +107,7 @@
   import { isStartedFolded, setStartedFolded } from "$lib/startedFolds.svelte";
   import { compact } from "$lib/compact.svelte";
   import { shown } from "$lib/unseen";
-  import { openGoTo, openNew } from "$lib/palette.svelte";
+  import { openChat, openGoTo, openNew } from "$lib/palette.svelte";
   import { profileToStartHeard } from "$lib/codexProfiles.svelte";
   import { openSettings } from "$lib/settings.svelte";
   import { chordFor, describe } from "$lib/keys.svelte";
@@ -427,11 +430,12 @@
 
   /** A session's own menu, from a right click on its row or the menu key
       on the row under the cursor: marking it unread, or read, the session
-      reopened the other way where its agent runs both ways, and stopping
-      it. It opens upwards near the
+      reopened the other way where its agent runs both ways, the chat that
+      started it, and stopping it. It opens upwards near the
       pane's foot, and its keyboard cursor walks the items while it is
-      open. */
-  let sessionMenu = $state<{ key: string; up: boolean } | null>(null);
+      open. `fixed` places it by the window for a row in the chats foot,
+      which scrolls and would cut a menu hung from the row. */
+  let sessionMenu = $state<{ key: string; up: boolean; fixed: string | null } | null>(null);
   let sessionMenuAt = $state(0);
   /** The row whose menu offers its notes: one that keeps any, found as
       the menu opens. */
@@ -444,6 +448,7 @@
     const other = otherWayFor(session);
     const live = isLive(session);
     const wentOnNow = wholeOf(session);
+    const byChat = chatOf(session);
     return [
       session.unread
         ? {
@@ -502,6 +507,17 @@
               run: () => void showNotes(session),
             },
           ]),
+      ...(byChat === null
+        ? []
+        : [
+            {
+              id: "session-menu-chat",
+              label: "Go to chat",
+              title: `Open the chat that started it, ${shownName(byChat)}`,
+              disabled: false,
+              run: () => choose(byChat.key),
+            },
+          ]),
       {
         id: "session-menu-stop",
         label: live ? "Stop" : "Close",
@@ -512,6 +528,10 @@
     ];
   });
 
+  /** About how tall a session's menu stands at its longest, which is
+      enough to tell whether it fits under its row. */
+  const SESSION_MENU_TALL = 260;
+
   function openSessionMenu(key: string, e: MouseEvent | null) {
     e?.preventDefault();
     const row = nav?.querySelector<HTMLElement>(`[data-row="${CSS.escape(`session:${key}`)}"]`) ?? null;
@@ -520,10 +540,19 @@
       row !== null && tree !== null && tree !== undefined
         ? row.getBoundingClientRect().bottom > tree.getBoundingClientRect().bottom - 90
         : false;
+    let fixed: string | null = null;
+    if (row !== null && row.closest('[data-testid="chats-foot"]') !== null) {
+      const at = row.getBoundingClientRect();
+      const right = `right: ${window.innerWidth - at.right}px`;
+      fixed =
+        at.bottom + 4 + SESSION_MENU_TALL > window.innerHeight
+          ? `position: fixed; ${right}; top: auto; bottom: ${window.innerHeight - at.top + 2}px`
+          : `position: fixed; ${right}; top: ${at.bottom + 4}px; bottom: auto`;
+    }
     menuOpen = false;
     sortOpen = false;
     projectMenu = null;
-    sessionMenu = { key, up };
+    sessionMenu = { key, up, fixed };
     sessionMenuAt = 0;
     sessionMenuNotes = null;
     const session = byKey(key);
@@ -643,6 +672,12 @@
   function newFromHead() {
     if (!isReady() || workspace.open.length === 0) return;
     openNew(null);
+  }
+
+  /** The palette's new chat, whose defaults one Enter starts. */
+  function newChat() {
+    if (!isReady() || chats.dir === null) return;
+    openChat();
   }
 
   /** What the sessions a session started are doing, in words, each counted
@@ -874,8 +909,33 @@
         if (idle.length < split.inactive.length) out.push({ id: "idle-more", run: () => toggle("idle-more") });
       }
     }
+    if (chats.dir !== null) out.push(...chatsWalk(chats.dir));
     return out;
   });
+
+  /** The chats line and what stands under it: the tray's chats while it
+      is open with the way to the older ones, else the chat on screen. A
+      chat starts no chats, so a row has none under it. */
+  function chatsWalk(dir: string): Row[] {
+    const out: Row[] = [{ id: "chats", run: () => (chats.tray = !chats.tray) }];
+    for (const entry of footEntries()) {
+      if (entry.kind === "row") {
+        const key = entry.session.key;
+        out.push({ id: `session:${key}`, run: () => pickChat(() => choose(key)) });
+      } else {
+        const transcript = entry.transcript;
+        out.push({ id: `past:${transcript.id}`, run: () => pickChat(() => resume(dir, transcript)) });
+      }
+    }
+    if (chats.tray && olderCount() > 0) out.push({ id: "chats-older", run: () => openResume(dir) });
+    return out;
+  }
+
+  /** Picking a chat closes the tray over it. */
+  function pickChat(run: () => void) {
+    chats.tray = false;
+    run();
+  }
 
   /** Every row, a session's subagents right under it. */
   let rows = $derived.by(() => {
@@ -1091,7 +1151,7 @@
       const key = id.slice("session:".length);
       const session = byKey(key);
       if (startedFor(key) === null && session !== null) void closeSessionAsking(session);
-    } else if (id.startsWith("past:") && screenProject !== null) {
+    } else if (id.startsWith("past:") && screenProject !== null && !isChatsFolder(screenProject)) {
       disown(screenProject, id.slice("past:".length));
     }
   }
@@ -1229,6 +1289,10 @@
       one, and under the account it ran under. A worktree the app made for
       it is still its own. */
   function resume(path: string, transcript: HistoryEntry) {
+    if (isChatsFolder(path)) {
+      if (resumeChat(transcript) !== null) focusPane("agent");
+      return;
+    }
     touch(path);
     const session = create(path, transcript.id, transcript.agent, transcript.cwd ?? null, null, null, transcript.account);
     session.madeTree = treeMadeFor(transcript.id, transcript.cwd ?? null);
@@ -1293,10 +1357,14 @@
         e.preventDefault();
         return;
       case "Escape":
-        // Closes the menu, then puts a peeked pane back, and goes no
-        // further: Escape elsewhere is the agent's, or closes the viewer.
+        // Closes the menu, then the chats tray with the cursor on its line,
+        // then puts a peeked pane back, and goes no further: Escape
+        // elsewhere is the agent's, or closes the viewer.
         if (menuOpen) menuOpen = false;
-        else if (layout.sessionsPeek) peekSessions(false);
+        else if (chats.tray) {
+          chats.tray = false;
+          cursor = "chats";
+        } else if (layout.sessionsPeek) peekSessions(false);
         else return;
         e.stopPropagation();
         break;
@@ -1677,9 +1745,15 @@
   {@const resumes = resumesWords(session)}
   {@const resumesSaid =
     resumes !== null && !folded && session.note === null && kids.length === 0 && news.length === 0}
+  <!-- A chat's sessions are drawn in their own projects: its row says
+       how many run and where. -->
+  {@const chatSaid = isChat(session) && session.note === null && news.length === 0 ? chatLine(session) : null}
+  <!-- The chat that started a session drawn in its own project. -->
+  {@const byChat = chatOf(session)}
   {@const line = folded
     ? startedWords(kids)
     : (session.note ??
+      chatSaid ??
       (kids.length > 0 || news.length > 0
         ? startedWords(kids)
         : resumesSaid
@@ -1701,9 +1775,10 @@
       class="row line"
       class:two={line !== null || marks.length > 0}
       tabindex="-1"
-      onclick={() => choose(session.key)}
+      onclick={(e) =>
+        choose(byChat !== null && (e.target as Element).closest(".chat-tag") !== null ? byChat.key : session.key)}
       oncontextmenu={(e) => openSessionMenu(session.key, e)}
-      title={rowName(session) ?? "New session"}
+      title={shownName(session)}
       data-testid="session-row"
     >
       <span
@@ -1720,8 +1795,13 @@
           class="label"
           class:strong={session.status !== "dormant"}
           class:unread={session.unread || isAsking(session)}
-          class:unnamed={rowName(session) === null}>{rowName(session) ?? "New session"}</span
+          class:unnamed={rowName(session) === null}>{shownName(session)}</span
         >
+        {#if byChat !== null}
+          <span class="chat-tag" title="Started by the chat {shownName(byChat)}" data-testid="chat-tag"
+            ><Icon name="chat" size={11} /></span
+          >
+        {/if}
         <span class="when" data-testid="session-when">{since(lastChanged(session), now)}</span>
       </span>
       {#if line !== null || marks.length > 0}
@@ -1733,7 +1813,9 @@
             class="note"
             class:asking={owned
               ? session.needs === "permission"
-              : subsSaid !== null
+              : chatSaid !== null
+                ? chatStarted(session).some(isAsking)
+                : subsSaid !== null
                 ? drawnSubs.some((one) => one.state === "asking")
                 : kids.some(isAsking)}
             class:first-say={news.length > 0}
@@ -1745,7 +1827,9 @@
               ? "session-note"
               : resumesSaid
                 ? "session-resumes"
-                : subsSaid !== null
+                : chatSaid !== null
+                  ? "chat-started"
+                  : subsSaid !== null
                   ? "subagent-summary"
                   : "orchestrator-summary"}>{line}</span
           >
@@ -1780,6 +1864,16 @@
                   class="dot mini"
                   class:live={isLive(kid)}
                   class:working={conducting(kid)}
+                  class:permission={kid.needs === "permission"}
+                ></span>{/each}
+            </span>
+          {:else if chatSaid !== null}
+            <span class="meta" data-testid="started-dots">
+              {#each chatStarted(session) as kid (kid.key)}<span
+                  class="dot mini"
+                  class:live={isLive(kid)}
+                  class:working={conducting(kid)}
+                  class:unread={kid.unread}
                   class:permission={kid.needs === "permission"}
                 ></span>{/each}
             </span>
@@ -1846,7 +1940,14 @@
 <!-- A session's own menu, under its row, or over it near the pane's foot. -->
 {#snippet sessionMenuFor(key: string)}
   {#if sessionMenu?.key === key}
-    <div class="menu session-menu" data-card class:up={sessionMenu.up} role="menu" data-testid="session-menu">
+    <div
+      class="menu session-menu"
+      data-card
+      class:up={sessionMenu.up}
+      style={sessionMenu.fixed}
+      role="menu"
+      data-testid="session-menu"
+    >
       {#each sessionItems as item, index (item.id)}
         {#if item.destructive && index > 0}<div class="separator" role="separator"></div>{/if}
         <button
@@ -2072,7 +2173,7 @@
         >{/if}
       <span class="when">{since(transcript.modified * 1000, now)}</span>
     </button>
-    <span class="actions">
+    {#if !isChatsFolder(path)}<span class="actions">
       <button
         class="icon"
         tabindex="-1"
@@ -2081,8 +2182,35 @@
         title="File with the sessions to resume"
         data-testid="archive-past">↧</button
       >
-    </span>
+    </span>{/if}
   </div>
+{/snippet}
+
+<!-- A chat's row under the chats line: a session's, with its subagents. -->
+{#snippet chatRow(session: Session)}
+  {@render sessionRow(session)}
+  {@render subagents(session, false, false, false)}
+{/snippet}
+
+{#snippet chatPast(transcript: HistoryEntry)}
+  {#if chats.dir !== null}{@render pastRow(chats.dir, transcript)}{/if}
+{/snippet}
+
+<!-- Under the tray's chats, the way to every older one. -->
+{#snippet olderChats(count: number)}
+  <button
+    class="fold tail"
+    class:cursor={current === "chats-older"}
+    tabindex="-1"
+    onclick={() => chats.dir !== null && openResume(chats.dir)}
+    data-row="chats-older"
+    data-testid="older-chats"
+  >
+    <svg class="chev history" viewBox="0 0 16 16" aria-hidden="true"
+      ><path d="M2.8 8a5.2 5.2 0 1 0 1.5-3.7" /><path d="M2.6 2.6v2.6h2.6" /><path d="M8 5.2V8l1.9 1.2" /></svg
+    >
+    <span class="fold-text">{count} more from before…</span>
+  </button>
 {/snippet}
 
 <!-- A project's name, with the part of the path that tells it from
@@ -2516,6 +2644,18 @@
         </div>
       {/if}
   </div>
+  {#if chats.dir !== null}
+    <ChatsFoot
+      {current}
+      atWork={conducting}
+      {chevron}
+      row={chatRow}
+      past={chatPast}
+      older={olderChats}
+      onNew={newChat}
+      newTitle={`New chat ${describe(chordFor("chat.new"))}`}
+    />
+  {/if}
   </div>
   <!-- Subagents as they start, said once each, outside the rows, which
        are inert while the pane is folded. -->
@@ -3151,6 +3291,26 @@
   .first .label,
   .second .note {
     flex: 1;
+  }
+
+  /* The chat a session drawn in its project was started by: a small
+     bubble after its name that goes to the chat. */
+  .chat-tag {
+    flex: none;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    margin-left: 6px;
+    padding: 0 3px;
+    border: 1px solid var(--accent-soft);
+    border-radius: var(--radius-tag);
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  .chat-tag:hover {
+    border-color: var(--accent);
   }
 
   /* The model, or a folded starter's dots, at the second line's end. */

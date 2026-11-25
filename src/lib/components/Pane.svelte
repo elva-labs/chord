@@ -20,6 +20,8 @@
     id: PaneId;
     title: string;
     meta?: string;
+    /** A glyph before the title that says what kind of thing it names. */
+    mark?: Snippet;
     /** Controls that live in the header, after the title. */
     head?: Snippet;
     /** No header of its own: the pane names itself somewhere in its body,
@@ -34,7 +36,7 @@
     children: Snippet;
   }
 
-  let { id, title, meta, head, bare = false, titleWidth = null, cellEnd, children }: Props = $props();
+  let { id, title, meta, mark, head, bare = false, titleWidth = null, cellEnd, children }: Props = $props();
 
   let focused = $derived(layout.focus === id);
 
@@ -107,14 +109,18 @@
       {#if titleWidth !== null}
         <div class="cell" data-tauri-drag-region>
           {#if appMenu}{@render menuButton()}{/if}
-          <span class="title" data-tauri-drag-region {title}>{title}</span>
+          <span class="title" data-tauri-drag-region {title}
+            >{#if mark}<span class="mark" data-tauri-drag-region>{@render mark()}</span>{/if}{title}</span
+          >
           {#if meta}<span class="meta" use:letters={meta} data-tauri-drag-region>{meta}</span>{/if}
           {#if cellEnd}<div class="cell-end">{@render cellEnd()}</div>{/if}
         </div>
         {#if head}<div class="head">{@render head()}</div>{/if}
       {:else}
         {#if appMenu}{@render menuButton()}{/if}
-        <span class="title" data-tauri-drag-region {title}>{title}</span>
+        <span class="title" data-tauri-drag-region {title}
+            >{#if mark}<span class="mark" data-tauri-drag-region>{@render mark()}</span>{/if}{title}</span
+          >
         {#if head}<div class="head" use:keeps>{@render head()}</div>{/if}
         {#if meta}<span class="meta" use:letters={meta} data-tauri-drag-region>{meta}</span>{/if}
       {/if}
@@ -400,6 +406,13 @@
 
   .meta {
     font-size: var(--meta-size);
+  }
+
+  .mark {
+    display: inline-flex;
+    margin-right: 6px;
+    vertical-align: -2px;
+    color: var(--ink-3);
   }
 
   /* Short of room the meta gives way before the name: it takes only what

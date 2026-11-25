@@ -3,8 +3,10 @@
   import { coversBrowser } from "$lib/browser.svelte";
   import type { Action } from "$lib/keymap";
   import { isMac } from "$lib/platform";
+  import Icon from "$lib/components/conversation/Icon.svelte";
   import {
     ALONE,
+    askingChat,
     chipOf,
     closePalette,
     palette,
@@ -190,14 +192,24 @@
               ? PROFILES
               : "How should it run",
   );
+  /** The palette asks for a new chat, which is in no project. */
+  const chat = $derived(askingChat());
+  /** The answers drawn as chips: a chat's folder is never one. */
+  const chips = $derived(palette.steps.filter((step) => !(chat && step.kind === "project")));
   const heading = $derived(
-    palette.mode === "goto" ? "Sessions and projects" : palette.mode === "commands" ? "Commands" : "New session",
+    palette.mode === "goto"
+      ? "Sessions and projects"
+      : palette.mode === "commands"
+        ? "Commands"
+        : chat
+          ? "New chat"
+          : "New session",
   );
   const nothingOpen = $derived(palette.mode === "goto" && palette.query.trim() === "");
   // What go to can do is what its list holds: sessions and projects to go to
   // and start in, the one row that opens a project when nothing is open, or
   // nothing.
-  const goable = $derived(items.some((item) => item.kind === "session" || item.kind === "project"));
+  const goable = $derived(items.some((item) => item.kind === "session" || item.kind === "past" || item.kind === "project"));
   const modifier = isMac() ? "⌘" : "Ctrl+";
 </script>
 
@@ -236,8 +248,8 @@
           <path d="M10.5 10.5 14 14" />
         </svg>
       {:else}
-        <span class="chip" id="palette-chip-new" data-testid="palette-chip">New session</span>
-        {#each palette.steps as step (step.kind)}
+        <span class="chip" id="palette-chip-new" data-testid="palette-chip">{chat ? "New chat" : "New session"}</span>
+        {#each chips as step (step.kind)}
           <span class="chip" id="palette-chip-{step.kind}" data-testid="palette-chip" data-step={step.kind}
             >{chipOf(step)}</span
           >
@@ -255,7 +267,7 @@
         aria-controls="palette-list"
         aria-activedescendant={items[cursor] === undefined ? undefined : optionId(items[cursor])}
         aria-describedby={palette.mode === "new"
-          ? ["new", ...palette.steps.map((step) => step.kind)].map((id) => `palette-chip-${id}`).join(" ")
+          ? ["new", ...chips.map((step) => step.kind)].map((id) => `palette-chip-${id}`).join(" ")
           : undefined}
         aria-label={heading}
         data-testid="palette-field"
@@ -300,16 +312,20 @@
                   class:permission={item.session.needs === "permission"}
                   data-testid="palette-dot"
                 ></span>
+              {:else if item.kind === "past"}
+                <span class="dot" data-testid="palette-dot"></span>
               {:else if item.kind === "project" || (item.kind === "choice" && item.step.kind === "project")}
                 <svg class="folder" viewBox="0 0 16 16" aria-hidden="true">
                   <path
                     d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z"
                   />
                 </svg>
+              {:else if item.kind === "ready" && chat}
+                <span class="bubble"><Icon name="chat" size={14} /></span>
               {/if}
               <span
                 class="label"
-                class:unnamed={item.kind === "session" && item.unnamed}
+                class:unnamed={(item.kind === "session" || item.kind === "past") && item.unnamed}
                 data-testid="palette-label">{item.label}</span
               >
               {#if item.kind === "ready"}
@@ -319,6 +335,9 @@
                 <span class="detail"></span>
               {:else if item.kind === "session"}
                 <span class="detail" data-testid="palette-detail">{item.project}</span>
+                <span class="end" data-testid="palette-end">{item.when}</span>
+              {:else if item.kind === "past"}
+                <span class="detail" data-testid="palette-detail">chat</span>
                 <span class="end" data-testid="palette-end">{item.when}</span>
               {:else if item.kind === "choice"}
                 <span class="detail" data-testid="palette-detail">{item.detail}</span>
@@ -564,6 +583,13 @@
     margin-left: auto;
     font-family: var(--chrome);
     font-size: 10.5px;
+    color: var(--ink-3);
+  }
+
+  /* A new chat's line leads with the chats' bubble. */
+  .bubble {
+    display: flex;
+    flex: none;
     color: var(--ink-3);
   }
 

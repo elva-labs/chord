@@ -1819,7 +1819,9 @@ test.describe("closing what the pane folds away or hangs under another", () => {
     await page.getByTestId("inactive-fold").click();
     await expect(page.getByTestId("inactive-project")).toContainText("demo");
     await page.keyboard.press(`${MOD}+1`);
+    // The last row is the Chats line; demo is the one above it.
     await page.keyboard.press("End");
+    await page.keyboard.press("ArrowUp");
     await page.keyboard.press("Delete");
     const strip = page.getByTestId("close-owner");
     await expect(strip).toContainText("Close demo with unsaved edits?");
