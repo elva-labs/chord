@@ -21,7 +21,7 @@ stays running for as long as its stdin is open:
 ```
 claude -p --input-format stream-json --output-format stream-json --verbose
   --include-partial-messages --forward-subagent-text --replay-user-messages
-  --permission-prompt-tool stdio
+  --include-hook-events --permission-prompt-tool stdio
   [--permission-mode <mode>] [--model <model>] [--effort <effort>]
   --session-id <id> | --resume <id> [--resume-session-at <entry>]
   [--disallowedTools <tools>] [--append-system-prompt-file <file>]
@@ -30,15 +30,16 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 ```
 
 The partial messages are the text as it streams; the forwarded subagent
-text is what a subagent says; the replayed user messages come back with
-the ids they were sent with, beside the harness's own lines saying when it
-took each; and the permission prompts come to the core instead of being
-refused. The session id is chosen by the workbench, as for a terminal
-session. The workbench's own tool server is attached to each session when
-it is installed, through a configuration file written for the session and
-removed when it ends, so it needs no entry in the account's configuration.
-`--bare` is never used: it would skip the hooks, the instructions and the
-MCP servers, and refuse the user's login.
+text is what a subagent says; the replayed user messages come back with the
+ids they were sent with, beside the harness's own lines saying when it took
+each; the hook events say when each hook ran and what it printed, which is
+all that says why one failed; and the permission prompts come to the core
+instead of being refused. The session id is chosen by the workbench, as for
+a terminal session. The workbench's own tool server is attached to each
+session when it is installed, through a configuration file written for the
+session and removed when it ends, so it needs no entry in the account's
+configuration. `--bare` is never used: it would skip the hooks, the
+instructions and the MCP servers, and refuse the user's login.
 
 The harness is also asked, through its environment, to say when its session
 goes idle: after a turn, and after the turns that report the subagents it
@@ -579,7 +580,17 @@ naming the session and its kind:
   before the turn's end, and for no turn that ended any other way.
 - **notice**: something the harness says that is neither an error nor part
   of a turn, such as that it fell back to another model, as information or
-  as a warning.
+  as a warning. Claude Code ends some notices with a pointer to a key of
+  its terminal, such as "· ctrl+o for history", which the window does not
+  have, and Chord drops it; it leaves what a hook wrote as written. When
+  the main agent's Stop hook keeps it from stopping or fails, the notice
+  says what the hook said, without its colour codes and cut to its first
+  three lines: as information when it sent the agent back to work, as a
+  warning when it failed. A subagent's Stop hook is not told apart from
+  the main agent's in what the harness writes, so its notice says only
+  that a stop hook reported a problem. When Chord's own hold sent a team's
+  lead back, the notice says so in Chord's words, with the gate that
+  holds, and with what another stop hook said in the same stop.
 - **retrying**: a request to the model failed and the harness tries again;
   the turn goes on.
 - **skipped**: streamed pieces left out because the window or its
@@ -1164,7 +1175,8 @@ kept apart and reads defensively, as the transcript readers are: an
 unknown message or field is ignored, a line that is not JSON is skipped,
 and a request from the harness that the workbench does not handle is refused
 rather than left unanswered. A line longer than a few megabytes is skipped,
-with an error that says so. The driver still sees its bytes pass, and a
+with an error that says so, unless it tells of a hook's run, which the
+thread can do without. The driver still sees its bytes pass, and a
 tool call whose result was in it finishes at once as failed and cut short.
 
 Every wait on the process has a limit. The harness has a minute and a half

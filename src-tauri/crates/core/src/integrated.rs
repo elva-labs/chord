@@ -114,6 +114,10 @@ const LINE_KEEP: usize = 8 * 1024 * 1024;
 #[cfg(test)]
 const LINE_KEEP: usize = 1024 * 1024;
 
+/// How much of the start of a line too long to read its driver is shown,
+/// to say whether it does without the line.
+const HEAD_KEEP: usize = 512;
+
 /// The most of a tool call's output, and of each string in its input,
 /// passed on to the window.
 const OUTPUT_KEEP: usize = 64 * 1024;
@@ -1181,6 +1185,12 @@ pub trait Driver: Send {
     /// The next bytes of a line too long to read, as they pass: what a
     /// driver can still learn from them without the whole.
     fn skipping(&mut self, _bytes: &[u8]) {}
+
+    /// Whether a line too long to read, which begins with these bytes, is
+    /// one the driver does without, so that skipping it is no error.
+    fn does_without(&self, _head: &[u8]) -> bool {
+        false
+    }
 
     /// The end of a line too long to read: what the driver makes of what
     /// passed.
@@ -2368,6 +2378,13 @@ impl Live {
         }
     }
 
+    /// Whether the driver does without a line too long to read that begins
+    /// with these bytes.
+    fn does_without(&self, head: &[u8]) -> bool {
+        let machine = self.machine.lock().expect("machine lock");
+        machine.driver.does_without(head)
+    }
+
     /// The end of a line too long to read.
     fn skipped(&self) {
         let mut machine = self.machine.lock().expect("machine lock");
@@ -3304,7 +3321,8 @@ fn write_lines(mut stdin: ChildStdin, lines: Receiver<Line>) {
 }
 
 /// Reads the agent's stdout a line at a time, each line at most
-/// [`LINE_KEEP`] long: the rest of a longer one is skipped, and said to be.
+/// [`LINE_KEEP`] long: the rest of a longer one is skipped, and said to be
+/// unless the driver does without it.
 fn read_lines(live: &Live, stdout: impl Read, _reading: Sender<()>) {
     let mut reader = BufReader::new(stdout);
     let mut line: Vec<u8> = Vec::new();
@@ -3322,13 +3340,16 @@ fn read_lines(live: &Live, stdout: impl Read, _reading: Sender<()>) {
             live.skipping(piece);
         } else if line.len() + piece.len() > LINE_KEEP {
             skipping = true;
-            live.fail(
-                ErrorKind::Protocol,
-                format!(
-                    "the agent wrote a line longer than {} MiB, which was skipped",
-                    LINE_KEEP / (1024 * 1024)
-                ),
-            );
+            let head: Vec<u8> = line.iter().chain(piece).take(HEAD_KEEP).copied().collect();
+            if !live.does_without(&head) {
+                live.fail(
+                    ErrorKind::Protocol,
+                    format!(
+                        "the agent wrote a line longer than {} MiB, which was skipped",
+                        LINE_KEEP / (1024 * 1024)
+                    ),
+                );
+            }
             live.skipping(&line);
             live.skipping(piece);
             line.clear();
