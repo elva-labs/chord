@@ -21,7 +21,7 @@ stays running for as long as its stdin is open:
 ```
 claude -p --input-format stream-json --output-format stream-json --verbose
   --include-partial-messages --forward-subagent-text --replay-user-messages
-  --permission-prompt-tool stdio
+  --include-hook-events --permission-prompt-tool stdio
   [--permission-mode <mode>] [--model <model>] [--effort <effort>]
   --session-id <id> | --resume <id> [--resume-session-at <entry>]
   [--disallowedTools <tools>] [--append-system-prompt-file <file>]
@@ -30,15 +30,16 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 ```
 
 The partial messages are the text as it streams; the forwarded subagent
-text is what a subagent says; the replayed user messages come back with
-the ids they were sent with, beside the harness's own lines saying when it
-took each; and the permission prompts come to the core instead of being
-refused. The session id is chosen by the workbench, as for a terminal
-session. The workbench's own tool server is attached to each session when
-it is installed, through a configuration file written for the session and
-removed when it ends, so it needs no entry in the account's configuration.
-`--bare` is never used: it would skip the hooks, the instructions and the
-MCP servers, and refuse the user's login.
+text is what a subagent says; the replayed user messages come back with the
+ids they were sent with, beside the harness's own lines saying when it took
+each; the hook events say when each hook ran and what it printed, which is
+all that says why one failed; and the permission prompts come to the core
+instead of being refused. The session id is chosen by the workbench, as for
+a terminal session. The workbench's own tool server is attached to each
+session when it is installed, through a configuration file written for the
+session and removed when it ends, so it needs no entry in the account's
+configuration. `--bare` is never used: it would skip the hooks, the
+instructions and the MCP servers, and refuse the user's login.
 
 The harness is also asked, through its environment, to say when its session
 goes idle: after a turn, and after the turns that report the subagents it
@@ -579,7 +580,13 @@ naming the session and its kind:
   before the turn's end, and for no turn that ended any other way.
 - **notice**: something the harness says that is neither an error nor part
   of a turn, such as that it fell back to another model, as information or
-  as a warning.
+  as a warning. A notice never ends with a pointer to a key of the
+  harness's terminal, such as one to open its transcript, which the window
+  does not have. When a Stop hook keeps the agent from stopping or fails,
+  the notice says what the hook said, cut to a few lines: as information
+  when it sent the agent back to work, as a warning when it failed. When
+  Chord's own hold sent a team's lead back, the notice says so in Chord's
+  words, with the gate that holds.
 - **retrying**: a request to the model failed and the harness tries again;
   the turn goes on.
 - **skipped**: streamed pieces left out because the window or its

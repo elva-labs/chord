@@ -235,12 +235,14 @@ holds every such command.
 The lead's stop is held in Chord: when it would end its turn while a gate
 it can move holds the hand-over, it is sent back once, told which gate
 holds and to ask for the verdicts the `gates` tool names, or to stop and
-ask the user. Stopping again ends the turn. It is not sent back when every
-open gate waits for the user, or when the run cannot be read. On Codex the
-lead goes on in a turn of its own, which the window shows as part of the
-turn that stopped, and only a turn that answers a message and ends
-complete is sent back: not one the user interrupted, one that failed, or
-one Codex started itself, such as a compaction.
+ask the user. On Claude Code the conversation shows a notice that Chord
+sent the lead back to work, naming the gate that holds. Stopping again ends
+the turn. It is not sent back when every open gate waits for the user, or
+when the run cannot be read. On Codex the lead goes on in a turn of its
+own, which the window shows as part of the turn that stopped, and only a
+turn that answers a message and ends complete is sent back: not one the
+user interrupted, one that failed, or one Codex started itself, such as a
+compaction.
 
 The holds on a Claude Code session hold its subagents too: Claude Code puts
 a subagent's tool calls to the same checks as the session's own.

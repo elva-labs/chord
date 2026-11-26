@@ -1839,13 +1839,23 @@ fn paused(home: &Path) -> bool {
 /// while agents are switched off, or when the run cannot be read, so a
 /// broken store never keeps a lead going.
 pub fn stop_held(home: &Path, token: &str) -> Option<String> {
+    stop_hold(home, token).map(|held| told_to_go_on(&held))
+}
+
+/// The gate that holds a lead's stop, as said to the user, such as that
+/// handing over is held as a reviewer has not approved the change yet.
+/// None where [`stop_held`] is None.
+pub fn stop_hold(home: &Path, token: &str) -> Option<String> {
     let state = state(home, token).ok().flatten()?;
     if state.waits_for_the_user() || paused(home) {
         return None;
     }
-    state.handing_over_held().map(|held| {
-        format!("{held} The gates tool says what each gate waits on. Ask for the verdicts it names and wait for them, or stop to ask the user.")
-    })
+    state.handing_over_held()
+}
+
+/// What a lead whose stop is held is told: what holds it, and how to go on.
+pub fn told_to_go_on(held: &str) -> String {
+    format!("{held} The gates tool says what each gate waits on. Ask for the verdicts it names and wait for them, or stop to ask the user.")
 }
 
 /// Why a shell command a session in a run would run is refused: it hands
