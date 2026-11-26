@@ -354,20 +354,36 @@ impl Place {
     /// from `start`, so a remote's branch moved onto the work never empties
     /// it.
     fn read(folder: &Path, from: &str, start: Option<&str>) -> Place {
-        let moved = Place::from_base(folder, from, start, git::moved_base(folder, start));
+        Place::of_tree(folder, from, start, git::tree_hash(folder))
+    }
+
+    /// The place a folder with the tree `tree` is.
+    fn of_tree(
+        folder: &Path,
+        from: &str,
+        start: Option<&str>,
+        tree: Result<String, String>,
+    ) -> Place {
+        let base = git::moved_base(folder, start);
+        let moved = Place::from_base(folder, from, start, base, tree.clone());
         if moved.base.as_deref() == start
             || !moved.changed.as_ref().is_ok_and(|paths| paths.is_empty())
         {
             return moved;
         }
-        Place::from_base(folder, from, start, start.map(str::to_string))
+        Place::from_base(folder, from, start, start.map(str::to_string), tree)
     }
 
-    fn from_base(folder: &Path, from: &str, start: Option<&str>, base: Option<String>) -> Place {
-        let tree = git::tree_hash(folder);
+    fn from_base(
+        folder: &Path,
+        from: &str,
+        start: Option<&str>,
+        base: Option<String>,
+        tree: Result<String, String>,
+    ) -> Place {
         let change = tree
             .clone()
-            .and_then(|tree| git::change_hash(folder, base.as_deref(), &tree))
+            .and_then(|tree| git::change_hash(folder, start, base.as_deref(), &tree))
             .map_err(|e| format!("the change in {} cannot be read: {e}", folder.display()));
         let changed = tree
             .clone()
@@ -480,7 +496,8 @@ impl State {
                 .iter()
                 .filter(|place| {
                     place.change.is_ok()
-                        && Place::read(own, "", place.start.as_deref()).change == place.change
+                        && Place::of_tree(own, "", place.start.as_deref(), Ok(tree.clone())).change
+                            == place.change
                 })
                 .collect();
         }

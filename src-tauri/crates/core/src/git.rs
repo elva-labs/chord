@@ -795,29 +795,228 @@ pub fn changed_paths(
         .collect())
 }
 
-/// The hash of the change from a commit to a tree: for each path that
-/// differs, its old and new names, its old and new modes, whether it was
-/// added, deleted, renamed or changed, and the lines taken out and put in,
-/// in the order they stand, with no lines around them and no line numbers;
-/// for a binary file or a submodule, its old and new contents' ids. A
-/// renamed file is found by its contents, and its lines are the ones that
-/// differ from its old name. So the same lines taken out of and put into
-/// the same files read as the same change on any commit they are put on,
-/// wherever in those files they land. With no commit, every file of the
-/// tree is added. Only the files that differ are read.
-pub fn change_hash(dir: &Path, since: Option<&str>, tree: &str) -> Result<String, String> {
+/// Where the lines of a file as a base has it stand in the file as the
+/// start has it.
+enum Placed {
+    /// The base has the file as the start does.
+    Same,
+    /// The base's file differs from the start's by these runs of lines,
+    /// each the lines of the start's it takes the place of and the lines of
+    /// the base's that stand there, as the count of lines before the run
+    /// and the count up to its end.
+    Through(Vec<[u64; 4]>),
+    /// The start has no such file to place the base's lines in.
+    Apart,
+}
+
+impl Placed {
+    /// How the file a change is made to stands against the start's: the
+    /// file at `path` with the contents `id` in the base.
+    fn of(
+        repo: &Repository,
+        start: Option<&git2::Tree>,
+        path: &[u8],
+        id: git2::Oid,
+    ) -> Result<Placed, git2::Error> {
+        let Some(start) = start else {
+            return Ok(Placed::Same);
+        };
+        let was = std::str::from_utf8(path)
+            .ok()
+            .and_then(|path| start.get_path(Path::new(path)).ok())
+            .filter(|entry| entry.kind() == Some(git2::ObjectType::Blob));
+        let Some(was) = was else {
+            return Ok(if id.is_zero() {
+                Placed::Same
+            } else {
+                Placed::Apart
+            });
+        };
+        if was.id() == id {
+            return Ok(Placed::Same);
+        }
+        if id.is_zero() {
+            return Ok(Placed::Apart);
+        }
+        let (old, new) = (repo.find_blob(was.id())?, repo.find_blob(id)?);
+        let mut options = DiffOptions::new();
+        options
+            .context_lines(0)
+            .interhunk_lines(0)
+            .indent_heuristic(false);
+        let patch = git2::Patch::from_blobs(&old, None, &new, None, Some(&mut options))?;
+        if patch.delta().flags().is_binary() {
+            return Ok(Placed::Apart);
+        }
+        let mut runs = Vec::new();
+        for at in 0..patch.num_hunks() {
+            let (hunk, _) = patch.hunk(at)?;
+            let (before, to) = span(hunk.old_start(), hunk.old_lines());
+            let (after, end) = span(hunk.new_start(), hunk.new_lines());
+            runs.push([before, to, after, end]);
+        }
+        Ok(Placed::Through(runs))
+    }
+
+    /// Where the base's line `line`, counted from none, stands in the
+    /// start's file: by its count there, or for a line the base brought,
+    /// by the place in the start's file its run stands at and its count in
+    /// that run. The first byte says which.
+    fn line(&self, line: u64) -> Vec<u8> {
+        let (kind, at, within) = match self {
+            Placed::Same => (0u8, line, 0),
+            Placed::Apart => (2, line, 0),
+            Placed::Through(runs) => {
+                let mut found = None;
+                let mut shift = 0i128;
+                for [_, to, after, end] in runs {
+                    if line < *after {
+                        break;
+                    }
+                    if line < *end {
+                        found = Some((1, *to, line - after));
+                        break;
+                    }
+                    shift = i128::from(*to) - i128::from(*end);
+                }
+                found.unwrap_or((0, (i128::from(line) + shift) as u64, 0))
+            }
+        };
+        let mut bytes = vec![kind];
+        bytes.extend_from_slice(&at.to_be_bytes());
+        bytes.extend_from_slice(&within.to_be_bytes());
+        bytes
+    }
+
+    /// Where the place after the base's first `lines` lines stands in the
+    /// start's file: after as many of its lines. A place among or right
+    /// after lines the base brought is the place after the start's lines
+    /// they stand for. The first byte says whether the start has the file.
+    fn gap(&self, lines: u64) -> Vec<u8> {
+        let (kind, at) = match self {
+            Placed::Same => (0u8, lines),
+            Placed::Apart => (2, lines),
+            Placed::Through(runs) => {
+                let mut found = None;
+                let mut shift = 0i128;
+                for [_, to, after, end] in runs {
+                    if lines <= *after {
+                        break;
+                    }
+                    if lines <= *end {
+                        found = Some(*to);
+                        break;
+                    }
+                    shift = i128::from(*to) - i128::from(*end);
+                }
+                (0, found.unwrap_or((i128::from(lines) + shift) as u64))
+            }
+        };
+        let mut bytes = vec![kind];
+        bytes.extend_from_slice(&at.to_be_bytes());
+        bytes
+    }
+}
+
+/// A run of lines a hunk names by its first line and its count, as the
+/// count of lines before it and the count up to its end. A run of no lines
+/// is named by the line it follows.
+fn span(first: u32, count: u32) -> (u64, u64) {
+    let (first, count) = (u64::from(first), u64::from(count));
+    match count {
+        0 => (first, first),
+        _ => (first.saturating_sub(1), first.saturating_sub(1) + count),
+    }
+}
+
+/// The byte a kind of difference is hashed as, which stays as it is
+/// whatever order libgit2 lists the kinds in.
+fn status_byte(status: git2::Delta) -> Result<u8, String> {
+    Ok(match status {
+        git2::Delta::Added => b'A',
+        git2::Delta::Deleted => b'D',
+        git2::Delta::Modified => b'M',
+        git2::Delta::Renamed => b'R',
+        git2::Delta::Copied => b'C',
+        git2::Delta::Typechange => b'T',
+        other => return Err(format!("a difference of an unknown kind: {other:?}")),
+    })
+}
+
+/// The changes hashed, by the commits and the tree they were hashed for.
+/// Each of the three names its contents, so a hash kept here stays true.
+static HASHED: std::sync::Mutex<Option<HashMap<[String; 3], String>>> = std::sync::Mutex::new(None);
+
+/// How many hashes are kept before they are all let go.
+const HASHED_KEPT: usize = 512;
+
+/// The hash of the change from the commit `since` to a tree, for work that
+/// began at the commit `start`: for each path that differs, its old and new
+/// names, its old and new modes, whether it was added, deleted, renamed or
+/// changed, and each run of lines taken out and put in, with no lines
+/// around it; for a binary file or a submodule, its old and new contents'
+/// ids. A renamed file is found by its contents, and its lines are the ones
+/// that differ from its old name. A run is placed in the file as `start`
+/// has it: lines taken out by the line of that file they begin at, lines
+/// put in by the line of that file they follow, each found through the
+/// lines that differ between `start` and `since`. So the same lines taken
+/// out of and put into the same places of the same files read as the same
+/// change on any commit they are put on, whatever that commit brought
+/// around them. Lines put in among lines `since` brought, or right after
+/// them, stand after the lines of `start` those stand for, whichever of
+/// them they follow. With no `since`, every file of the tree is added;
+/// with no `start`, it is `since`. Only the files that differ are read.
+pub fn change_hash(
+    dir: &Path,
+    start: Option<&str>,
+    since: Option<&str>,
+    tree: &str,
+) -> Result<String, String> {
+    let whole = |text: &str| text.len() >= 40 && git2::Oid::from_str(text).is_ok();
+    let key = match (start.or(since), since) {
+        (Some(start), Some(since)) if whole(start) && whole(since) && whole(tree) => {
+            Some([start.to_string(), since.to_string(), tree.to_string()])
+        }
+        _ => None,
+    };
+    if let Some(key) = &key {
+        let kept = HASHED.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(hash) = kept.as_ref().and_then(|kept| kept.get(key)) {
+            return Ok(hash.clone());
+        }
+    }
+    let hash = change_hashed(dir, start, since, tree)?;
+    if let Some(key) = key {
+        let mut kept = HASHED.lock().unwrap_or_else(|e| e.into_inner());
+        let kept = kept.get_or_insert_with(HashMap::new);
+        if kept.len() >= HASHED_KEPT {
+            kept.clear();
+        }
+        kept.insert(key, hash.clone());
+    }
+    Ok(hash)
+}
+
+fn change_hashed(
+    dir: &Path,
+    start: Option<&str>,
+    since: Option<&str>,
+    tree: &str,
+) -> Result<String, String> {
     let repo = open(dir)?;
     let failed = |e: git2::Error| e.message().to_string();
     let new = repo
         .find_tree(git2::Oid::from_str(tree).map_err(failed)?)
         .map_err(failed)?;
-    let old = match since {
-        Some(commit) => Some(
-            repo.revparse_single(commit)
-                .and_then(|object| object.peel_to_tree())
-                .map_err(failed)?,
-        ),
-        None => None,
+    let tree_of = |commit: &str| {
+        repo.revparse_single(commit)
+            .and_then(|object| object.peel_to_tree())
+            .map_err(failed)
+    };
+    let old = since.map(tree_of).transpose()?;
+    let began = match (start, &old) {
+        (Some(start), Some(old)) => Some(tree_of(start)?).filter(|began| began.id() != old.id()),
+        _ => None,
     };
     let mut options = DiffOptions::new();
     options
@@ -834,21 +1033,18 @@ pub fn change_hash(dir: &Path, since: Option<&str>, tree: &str) -> Result<String
 
     let mut records: Vec<(Vec<u8>, Vec<u8>, Vec<u8>)> = Vec::new();
     for at in 0..diff.deltas().len() {
-        let patch = git2::Patch::from_diff(&diff, at).map_err(failed)?;
-        let Some(patch) = patch else { continue };
+        let patch = git2::Patch::from_diff(&diff, at)
+            .map_err(failed)?
+            .ok_or("a file that differs has no lines to read")?;
         let delta = patch.delta();
-        let name = |file: &git2::DiffFile| {
-            file.path()
-                .map(|path| path.to_string_lossy().into_owned().into_bytes())
-                .unwrap_or_default()
-        };
+        let name = |file: &git2::DiffFile| file.path_bytes().unwrap_or_default().to_vec();
         let (old_file, new_file) = (delta.old_file(), delta.new_file());
         let mut record = Vec::new();
         let mut field = |bytes: &[u8]| {
             record.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
             record.extend_from_slice(bytes);
         };
-        field(&[delta.status() as u8]);
+        field(&[status_byte(delta.status())?]);
         field(&name(&old_file));
         field(&name(&new_file));
         field(&u32::from(old_file.mode()).to_be_bytes());
@@ -860,9 +1056,13 @@ pub fn change_hash(dir: &Path, since: Option<&str>, tree: &str) -> Result<String
             field(old_file.id().as_bytes());
             field(new_file.id().as_bytes());
         } else {
-            let (mut out, mut put, mut ends) = (Vec::new(), Vec::new(), Vec::new());
+            let placed = Placed::of(&repo, began.as_ref(), &name(&old_file), old_file.id())
+                .map_err(failed)?;
             for hunk in 0..patch.num_hunks() {
-                for at in 0..patch.num_lines_in_hunk(hunk).map_err(failed)? {
+                let (header, lines) = patch.hunk(hunk).map_err(failed)?;
+                let (before, _) = span(header.old_start(), header.old_lines());
+                let (mut out, mut put, mut ends) = (Vec::new(), Vec::new(), Vec::new());
+                for at in 0..lines {
                     let line = patch.line_in_hunk(hunk, at).map_err(failed)?;
                     let into = match line.origin() {
                         '-' => &mut out,
@@ -874,10 +1074,20 @@ pub fn change_hash(dir: &Path, since: Option<&str>, tree: &str) -> Result<String
                     into.extend_from_slice(&(line.content().len() as u64).to_be_bytes());
                     into.extend_from_slice(line.content());
                 }
+                if header.old_lines() > 0 {
+                    field(&placed.line(before));
+                } else {
+                    field(&[]);
+                }
+                field(&out);
+                if header.new_lines() > 0 {
+                    field(&placed.gap(before));
+                } else {
+                    field(&[]);
+                }
+                field(&put);
+                field(&ends);
             }
-            field(&out);
-            field(&put);
-            field(&ends);
         }
         records.push((name(&new_file), name(&old_file), record));
     }
@@ -1935,6 +2145,263 @@ mod tests {
         let mut every = changed_paths(&web, "apps/web/", None, &tree).unwrap();
         every.sort();
         assert_eq!(every, vec!["../api/a.rs", "infra/main.tf", "keep.txt"]);
+    }
+
+    /// A commit on `parent` with `files` written over its own, by its id.
+    fn commit_on(dir: &Path, parent: &str, files: &[(&str, &str)]) -> String {
+        git(dir, &["checkout", "-q", "--detach", parent]);
+        for (name, body) in files {
+            write(dir, name, body);
+        }
+        commit(dir);
+        head(dir).unwrap()
+    }
+
+    /// The hash of the change from the commit `since` to the commit `to`,
+    /// for work that began at `start`.
+    fn change(dir: &Path, start: &str, since: &str, to: &str) -> String {
+        let tree = git(dir, &["rev-parse", &format!("{to}^{{tree}}")]);
+        change_hash(dir, Some(start), Some(since), &tree).unwrap()
+    }
+
+    /// A repository whose first commit holds `body` as `src/lib.rs`.
+    fn begun(name: &str, body: &str) -> (Scratch, String) {
+        let dir = repo(name);
+        write(&dir, "src/lib.rs", body);
+        commit(&dir);
+        let start = head(&dir).unwrap();
+        (dir, start)
+    }
+
+    const GUARDED: &str = "fn delete_user(user: &User) {\n    require_admin(user);\n    delete(user);\n}\n\nfn list_users(user: &User) {\n    require_admin(user);\n    list();\n}\n";
+
+    #[test]
+    fn the_same_line_taken_out_of_another_place_is_another_change() {
+        let (dir, start) = begun("change-removed-copy", GUARDED);
+        let unguarded = |function: &str| {
+            GUARDED.replacen(
+                &format!("{function}(user: &User) {{\n    require_admin(user);\n"),
+                &format!("{function}(user: &User) {{\n"),
+                1,
+            )
+        };
+        let listing = commit_on(&dir, &start, &[("src/lib.rs", &unguarded("list_users"))]);
+        let deleting = commit_on(&dir, &start, &[("src/lib.rs", &unguarded("delete_user"))]);
+        assert_ne!(
+            git(&dir, &["rev-parse", &format!("{listing}^{{tree}}")]),
+            git(&dir, &["rev-parse", &format!("{start}^{{tree}}")]),
+            "the guard is out"
+        );
+        assert_ne!(
+            change(&dir, &start, &start, &listing),
+            change(&dir, &start, &start, &deleting)
+        );
+    }
+
+    const PAYING: &str =
+        "fn pay(order: &Order) {\n    let total = order.total();\n    charge(total);\n}\n";
+
+    #[test]
+    fn the_same_line_put_in_at_another_place_is_another_change() {
+        let (dir, start) = begun("change-added-moved", PAYING);
+        let before = commit_on(
+            &dir,
+            &start,
+            &[(
+                "src/lib.rs",
+                &PAYING.replace("    charge(", "    check(order);\n    charge("),
+            )],
+        );
+        let after = commit_on(
+            &dir,
+            &start,
+            &[(
+                "src/lib.rs",
+                &PAYING.replace("total);\n", "total);\n    check(order);\n"),
+            )],
+        );
+        assert_ne!(
+            change(&dir, &start, &start, &before),
+            change(&dir, &start, &start, &after)
+        );
+        let top = commit_on(
+            &dir,
+            &start,
+            &[("src/lib.rs", &format!("    check(order);\n{PAYING}"))],
+        );
+        assert_ne!(
+            change(&dir, &start, &start, &top),
+            change(&dir, &start, &start, &before)
+        );
+    }
+
+    #[test]
+    fn a_line_put_below_lines_the_base_brought_in_place_of_others_is_another_change() {
+        let (dir, start) = begun("change-added-below", PAYING);
+        let checked = PAYING.replace("    let total", "    check(order);\n    let total");
+        let work = commit_on(&dir, &start, &[("src/lib.rs", &checked)]);
+        let returning = "    let Some(total) = order.total() else {\n        return;\n    };\n";
+        let main = commit_on(
+            &dir,
+            &start,
+            &[(
+                "src/lib.rs",
+                &PAYING.replace("    let total = order.total();\n", returning),
+            )],
+        );
+        let kept = commit_on(
+            &dir,
+            &main,
+            &[(
+                "src/lib.rs",
+                &checked.replace("    let total = order.total();\n", returning),
+            )],
+        );
+        let below = commit_on(
+            &dir,
+            &main,
+            &[(
+                "src/lib.rs",
+                &PAYING.replace(
+                    "    let total = order.total();\n",
+                    &format!("{returning}    check(order);\n"),
+                ),
+            )],
+        );
+        let reviewed = change(&dir, &start, &start, &work);
+        assert_eq!(
+            change(&dir, &start, &main, &kept),
+            reviewed,
+            "the check is where it was reviewed, above the base's lines"
+        );
+        assert_ne!(
+            change(&dir, &start, &main, &below),
+            reviewed,
+            "the check is below the return the base brought"
+        );
+    }
+
+    #[test]
+    fn the_same_line_the_base_brought_above_leaves_each_copy_its_own_place() {
+        let (dir, start) = begun("change-copy-above", GUARDED);
+        let unguarded = |body: &str, function: &str| {
+            body.replacen(
+                &format!("{function}(user: &User) {{\n    require_admin(user);\n"),
+                &format!("{function}(user: &User) {{\n"),
+                1,
+            )
+        };
+        let work = commit_on(
+            &dir,
+            &start,
+            &[("src/lib.rs", &unguarded(GUARDED, "list_users"))],
+        );
+        let more = format!(
+            "fn add_user(user: &User) {{\n    require_admin(user);\n    add(user);\n}}\n\n{GUARDED}"
+        );
+        let main = commit_on(&dir, &start, &[("src/lib.rs", &more)]);
+        let rebased = commit_on(
+            &dir,
+            &main,
+            &[("src/lib.rs", &unguarded(&more, "list_users"))],
+        );
+        let other = commit_on(
+            &dir,
+            &main,
+            &[("src/lib.rs", &unguarded(&more, "delete_user"))],
+        );
+        let reviewed = change(&dir, &start, &start, &work);
+        assert_eq!(change(&dir, &start, &main, &rebased), reviewed);
+        assert_ne!(
+            change(&dir, &start, &main, &other),
+            reviewed,
+            "the second copy in the file now, which was the first when it was reviewed"
+        );
+    }
+
+    #[test]
+    fn lines_put_where_the_base_put_its_own_read_the_same_either_side_of_them() {
+        let (dir, start) = begun("change-same-gap", "one\ntwo\n");
+        let work = commit_on(&dir, &start, &[("src/lib.rs", "one\ntwo\nwork\n")]);
+        let main = commit_on(&dir, &start, &[("src/lib.rs", "one\ntwo\nmain\n")]);
+        let below = commit_on(&dir, &main, &[("src/lib.rs", "one\ntwo\nmain\nwork\n")]);
+        let above = commit_on(&dir, &main, &[("src/lib.rs", "one\ntwo\nwork\nmain\n")]);
+        let reviewed = change(&dir, &start, &start, &work);
+        assert_eq!(change(&dir, &start, &main, &below), reviewed);
+        assert_eq!(change(&dir, &start, &main, &above), reviewed);
+        let apart = commit_on(&dir, &main, &[("src/lib.rs", "one\nwork\ntwo\nmain\n")]);
+        assert_ne!(change(&dir, &start, &main, &apart), reviewed);
+    }
+
+    #[test]
+    fn a_change_of_mode_a_deletion_and_the_end_of_a_file_are_in_the_change() {
+        let dir = repo("change-kinds");
+        write(&dir, "run.sh", "echo\n");
+        write(&dir, "gone.txt", "gone\n");
+        write(&dir, "end.txt", "last\n");
+        write(&dir, "empty.txt", "");
+        write(&dir, "dos.txt", "a\r\n");
+        commit(&dir);
+        let start = head(&dir).unwrap();
+        let same = change(&dir, &start, &start, &start);
+        let differs = |files: &[(&str, &str)], why: &str| {
+            let to = commit_on(&dir, &start, files);
+            let hash = change(&dir, &start, &start, &to);
+            assert_ne!(hash, same, "{why}");
+            hash
+        };
+        let ended = differs(&[("end.txt", "last")], "the last line loses its end");
+        let more = differs(&[("end.txt", "last\n\n")], "an empty line more");
+        assert_ne!(ended, more);
+        differs(&[("empty.txt", "\n")], "an empty file gets a line");
+        differs(&[("dos.txt", "a\n")], "a line loses its carriage return");
+        let added = differs(&[("new.txt", "")], "an empty file more");
+        assert_ne!(added, differs(&[("other.txt", "")], "by another name"));
+
+        git(&dir, &["checkout", "-q", "--detach", &start]);
+        git(&dir, &["rm", "-q", "gone.txt"]);
+        commit(&dir);
+        let deleted = change(&dir, &start, &start, &head(&dir).unwrap());
+        assert_ne!(deleted, same, "a file deleted");
+        assert_ne!(
+            deleted,
+            differs(&[("gone.txt", "")], "a file emptied"),
+            "a file deleted is not a file emptied"
+        );
+
+        git(&dir, &["checkout", "-q", "--detach", &start]);
+        git(&dir, &["update-index", "--chmod=+x", "run.sh"]);
+        git(&dir, &["commit", "-q", "-m", "mode"]);
+        let run = change(&dir, &start, &start, &head(&dir).unwrap());
+        assert_ne!(run, same, "a file made runnable, its lines as they were");
+    }
+
+    #[test]
+    fn a_submodule_is_in_the_change_by_the_commit_it_is_at() {
+        let dir = repo("change-submodule");
+        write(&dir, "keep.txt", "x\n");
+        commit(&dir);
+        let start = head(&dir).unwrap();
+        let at = |commit: &str| {
+            git(&dir, &["checkout", "-q", "--detach", &start]);
+            git(
+                &dir,
+                &[
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    &format!("160000,{commit},vendor/lib"),
+                ],
+            );
+            git(&dir, &["commit", "-q", "-m", "submodule"]);
+            let to = head(&dir).unwrap();
+            git(&dir, &["reset", "-q", "--hard"]);
+            change(&dir, &start, &start, &to)
+        };
+        let one = at("1111111111111111111111111111111111111111");
+        let other = at("2222222222222222222222222222222222222222");
+        assert_ne!(one, change(&dir, &start, &start, &start));
+        assert_ne!(one, other);
     }
 
     #[test]
