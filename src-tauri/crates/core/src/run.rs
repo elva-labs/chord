@@ -11,12 +11,14 @@
 //! read as it stands, untracked files included, as its tree. Its change
 //! counts from its base: the commit the run began at, or for a folder
 //! other than the lead's, the newest commit it shares with the run's, or
-//! where a rebase on a remote's default branch moved it, the newest commit
-//! the branch shares with that branch as last fetched, unless that leaves
-//! nothing changed; see [`git::moved_base`]. The change is the paths changed since the base and
-//! a hash of the lines taken out and put in there, with no lines around
-//! them and no line numbers; see [`git::change_hash`]. Paths, in the change
-//! and in a gate, are measured from the run's folder. A verdict names the
+//! where a rebase on the followed remote's default branch moved it, the
+//! newest commit the branch shares with that branch as last fetched,
+//! unless that leaves nothing changed; see [`git::moved_base`]. The change
+//! is the paths changed since the base and a hash of the lines taken out
+//! and put in there, with no lines around them, each run placed in the
+//! file as the work began with it; see [`git::change_hash`]. Paths, in
+//! the change and in a gate, are measured from the run's folder. A verdict
+//! names the
 //! plan version or the place and change its member read, is refused when
 //! that is no longer what stands, and records the hash it was given on, so
 //! a plan or a change that differs since makes an approval out of date,

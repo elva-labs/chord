@@ -67,23 +67,34 @@ to approve first is done.
 The change is the work in each checkout the run's work is in, committed
 or not, untracked files included: the lines it adds and removes in each
 file from its base, as a hash, and the paths changed there. A file's lines
-count without the lines around them and without where in the file they
-stand. Its path, its mode, a rename, a deletion and the contents of a
-binary file count as well. The lead's checkout counts from the commit the
-run began at, and a member's own folder or worktree from the newest commit
-it shares with that one. A folder nothing changed in is left out, and so
+count without the lines around them. Each run of them is placed in the
+file as it was when the work began: lines taken out by the line they were
+there, lines put in by the line there they follow. Lines main brings in
+above or below leave those places as they were, so a rebase keeps them,
+and the same lines taken out of, or put in at, another place in the file
+are another change. Its path, its mode, a rename, a deletion and the
+contents of a binary file count as well. The lead's checkout counts from
+the commit the run began at, and a member's own folder or worktree from
+the newest commit it shares with that one. A folder nothing changed in is left out, and so
 are the folders of members that only read, and a member's folder that no
 longer exists, which `gates` names. While nothing changed anywhere the
 change is the lead's folder.
 
 A rebase on the project's main branch moves the base with the work. The
 base is then the newest commit the checkout shares with the default branch
-of one of its remotes, as it was last fetched, when that commit is the one
-the change counted from or comes after it. The paths changed count from it
-too, so main's own paths do not make a gate on paths needed. The
-checkout's own branches never move the base, so a commit, a merge, or a
-branch moved by hand leaves the change counting from where it did. When
-the remotes' branches disagree, or the commit the change counted from was
+of the remote it follows, as it was last fetched, when that commit is the
+one the change counted from or comes after it. The paths changed count
+from it too, so main's own paths do not make a gate on paths needed.
+Merging the remote's default branch into the work moves the base the same
+way.
+
+One remote is followed and no other moves the base: the one the checked
+out branch tracks, else the one `remote.pushDefault` names, else `origin`,
+the first of them whose address is not a folder on this machine. Its
+default branch is the one its `HEAD` names, else `main`, else `master`.
+The checkout's own branches never move the base, so a commit, or merging
+the work into a local branch, or a branch moved by hand leaves the change
+counting from where it did. When the commit the change counted from was
 rewritten, the change counts from that commit, and a rebase puts its
 approval out of date. A base that would leave nothing changed is not taken
 either, so work that has reached the remote's default branch counts from
@@ -92,15 +103,18 @@ out of date when it was rebased first.
 
 Measuring the change by its lines has two weaknesses:
 
-- the same lines at another place in the same file read as the same
-  change, so lines moved within a file keep an approval;
+- where main put lines of its own into a file without taking any out,
+  lines the work puts in at that same place read the same whether they
+  stand before, among or after main's, so resolving a conflict there one
+  way or the other keeps an approval. Where main's lines took the place of
+  earlier ones, the order counts;
 - what came in from main is not reviewed together with the work, so a
   rebase that keeps the approval may put the work beside code it was
   never read with.
 
-It errs the other way as well: where main's edits beside the work make
-git pair the lines differently, a rebase puts the approval out of date
-though the work is as it was.
+It errs the other way as well: where main changes the lines right beside
+the work's, or its edits make git pair the lines differently, a rebase
+puts the approval out of date though the work is as it was.
 
 A member that only reads may read the change in its own folder or worktree,
 with the change checked out there. A verdict naming that folder is on the
@@ -194,7 +208,8 @@ A session in a run has tools of the run beside the
   the change it read, or asks for changes with findings that say what must
   change, on each gate its agent approves;
 - `gates`, for every session in the run: the plan, its version and hash,
-  the hash of the change in each folder, and each gate's agent, when it
+  the hash of the change in each folder and the commit it is counted
+  from, and each gate's agent, when it
   holds, how it stands and why, and the last verdict's findings.
 
 ## What a run holds
@@ -211,8 +226,9 @@ merges a pull request, from whichever folder it works in.
 
 Only commits go out, so an approval of the change holds the hand-over as
 well while the files in that folder differ from its last commit: work
-approved and not yet committed, or committed with more left beside it. Commit the approved work, or remove what should not go out,
-and the hand-over is free. Uncommitted work does not hold the lead's stop.
+approved and not yet committed, or committed with more left beside it.
+Commit the approved work, or remove what should not go out, and the
+hand-over is free. Uncommitted work does not hold the lead's stop.
 
 | Hold | Claude Code in Chord | Codex in Chord | Either in a terminal |
 | --- | --- | --- | --- |
@@ -323,8 +339,10 @@ What the holds do not see:
 - the window's own routes. A session with a shell can reach
   `chord-remote serve` as the window does, and so waive a gate or end a
   run, as it can write the store.
-- a remote's default branch moved by other means than a fetch of what
-  the remote holds, such as `git update-ref`, or a commit made in a
-  remote that is a folder on the same machine. Moved onto part of the
-  work, it moves the change's base there and leaves that part out of the
-  change.
+- the followed remote's default branch moved by other means than a fetch
+  of what the remote holds: `git update-ref`, `git remote set-head`
+  naming another branch, or the remote or the branch's upstream pointed
+  elsewhere with `git remote set-url` or `git config`. Moved onto part of
+  the work, it moves the change's base there and leaves that part out of
+  the change. A remote that is a folder on the same machine is never
+  followed, so a commit made in one does not do this.
