@@ -200,7 +200,25 @@ workflows while agents and teams are off, then the accounts, each under its
 heading. <kbd>Enter</kbd> on one starts the
 session with that one answer changed, so `cod` and <kbd>Enter</kbd> start
 Codex under the account the line named. With nothing to choose, the line
-takes no text. While a session that another started in a
+takes no text.
+
+While [agents](reference/settings.md#agents) are on, a session in Chord also
+works as an agent, or leads a team. Under Change a row, As, names the agent:
+`No agent`, or the one last picked in the project, marked `last picked`,
+which the line names too, before the account, as in `Claude Code · Reviewer ·
+Work`. <kbd>Enter</kbd> on As asks which, under `As which agent`: No agent
+and each agent under Agents, with a lock on each that reads only, then each
+team under Teams with its members. The cursor starts on the agent the row
+named, and <kbd>Enter</kbd> starts the session as the one picked, on the
+harness and the account the line named; <kbd>Backspace</kbd> on an empty
+field goes back to the line. Typing on the line lists the agents too, under
+`As which agent`, and the teams under `Leading which team`. A session that
+runs in a terminal or follows a workflow works as none: the row is dimmed,
+says why, and the cursor passes over it, and typing finds no agent or team.
+In a project that follows a workflow the line starts the workflow, so As is
+dimmed there with `under a workflow`; a harness picked through Change or
+typed on the line leaves the workflow, and that session is asked its agent
+as any other in Chord. While a session that another started in a
 different project is on screen, the project on screen is the starter's, as
 [sessions](reference/sessions.md) describes, both here and for the command that starts
 a session in the project on screen. Change asks the account, when accounts are named in the
@@ -213,8 +231,9 @@ runs on, and under another the harnesses to run alone, with no workflow. With
 them on, only the harnesses to run alone, so in a project that follows a
 workflow, going through Change leaves the workflow, while an account typed
 on the line keeps it. The cursor starts on the project's workflow where one
-is offered, else on the harness last started in the project. A step with
-nothing to choose is not asked. Each
+is offered, else on the harness last started in the project. Last, for a
+session in Chord while agents are on, comes the agent it works as, as on the
+As row. A step with nothing to choose is not asked. Each
 answer stays in the field as a chip, and <kbd>Backspace</kbd> on an empty
 field takes the last one back, one step to a press however long the key is
 held; with none taken it goes back to the line of defaults, and from that
