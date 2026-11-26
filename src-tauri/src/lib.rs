@@ -12,6 +12,7 @@ mod browser;
 mod browser_keys;
 mod browser_page;
 mod chrome;
+mod ending;
 mod launch;
 mod leaving;
 mod menu;
@@ -2749,6 +2750,7 @@ pub fn run() {
     let builder = builder.activate_ignoring_other_apps(!probe::wanted());
     builder
         .manage(launch::Launches::default())
+        .manage(ending::Ending::default())
         .manage(Arc::new(page_files::Pages::default()))
         .register_asynchronous_uri_scheme_protocol(page_files::SCHEME, page_files::handle)
         .plugin(tauri_plugin_opener::init())

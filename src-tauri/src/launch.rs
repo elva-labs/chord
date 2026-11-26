@@ -51,9 +51,32 @@ pub fn take_opened(launches: State<'_, Launches>) -> Vec<String> {
 
 /// The app's run loop events. On macOS the folders `open` names arrive as
 /// one, whether the app was running or is starting for them. When the app
-/// exits, its integrated sessions are stopped, so that no agent outlives
-/// it.
+/// is asked to exit with sessions running, it goes off the screen and the
+/// sessions are stopped apart from the main thread, so that no agent
+/// outlives it and nothing on screen waits for them; see the ending module.
 pub fn on_event(app: &AppHandle, event: RunEvent) {
+    if let RunEvent::ExitRequested { code, api, .. } = &event {
+        let Some(core) = app.try_state::<std::sync::Arc<chord_core::Core>>() else {
+            return;
+        };
+        let core = std::sync::Arc::clone(&*core);
+        let stopping = std::sync::Arc::clone(&core);
+        let app = app.clone();
+        let code = code.unwrap_or(0);
+        let held = app.state::<crate::ending::Ending>().exit_requested(
+            core.integrated_running(),
+            || crate::ending::vanish(&app),
+            move || stopping.integrated_stop_all(),
+            {
+                let app = app.clone();
+                move || app.exit(code)
+            },
+        );
+        if held {
+            api.prevent_exit();
+        }
+        return;
+    }
     if let RunEvent::Exit = event {
         if let Some(core) = app.try_state::<std::sync::Arc<chord_core::Core>>() {
             core.integrated_stop_all();
@@ -79,6 +102,9 @@ pub fn on_event(app: &AppHandle, event: RunEvent) {
 #[cfg(any(target_os = "linux", windows))]
 pub fn single_instance() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_single_instance::init(|app, args, cwd| {
+        if app.state::<crate::ending::Ending>().under_way() {
+            return;
+        }
         request(app, folders(args, Path::new(&cwd)));
         let welcome = app.get_webview_window(crate::welcome::WELCOME);
         if let Some(window) = welcome.or_else(|| app.get_webview_window("main")) {
