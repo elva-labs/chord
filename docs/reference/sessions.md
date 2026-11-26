@@ -128,7 +128,8 @@ whatever the span, Never included. After that only what happens later makes
 it active: it is back once it is used, a session under it
 runs or waits for you, a row under it changes or a transcript of its own is
 written. It is not offered while a session under the project is running or
-waiting for you, nor under Inactive. Filing the project on screen puts in
+waiting for you, nor under Inactive; should one start while the menu is open,
+the item stays in its place, disabled. Filing the project on screen puts in
 front, with no session opened, the one you last used of the other active
 projects, so none filed or folded comes back by it. With no other active
 project none is in front, and the next start puts the first open project in

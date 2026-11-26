@@ -362,15 +362,16 @@
   /** A project's own menu, from the ⋯ on its header or its row under
       Inactive, or a right click on either: a new session in it, filing it
       under Inactive, and closing it. It opens upwards when the row is near the pane's foot,
-      and its keyboard cursor walks the items while it is open. */
-  let projectMenu = $state<{ path: string; up: boolean } | null>(null);
+      and its keyboard cursor walks the items while it is open. Which items
+      it has is settled as it opens, so none moves under the cursor or the
+      pointer; one that no longer applies is disabled. */
+  let projectMenu = $state<{ path: string; up: boolean; other: SessionKind | null; fileable: boolean } | null>(null);
   let projectMenuAt = $state(0);
 
   let projectItems = $derived.by((): MenuItem[] => {
     if (projectMenu === null) return [];
-    const path = projectMenu.path;
+    const { path, other, fileable } = projectMenu;
     const agent = defaultAgent(path);
-    const other = startsIn(path) ? otherWay(path) : null;
     return [
       ...(startsIn(path)
         ? [{ id: "project-menu-new", label: "New session", disabled: !isReady(), run: () => startIn(path) }]
@@ -391,10 +392,19 @@
               },
             },
           ]),
-      // Only a project in the list that nothing running or waiting holds there.
-      ...(!split.active.some((project) => project.path === path) || holdsActive(path)
-        ? []
-        : [{ id: "project-menu-inactive", label: "Make inactive", disabled: false, run: () => makeInactive(path) }]),
+      ...(fileable
+        ? [
+            {
+              id: "project-menu-inactive",
+              label: "Make inactive",
+              disabled: holdsActive(path),
+              run: () => {
+                makeInactive(path);
+                nav?.focus();
+              },
+            },
+          ]
+        : []),
       {
         id: "close-project",
         label: "Close project",
@@ -404,6 +414,19 @@
       },
     ];
   });
+
+  /** Whether the project's menu offers filing it under Inactive: only a
+      project in the list that nothing running or waiting holds there. */
+  function canFile(path: string): boolean {
+    return split.active.some((project) => project.path === path) && !holdsActive(path);
+  }
+
+  /** What the project's menu holds, as the ⋯ names it. */
+  function moreTitle(path: string): string {
+    const words = [startsIn(path) ? "new session" : null, canFile(path) ? "make inactive" : null, "close"];
+    const said = words.filter((word) => word !== null).join(", ");
+    return said.charAt(0).toUpperCase() + said.slice(1);
+  }
 
   function openProjectMenu(path: string, e: MouseEvent) {
     e.preventDefault();
@@ -420,7 +443,7 @@
     menuOpen = false;
     sortOpen = false;
     sessionMenu = null;
-    projectMenu = { path, up };
+    projectMenu = { path, up, other: startsIn(path) ? otherWay(path) : null, fileable: canFile(path) };
     projectMenuAt = 0;
     if (row?.dataset.row !== undefined) cursor = row.dataset.row;
     nav?.focus();
@@ -2260,7 +2283,7 @@
     aria-haspopup="menu"
     aria-expanded={projectMenu?.path === path}
     aria-label="More for {projectLabel(path)}"
-    title={startsIn(path) ? "New session, close" : "Close"}
+    title={moreTitle(path)}
     data-testid="project-more"
     ><svg class="glyph" viewBox="0 0 16 16" aria-hidden="true"
       ><circle cx="3.5" cy="8" r=".9" /><circle cx="8" cy="8" r=".9" /><circle cx="12.5" cy="8" r=".9" /></svg
