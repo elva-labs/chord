@@ -1390,3 +1390,380 @@ fn a_run_holds_nothing_while_agents_are_off_and_holds_again_once_on() {
     agents_switched(home.path(), true);
     assert_eq!(holds(home.path()), before);
 }
+
+/// Runs git in `dir` and says what it printed, failing the test when git
+/// fails.
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_EDITOR", "true")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "git {args:?}: {out:?}");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+const LETTERS: &str = "a\nb\nc\nd\ne\nf\ng\nh\n";
+
+/// A home, and a folder whose first commit holds `files`, is what the
+/// remote's default branch was last fetched at, and is where a branch
+/// named work begins, with a run begun on it and a reviewer that reads.
+fn on_a_branch(label: &str, files: &[(&str, &str)]) -> (Scratch, Scratch) {
+    let home = Scratch::new(&format!("run-home-{label}"));
+    let dir = repo(label);
+    for (name, body) in files {
+        write(&dir, name, body);
+    }
+    commit(&dir);
+    git(
+        &dir,
+        &["remote", "add", "origin", "https://example.invalid/p.git"],
+    );
+    git(&dir, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&dir, &["checkout", "-q", "-b", "work"]);
+    begin(home.path(), "lead", &team(QUICK_FIX), &dir).unwrap();
+    join(home.path(), "lead", "rev", REVIEWER, &dir, None, true, "").unwrap();
+    (home, dir)
+}
+
+/// The default branch moves on with `files` written in a commit of its
+/// own, as a fetch then shows it, and the folder goes back to its branch
+/// with what it had uncommitted.
+fn main_moves(dir: &Path, files: &[(&str, &str)]) {
+    let branch = git(dir, &["branch", "--show-current"]);
+    git(dir, &["checkout", "-q", "main"]);
+    for (name, body) in files {
+        write(dir, name, body);
+        git(dir, &["add", name]);
+    }
+    git(dir, &["commit", "-qm", "main"]);
+    git(dir, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(dir, &["checkout", "-q", &branch]);
+}
+
+/// Rebases the folder's branch on the remote's default branch, resolving
+/// the conflict it meets with `resolved`, when any are given.
+fn rebased(dir: &Path, resolved: &[(&str, &str)]) {
+    let out = Command::new("git")
+        .args(["rebase", "-q", "origin/main"])
+        .current_dir(dir)
+        .env("GIT_EDITOR", "true")
+        .output()
+        .unwrap();
+    if resolved.is_empty() {
+        assert!(out.status.success(), "{out:?}");
+        return;
+    }
+    assert!(!out.status.success(), "the rebase meets a conflict");
+    for (name, body) in resolved {
+        write(dir, name, body);
+    }
+    git(dir, &["add", "-A"]);
+    git(dir, &["rebase", "--continue"]);
+}
+
+fn change_standing(home: &Path) -> Standing {
+    standing(home, REVIEWER, When::Change).standing
+}
+
+fn approved_now(home: &Path) {
+    let gates = given(home, "rev", When::Change, true, "", None).unwrap();
+    assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
+}
+
+#[test]
+fn a_clean_rebase_keeps_the_approval_and_an_edit_after_it_does_not() {
+    let (home, dir) = on_a_branch("rebase-clean", &[("list.txt", LETTERS)]);
+    let start = git(&dir, &["rev-parse", "HEAD"]);
+    write(&dir, "list.txt", &LETTERS.replace("g\n", "G\n"));
+    commit(&dir);
+    approved_now(home.path());
+    let before = state(home.path(), "lead").unwrap().unwrap().places[0].clone();
+
+    main_moves(
+        &dir,
+        &[
+            ("list.txt", &format!("top\n{LETTERS}")),
+            ("README.md", "main's own\n"),
+        ],
+    );
+    assert_eq!(
+        change_standing(home.path()),
+        Standing::Approved,
+        "not rebased yet"
+    );
+    rebased(&dir, &[]);
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    let place = &now.places[0];
+    assert_ne!(place.tree, before.tree, "the tree has main's work in it");
+    assert_eq!(place.change, before.change, "the same lines, a line lower");
+    assert_eq!(place.start.as_deref(), Some(start.as_str()));
+    assert_eq!(
+        place.base.as_deref(),
+        Some(git(&dir, &["rev-parse", "origin/main"]).as_str())
+    );
+    assert_eq!(
+        now.paths,
+        vec!["list.txt"],
+        "main's paths are not the run's"
+    );
+    assert_eq!(now.gates[0].standing, Standing::Approved);
+    assert_eq!(
+        command_held(home.path(), "lead", "git push origin work"),
+        None
+    );
+
+    write(
+        &dir,
+        "list.txt",
+        &format!("top\n{}", LETTERS.replace("g\n", "GG\n")),
+    );
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn a_conflict_resolved_without_touching_the_works_lines_keeps_the_approval() {
+    let (home, dir) = on_a_branch("rebase-kept", &[("list.txt", "one\ntwo\n")]);
+    write(&dir, "list.txt", "one\ntwo\nwork\n");
+    commit(&dir);
+    approved_now(home.path());
+    main_moves(&dir, &[("list.txt", "one\ntwo\nmain\n")]);
+    rebased(&dir, &[("list.txt", "one\ntwo\nmain\nwork\n")]);
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+}
+
+#[test]
+fn a_conflict_resolved_by_altering_the_works_lines_puts_the_approval_out_of_date() {
+    let (home, dir) = on_a_branch("rebase-altered", &[("list.txt", "one\ntwo\n")]);
+    write(&dir, "list.txt", "one\ntwo\nwork\n");
+    commit(&dir);
+    approved_now(home.path());
+    main_moves(&dir, &[("list.txt", "one\ntwo\nmain\n")]);
+    rebased(&dir, &[("list.txt", "one\ntwo\nmain\nwork and main\n")]);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn main_changing_a_line_the_work_replaces_puts_the_approval_out_of_date() {
+    let (home, dir) = on_a_branch("rebase-replaced", &[("list.txt", "one\ntwo\n")]);
+    write(&dir, "list.txt", "one\ndeux\n");
+    commit(&dir);
+    approved_now(home.path());
+    main_moves(&dir, &[("list.txt", "one\nzwei\n")]);
+    rebased(&dir, &[("list.txt", "one\ndeux\n")]);
+    assert_eq!(
+        change_standing(home.path()),
+        Standing::OutOfDate,
+        "the work now takes out main's line, which was not reviewed"
+    );
+}
+
+#[test]
+fn a_rename_rebased_keeps_the_approval_and_another_name_does_not() {
+    let body: String = (1..=12).map(|n| format!("line {n}\n")).collect();
+    let (home, dir) = on_a_branch("rebase-rename", &[("src/old.rs", &body)]);
+    git(&dir, &["mv", "src/old.rs", "src/new.rs"]);
+    write(&dir, "src/new.rs", &body.replace("line 10\n", "line ten\n"));
+    commit(&dir);
+    approved_now(home.path());
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.paths, vec!["src/new.rs", "src/old.rs"]);
+
+    main_moves(
+        &dir,
+        &[("src/old.rs", &body.replace("line 2\n", "line two\n"))],
+    );
+    rebased(&dir, &[]);
+    let renamed = std::fs::read_to_string(dir.join("src/new.rs")).unwrap();
+    assert!(renamed.contains("line two") && renamed.contains("line ten"));
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+
+    git(&dir, &["mv", "src/new.rs", "src/newer.rs"]);
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn a_binary_file_rebased_keeps_the_approval_and_other_bytes_do_not() {
+    let (home, dir) = on_a_branch("rebase-binary", &[("logo.bin", "\0one\0")]);
+    write(&dir, "logo.bin", "\0two\0");
+    commit(&dir);
+    approved_now(home.path());
+    main_moves(&dir, &[("README.md", "main's own\n")]);
+    rebased(&dir, &[]);
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+
+    write(&dir, "logo.bin", "\0six\0");
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn untracked_files_stay_in_the_change_after_a_rebase() {
+    let (home, dir) = on_a_branch("rebase-untracked", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("b\n", "B\n"));
+    commit(&dir);
+    write(&dir, "notes.txt", "untracked\n");
+    approved_now(home.path());
+    main_moves(&dir, &[("README.md", "main's own\n")]);
+    rebased(&dir, &[]);
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+    let held = command_held(home.path(), "lead", "git push origin work").unwrap();
+    assert!(held.contains("is not all committed"), "{held}");
+
+    std::fs::remove_file(dir.join("notes.txt")).unwrap();
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn a_rebase_in_a_run_in_a_subfolder_keeps_the_approval_and_its_paths() {
+    let home = Scratch::new("run-home-rebase-subfolder");
+    let dir = repo("rebase-subfolder");
+    write(&dir, "apps/web/src/main.rs", "fn main() {}\n");
+    write(&dir, "infra/main.tf", "resource {}\n");
+    commit(&dir);
+    git(
+        &dir,
+        &["remote", "add", "origin", "https://example.invalid/p.git"],
+    );
+    git(&dir, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&dir, &["checkout", "-q", "-b", "work"]);
+    let web = dir.join("apps/web");
+    begin(home.path(), "lead", &team(QUICK_FIX), &web).unwrap();
+    join(home.path(), "lead", "rev", REVIEWER, &web, None, true, "").unwrap();
+    write(&web, "src/main.rs", "fn main() { page() }\n");
+    commit(&dir);
+    approved_now(home.path());
+
+    main_moves(&dir, &[("infra/main.tf", "resource { more }\n")]);
+    rebased(&dir, &[]);
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.paths, vec!["src/main.rs"], "{:?}", now.paths);
+    assert_eq!(now.gates[0].standing, Standing::Approved);
+}
+
+#[test]
+fn a_rebase_in_two_folders_keeps_the_approval_in_each() {
+    let (home, dir) = on_a_branch("rebase-two", &[("list.txt", LETTERS)]);
+    let tree_dir = worktree(&dir, "dev");
+    join(
+        home.path(),
+        "lead",
+        "dev",
+        "Developer",
+        &tree_dir,
+        None,
+        false,
+        "",
+    )
+    .unwrap();
+    write(&dir, "list.txt", &LETTERS.replace("c\n", "C\n"));
+    commit(&dir);
+    write(&tree_dir, "src/dev.rs", "fn dev() {}\n");
+    commit(&tree_dir);
+    given_in(home.path(), Some(&dir)).unwrap();
+    given_in(home.path(), Some(&tree_dir)).unwrap();
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+
+    main_moves(&dir, &[("README.md", "main's own\n")]);
+    rebased(&dir, &[]);
+    rebased(&tree_dir, &[]);
+    let gate = standing(home.path(), REVIEWER, When::Change);
+    assert_eq!(gate.folders.len(), 2);
+    assert!(
+        gate.folders
+            .iter()
+            .all(|f| f.standing == Standing::Approved),
+        "{:?}",
+        gate.folders
+    );
+
+    write(&tree_dir, "src/dev.rs", "fn dev() { more() }\n");
+    commit(&tree_dir);
+    let gate = standing(home.path(), REVIEWER, When::Change);
+    assert_eq!(gate.standing, Standing::OutOfDate, "{}", gate.reason);
+    let _ = std::fs::remove_dir_all(&tree_dir);
+}
+
+#[test]
+fn a_local_branch_moved_onto_the_work_leaves_the_change_where_it_was() {
+    let (home, dir) = on_a_branch("rebase-local", &[("list.txt", LETTERS)]);
+    let start = git(&dir, &["rev-parse", "HEAD"]);
+    write(&dir, "list.txt", &LETTERS.replace("c\n", "C\n"));
+    commit(&dir);
+    git(&dir, &["branch", "-f", "main", "HEAD"]);
+    git(&dir, &["checkout", "-q", "-b", "next"]);
+    write(&dir, "more.txt", "more\n");
+    commit(&dir);
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.places[0].base.as_deref(), Some(start.as_str()));
+    assert_eq!(now.paths, vec!["list.txt", "more.txt"]);
+}
+
+#[test]
+fn work_that_reached_the_remotes_default_branch_stays_approved() {
+    let (home, dir) = on_a_branch("rebase-landed", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("c\n", "C\n"));
+    commit(&dir);
+    approved_now(home.path());
+    git(&dir, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.places[0].changed, Ok(Vec::new()));
+    assert_eq!(now.gates[0].standing, Standing::Approved);
+
+    write(&dir, "list.txt", &LETTERS.replace("c\n", "CC\n"));
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn a_verdict_recorded_on_a_tree_approves_while_the_tree_stands() {
+    let (home, dir) = on_a_branch("rebase-old-verdict", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("c\n", "C\n"));
+    commit(&dir);
+    approved_now(home.path());
+    let tree = state(home.path(), "lead").unwrap().unwrap().places[0]
+        .tree
+        .clone()
+        .unwrap();
+    Runs::open(home.path())
+        .unwrap()
+        .conn
+        .execute("UPDATE verdicts SET seen = ?1", [&tree])
+        .unwrap();
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+
+    main_moves(&dir, &[("README.md", "main's own\n")]);
+    rebased(&dir, &[]);
+    assert_eq!(
+        change_standing(home.path()),
+        Standing::OutOfDate,
+        "a tree after a rebase is another tree"
+    );
+}
+
+#[test]
+fn a_reviewer_reading_the_work_before_a_rebase_approves_the_change_after_it() {
+    let (home, dir) = on_a_branch("rebase-reader", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("c\n", "C\n"));
+    commit(&dir);
+    let own = worktree(&dir, "review");
+    join(home.path(), "lead", "rev2", REVIEWER, &own, None, true, "").unwrap();
+    main_moves(&dir, &[("README.md", "main's own\n")]);
+    rebased(&dir, &[]);
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_ne!(Ok(git::tree_hash(&own).unwrap()), now.places[0].tree);
+    let change = now.places[0].change.clone().unwrap();
+    let read = Read::Change {
+        folder: Some(&own),
+        change: &change,
+    };
+    let gates = verdict(home.path(), "rev2", read, true, "", None).unwrap();
+    assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
+
+    write(&own, "list.txt", &LETTERS.replace("c\n", "CC\n"));
+    let refused = verdict(home.path(), "rev2", read, true, "", None).unwrap_err();
+    assert!(refused.contains("the change in none"), "{refused}");
+    let _ = std::fs::remove_dir_all(&own);
+}
