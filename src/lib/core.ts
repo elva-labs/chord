@@ -2302,7 +2302,7 @@ export interface Core {
   runWaive(project: string, token: string, gate: number, reason: string): Promise<RunWaiver>;
   /** Something was written to a team's run that can change how its gates
       stand, named by its lead's token: read it again with `runState`. A
-      change of the tree is not told; it shows on the next read. */
+      change to the files is not told; it shows on the next read. */
   onRunChanged(handler: (changed: { lead: string }) => void): Promise<() => void>;
   /** Adds an entry to a session's usage log, where its project is. With
       `transcript`, for a turn of a Claude Code session in a terminal, the
