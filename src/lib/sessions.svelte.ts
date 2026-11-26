@@ -46,6 +46,7 @@ import { failureOf, interruptedOnScreen, type Failure } from "$lib/turnFailure";
 import { screen } from "$lib/screens";
 import {
   askWhole as wholeNext,
+  briefingBack,
   briefingFor,
   identified as wentOnAs,
   leftBy,
@@ -2492,6 +2493,8 @@ export async function launch(
   session.modeNamed = mode;
   session.modeSeen = null;
   const back = bringingBack.delete(key);
+  // A briefing taken for a start that fails goes back for the next one.
+  let briefing: string | null = null;
   try {
     // A cold and large conversation goes on fresh from its notes, briefed
     // in its first prompt, which says to wait for the user when there is
@@ -2503,7 +2506,7 @@ export async function launch(
     if (!back && session.resumedFrom !== null) session.resumedFrom = resume ?? wentOn(key)?.from ?? null;
     // A fresh run taken up again before its briefing went is briefed now.
     const held = resume !== null && wentOn(key)?.id === resume;
-    const briefing =
+    briefing =
       (resume === null || held) && session.resumedFrom !== null ? briefingFor(key, session.prompt !== null) : null;
     // The row keeps the name it showed, which its old conversation gave.
     if (briefing !== null && !held) session.title ??= knownName(session);
@@ -2542,6 +2545,7 @@ export async function launch(
       .catch(() => {});
     return false;
   } catch (error) {
+    if (briefing !== null) briefingBack(key, briefing);
     // A conversation held where it went back is not resumed in a terminal
     // without the user's say: the row says so, and offers to open it as a
     // conversation, which goes on from that point.
