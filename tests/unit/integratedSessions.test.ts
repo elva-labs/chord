@@ -3362,6 +3362,42 @@ describe("the agent a session works as", () => {
     }
   });
 
+  it("starts as an agent on the model and mode last chosen, at the agent's effort and not the one last chosen", async () => {
+    type Begun = { options: { model?: string; mode?: string; effort?: string; readsOnly?: boolean } };
+    const begun = () => (fake.calls.filter((call) => call.method === "start").at(-1) as unknown as Begun).options;
+    const modelless = { ...reviewer, model: null, effort: "low" };
+    try {
+      adoptLastChosen({ "claude-code": { model: "haiku", effort: "high", mode: "acceptEdits" } });
+      const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+      workAs(session.key, modelless, null);
+      expect(session.model).toBe("haiku");
+      expect(conversationOf(session.key).settings).toEqual({ model: "haiku", mode: "acceptEdits", effort: "low" });
+      await launch(session.key);
+      await settled();
+      expect(begun()).toMatchObject({ model: "haiku", mode: "acceptEdits", effort: "low", readsOnly: true });
+    } finally {
+      resetLastChosen();
+    }
+  });
+
+  it("gives a Codex session under a profile neither the agent's model nor its effort, and still has it read only", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    session.profile = "fast";
+    session.model = null;
+    workAs(session.key, { ...reviewer, model: { harness: "codex", model: "gpt-5-codex" }, effort: "low" }, null);
+    expect(session.model).toBeNull();
+    expect(conversationOf(session.key).settings).toMatchObject({ model: null, effort: null });
+    await launch(session.key);
+    await settled();
+    const begun = fake.calls.filter((call) => call.method === "start").at(-1) as unknown as {
+      options: Record<string, unknown>;
+    };
+    expect(begun.options).toMatchObject({ agent: "codex", profile: "fast", readsOnly: true });
+    expect(begun.options.model).toBeUndefined();
+    expect(begun.options.effort).toBeUndefined();
+  });
+
   it("lets a pick go with a message sent while agents are switched off", async () => {
     const { session } = await started();
     workAs(session.key, reviewer);
