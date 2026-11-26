@@ -1211,7 +1211,15 @@ pub trait Driver: Send {
 
     /// For an agent that runs commands, the line that runs the user's
     /// command `text` under the window's id, stopped after `timeout`.
-    fn run(&mut self, _command: &str, _text: &str, _timeout: Duration) -> Result<String, String> {
+    /// One the agent `offered` the user, once it ends, starts a turn in
+    /// which the agent goes on from its result, after any that runs.
+    fn run(
+        &mut self,
+        _command: &str,
+        _text: &str,
+        _timeout: Duration,
+        _offered: bool,
+    ) -> Result<String, String> {
         Err("the agent runs no command".into())
     }
 
@@ -1224,8 +1232,10 @@ pub trait Driver: Send {
         Err("the agent takes no command".into())
     }
 
-    /// Whether a command the core ran is still being recorded: a message
-    /// waits until it is, so the agent reads the command first.
+    /// Whether a command the core ran is still being recorded, or the turn
+    /// an agent that runs commands itself goes on in after an offered one
+    /// is on its way: a message, and for such an agent a command, waits
+    /// until it is not, so the agent reads the command first.
     fn recording(&self) -> bool {
         false
     }
@@ -2546,7 +2556,8 @@ impl Live {
     /// Hands the agent what is held, in the order sent, once it is ready
     /// and no command of the user's runs. A command goes at once to the
     /// core's own runner, and to an agent that runs it itself once no
-    /// turn runs and it has named the message handed over before. A
+    /// turn runs or is on its way and it has named the message handed
+    /// over before. A
     /// message waits for a command the core ran to be recorded, and, for
     /// an agent that takes none while a turn runs, for the same as a
     /// command. One the driver cannot make a line of is dropped, and the
@@ -2564,7 +2575,7 @@ impl Live {
             };
             let busy = machine.tracker.turn || machine.handed.is_some();
             if front.command {
-                if machine.driver.runs_commands() && busy {
+                if machine.driver.runs_commands() && (busy || machine.driver.recording()) {
                     return;
                 }
                 let held = machine.held.pop_front().expect("held");
@@ -2610,7 +2621,7 @@ impl Live {
         let started = if machine.driver.runs_commands() {
             machine
                 .driver
-                .run(&command, &text, machine.deadlines.command)
+                .run(&command, &text, machine.deadlines.command, offered)
                 .and_then(|line| self.enqueue(line).map(|_| None))
         } else {
             self.run_here(machine, &command, &text).map(Some)
@@ -4332,7 +4343,7 @@ fn going_back(sessions: &Sessions, id: &str) -> Result<(Going, Option<String>, S
         return Err(why.to_string());
     }
     if machine.driver.recording() {
-        return Err("a command is being recorded".into());
+        return Err("the agent has yet to take up a command the user ran".into());
     }
     machine.going_back = true;
     let found = (machine.tracker.conversation(), machine.tracker.kept());
@@ -5178,11 +5189,21 @@ mod tests {
             self.runs
         }
 
-        fn run(&mut self, command: &str, text: &str, timeout: Duration) -> Result<String, String> {
+        fn run(
+            &mut self,
+            command: &str,
+            text: &str,
+            timeout: Duration,
+            offered: bool,
+        ) -> Result<String, String> {
             if text == "bad" {
                 return Err("not a command this agent runs".into());
             }
-            Ok(format!("run {command} {text} in {}", timeout.as_secs()))
+            Ok(format!(
+                "run {command} {text} in {}{}",
+                timeout.as_secs(),
+                if offered { " offered" } else { "" }
+            ))
         }
 
         fn ran(&mut self, command: &str, ran: &Ran) -> Result<String, String> {

@@ -138,7 +138,7 @@ test("runs a command the agent wrote for the user by its mark, leaving the draft
 });
 
 for (const codex of [false, true])
-  test(`tells the core a command is one the agent offered, by its mark or typed as offered, ${codex ? "never for Codex" : "for Claude Code"}`, async ({
+  test(`tells the core a command is one the agent offered, by its mark or typed as offered, ${codex ? "for Codex" : "for Claude Code"}`, async ({
     page,
   }) => {
     await open(page, { codex });
@@ -153,8 +153,8 @@ for (const codex of [false, true])
     await expect
       .poll(async () => (await calls(page)).filter((call) => call.method === "run").map((call) => [call.text, call.offered]))
       .toEqual([
-        ["npm test", !codex],
-        ["npm run lint", !codex],
+        ["npm test", true],
+        ["npm run lint", true],
         ["git status", false],
       ]);
   });

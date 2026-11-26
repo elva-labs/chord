@@ -10,6 +10,7 @@ use serde_json::Value;
 use crate::claude_history::{
     last_exchanges, lines, millis, Quoted, Span, Standing, HEAD_KEEP, TAIL_KEEP,
 };
+use crate::codex_app_server::OFFERED_INPUT;
 
 /// How much of a line's start is searched for its kind, which Codex writes
 /// ahead of the rest.
@@ -139,6 +140,14 @@ fn said_in(entry: &Value, events: bool) -> Option<Quoted> {
                 "AgentMessage" => false,
                 _ => return None,
             };
+            // The workbench's own input, kept as a message of the user's
+            // under an id that says so, is not something the user said.
+            if item["client_id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with(OFFERED_INPUT))
+            {
+                return None;
+            }
             let text = item["content"]
                 .as_array()?
                 .iter()

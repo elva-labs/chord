@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use crate::adapter::{prepare_process, process, CODEX_HOME_VAR};
-use crate::codex_app_server::{call_of, finished, said, turned_down};
+use crate::codex_app_server::{call_of, finished, said, turned_down, OFFERED_INPUT};
 use crate::env::find_on_path;
 use crate::integrated::{
     cut, now_millis, CommandState, CompactReason, Event, History, Image, MessageState, Outcome,
@@ -172,6 +172,7 @@ pub(crate) fn marks_of(
                         .or_else(|| item["id"].as_str())
                 })
                 .enumerate()
+                .filter(|(_, message)| !message.starts_with(OFFERED_INPUT))
                 .map(|(at, message)| Mark {
                     message: message.to_string(),
                     turn: id.to_string(),
@@ -437,6 +438,15 @@ fn agent_s(item: &Value) -> bool {
         ) || call_of(item).is_some())
 }
 
+/// Whether an item is the input the workbench sent to have the agent go on
+/// from a command it offered, which is no message of the user's.
+fn workbench_s(item: &Value) -> bool {
+    item["type"] == "userMessage"
+        && item["clientId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with(OFFERED_INPUT))
+}
+
 /// Whether an item is a command the user ran themselves.
 fn user_shell(item: &Value) -> bool {
     item["type"] == "commandExecution" && item["source"] == "userShell"
@@ -556,9 +566,18 @@ fn unquoted(word: &str) -> Option<String> {
 /// open while it has no end. An older turn Codex never ended was
 /// interrupted. A command the user ran is told of as the session tells of
 /// one, and a turn that only ran such commands is no turn of the agent's.
-fn turn_events(turn: &Value, items: &[Value], folder: &Path, last: bool) -> Vec<Said> {
+/// The input the workbench sent to have the agent go on from a command it
+/// offered is told of as nothing, so its turn has no message.
+fn turn_events(turn: &Value, all: &[Value], folder: &Path, last: bool) -> Vec<Said> {
+    let messages = all.iter().any(|item| item["type"] == "userMessage");
+    let items: Vec<Value> = all
+        .iter()
+        .filter(|item| !workbench_s(item))
+        .cloned()
+        .collect();
+    let items = items.as_slice();
     let mut out: Vec<Said> = Vec::new();
-    let mut now = items
+    let mut now = all
         .iter()
         .find_map(|item| millis(item, "startedAtMs").or_else(|| millis(item, "completedAtMs")))
         .or_else(|| seconds(turn, "startedAt"))
@@ -578,7 +597,6 @@ fn turn_events(turn: &Value, items: &[Value], folder: &Path, last: bool) -> Vec<
         }
         return out;
     }
-    let messages = items.iter().any(|item| item["type"] == "userMessage");
     let opener = items
         .iter()
         .take_while(|item| !agent_s(item))

@@ -303,6 +303,61 @@ fn the_messages_are_read_from_the_items_with_the_agents_words_as_one() {
 }
 
 #[test]
+fn the_workbench_s_input_for_an_offered_command_is_not_something_the_user_said() {
+    let home = Scratch::new("rollout-offered");
+    let offered = |seconds: u64, id: &str, text: &str| {
+        line(
+            seconds,
+            "event_msg",
+            json!({ "type": "item_completed", "item": { "type": "UserMessage", "id": "u", "client_id": id,
+                "content": [{ "type": "text", "text": text, "text_elements": [] }] } }),
+        )
+    };
+    let input = format!("{OFFERED_INPUT}44444444-4444-4444-8444-444444444444");
+    let path = rollout(
+        &home,
+        &[
+            offered(0, &input, "From the workbench, not the user: go on"),
+            agent(1, "went on first"),
+            user(2, "first ask"),
+            agent(3, "first answer"),
+            // A message of the user's own keeps its place whatever it says,
+            // under an id of the window's.
+            offered(
+                4,
+                "55555555-5555-4555-8555-555555555555",
+                "chord-offered: second ask",
+            ),
+            agent(5, "second answer"),
+            offered(6, &input, "From the workbench, not the user: go on"),
+            agent(7, "went on"),
+        ],
+    );
+    assert_eq!(first_said(&path).as_deref(), Some("first ask"));
+    assert_eq!(
+        last_said(&path, 2),
+        vec![
+            Quoted {
+                user: true,
+                text: "first ask".into()
+            },
+            Quoted {
+                user: false,
+                text: "first answer".into()
+            },
+            Quoted {
+                user: true,
+                text: "chord-offered: second ask".into()
+            },
+            Quoted {
+                user: false,
+                text: "second answer\n\nwent on".into()
+            },
+        ]
+    );
+}
+
+#[test]
 fn a_rollout_written_before_items_is_read_from_its_events() {
     let home = Scratch::new("rollout-events");
     let path = rollout(
