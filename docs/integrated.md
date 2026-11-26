@@ -395,7 +395,7 @@ the same way.
 | Start | Starts or resumes a session in a project, with a model, a mode, an effort, an account and, for a session that follows a workflow, its instructions. Answers with the session's id and the conversation's id where the workbench knows it then, or fails because the folder is not trusted or no tool server can reach a session under a workflow. |
 | Trust | Records that the user trusts the folder a session would run in. |
 | Send | Sends the user's message, with any images, under an id the window chose: a UUID it has not used in the session. |
-| Interrupt | Stops the running turn. Messages already queued stay queued. |
+| Interrupt | Stops the running turn. Messages already queued stay queued, and so does the record of a command the agent offered, which starts its turn after. |
 | Send now | Sends every message that waits for a turn now, in the order sent, as described under [sending now](#sending-now), and answers whether the turn was stopped for them, takes them in, or found none waiting. Fails saying why while a request waits for an answer, while the conversation is being compacted, when no turn runs, or when nothing waits. |
 | Run | Runs a command the user typed with a leading `!`, under an id the window chose: a UUID it has not used in the session. It waits for what was sent before it, as described under [commands the user runs](#commands-the-user-runs). Fails with nothing to run, or while the session goes back. |
 | Stop command | Stops the user's command that runs. Fails when it does not run. |
@@ -767,15 +767,18 @@ order sent. Each harness takes a command its own way.
 A command the agent offered the user goes to Claude Code as a turn of its
 own. The window counts a command as offered when the user ran it from the
 run mark after a `! command` in the agent's words, or typed in the
-composer the same line, once trimmed, as one the agent's last answer
-offers; it finds those as it places the marks. The core then gives Claude
+composer the same line, once trimmed, as one offered in the words of the
+agent's last turn that said anything, across all of that turn's words; it
+finds those as it places the marks. The core then gives Claude
 Code the same record headed by a line from the workbench, not the user,
 saying the user ran the command the agent offered and to go on from its
 result, and leaves out what keeps the record from asking the model. So it
-starts a turn of its own once it ends, done, failed, stopped or timed out,
-and a command that ends while a turn runs starts its turn after that one,
+starts a turn of its own once it ends, whatever its exit code, stopped or
+timed out, and a command that ends while a turn runs starts its turn after that one,
 never cutting it short; several that end during one turn are taken
-together in the next. The thread shows the command as the user's, with no
+together in the next. Stopping the running turn does not drop such a
+record: it starts its turn right after, and it cannot be taken back,
+being written once the command ends. The thread shows the command as the user's, with no
 message of the user's beside it. A command the user typed on their own
 stays context. For Codex every command stays context: its command runs as
 a turn that asks no model, and asking the model after it would take a

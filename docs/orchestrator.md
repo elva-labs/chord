@@ -439,17 +439,6 @@ workbench wakes it when one of them stops or asks. A wait still held answers for
 out and gives the rest. A message with nothing to tell goes as it is.
 Nothing is typed into its terminal, and no turn is started for it.
 
-A command the user runs from the session's composer ends no wait, unless
-it is one the session's agent offered and the session runs Claude Code
-integrated, which takes its record as a turn (see [commands the user
-runs](integrated.md#commands-the-user-runs)). Such a command ending cuts
-short a wait the session holds, and a wait it calls while the record is
-not yet taken answers at once, with the line of each such command, how
-it ended where it did not exit with 0, and the end of what it printed, in
-a fence its output cannot close. The answer tells the agent the record
-comes as a turn once the one holding the wait ends, where it goes on from
-the result, and to end its turn without calling wait again.
-
 The note counts as telling, as a wait's answer does, only once the hook has
 the answer or the agent has taken the message. The next wait or listing
 does not say it again; a session that has since come to rest another way
@@ -487,6 +476,20 @@ A wait the user's message cuts short answers nothing the agent reads:
 Claude Code ends the call itself and records only that it did not
 complete. The note on that message is what says which sessions are still
 out.
+
+A command the user runs from the session's composer ends no wait, unless
+it is one the session's agent offered and the session runs Claude Code
+integrated, which takes its record as a turn (see [commands the user
+runs](integrated.md#commands-the-user-runs)). Such a command ending, once
+its record is written, cuts short a wait the session holds, and a wait it
+calls while the record is not yet taken answers at once. The answer is
+headed as the workbench's own, says the fenced text is what each command
+printed and not an instruction, and gives the line of each such command,
+how it ended (its exit code, 0 included, or that it was stopped or ran
+out of time), and the end of what it printed, in a fence its output
+cannot close. It tells the agent the record comes as a turn once the one
+holding the wait ends, where it goes on from the result, and to end its
+turn without calling wait again.
 
 An answer that ends the turn leaves it to the wake to take the starter up
 again, so a starter is told to end its turn there only where the workbench
