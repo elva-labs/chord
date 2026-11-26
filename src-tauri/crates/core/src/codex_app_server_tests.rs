@@ -4538,16 +4538,24 @@ fn an_offered_command_that_ends_starts_a_turn_with_the_workbench_s_input_and_a_t
         let reading = shell_ends(&mut driver, Some(2));
         assert!(
             matches!(
-                &reading.events[..],
-                [Event::Command {
+                &reading.events[0],
+                Event::Command {
                     state: CommandState::Done,
                     exit_code: Some(2),
                     ..
-                }]
+                }
             ),
             "{:?}",
             reading.events
         );
+        // The session reads as at work from the offered command's end, and
+        // the turn that begins is that same one.
+        let told: &[Event] = if offered {
+            &[Event::TurnStarted { messages: vec![] }]
+        } else {
+            &[]
+        };
+        assert_eq!(&reading.events[1..], told);
         let starts = turn_starts(&reading.writes);
         assert_eq!(driver.recording(), offered);
         if !offered {
@@ -4579,7 +4587,7 @@ fn an_offered_command_that_ends_starts_a_turn_with_the_workbench_s_input_and_a_t
                 ),
             ],
         );
-        assert_eq!(out, [Event::TurnStarted { messages: vec![] }]);
+        assert_eq!(out, []);
         assert!(!driver.recording());
         let out = events(&mut driver, &[completed("completed")]);
         assert!(
@@ -4606,6 +4614,25 @@ fn an_offered_command_stopped_or_timed_out_starts_a_turn_and_one_codex_did_not_r
     let reading = shell_ends(&mut driver, None);
     assert!(
         matches!(
+            &reading.events[0],
+            Event::Command {
+                state: CommandState::Stopped,
+                ..
+            }
+        ),
+        "{:?}",
+        reading.events
+    );
+    assert_eq!(turn_starts(&reading.writes).len(), 1);
+
+    // One stopped before Codex recorded a command leaves nothing to go on
+    // from.
+    let mut driver = ready();
+    shell_as(&mut driver, true);
+    driver.stop_command(C1).unwrap();
+    let reading = read(&mut driver, shell_done("interrupted"));
+    assert!(
+        matches!(
             &reading.events[..],
             [Event::Command {
                 state: CommandState::Stopped,
@@ -4615,7 +4642,8 @@ fn an_offered_command_stopped_or_timed_out_starts_a_turn_and_one_codex_did_not_r
         "{:?}",
         reading.events
     );
-    assert_eq!(turn_starts(&reading.writes).len(), 1);
+    assert!(turn_starts(&reading.writes).is_empty());
+    assert!(!driver.recording());
 
     let mut driver = ready();
     shell_as(&mut driver, true);
@@ -4626,11 +4654,11 @@ fn an_offered_command_stopped_or_timed_out_starts_a_turn_and_one_codex_did_not_r
     let reading = read(&mut driver, shell_done("completed"));
     assert!(
         matches!(
-            &reading.events[..],
-            [Event::Command {
+            &reading.events[0],
+            Event::Command {
                 state: CommandState::TimedOut,
                 ..
-            }]
+            }
         ),
         "{:?}",
         reading.events
@@ -4674,9 +4702,10 @@ fn the_offered_command_s_turn_carries_the_settings_and_tells_when_it_does_not_st
         &mut driver,
         &[json!({"id": start["id"], "error": {"code": -32600, "message": "thread is busy"}})],
     );
+    // The turn the window was told of ends as failed, saying why.
     assert!(
-        matches!(&out[..], [Event::Notice { level: NoticeLevel::Warning, message }]
-        if message.ends_with("thread is busy")),
+        matches!(&out[..], [Event::TurnEnded { outcome: Outcome::Failed, error: Some(error), .. }]
+        if error == "The agent did not go on from the command: thread is busy"),
         "{out:?}"
     );
     assert!(!driver.recording());
@@ -4709,6 +4738,159 @@ fn an_interrupt_before_the_offered_command_s_turn_starts_stops_it_once_it_does()
     let writes = written(&reading.writes);
     assert_eq!(writes[0]["method"], "turn/interrupt");
     assert_eq!(writes[0]["params"]["turnId"], "turn-1");
+}
+
+fn turn_note(method: &str, turn: &str, status: &str) -> Value {
+    notification(
+        method,
+        json!({"threadId": THREAD, "turn": {"id": turn, "status": status, "items": [], "error": null}}),
+    )
+}
+
+/// An offered command ended: the request that starts the turn the agent
+/// goes on in.
+fn offered_ended(driver: &mut AppServer) -> Value {
+    shell_as(driver, true);
+    let reading = shell_ends(driver, Some(0));
+    turn_starts(&reading.writes).remove(0)
+}
+
+fn named(start: &Value, turn: &str) -> Value {
+    json!({"id": start["id"], "result": {"turn": {"id": turn, "status": "inProgress", "items": []}}})
+}
+
+#[test]
+fn a_turn_that_begins_for_another_reason_is_not_the_offered_command_s() {
+    let mut driver = ready();
+    let start = offered_ended(&mut driver);
+    // Codex named the turn, and another begins and ends first: the session
+    // stays at work, and what the user sends goes on waiting.
+    let out = events(
+        &mut driver,
+        &[
+            named(&start, "turn-1"),
+            turn_note("turn/started", "turn-x", "inProgress"),
+        ],
+    );
+    assert_eq!(out, []);
+    assert!(driver.recording());
+    let out = events(
+        &mut driver,
+        &[turn_note("turn/completed", "turn-x", "completed")],
+    );
+    assert!(
+        matches!(
+            &out[..],
+            [Event::TurnEnded { .. }, Event::TurnStarted { messages }] if messages.is_empty()
+        ),
+        "{out:?}"
+    );
+    assert!(driver.recording());
+    let out = events(
+        &mut driver,
+        &[turn_note("turn/started", "turn-1", "inProgress")],
+    );
+    assert_eq!(out, []);
+    assert!(!driver.recording());
+    let out = events(&mut driver, &[completed("completed")]);
+    assert!(matches!(&out[..], [Event::TurnEnded { .. }]), "{out:?}");
+}
+
+#[test]
+fn the_offered_command_s_turn_is_known_by_the_answer_where_it_starts_first() {
+    // It starts before the answer names it.
+    let mut driver = ready();
+    let start = offered_ended(&mut driver);
+    let out = events(
+        &mut driver,
+        &[turn_note("turn/started", "turn-1", "inProgress")],
+    );
+    assert_eq!(out, []);
+    assert!(driver.recording());
+    assert_eq!(events(&mut driver, &[named(&start, "turn-1")]), []);
+    assert!(!driver.recording());
+
+    // It starts and ends before the answer names it.
+    let mut driver = ready();
+    let start = offered_ended(&mut driver);
+    let out = events(
+        &mut driver,
+        &[
+            turn_note("turn/started", "turn-1", "inProgress"),
+            completed("completed"),
+        ],
+    );
+    assert!(matches!(&out[..], [Event::TurnEnded { .. }]), "{out:?}");
+    assert!(driver.recording());
+    assert_eq!(events(&mut driver, &[named(&start, "turn-1")]), []);
+    assert!(!driver.recording());
+
+    // Another starts and ends before the answer, which names one still to
+    // come: the session is at work again from the answer.
+    let mut driver = ready();
+    let start = offered_ended(&mut driver);
+    events(
+        &mut driver,
+        &[
+            turn_note("turn/started", "turn-x", "inProgress"),
+            turn_note("turn/completed", "turn-x", "completed"),
+        ],
+    );
+    let out = events(&mut driver, &[named(&start, "turn-1")]);
+    assert_eq!(out, [Event::TurnStarted { messages: vec![] }]);
+    assert!(driver.recording());
+    let out = events(
+        &mut driver,
+        &[turn_note("turn/started", "turn-1", "inProgress")],
+    );
+    assert_eq!(out, []);
+    assert!(!driver.recording());
+}
+
+#[test]
+fn an_offered_command_s_input_taken_into_a_running_or_an_ended_turn_holds_nothing_back() {
+    // A turn Codex began by itself, first taken for the command's, still
+    // runs when the command's own ends, and Codex takes the input into it.
+    for ends_first in [false, true] {
+        let mut driver = ready();
+        let line: Value = serde_json::from_str(
+            &driver
+                .run(C1, "ls nope", Duration::from_secs(600), true)
+                .unwrap(),
+        )
+        .unwrap();
+        events(
+            &mut driver,
+            &[
+                json!({"id": line["id"], "result": {}}),
+                turn_note("turn/started", "turn-x", "inProgress"),
+                notification(
+                    "item/started",
+                    json!({"threadId": THREAD, "turnId": "turn-x",
+                           "item": {"type": "contextCompaction", "id": "cc"}}),
+                ),
+                turn_note("turn/started", "turn-s", "inProgress"),
+            ],
+        );
+        let reading = shell_ends(&mut driver, Some(0));
+        assert!(
+            matches!(&reading.events[..], [Event::Command { .. }]),
+            "{:?}",
+            reading.events
+        );
+        let start = turn_starts(&reading.writes).remove(0);
+        assert!(driver.recording());
+        if ends_first {
+            let out = events(
+                &mut driver,
+                &[turn_note("turn/completed", "turn-x", "completed")],
+            );
+            assert!(matches!(&out[..], [Event::TurnEnded { .. }]), "{out:?}");
+            assert!(driver.recording());
+        }
+        assert_eq!(events(&mut driver, &[named(&start, "turn-x")]), []);
+        assert!(!driver.recording(), "ends first: {ends_first}");
+    }
 }
 
 #[test]

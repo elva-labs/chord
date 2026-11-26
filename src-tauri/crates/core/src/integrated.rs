@@ -4343,7 +4343,7 @@ fn going_back(sessions: &Sessions, id: &str) -> Result<(Going, Option<String>, S
         return Err(why.to_string());
     }
     if machine.driver.recording() {
-        return Err("a command is being recorded".into());
+        return Err("the agent has yet to take up a command the user ran".into());
     }
     machine.going_back = true;
     let found = (machine.tracker.conversation(), machine.tracker.kept());
