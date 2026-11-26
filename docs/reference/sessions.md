@@ -128,10 +128,11 @@ whatever the span, Never included. After that only what happens later makes
 it active: it is back once it is used, a session under it
 runs or waits for you, a row under it changes or a transcript of its own is
 written. It is not offered while a session under the project is running or
-waiting for you, nor under Inactive. Filing the project on screen puts the
-other open project you last used in front, with no session opened, and that
-one is active while it is on screen. With no other project none is in front,
-and the next start puts the filed one in front again.
+waiting for you, nor under Inactive. Filing the project on screen puts in
+front, with no session opened, the one you last used of the other active
+projects, so none filed or folded comes back by it. With no other active
+project none is in front, and the next start puts the first open project in
+front, which is active while it is on screen.
 
 What happens in a project is the user using it, a row drawn under it
 changing what it says, and one of its own transcripts being written, which
@@ -1759,8 +1760,9 @@ presents or shows something; asking for the terminal says that a chat has
 none. The header shows the chat's mark and its name, with no model. The
 status bar says Chat where a project's branch would be, and the account the
 chat runs under when [accounts](#accounts) are set up. Closing the chat on
-screen with none to take its place puts the open project you last used in
-front, with no session opened.
+screen with none to take its place puts the active project you last used in
+front, with no session opened, or none when no project is
+[active](#active-and-inactive).
 
 A chat is a session like any other in everything else: it is marked
 unread, working and waiting like a row in a project, counts toward the

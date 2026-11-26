@@ -304,18 +304,42 @@ describe("a project filed by hand", () => {
 
   it("leaves the front to the project last used, without using it again", () => {
     three();
-    touch("/a", NOW - 2 * DAY);
-    touch("/c", NOW - DAY);
+    const now = Date.now();
+    touch("/a", now - 2 * DAY);
+    touch("/c", now - DAY);
     activate("/b");
     makeInactive("/b");
     expect(workspace.active).toBe("/c");
     expect(sessions.active).toBeNull();
-    expect(projects.used).toEqual({ "/a": NOW - 2 * DAY, "/c": NOW - DAY });
+    expect(projects.used).toEqual({ "/a": now - 2 * DAY, "/c": now - DAY });
     expect(isActive("/b", onScreen())).toBe(false);
     expect(JSON.parse(localStorage.getItem("chord.workspace")!).active).toBe("/c");
 
     makeInactive("/c");
     expect(workspace.active).toBe("/a");
+  });
+
+  it("keeps both filed when two are filed in a row", () => {
+    three();
+    workspace.open.pop();
+    touch("/a", Date.now() - 2000);
+    touch("/b", Date.now() - 1000);
+    activate("/a");
+    makeInactive("/a");
+    expect(workspace.active).toBe("/b");
+    makeInactive("/b");
+    expect(workspace.active).toBeNull();
+    expect(isActive("/a", onScreen())).toBe(false);
+    expect(isActive("/b", onScreen())).toBe(false);
+  });
+
+  it("does not put a project the span folded in front", () => {
+    three();
+    touch("/a", Date.now() - 30 * DAY);
+    touch("/c", Date.now() - 20 * DAY);
+    activate("/b");
+    makeInactive("/b");
+    expect(workspace.active).toBeNull();
   });
 
   it("leaves the front where it is when it is not on screen", () => {
