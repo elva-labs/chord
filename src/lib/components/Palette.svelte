@@ -567,9 +567,14 @@
     font-weight: 500;
   }
 
-  .row[data-kind="ready"] .detail {
+  .row[data-kind="ready"] .detail,
+  .row[data-kind="as"] .detail {
     font-size: 12px;
     color: var(--ink-2);
+  }
+
+  .row[data-kind="as"].off .detail {
+    color: var(--ink-3);
   }
 
   .row[data-kind="change"] {

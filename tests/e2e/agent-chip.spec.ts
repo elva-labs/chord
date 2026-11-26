@@ -191,4 +191,11 @@ test("the palette's new session asks which agent it works as, starts as the one 
   );
   await expect(as.getByTestId("palette-detail")).toHaveText("Reviewer");
   await expect(as.getByTestId("palette-end")).toHaveText("last picked");
+  // The row reads at the size and colour of the line above it.
+  const line = page.locator("[data-testid='palette-row'][data-kind='ready'] [data-testid='palette-detail']");
+  for (const property of ["font-size", "color"])
+    await expect(as.getByTestId("palette-detail")).toHaveCSS(
+      property,
+      await line.evaluate((node, name) => getComputedStyle(node).getPropertyValue(name), property),
+    );
 });
