@@ -1245,7 +1245,8 @@
 
   /** Chips kept while the pointer or the keyboard is in the row or a menu
       of it is open, so nothing moves under the pointer; they go once the
-      row is left. */
+      row is left. While agents and teams are on, a workflow left has
+      nothing to pick, so its chip goes at once. */
   let kept = $state({ agent: false, mode: false, effort: false, workflow: false, resume: false });
   let pointerIn = $state(false);
   let focusIn = $state(false);
@@ -1265,7 +1266,7 @@
   let showAgent = $derived(switches.agents && (away.agent || kept.agent));
   let showEffort = $derived(away.effort || kept.effort);
   let showMode = $derived(away.mode || kept.mode);
-  let showWorkflow = $derived(away.workflow || kept.workflow);
+  let showWorkflow = $derived(away.workflow || (kept.workflow && !switches.agents));
   let showResume = $derived(away.resume || kept.resume);
 
   /** What the plus offers: the settings the agent and the session take that

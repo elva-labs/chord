@@ -412,4 +412,7 @@ test("with agents and teams on, a session under the project's workflow shows it 
   await expect.poll(async () => (await starts(page)).length).toBe(before + 1);
   expect((await starts(page)).at(-1)!.options!.instructions).toBeUndefined();
   await expect(page.getByTestId("model-chip")).toBeEnabled();
+  // Left, there is no workflow to pick, so the chip goes with the pointer
+  // still in the row.
+  await expect(chip(page)).toHaveCount(0);
 });
