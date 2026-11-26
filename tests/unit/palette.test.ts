@@ -41,10 +41,14 @@ import "$lib/orchestrator.svelte";
 import { resetFolder } from "$lib/orchestratorFolder.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 import { pickProfile, profileToStart, readProfiles, resetProfiles } from "$lib/codexProfiles.svelte";
+import { paletteChanged, resetPluginPalette } from "$lib/pluginPalette.svelte";
+import { flash } from "$lib/flash.svelte";
 import { resetChats } from "$lib/chats.svelte";
 
 /** The Codex profiles the core lists, for any account. */
 const listed = vi.hoisted(() => ({ profiles: [] as unknown[] }));
+/** The plugin commands picked, and what the core says to the next pick. */
+const picks = vi.hoisted(() => ({ made: [] as unknown[], refuse: null as string | null }));
 
 vi.mock("$lib/core", () => ({
   core: () => ({
@@ -52,6 +56,10 @@ vi.mock("$lib/core", () => ({
     setBadge: async () => {},
     setWindowTitle: async () => {},
     codexProfiles: async () => listed.profiles,
+    pluginPalettePick: async (request: unknown) => {
+      picks.made.push(request);
+      if (picks.refuse !== null) throw picks.refuse;
+    },
   }),
 }));
 
@@ -82,6 +90,9 @@ beforeEach(() => {
   resetProfiles();
   resetChats();
   listed.profiles = [];
+  resetPluginPalette();
+  picks.made = [];
+  picks.refuse = null;
   // No workflows unless a test has some.
   resetWorkflows();
   harnesses.availability = "ready";
@@ -566,6 +577,96 @@ describe("commands", () => {
     const zoom = commandItems("zoom in")[0];
     expect(pickItem(zoom)).toEqual({ type: "perform", action: { type: "zoom", step: 1 } });
     expect(pickItem(commandItems("go to")[0])).toEqual({ type: "perform", action: { type: "goto" } });
+  });
+});
+
+describe("plugins' commands", () => {
+  const overview = (project = A, labels = ["Pull request overview"]) =>
+    paletteChanged({
+      source: "src-1",
+      plugin: "github",
+      project,
+      commands: labels.map((label, at) => ({ id: `c${at}`, label })),
+    });
+  const plugged = (query: string) =>
+    commandItems(query).flatMap((item) => (item.kind === "plugin" ? [item] : []));
+
+  it("lists the project on screen's after the app's, with the plugin's name", () => {
+    overview();
+    overview(B, ["Something else"]);
+    workspace.active = A;
+    const items = commandItems("");
+    expect(items.at(-1)).toMatchObject({ kind: "plugin", label: "Pull request overview", detail: "github" });
+    expect(items.slice(0, -1).every((item) => item.kind !== "plugin")).toBe(true);
+    workspace.active = B;
+    expect(plugged("").map((item) => item.label)).toEqual(["Something else"]);
+  });
+
+  it("lists none while no project is on screen", () => {
+    overview();
+    workspace.active = null;
+    expect(plugged("")).toEqual([]);
+  });
+
+  it("matches on the label and on the plugin's name", () => {
+    overview();
+    workspace.active = A;
+    expect(plugged("pul").map((item) => item.label)).toEqual(["Pull request overview"]);
+    expect(plugged("github").map((item) => item.label)).toEqual(["Pull request overview"]);
+    expect(plugged("overview git").map((item) => item.label)).toEqual(["Pull request overview"]);
+    expect(plugged("checks")).toEqual([]);
+  });
+
+  it("leaves out a label that reads as one of the app's commands", () => {
+    overview(A, ["Open settings", "open project", "Show source", "New session in api", "New session", "Pull requests"]);
+    workspace.active = A;
+    expect(plugged("").map((item) => item.label)).toEqual(["Pull requests"]);
+  });
+
+  it("leaves out one offered only at other times, and one spaced apart", () => {
+    overview(A, [
+      "Turn word wrap on",
+      "Go back to an earlier message",
+      "Preview  file",
+      "New  session",
+      "New session\tin api",
+      "Newsletter",
+    ]);
+    workspace.active = A;
+    expect(plugged("").map((item) => item.label)).toEqual(["Newsletter"]);
+  });
+
+  it("goes when the plugin sends an empty list", () => {
+    overview();
+    workspace.active = A;
+    paletteChanged({ source: "src-1", plugin: "github", project: A, commands: [] });
+    expect(plugged("")).toEqual([]);
+  });
+
+  it("tells the plugin of a pick once the palette is away, with the session on screen", async () => {
+    overview();
+    const session = create(A);
+    select(session.key);
+    workspace.active = A;
+    const outcome = pickItem(plugged("pul")[0]);
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") await outcome.then();
+    await tick();
+    expect(picks.made).toEqual([
+      { source: "src-1", plugin: "github", command: "c0", project: A, session: session.token },
+    ]);
+  });
+
+  it("says in the status bar what the core refused", async () => {
+    overview();
+    workspace.active = A;
+    picks.refuse = "the github plugin is not running";
+    const outcome = pickItem(plugged("pul")[0]);
+    if (outcome.type === "close") outcome.then();
+    await tick();
+    await tick();
+    expect(picks.made).toHaveLength(1);
+    expect(flash.text).toBe("Pull request overview: the github plugin is not running");
   });
 });
 

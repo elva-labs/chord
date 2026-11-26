@@ -59,6 +59,10 @@ pub const PLUGIN_SEND: &str = "plugin_send";
 /// the last one stops, so the hooks are brought up to date at once.
 pub const PLUGIN_HEARS: &str = "plugin_hears";
 
+/// The event a plugin's commands for the palette are told by, one project
+/// at a time.
+pub const PLUGIN_PALETTE: &str = "plugin_palette";
+
 /// The manifest at a source's root.
 pub const MANIFEST: &str = "workbench-plugins.toml";
 
@@ -84,6 +88,10 @@ pub struct Declared {
     /// ran, each as words separated by one space.
     #[serde(default)]
     pub commands: Vec<String>,
+    /// The ids of the commands the plugin may put in the command palette.
+    /// Not the shell commands of `commands`: these are the user's to pick.
+    #[serde(default)]
+    pub palette: Vec<String>,
 }
 
 impl Declared {
@@ -102,6 +110,7 @@ impl Declared {
             sections: Vec::new(),
             view: None,
             commands: Vec::new(),
+            palette: Vec::new(),
         }
     }
 }
@@ -437,13 +446,52 @@ pub struct Notified {
     pub target: Option<String>,
 }
 
-/// What a plugin said went wrong with an action, for the window to show.
+/// What a plugin said went wrong with an action or a palette command, for
+/// the window to show.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Notice {
     pub source: String,
     pub plugin: String,
     pub text: String,
+    /// The label of the palette command the notice is about, which the
+    /// window says where the user is looking, since the palette has closed
+    /// by then.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
+
+/// One command a plugin puts in the command palette: the id its manifest
+/// declares, and the label the user reads and types.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PaletteCommand {
+    pub id: String,
+    pub label: String,
+}
+
+/// A plugin's commands for the palette in one project, as told to the
+/// window. No commands is the plugin's commands gone from that project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PaletteEvent {
+    pub source: String,
+    pub plugin: String,
+    pub project: String,
+    pub commands: Vec<PaletteCommand>,
+}
+
+/// How many commands one plugin may put in the palette.
+pub const PALETTE_MOST: usize = 8;
+
+/// How long a palette command's label may be, in characters.
+pub const LABEL_MOST: usize = 60;
+
+/// How long a picked palette command waits for the plugin's result before
+/// the user is told it did not answer.
+const PICK_WAIT: Duration = Duration::from_secs(10);
+
+/// What every pick's id starts with, which no tool call's does: a result
+/// under such an id is a pick's and is never written for the tool server,
+/// even once the pick is over.
+const PICK_ID: &str = "pick-";
 
 /// The states a row may be in.
 const STATES: [&str; 4] = ["ok", "busy", "waiting", "failed"];
@@ -487,6 +535,8 @@ struct Running {
     complained: std::sync::mpsc::Receiver<()>,
     /// The beginnings of the commands its manifest listens for.
     commands: Vec<String>,
+    /// The ids of the palette commands its manifest declares.
+    palette: Vec<String>,
 }
 
 /// How many lines of a plugin's error output are kept for its row.
@@ -760,6 +810,17 @@ struct Inner {
     /// The page each plugin last sent for a project, so what a plugin
     /// leaves in the viewer can be taken out of it when it goes.
     views: Mutex<HashMap<ViewKey, ViewEvent>>,
+    /// The palette commands each plugin last sent for a project, so what a
+    /// plugin leaves in the palette can be taken out of it when it goes.
+    palettes: Mutex<HashMap<ViewKey, PaletteEvent>>,
+    /// The palette commands picked and waiting for the plugin's result, by
+    /// id: the plugin and the command's label, until the result comes, the
+    /// plugin goes or `pick_wait` is over. A pick's entries in `pending`
+    /// and `acts` are added and taken away under this lock.
+    picks: Mutex<HashMap<String, (Key, String)>>,
+    /// How long a pick waits for its result: `PICK_WAIT`, or less in a
+    /// test.
+    pick_wait: Duration,
     /// The actions waiting for an answer, by the plugin they went to, which
     /// tells an action's result from a tool call's, until it comes or the
     /// plugin goes.
@@ -1002,6 +1063,25 @@ pub fn read_manifest(
                 "plugin {name}: at most {COMMAND_BEGINNINGS} commands are listened for"
             ));
         }
+        let mut palette: Vec<String> = Vec::new();
+        for id in strings("palette")? {
+            if !valid_name(&id) {
+                return Err(format!(
+                    "plugin {name}: the palette command {id:?} must be a plain identifier"
+                ));
+            }
+            if palette.contains(&id) {
+                return Err(format!(
+                    "plugin {name}: the palette command {id:?} is named twice"
+                ));
+            }
+            palette.push(id);
+        }
+        if palette.len() > PALETTE_MOST {
+            return Err(format!(
+                "plugin {name}: at most {PALETTE_MOST} palette commands are declared"
+            ));
+        }
         declared.push(Declared {
             name,
             path: relative,
@@ -1013,6 +1093,7 @@ pub fn read_manifest(
             sections: strings("sections")?,
             view,
             commands,
+            palette,
         });
     }
     if declared.is_empty() {
@@ -1256,6 +1337,9 @@ impl Plugins {
                 newer: Mutex::new(HashMap::new()),
                 sections: Mutex::new(HashMap::new()),
                 views: Mutex::new(HashMap::new()),
+                palettes: Mutex::new(HashMap::new()),
+                picks: Mutex::new(HashMap::new()),
+                pick_wait: PICK_WAIT,
                 pending: Mutex::new(HashMap::new()),
                 acts: Mutex::new(HashMap::new()),
                 owned: Mutex::new(owned),
@@ -1270,6 +1354,15 @@ impl Plugins {
                 notifying: Mutex::new(HashMap::new()),
             }),
         }
+    }
+
+    /// The same core with picks that wait `wait` for their result.
+    #[cfg(test)]
+    fn waiting_for_picks(mut self, wait: Duration) -> Self {
+        Arc::get_mut(&mut self.inner)
+            .expect("a core nothing holds yet")
+            .pick_wait = wait;
+        self
     }
 
     /// Every source, as the window lists them, manifests read afresh.
@@ -1397,6 +1490,21 @@ impl Plugins {
         )
     }
 
+    /// Tells a plugin one of its palette commands was picked, for a project
+    /// and the session on screen there, and comes back at once: what the
+    /// plugin does shows up as its page, a web address or a start to say
+    /// yes to, and what went wrong as a notice.
+    pub fn palette_pick(
+        &self,
+        source_id: &str,
+        name: &str,
+        command: &str,
+        project: &str,
+        session: Option<&str>,
+    ) -> Result<(), String> {
+        self.inner.pick(source_id, name, command, project, session)
+    }
+
     /// Hands a plugin's page's message to the plugin and comes back at
     /// once: whatever the plugin makes of it arrives as its own line. A
     /// message the window says came of the user's click or key carries an
@@ -1464,6 +1572,30 @@ fn web_address(url: &str) -> bool {
     rest.is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'))
         && url.len() <= 2048
         && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+/// A palette command's label as the palette shows it: one line with no
+/// character that shows nothing or moves others, of `LABEL_MOST`
+/// characters at most, and starting with a letter or a digit that is not
+/// lowercase: the app's own commands start with a capital, and a label in
+/// a script without case, or one starting with a digit, starts as it is.
+/// None for a label that is not fit to show, a long one included, which is
+/// refused and not cut.
+fn palette_label(label: &str) -> Option<String> {
+    let seen: String = label
+        .chars()
+        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .filter(|c| !unseen(*c))
+        .collect();
+    let line = seen.split_whitespace().collect::<Vec<_>>().join(" ");
+    let count = line.chars().count();
+    (count > 0
+        && count <= LABEL_MOST
+        && line
+            .chars()
+            .next()
+            .is_some_and(|first| first.is_alphanumeric() && !first.is_lowercase()))
+    .then_some(line)
 }
 
 /// How long a command beginning in a manifest may be, and how many one
@@ -2664,6 +2796,7 @@ impl Inner {
                     complaints,
                     complained,
                     commands: declared.commands.clone(),
+                    palette: declared.palette.clone(),
                 },
             );
             // A process that is still going when the next one takes its
@@ -2820,6 +2953,7 @@ impl Inner {
         };
         // Its actions are answered by no one now, and the next process
         // under its name answers nothing the user did for this one.
+        self.drop_picks(&key, "stopped before it answered");
         self.pending
             .lock()
             .expect("plugins lock")
@@ -2835,6 +2969,7 @@ impl Inner {
         self.publish();
         self.forget_sections(source_id, name);
         self.forget_views(source_id, name);
+        self.forget_palettes(source_id, name);
         if !still_on {
             self.tell(source_id, name, State::Off, None, None);
             return;
@@ -2879,6 +3014,8 @@ impl Inner {
         self.publish();
         self.forget_sections(source_id, name);
         self.forget_views(source_id, name);
+        self.forget_palettes(source_id, name);
+        self.drop_picks(&key, "was turned off before it answered");
         if let Ok(mut stdin) = stdin.lock() {
             let _ = writeln!(stdin, r#"{{"type":"stop"}}"#);
             let _ = stdin.flush();
@@ -3043,6 +3180,23 @@ impl Inner {
             Some(text) => text.to_string(),
             None => serde_json::to_string(value).unwrap_or_default(),
         };
+        let error = message.get("error").filter(|error| !error.is_null());
+        if id.starts_with(PICK_ID) {
+            let key: Key = (source_id.to_string(), name.to_string());
+            if let (Some(label), Some(error)) = (self.end_pick(id, &key), error) {
+                crate::events::emit(
+                    &self.sink,
+                    PLUGIN_NOTICE,
+                    &Notice {
+                        source: source_id.to_string(),
+                        plugin: name.to_string(),
+                        text: crate::show::one_line(&text(error)),
+                        command: Some(label),
+                    },
+                );
+            }
+            return;
+        }
         if self
             .pending
             .lock()
@@ -3050,14 +3204,15 @@ impl Inner {
             .remove(id)
             .is_some()
         {
-            if let Some(error) = message.get("error").filter(|error| !error.is_null()) {
+            if let Some(error) = error {
                 crate::events::emit(
                     &self.sink,
                     PLUGIN_NOTICE,
                     &Notice {
                         source: source_id.to_string(),
                         plugin: name.to_string(),
-                        text: text(error),
+                        text: crate::show::one_line(&text(error)),
+                        command: None,
                     },
                 );
             }
@@ -3121,6 +3276,7 @@ impl Inner {
                 self.tell_section(&section);
             }
             "view" => self.viewed(source_id, name, message),
+            "palette" => self.paletted(source_id, name, message),
             "view_data" => self.view_data(source_id, name, message),
             "notify"
                 if message
@@ -3643,6 +3799,186 @@ impl Inner {
         }
     }
 
+    /// One `palette` line from a plugin: its whole list of commands for the
+    /// palette in one project, which takes the place of the last. A command
+    /// the manifest does not declare, or with no label fit to show, is
+    /// dropped, and so is one whose label another of the plugin's took
+    /// first. The app's own commands are kept from imitation by the window,
+    /// which knows them.
+    fn paletted(&self, source_id: &str, name: &str, message: &serde_json::Value) {
+        let Some(project) = message
+            .get("project")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|project| !project.is_empty())
+        else {
+            return;
+        };
+        let key: Key = (source_id.to_string(), name.to_string());
+        let Some(declared) = self
+            .running
+            .lock()
+            .expect("plugins lock")
+            .get(&key)
+            .map(|live| live.palette.clone())
+        else {
+            return;
+        };
+        let mut commands: Vec<PaletteCommand> = Vec::new();
+        for command in message
+            .get("commands")
+            .and_then(|commands| commands.as_array())
+            .into_iter()
+            .flatten()
+        {
+            let id = command
+                .get("id")
+                .and_then(|id| id.as_str())
+                .unwrap_or_default();
+            if !declared.iter().any(|known| known == id) {
+                continue;
+            }
+            let Some(label) = command
+                .get("label")
+                .and_then(|label| label.as_str())
+                .and_then(palette_label)
+            else {
+                continue;
+            };
+            let taken = commands
+                .iter()
+                .any(|kept| kept.id == id || kept.label.to_lowercase() == label.to_lowercase());
+            if !taken && commands.len() < PALETTE_MOST {
+                commands.push(PaletteCommand {
+                    id: id.to_string(),
+                    label,
+                });
+            }
+        }
+        let event = PaletteEvent {
+            source: source_id.to_string(),
+            plugin: name.to_string(),
+            project: project.to_string(),
+            commands,
+        };
+        let place: ViewKey = (key.0, key.1, event.project.clone());
+        {
+            // Checked under the palettes' lock, so a project closed while
+            // this line is read has its commands taken away after it.
+            let mut palettes = self.palettes.lock().expect("plugins lock");
+            if !self
+                .projects
+                .lock()
+                .expect("plugins lock")
+                .iter()
+                .any(|open| open == project)
+            {
+                return;
+            }
+            if palettes.get(&place) == Some(&event) {
+                return;
+            }
+            if event.commands.is_empty() {
+                if palettes.remove(&place).is_none() {
+                    return;
+                }
+            } else {
+                palettes.insert(place, event.clone());
+            }
+        }
+        crate::events::emit(&self.sink, PLUGIN_PALETTE, &event);
+    }
+
+    /// The commands a plugin left in the palette go with it: every project
+    /// it had some for is told of none and forgotten.
+    fn forget_palettes(&self, source_id: &str, name: &str) {
+        self.forget_palettes_where(|(source, plugin, _)| source == source_id && plugin == name);
+    }
+
+    /// The commands plugins left in the palette for a project that closed
+    /// go with it.
+    fn forget_palettes_in(&self, project: &str) {
+        self.forget_palettes_where(|(_, _, open)| open == project);
+    }
+
+    /// Every palette whose place `gone` names is told of no commands and
+    /// forgotten.
+    fn forget_palettes_where(&self, gone: impl Fn(&ViewKey) -> bool) {
+        let gone: Vec<PaletteEvent> = {
+            let mut palettes = self.palettes.lock().expect("plugins lock");
+            let keys: Vec<ViewKey> = palettes.keys().filter(|key| gone(key)).cloned().collect();
+            keys.iter().filter_map(|key| palettes.remove(key)).collect()
+        };
+        for palette in gone {
+            crate::events::emit(
+                &self.sink,
+                PLUGIN_PALETTE,
+                &PaletteEvent {
+                    commands: Vec::new(),
+                    ..palette
+                },
+            );
+        }
+    }
+
+    /// The palette commands of `plugin` still waiting for a result are
+    /// answered by no one now: each is forgotten, and the window told why.
+    fn drop_picks(&self, plugin: &Key, why: &str) {
+        let dropped: Vec<String> = {
+            let mut picks = self.picks.lock().expect("plugins lock");
+            let ids: Vec<String> = picks
+                .iter()
+                .filter(|(_, (key, _))| key == plugin)
+                .map(|(id, _)| id.clone())
+                .collect();
+            ids.iter()
+                .filter_map(|id| self.forget_pick(&mut picks, id))
+                .map(|(_, label)| label)
+                .collect()
+        };
+        for label in dropped {
+            self.tell_pick(plugin, label, why);
+        }
+    }
+
+    /// Ends the pick `id` of `plugin` with its result, and gives its label
+    /// if it was still waiting. Once its result is in, the plugin can no
+    /// longer act on the pick. A result that comes for a pick already over,
+    /// or from another plugin, ends nothing.
+    fn end_pick(&self, id: &str, plugin: &Key) -> Option<String> {
+        let mut picks = self.picks.lock().expect("plugins lock");
+        if picks.get(id).is_none_or(|(key, _)| key != plugin) {
+            return None;
+        }
+        self.forget_pick(&mut picks, id).map(|(_, label)| label)
+    }
+
+    /// Forgets the pick `id` with what it may still do: nothing waits for
+    /// its result, and the plugin can no longer act on it.
+    fn forget_pick(
+        &self,
+        picks: &mut HashMap<String, (Key, String)>,
+        id: &str,
+    ) -> Option<(Key, String)> {
+        let pick = picks.remove(id)?;
+        self.pending.lock().expect("plugins lock").remove(id);
+        self.acts.lock().expect("plugins lock").remove(id);
+        Some(pick)
+    }
+
+    fn tell_pick(&self, plugin: &Key, label: String, why: &str) {
+        crate::events::emit(
+            &self.sink,
+            PLUGIN_NOTICE,
+            &Notice {
+                source: plugin.0.clone(),
+                plugin: plugin.1.clone(),
+                text: format!("the {} plugin {why}", plugin.1),
+                command: Some(label),
+            },
+        );
+    }
+
     /// What a running plugin said of itself as it came up, which is where
     /// the order of its sections is written down.
     fn greeting(&self, source_id: &str, name: &str) -> Option<Hello> {
@@ -3907,6 +4243,75 @@ impl Inner {
         Ok(())
     }
 
+    /// Tells the plugin a command of its was picked in the palette, and
+    /// comes back: the plugin answers it as it answers an action, and may
+    /// open a web address, ask to start a session or open its page for it.
+    /// A command the plugin does not have in the project, or a plugin that
+    /// is not running, is an error at once; a result that has not come in
+    /// `PICK_WAIT` is told as the plugin's silence, and one with an error
+    /// as what the plugin said.
+    fn pick(
+        self: &Arc<Self>,
+        source_id: &str,
+        name: &str,
+        command: &str,
+        project: &str,
+        session: Option<&str>,
+    ) -> Result<(), String> {
+        let key: Key = (source_id.to_string(), name.to_string());
+        let not_running = || format!("the {name} plugin is not running");
+        if !self
+            .running
+            .lock()
+            .expect("plugins lock")
+            .contains_key(&key)
+        {
+            return Err(not_running());
+        }
+        let label = self
+            .palettes
+            .lock()
+            .expect("plugins lock")
+            .get(&(key.0.clone(), key.1.clone(), project.to_string()))
+            .and_then(|palette| palette.commands.iter().find(|c| c.id == command))
+            .map(|c| c.label.clone())
+            .ok_or_else(|| format!("the {name} plugin has no such command here"))?;
+        let id = format!("{PICK_ID}{}", uuid::Uuid::new_v4().simple());
+        let mut message = serde_json::json!({
+            "type": "pick",
+            "id": id,
+            "command": command,
+            "project": project,
+        });
+        if let Some(session) = session.and_then(|token| self.session_of(token)) {
+            message["session"] = serde_json::Value::String(session);
+        }
+        {
+            let mut picks = self.picks.lock().expect("plugins lock");
+            picks.insert(id.clone(), (key.clone(), label));
+            self.pending
+                .lock()
+                .expect("plugins lock")
+                .insert(id.clone(), key.clone());
+            self.acted(&id, key);
+        }
+        // A plugin that cannot be written to has stopped, whether or not
+        // its exit has been seen yet.
+        if self.send(source_id, name, &message).is_err() {
+            self.forget_pick(&mut self.picks.lock().expect("plugins lock"), &id);
+            return Err(not_running());
+        }
+        let plugins = Arc::clone(self);
+        std::thread::spawn(move || {
+            std::thread::sleep(plugins.pick_wait);
+            let silent = plugins.forget_pick(&mut plugins.picks.lock().expect("plugins lock"), &id);
+            if let Some((plugin, label)) = silent {
+                plugins.tell_pick(&plugin, label, "did not answer");
+            }
+        });
+        Ok(())
+    }
+
     fn set_projects(&self, paths: Vec<String>) {
         let changes: Vec<(&str, String)> = {
             let mut projects = self.projects.lock().expect("plugins lock");
@@ -3924,6 +4329,9 @@ impl Inner {
             *projects = paths;
             changes
         };
+        for (_, path) in changes.iter().filter(|(event, _)| *event == "closed") {
+            self.forget_palettes_in(path);
+        }
         for (event, path) in changes {
             self.broadcast(&serde_json::json!({
                 "type": "project",
@@ -4287,6 +4695,70 @@ while IFS= read -r line; do
     *'"type":"action"'*)
       id=$(printf '%s' "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
       printf '{"type":"result","id":"%s","error":"gh is not logged in"}\n' "$id"
+      ;;
+  esac
+done
+"#;
+
+    /// A plugin that puts commands in the palette, some of them not fit
+    /// to show, writes down every line it hears, and answers a pick by
+    /// opening a web address, with what went wrong, or not at all.
+    #[cfg(unix)]
+    const PALETTE: &str = r#"#!/bin/sh
+echo '{"type":"hello","name":"board","version":"1.0.0"}'
+echo '{"type":"palette","commands":[{"id":"overview","label":"No project"}]}'
+printf '%s\n' '{"type":"palette","project":"PROJECT","commands":[{"id":"overview","label":"  Pull\trequest   overview "},{"id":"checks","label":"Checks"},{"id":"refresh","label":"Refresh\u202e checks"},{"id":"long","label":"LONG"},{"id":"lower","label":"lowercase"},{"id":"other","label":"Not declared"},{"id":"checks","label":"Checks again"},{"id":"twin","label":"CHECKS"}]}'
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> received.txt
+  case "$line" in
+    *'"type":"stop"'*) exit 0;;
+    *'"type":"pick"'*)
+      id=$(printf '%s' "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+      case "$line" in
+        *'"command":"overview"'*)
+          printf '{"type":"open_url","project":"PROJECT","answers":"%s","url":"https://example.com/pulls"}\n' "$id"
+          printf '{"type":"result","id":"%s"}\n' "$id"
+          ;;
+        *'"command":"checks"'*)
+          printf '{"type":"result","id":"%s","error":"gh is not\\nlogged in"}\n' "$id"
+          ;;
+      esac
+      ;;
+  esac
+done
+"#;
+
+    /// A plugin that puts commands in the palette for an open project and
+    /// for one that is not, then answers a pick late, both at once in the
+    /// other order, or by stopping, or answers one and acts on it after.
+    #[cfg(unix)]
+    const PICKS: &str = r#"#!/bin/sh
+echo '{"type":"hello","name":"board","version":"1.0.0"}'
+echo '{"type":"palette","project":"/not/open","commands":[{"id":"first","label":"First"}]}'
+echo '{"type":"palette","project":"PROJECT","commands":[{"id":"slow","label":"Slow"},{"id":"first","label":"First"},{"id":"second","label":"Second"},{"id":"crash","label":"Crash"},{"id":"after","label":"After"}]}'
+first=""
+while IFS= read -r line; do
+  case "$line" in
+    *'"type":"stop"'*) exit 0;;
+    *'"type":"pick"'*)
+      id=$(printf '%s' "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+      case "$line" in
+        *'"command":"slow"'*)
+          (sleep 1
+           printf '{"type":"open_url","project":"PROJECT","answers":"%s","url":"https://example.com/late"}\n' "$id"
+           printf '{"type":"result","id":"%s","error":"too late"}\n' "$id") &
+          ;;
+        *'"command":"first"'*) first=$id;;
+        *'"command":"second"'*)
+          printf '{"type":"result","id":"%s","error":"second went wrong"}\n' "$id"
+          printf '{"type":"result","id":"%s"}\n' "$first"
+          ;;
+        *'"command":"crash"'*) exit 3;;
+        *'"command":"after"'*)
+          printf '{"type":"result","id":"%s"}\n' "$id"
+          printf '{"type":"open_url","project":"PROJECT","answers":"%s","url":"https://example.com/after"}\n' "$id"
+          ;;
+      esac
       ;;
   esac
 done
@@ -5146,6 +5618,381 @@ sections = ["Pull request"]
         assert_eq!(gone["project"], here);
         assert!(gone["actions"].as_array().unwrap().is_empty());
         assert!(gone["detail"].is_null());
+    }
+
+    #[test]
+    fn a_palette_label_is_one_short_line_that_never_starts_in_lowercase() {
+        assert_eq!(
+            palette_label("  Pull\trequest \n overview ").as_deref(),
+            Some("Pull request overview")
+        );
+        assert_eq!(
+            palette_label("Open\u{202e}\u{200b} board").as_deref(),
+            Some("Open board")
+        );
+        assert_eq!(palette_label("Ärenden").as_deref(), Some("Ärenden"));
+        assert_eq!(palette_label("   "), None);
+        assert_eq!(palette_label("lowercase"), None);
+        assert_eq!(palette_label("2FA codes").as_deref(), Some("2FA codes"));
+        assert_eq!(
+            palette_label("日本語のコマンド").as_deref(),
+            Some("日本語のコマンド")
+        );
+        assert_eq!(palette_label("فتح الطلب").as_deref(), Some("فتح الطلب"));
+        assert_eq!(palette_label("ärenden"), None);
+        assert_eq!(palette_label("> Go to file"), None);
+        let most = format!("A{}", "b".repeat(LABEL_MOST - 1));
+        assert_eq!(palette_label(&most).as_deref(), Some(most.as_str()));
+        assert_eq!(palette_label(&format!("{most}b")), None);
+    }
+
+    #[test]
+    fn reads_the_palette_commands_a_manifest_declares() {
+        let dir = source_with(
+            "[[plugin]]\nname = \"github\"\npath = \"github\"\nrun = [\"sh\", \"main.sh\"]\ncommands = [\"gh pr create\"]\npalette = [\"overview\", \"checks\"]\n",
+            "palette",
+        );
+        let declared = read_manifest(&dir, &vars()).unwrap();
+        assert_eq!(declared[0].palette, ["overview", "checks"]);
+        assert_eq!(declared[0].commands, ["gh pr create"]);
+
+        let none = source_with(GOOD, "palette-none");
+        assert!(read_manifest(&none, &vars()).unwrap()[0].palette.is_empty());
+
+        let many = (0..=PALETTE_MOST)
+            .map(|at| format!("\"c{at}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let wrong = [
+            ("[\"Pull request\"]".to_string(), "plain identifier"),
+            ("[\"overview\", \"overview\"]".to_string(), "named twice"),
+            (format!("[{many}]"), "at most 8 palette commands"),
+            ("\"overview\"".to_string(), "palette"),
+        ];
+        for (palette, expected) in wrong {
+            let manifest = format!(
+                "[[plugin]]\nname = \"github\"\npath = \"github\"\nrun = [\"sh\", \"main.sh\"]\npalette = {palette}\n"
+            );
+            let dir = source_with(&manifest, "palette-wrong");
+            let error = read_manifest(&dir, &vars()).unwrap_err();
+            assert!(error.contains(expected), "{palette} gave {error:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn puts_a_plugin_s_commands_in_the_palette_and_tells_it_of_a_pick() {
+        let home = Scratch::absent("plugins-palette-home");
+        let dir = source_with(
+            r#"
+[[plugin]]
+name = "board"
+path = "github"
+run = ["sh", "main.sh"]
+palette = ["overview", "checks", "refresh", "long", "lower", "twin"]
+"#,
+            "palette-runs",
+        );
+        let here = dunce::canonicalize(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        let long = format!("A{}", "b".repeat(LABEL_MOST));
+        std::fs::write(
+            dir.join("github/main.sh"),
+            PALETTE.replace("PROJECT", &here).replace("LONG", &long),
+        )
+        .unwrap();
+        let received = dir.join("github/received.txt");
+        let recorder = Arc::new(Recorder::default());
+        let plugins = plugins_at(&home, recorder.clone());
+        plugins.set_projects(vec![here.clone()]);
+        plugins.session_started("pty-1", started(Some("s-1"), Some("t-1"), &here));
+        let added = plugins.add(&here, None).unwrap();
+        plugins.enable(&added.id, "board", true).unwrap();
+
+        let wait = |event: &'static str, ok: &dyn Fn(&serde_json::Value) -> bool| {
+            for _ in 0..50 {
+                let found = recorder
+                    .events
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .rev()
+                    .find(|(name, payload)| name == event && ok(payload))
+                    .map(|(_, payload)| payload.clone());
+                if let Some(payload) = found {
+                    return payload;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            panic!("nothing said {event}");
+        };
+        let heard = |what: &str| {
+            for _ in 0..50 {
+                let lines = std::fs::read_to_string(&received).unwrap_or_default();
+                if let Some(line) = lines.lines().find(|line| line.contains(what)) {
+                    return serde_json::from_str::<serde_json::Value>(line).unwrap();
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            panic!("the plugin never heard {what}");
+        };
+
+        // Only the declared commands with labels fit to show, once each by
+        // id and by label, and none for a line that names no project.
+        let palette = wait(PLUGIN_PALETTE, &|payload| {
+            payload["commands"]
+                .as_array()
+                .is_some_and(|commands| !commands.is_empty())
+        });
+        assert_eq!(palette["source"], added.id);
+        assert_eq!(palette["plugin"], "board");
+        assert_eq!(palette["project"], here);
+        assert_eq!(
+            palette["commands"],
+            serde_json::json!([
+                { "id": "overview", "label": "Pull request overview" },
+                { "id": "checks", "label": "Checks" },
+                { "id": "refresh", "label": "Refresh checks" },
+            ])
+        );
+        let told = recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(name, _)| name == PLUGIN_PALETTE)
+            .count();
+        assert_eq!(told, 1, "a line with no project tells nothing");
+
+        // A pick reaches the plugin with the session's id, and is an act of
+        // the user's that the plugin may open a web address for.
+        plugins
+            .palette_pick(&added.id, "board", "overview", &here, Some("t-1"))
+            .unwrap();
+        let pick = heard("\"command\":\"overview\"");
+        assert_eq!(pick["type"], "pick");
+        assert_eq!(pick["project"], here);
+        assert_eq!(pick["session"], "s-1");
+        assert!(pick["id"].as_str().is_some_and(|id| !id.is_empty()));
+        let opened = wait(PLUGIN_OPEN_URL, &|_| true);
+        assert_eq!(opened["url"], "https://example.com/pulls");
+        assert_eq!(opened["project"], here);
+
+        // What went wrong is the plugin's notice, named by the command.
+        plugins
+            .palette_pick(&added.id, "board", "checks", &here, None)
+            .unwrap();
+        assert!(heard("\"command\":\"checks\"").get("session").is_none());
+        let notice = wait(PLUGIN_NOTICE, &|payload| payload.get("command").is_some());
+        assert_eq!(notice["command"], "Checks");
+        assert_eq!(notice["text"], "gh is not logged in");
+
+        let refused = plugins
+            .palette_pick(&added.id, "board", "lower", &here, None)
+            .unwrap_err();
+        assert_eq!(refused, "the board plugin has no such command here");
+        let elsewhere = plugins
+            .palette_pick(&added.id, "board", "overview", "/elsewhere", None)
+            .unwrap_err();
+        assert_eq!(elsewhere, "the board plugin has no such command here");
+        let missing = plugins
+            .palette_pick(&added.id, "missing", "overview", &here, None)
+            .unwrap_err();
+        assert_eq!(missing, "the missing plugin is not running");
+
+        // A pick the plugin is still sitting on when it is turned off is
+        // told as such, and its commands leave the palette with it.
+        plugins
+            .palette_pick(&added.id, "board", "refresh", &here, None)
+            .unwrap();
+        heard("\"command\":\"refresh\"");
+        plugins.enable(&added.id, "board", false).unwrap();
+        let dropped = wait(PLUGIN_NOTICE, &|payload| {
+            payload["command"] == "Refresh checks"
+        });
+        assert_eq!(
+            dropped["text"],
+            "the board plugin was turned off before it answered"
+        );
+        let gone = wait(PLUGIN_PALETTE, &|payload| {
+            payload["commands"]
+                .as_array()
+                .is_some_and(|commands| commands.is_empty())
+        });
+        assert_eq!(gone["project"], here);
+        let after = plugins
+            .palette_pick(&added.id, "board", "overview", &here, None)
+            .unwrap_err();
+        assert_eq!(after, "the board plugin is not running");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_pick_ends_once_whether_answered_late_together_or_never() {
+        let home = Scratch::absent("plugins-picks-home");
+        let dir = source_with(
+            r#"
+[[plugin]]
+name = "board"
+path = "github"
+run = ["sh", "main.sh"]
+palette = ["slow", "first", "second", "crash", "after"]
+"#,
+            "palette-picks",
+        );
+        let here = dunce::canonicalize(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        std::fs::write(dir.join("github/main.sh"), PICKS.replace("PROJECT", &here)).unwrap();
+        let recorder = Arc::new(Recorder::default());
+        let plugins =
+            plugins_at(&home, recorder.clone()).waiting_for_picks(Duration::from_millis(300));
+        plugins.set_projects(vec![here.clone()]);
+        let added = plugins.add(&here, None).unwrap();
+        plugins.enable(&added.id, "board", true).unwrap();
+
+        let said = |event: &str| -> Vec<serde_json::Value> {
+            recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(name, _)| name == event)
+                .map(|(_, payload)| payload.clone())
+                .collect()
+        };
+        let wait = |event: &'static str, ok: &dyn Fn(&serde_json::Value) -> bool| {
+            for _ in 0..50 {
+                if let Some(payload) = said(event).into_iter().find(|payload| ok(payload)) {
+                    return payload;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            panic!("nothing said {event}");
+        };
+        let notices = |label: &str| {
+            said(PLUGIN_NOTICE)
+                .into_iter()
+                .filter(|notice| notice["command"] == label)
+                .map(|notice| notice["text"].as_str().unwrap_or_default().to_string())
+                .collect::<Vec<_>>()
+        };
+
+        // Commands for a project not open here go nowhere.
+        wait(PLUGIN_PALETTE, &|payload| payload["project"] == here);
+        assert!(said(PLUGIN_PALETTE)
+            .iter()
+            .all(|payload| payload["project"] == here));
+
+        // No result in time is the plugin's silence, and what it sends for
+        // the pick after that opens nothing, is said nowhere and is
+        // written for no tool call.
+        plugins
+            .palette_pick(&added.id, "board", "slow", &here, None)
+            .unwrap();
+        let silent = wait(PLUGIN_NOTICE, &|payload| payload["command"] == "Slow");
+        assert_eq!(silent["text"], "the board plugin did not answer");
+        std::thread::sleep(Duration::from_millis(1500));
+        assert!(
+            said(PLUGIN_OPEN_URL).is_empty(),
+            "a pick that is over opens nothing"
+        );
+        assert_eq!(notices("Slow"), ["the board plugin did not answer"]);
+        let written = std::fs::read_dir(crate::show::answers_path(&home))
+            .map(|entries| entries.count())
+            .unwrap_or(0);
+        assert_eq!(written, 0, "a pick's result is no tool call's answer");
+
+        // Two picks at once: each is ended by its own result.
+        plugins
+            .palette_pick(&added.id, "board", "first", &here, None)
+            .unwrap();
+        plugins
+            .palette_pick(&added.id, "board", "second", &here, None)
+            .unwrap();
+        let wrong = wait(PLUGIN_NOTICE, &|payload| payload["command"] == "Second");
+        assert_eq!(wrong["text"], "second went wrong");
+        std::thread::sleep(Duration::from_millis(600));
+        assert!(notices("First").is_empty(), "the first pick was answered");
+        assert_eq!(notices("Second"), ["second went wrong"]);
+
+        // Once its result is in, the plugin can no longer act on the pick.
+        plugins
+            .palette_pick(&added.id, "board", "after", &here, None)
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(600));
+        assert!(
+            said(PLUGIN_OPEN_URL).is_empty(),
+            "a pick that has its result opens nothing"
+        );
+        assert!(notices("After").is_empty(), "the pick was answered");
+
+        // A plugin that stops on a pick is told as stopped, once.
+        plugins
+            .palette_pick(&added.id, "board", "crash", &here, None)
+            .unwrap();
+        let stopped = wait(PLUGIN_NOTICE, &|payload| payload["command"] == "Crash");
+        assert_eq!(
+            stopped["text"],
+            "the board plugin stopped before it answered"
+        );
+        std::thread::sleep(Duration::from_millis(600));
+        assert_eq!(
+            notices("Crash"),
+            ["the board plugin stopped before it answered"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_project_that_closes_takes_its_palette_commands_with_it() {
+        let home = Scratch::absent("plugins-palette-closed-home");
+        let dir = source_with(
+            r#"
+[[plugin]]
+name = "board"
+path = "github"
+run = ["sh", "main.sh"]
+palette = ["slow", "first", "second", "crash"]
+"#,
+            "palette-closed",
+        );
+        let here = dunce::canonicalize(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        std::fs::write(dir.join("github/main.sh"), PICKS.replace("PROJECT", &here)).unwrap();
+        let recorder = Arc::new(Recorder::default());
+        let plugins = plugins_at(&home, recorder.clone());
+        plugins.set_projects(vec![here.clone()]);
+        let added = plugins.add(&here, None).unwrap();
+        plugins.enable(&added.id, "board", true).unwrap();
+        let commands = || {
+            recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(name, _)| name == PLUGIN_PALETTE)
+                .map(|(_, payload)| payload["commands"].as_array().map_or(0, Vec::len))
+                .collect::<Vec<_>>()
+        };
+        for _ in 0..50 {
+            if !commands().is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(commands(), [4]);
+        plugins.set_projects(Vec::new());
+        assert_eq!(commands(), [4, 0]);
+        let refused = plugins
+            .palette_pick(&added.id, "board", "first", &here, None)
+            .unwrap_err();
+        assert_eq!(refused, "the board plugin has no such command here");
     }
 
     #[cfg(unix)]

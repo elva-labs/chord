@@ -250,7 +250,8 @@ pub fn homeward(host: &str, event: &str, mut payload: Value) -> Value {
         | chord_core::plugins::PLUGIN_OPEN_URL
         | chord_core::plugins::PLUGIN_START
         | chord_core::plugins::PLUGIN_SEND
-        | chord_core::plugins::PLUGIN_NOTIFY => {
+        | chord_core::plugins::PLUGIN_NOTIFY
+        | chord_core::plugins::PLUGIN_PALETTE => {
             put_back(&mut payload, "project", |path| with_host(host, path));
         }
         _ => {}
@@ -862,6 +863,19 @@ mod tests {
         );
         assert_eq!(open["project"], "ssh://lab/srv/api");
         assert_eq!(open["url"], "https://example.com/pull/1");
+
+        let palette = homeward(
+            "lab",
+            chord_core::plugins::PLUGIN_PALETTE,
+            json!({
+                "source": "src-1",
+                "plugin": "github",
+                "project": "/srv/api",
+                "commands": [{ "id": "overview", "label": "Pull request overview" }]
+            }),
+        );
+        assert_eq!(palette["project"], "ssh://lab/srv/api");
+        assert_eq!(palette["commands"][0]["label"], "Pull request overview");
 
         for event in [
             chord_core::plugins::PLUGIN_START,

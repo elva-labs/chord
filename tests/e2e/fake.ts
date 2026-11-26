@@ -668,6 +668,7 @@ export async function installFakeCore(
         tools: [] as string[],
         sections: [] as string[],
         commands: [] as string[],
+        palette: [] as string[],
         view: null,
         enabled: false,
         state: "off",
@@ -1276,6 +1277,20 @@ export async function installFakeCore(
           (w.__pluginActions ??= []).push(request);
           if (request.action === "explode")
             throw new Error("the plugin is not running");
+        },
+        onPluginPalette: async (handler: (event: unknown) => void) => {
+          (window as unknown as Record<string, unknown>).__pluginPalette =
+            handler;
+          return () => {};
+        },
+        // Every palette command picked, for a test to read back. "explode"
+        // is the plugin that is never running.
+        pluginPalettePick: async (request: { plugin: string }) => {
+          const w = window as unknown as { __pluginPicks?: unknown[] };
+          (w.__pluginPicks ??= []).push(request);
+          // The core rejects with the reason as a string.
+          if (request.plugin === "explode")
+            return Promise.reject("the explode plugin is not running");
         },
         // What runs under a pty: whatever a test put there.
         ptyProcesses: async (id: string) => {

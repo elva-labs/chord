@@ -16,9 +16,15 @@ export const flash = $state({
 let timer: ReturnType<typeof setTimeout> | null = null;
 let again: ReturnType<typeof setTimeout> | null = null;
 
+/** How long an error stays: long enough to read once it is noticed,
+    which may be well after what failed was asked for. */
+export function errorMs(text: string): number {
+  return Math.min(8000, 4000 + 50 * text.length);
+}
+
 /** Shows a word. The same word again is cleared and set a task later, so
     the live region's content changes and is announced once more. */
-export function say(text: string) {
+export function say(text: string, ms = FLASH_MS) {
   if (again !== null) clearTimeout(again);
   again = null;
   if (flash.text === text) {
@@ -32,7 +38,12 @@ export function say(text: string) {
   timer = setTimeout(() => {
     flash.text = null;
     timer = null;
-  }, FLASH_MS);
+  }, ms);
+}
+
+/** Shows what went wrong, for as long as `errorMs` gives it. */
+export function sayError(text: string) {
+  say(text, errorMs(text));
 }
 
 /** Holds a word in the bar until it is let go. */

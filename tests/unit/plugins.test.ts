@@ -31,6 +31,7 @@ const github = (): PluginInfo => ({
   tools: ["pr", "checks"],
   sections: ["Pull request"],
   commands: [],
+  palette: [],
   view: "wide",
   enabled: false,
   state: "off",
@@ -282,6 +283,12 @@ describe("a plugin", () => {
         run: ["sh", "x"],
       }),
     ).toBe("runs sh");
+    expect(summary({ ...github(), palette: ["overview"] })).toBe(
+      "2 tools, 1 section, 1 palette command, a wide view, runs node",
+    );
+    expect(summary({ ...github(), tools: [], palette: ["a", "b"] })).toBe(
+      "1 section, 2 palette commands, a wide view, runs node",
+    );
     expect(
       stateLabel({ ...github(), state: "failed", detail: "needs node" }),
     ).toBe("failed: needs node");

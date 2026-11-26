@@ -77,6 +77,7 @@ import { chatRows, chats, isChat, isChatsFolder, pastChats } from "$lib/chats.sv
 import { canGoBack, openBack } from "$lib/rewind.svelte";
 import { compact } from "$lib/compact.svelte";
 import { browser } from "$lib/browser.svelte";
+import { paletteCommands, pickPluginCommand, type PluginCommand } from "$lib/pluginPalette.svelte";
 
 /**
  * The palette: one field over the workbench in two lists. Go to narrows the
@@ -89,6 +90,11 @@ import { browser } from "$lib/browser.svelte";
  * or when it was last used. An action is listed with its chord. Going to
  * the next session that needs you leads the commands, since it is what the
  * palette is opened for most.
+ *
+ * The plugins' commands for the project on screen follow the app's, each
+ * with its plugin's name beside it and matched by that name too. A plugin
+ * cannot take a label the app's commands use: a command that would read as
+ * one of the app's is left out.
  *
  * A new session asks for the project when it is not known, then offers
  * one line: the session it would start, on the agent it used last and the
@@ -197,6 +203,16 @@ export type PaletteItem =
       group: null;
       action: ActionKey;
       chord: string;
+    }
+  | {
+      /** A command a plugin put in the palette. */
+      kind: "plugin";
+      id: string;
+      label: string;
+      group: null;
+      /** The plugin's name, drawn beside the label. */
+      detail: string;
+      command: PluginCommand;
     }
   | {
       /** The session the defaults start, which Enter takes. */
@@ -378,6 +394,23 @@ function standing(path: string): string {
   return used === null ? "" : since(used);
 }
 
+/** What the app's own commands are called, whether the palette lists
+    them now or only at times. No plugin's command takes one of these, nor
+    an action's label. Those that start a session in a project are these
+    words of New session followed by the project. */
+const COMMAND_LABELS = {
+  new: "New session",
+  goBack: "Go back to an earlier message",
+  preview: "Preview file",
+  source: "Show source",
+  wrapOn: "Turn word wrap on",
+  wrapOff: "Turn word wrap off",
+  open: "Open project",
+  remote: "Open remote project",
+  setup: "Check setup",
+  welcome: "Show welcome",
+};
+
 /** The command that shows the file open in the viewer the other way, when
     it is one the app renders: Preview file while its source is shown, Show
     source while its rendering is. Offered with the viewer holding a file,
@@ -392,7 +425,7 @@ function viewCommand(): PaletteItem | null {
   return {
     kind: "command",
     id: rendered ? "command:source" : "command:preview",
-    label: rendered ? "Show source" : "Preview file",
+    label: rendered ? COMMAND_LABELS.source : COMMAND_LABELS.preview,
     group: null,
     command: rendered ? "source" : "preview",
     chord: "",
@@ -406,7 +439,7 @@ function wrapCommand(): PaletteItem | null {
   return {
     kind: "command",
     id: "command:wrap",
-    label: wrap.on ? "Turn word wrap off" : "Turn word wrap on",
+    label: wrap.on ? COMMAND_LABELS.wrapOff : COMMAND_LABELS.wrapOn,
     group: null,
     command: "wrap",
     chord: describe(chordFor("editor.wrap")),
@@ -494,7 +527,7 @@ export function goToItems(query: string): PaletteItem[] {
     const open: PaletteItem = {
       kind: "command",
       id: "command:open",
-      label: "Open project",
+      label: COMMAND_LABELS.open,
       group: null,
       command: "open",
       chord: "",
@@ -534,11 +567,11 @@ export function commandItems(query: string): PaletteItem[] {
   const view = viewCommand();
   const wrapping = wrapCommand();
   const commands: PaletteItem[] = [
-    ...(workspace.open.length === 0 ? [] : [command("new", "New session")]),
+    ...(workspace.open.length === 0 ? [] : [command("new", COMMAND_LABELS.new)]),
     ...(chats.dir === null ? [] : [command("newChat", CHAT.label, describe(chordFor("chat.new")))]),
     ...(here === null
       ? []
-      : [command("newHere", `New session in ${projectLabel(here)}`)]),
+      : [command("newHere", `${COMMAND_LABELS.new} in ${projectLabel(here)}`)]),
     // The other way from New session's, for one session in the project on
     // screen, alone.
     ...(other === null
@@ -547,20 +580,20 @@ export function commandItems(query: string): PaletteItem[] {
           command(
             "newOther",
             other === "integrated"
-              ? `New session in Chord in ${projectLabel(here!)}`
-              : `New session in a terminal in ${projectLabel(here!)}`,
+              ? `${COMMAND_LABELS.new} in Chord in ${projectLabel(here!)}`
+              : `${COMMAND_LABELS.new} in a terminal in ${projectLabel(here!)}`,
           ),
         ]),
     // Going back is the session on screen's, while it is at rest.
     ...(sessions.active !== null && canGoBack(sessions.active)
-      ? [command("goBack", "Go back to an earlier message")]
+      ? [command("goBack", COMMAND_LABELS.goBack)]
       : []),
     ...(view === null ? [] : [view]),
     ...(wrapping === null ? [] : [wrapping]),
-    command("open", "Open project"),
-    command("remote", "Open remote project"),
-    command("setup", "Check setup"),
-    command("welcome", "Show welcome"),
+    command("open", COMMAND_LABELS.open),
+    command("remote", COMMAND_LABELS.remote),
+    command("setup", COMMAND_LABELS.setup),
+    command("welcome", COMMAND_LABELS.welcome),
   ];
   const actions = ACTIONS.filter(
     ({ key }) =>
@@ -573,12 +606,43 @@ export function commandItems(query: string): PaletteItem[] {
     action: key,
     chord: describe(chordFor(key)),
   }));
-  return [attention, ...commands, ...actions].filter((item) =>
+  const app = [attention, ...commands, ...actions];
+  const taken = new Set(app.map((item) => normal(item.label)));
+  const plugins = paletteCommands()
+    .filter((command) => !shadows(command.label, taken))
+    .map((command): PaletteItem => ({
+      kind: "plugin",
+      id: `plugin:${JSON.stringify([command.source, command.plugin, command.command])}`,
+      label: command.label,
+      group: null,
+      detail: command.plugin,
+      command,
+    }));
+  return [...app, ...plugins].filter((item) =>
     matches(
-      `${item.label} ${item.kind === "attention" ? item.detail : ""}`,
+      `${item.label} ${item.kind === "attention" || item.kind === "plugin" ? item.detail : ""}`,
       query,
     ),
   );
+}
+
+/** A label as two labels that read the same share it: lowercase, with any
+    run of whitespace one space. */
+function normal(label: string): string {
+  return label.toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+}
+
+/** Every label the app's commands and actions can wear, as `normal` gives
+    it. */
+const APP_LABELS = new Set(
+  [...Object.values(COMMAND_LABELS), ...ACTIONS.map(({ label }) => label)].map(normal),
+);
+
+/** Whether a plugin's label reads as one of the app's commands: one listed
+    now, one offered at other times, or one that starts a session. */
+function shadows(label: string, taken: Set<string>): boolean {
+  const seen = normal(label);
+  return taken.has(seen) || APP_LABELS.has(seen) || seen.startsWith(normal(COMMAND_LABELS.new));
 }
 
 /** The question a new session asks next given the answers so far, or null
@@ -1249,5 +1313,9 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       }
     case "action":
       return { type: "perform", action: actionFor(item.action) };
+    case "plugin": {
+      const command = item.command;
+      return { type: "close", then: () => void pickPluginCommand(command) };
+    }
   }
 }

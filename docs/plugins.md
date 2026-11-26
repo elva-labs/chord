@@ -134,7 +134,7 @@ names the project, so one process serves them all.
 From the app to the plugin: a greeting with the app's version and the
 projects open; a project opened or closed; a session started or ended;
 the tree moved; a shell command a session ran, for a plugin that asked to
-hear it; an action taken, with its row, any input given and the session
+hear it; one of its commands picked in the palette; an action taken, with its row, any input given and the session
 whose section it is on; a tool called, with its arguments and the session that
 called it, by the harness's own id as the session events give it, or none
 where that is not known yet; a message from the plugin's view; what came
@@ -145,10 +145,11 @@ full shape of what the manifest declared, the tools with their
 descriptions and input schemas, the sections with their actions, the view
 with its width; a section's rows for a project, with its title, its line
 of detail and whether it starts folded, sent whenever they change, for the
-project or for one session in it; a mark on a session's row; a web
+project or for one session in it; its commands for the palette in a
+project; a mark on a session's row; a web
 address to open in the user's browser, a session to start or a line for a
-session it started, each in answer to the user; the result of a tool call
-or an action; a place to open in the viewer, a
+session it started, each in answer to the user; the result of a tool call,
+an action or a pick; a place to open in the viewer, a
 file's diff, files to present, or a line for a session's row, the same
 means the agent has; the view's page and the data the view shows. The app
 never polls a plugin, and a plugin that has nothing to say stays silent.
@@ -164,7 +165,7 @@ out itself, `git` and `gh` on the machine, as the agent does.
 
 ## What a plugin looks like
 
-The manifest names the tools, sections and view; it holds no code for
+The manifest names the tools, sections, palette commands and view; it holds no code for
 them. The `run` command is the plugin's one entry point, started in the
 plugin's own directory, and everything named in the manifest arrives at
 that process as a message with the name in it. A tool call is one line on
@@ -794,16 +795,115 @@ away while the view shows, which is what a graph of the branch needs. The
 layout's rules stand either way: the agent keeps its minimum, and a dragged
 divider is remembered.
 
+## Palette commands
+
+A plugin can put commands in the command palette, beside the app's own:
+the GitHub plugin's "Pull request overview", say. These are not the
+`commands` above, which are shell commands a plugin hears; the manifest
+calls these `palette`, and declares them by id, up to 8, each a plain
+identifier as a tool's name is:
+
+```toml
+[[plugin]]
+name = "github"
+palette = ["overview"]
+```
+
+The manifest says which commands there can be, so the settings can say
+what turning a plugin on adds. Whether one is there, and what it reads,
+is up to the plugin, which sends its whole list for a project as a section
+sends its rows, whenever it changes:
+
+```json
+{
+  "type": "palette",
+  "project": "/srv/orbit-api",
+  "commands": [{ "id": "overview", "label": "Pull request overview" }]
+}
+```
+
+A command the manifest does not declare is dropped, and so is one whose
+label is unfit to show: a label is one line of at most 60 characters,
+starting with a letter or a digit that is not lowercase, as the app's own
+start with a capital, and one that is longer is dropped, not cut. A label
+the plugin already gave another of its commands, compared without case, is
+dropped too. A line for a project that is not open is dropped whole. An
+empty list takes the plugin's commands out of that project, and they go
+as well when the project closes, and when the plugin stops, is turned off
+or is removed.
+
+The palette lists a plugin's commands in its commands mode, `>` in go to,
+after the app's, each marked with the plugin's name and found by its
+label or that name. They are the commands of the project on screen, and
+there are none while no project is. For a project on another machine they
+are those of the plugins running there, as Projects on other machines
+says. The label is drawn as text, never as markup. A label the app uses
+for a command of its own, even one it offers only at times, or one that
+starts with the words New session, is not listed, so a plugin cannot
+stand in for the app. Labels are compared without case and with any run
+of spaces read as one.
+
+Picking one tells the plugin, with an id, and the session on screen when
+it is one of the project's:
+
+```json
+{
+  "type": "pick",
+  "id": "p3",
+  "command": "overview",
+  "project": "/srv/orbit-api",
+  "session": "6f2a…"
+}
+```
+
+Every pick needs a `result` of the same id, as an action does, whatever
+else the plugin does for it: one that opens a page or starts a session
+and sends no result is said to have not answered. The plugin does what
+the command is for with what it already can. The pick's id is one the
+user gave, as an action's is, so the plugin may answer it with a web
+address, a session to start or a line for a session, as under Answering
+the user, before its result or after it, until the result is sent or the
+10 seconds are up. To open its own page it sends its `view` again with
+`"open": true`, which the viewer shows while that project is on screen.
+A pick that opens an address sends it:
+
+```json
+{
+  "type": "open_url",
+  "project": "/srv/orbit-api",
+  "answers": "p3",
+  "url": "https://example.com/pulls/12"
+}
+```
+
+and then says it is done:
+
+```json
+{ "type": "result", "id": "p3" }
+```
+
+A pick never holds the palette: it closes as the command is picked. What
+goes wrong is said in the status bar, with the command's label, for a few
+seconds more the longer it is, and on the plugin's sections for a while. A plugin
+that is not running is said at once. One that stops or is turned off
+before it answers, or sends no result within 10 seconds, is said then,
+and so is the `error` of a result that carries one. Once a pick is said
+to have not answered it is over: a result that comes later is dropped,
+and the plugin can no longer open an address or start a session for it.
+
 ## Projects on other machines
 
-A plugin runs on the machine the app does, and hears about every project
-open there, a project on another machine among them. Its rows and its page
-come home the way everything else from a remote does, with the host put
-back on the paths it names, and what it runs to find them out runs here.
-Its marks and web addresses come home the same way, and a session on
-another machine is told with its folder, its starter and its worktree as
-one here is.
-The daemon on the other machine runs no plugins of its own.
+A plugin runs where its project is. The daemon on another machine runs
+the plugins turned on in that machine's own store, and those hear only
+the projects open on that machine, with its paths. Their rows, pages,
+marks, palette commands and web addresses come home the way everything
+else from a remote does, with the host put back on the paths they name,
+and what they run to find them out runs over there. A plugin turned on
+here never hears of a project on another machine.
+
+The settings in this window turn plugins on and off here only. A plugin
+is turned on over there by Chord running on that machine, which shares
+its store with the daemon; from this window, it cannot be yet.
 
 ## Writing one
 

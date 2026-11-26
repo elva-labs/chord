@@ -345,6 +345,8 @@
               {:else if item.kind === "project"}
                 <span class="detail"></span>
                 <span class="end" data-testid="palette-end">{item.end}</span>
+              {:else if item.kind === "plugin"}
+                <span class="detail" data-testid="palette-detail">{item.detail}</span>
               {:else if item.kind === "attention"}
                 <span class="detail">{item.waiting === 0 ? "nothing waiting" : `${item.waiting} waiting`}</span>
                 <kbd>{item.chord}</kbd>

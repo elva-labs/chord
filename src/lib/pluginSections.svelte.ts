@@ -32,6 +32,7 @@ import {
 import { isChatsFolder } from "$lib/chats.svelte";
 import { workspace } from "$lib/workspace.svelte";
 import { activeSession } from "$lib/sessions.svelte";
+import { sayError } from "$lib/flash.svelte";
 
 /** A section as one project has it. */
 export interface PluginSection {
@@ -162,9 +163,12 @@ export function sectionChanged(event: PluginSectionEvent) {
   else pluginSections.sections[at] = section;
 }
 
-/** A word from a plugin, on its sections for a while. */
+/** A word from a plugin, on its sections for a while. One about a command
+    picked in the palette is said in the status bar as well, with the
+    command's label, since the palette that would have shown it is gone. */
 export function noticed(event: PluginNoticeEvent) {
   say(pluginOf(event), event.text);
+  if (event.command !== undefined) sayError(`${event.command}: ${event.text}`);
 }
 
 function say(plugin: string, text: string) {

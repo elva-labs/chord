@@ -204,8 +204,8 @@ export function trust(id: string, name: string) {
   }
 }
 
-/** What enabling a plugin means, in a few words: "2 tools, 1 section, a
-    wide view, runs node". */
+/** What enabling a plugin means, in a few words: "2 tools, 1 section,
+    1 palette command, a wide view, runs node". */
 export function summary(plugin: PluginInfo): string {
   const parts: string[] = [];
   const count = (n: number, one: string, many: string) =>
@@ -214,6 +214,8 @@ export function summary(plugin: PluginInfo): string {
   const sections = count(plugin.sections.length, "section", "sections");
   if (tools !== null) parts.push(tools);
   if (sections !== null) parts.push(sections);
+  const palette = count(plugin.palette?.length ?? 0, "palette command", "palette commands");
+  if (palette !== null) parts.push(palette);
   if (plugin.view !== null) parts.push(`a ${plugin.view} view`);
   const program = plugin.run[0] ?? "";
   const runtime = program.split(/[\\/]/).pop() ?? program;
