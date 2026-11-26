@@ -436,10 +436,14 @@
     }
     const row = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-row]");
     const tree = nav?.querySelector<HTMLElement>(".tree");
-    const up =
-      row !== null && tree !== null && tree !== undefined
-        ? row.getBoundingClientRect().bottom > tree.getBoundingClientRect().bottom - 125
-        : false;
+    // Upwards only with the room above: what overflows the foot scrolls into
+    // reach, and what overflows the head does not.
+    let up = false;
+    if (row !== null && tree !== null && tree !== undefined) {
+      const at = row.getBoundingClientRect();
+      const within = tree.getBoundingClientRect();
+      up = at.bottom > within.bottom - 125 && at.top - within.top >= 125;
+    }
     menuOpen = false;
     sortOpen = false;
     sessionMenu = null;
