@@ -294,7 +294,8 @@ export function resumeChat(transcript: HistoryEntry): Session | null {
     starts under unless named. It runs the way the agent's setting says, unless started the other
     way. A Codex session alone runs under the Codex profile named, on the
     model its file sets. Starting one is the user using the project, so it
-    counts as used. Nothing new starts in the orchestrator folder. */
+    counts as used. Nothing new starts in the orchestrator folder. The row
+    started is returned, or null where none is. */
 export function startSession(
   path: string,
   agent?: HarnessId,
@@ -302,8 +303,8 @@ export function startSession(
   workflow?: Workflow | null,
   kind?: SessionKind,
   profile: string | null = null,
-) {
-  if (!startsIn(path)) return;
+): Session | null {
+  if (!startsIn(path)) return null;
   if (workspace.active !== path) activate(path);
   touch(path);
   const live = create(
@@ -322,6 +323,7 @@ export function startSession(
     live.model = null;
   }
   focusPane("agent");
+  return live;
 }
 
 /** Opens the native picker. Returns false when the user cancels. */
