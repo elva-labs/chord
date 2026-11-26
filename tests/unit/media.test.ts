@@ -1557,16 +1557,24 @@ describe("copies of files from outside the project", () => {
 });
 
 describe("a command the agent offered", () => {
-  /** What the agent said in a turn, as the thread keeps it. */
-  const said = (...texts: string[]) =>
+  /** A run of the agent's in a turn, as the thread keeps it: its words,
+      and a tool call when `tool` is set. */
+  const run = (turn: number, texts: string[], tool = false) =>
     ({
       kind: "agent",
       key: "",
-      turn: 1,
+      turn,
       at: null,
-      parts: texts.map((text, at) => ({ kind: "text", block: `b${at}`, text, done: true, gap: false })),
+      parts: [
+        ...texts.map((text, at) => ({ kind: "text", block: `b${at}`, text, done: true, gap: false })),
+        ...(tool ? [{ kind: "tool", id: "t1", name: "wait" }] : []),
+      ],
     }) as unknown as Entry;
+  let turns = 0;
+  /** What the agent said in a turn of its own. */
+  const said = (...texts: string[]) => run(++turns, texts);
   const user = { kind: "user", key: "", message: "m" } as Entry;
+  const command = { kind: "command", key: "", command: "ls" } as Entry;
 
   it("is each command a code span or a line of a code block offers, as the run marks find them", () => {
     expect(offers("Run `! git push origin :refs/tags/v1` and then\n\n```\n! npm login\nnot one\n```")).toEqual([
@@ -1590,5 +1598,22 @@ describe("a command the agent offered", () => {
 
   it("is found in any text part of the answer, not only its last", () => {
     expect(offeredLast([said("`! npm login`", "Then tell me.")], "npm login")).toBe(true);
+  });
+
+  it("is still the offer when a later turn only called tools", () => {
+    const entries = [said("Run `! npm login`"), run(++turns, [], true)];
+    expect(offeredLast(entries, "npm login")).toBe(true);
+  });
+
+  it("is still the offer while a turn that has only just started says nothing", () => {
+    const entries = [said("Run `! npm login`"), user, run(++turns, [])];
+    expect(offeredLast(entries, "npm login")).toBe(true);
+  });
+
+  it("is found across the runs of one turn a command split, words before and after it", () => {
+    const turn = ++turns;
+    const entries = [run(turn, ["Run `! npm login`"]), command, run(turn, [], true), run(turn, ["Then tell me."])];
+    expect(offeredLast(entries, "npm login")).toBe(true);
+    expect(offeredLast([...entries, said("Done.")], "npm login")).toBe(false);
   });
 });

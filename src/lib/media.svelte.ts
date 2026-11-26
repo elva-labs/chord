@@ -1152,16 +1152,25 @@ export function offers(markdown: string): string[] {
 }
 
 /** Whether a line the user typed after a `!` is one the agent offered in
-    what it last said: the words of its last reply in the thread, with
-    the line and each command compared trimmed. */
+    what it last said: the words of the last turn in the thread that has
+    any, across every run of that turn, so a turn that only called tools
+    or has only just started leaves the offer standing, and so do a
+    command or a tool call that split the turn's words. The line and each
+    command are compared trimmed. */
 export function offeredLast(entries: readonly Entry[], line: string): boolean {
-  const last = entries.findLast((entry) => entry.kind === "agent");
-  if (last?.kind !== "agent") return false;
-  const words = last.parts
-    .flatMap((part) => (part.kind === "text" ? [part.text] : []))
-    .join("\n\n");
   const typed = line.trim();
-  return typed !== "" && offers(words).includes(typed);
+  if (typed === "") return false;
+  const words = (entry: Entry) =>
+    entry.kind === "agent"
+      ? entry.parts.flatMap((part) => (part.kind === "text" && part.text.trim() !== "" ? [part.text] : []))
+      : [];
+  const last = entries.findLast((entry) => words(entry).length > 0);
+  if (last?.kind !== "agent") return false;
+  const said = entries
+    .filter((entry) => entry.kind === "agent" && entry.turn === last.turn)
+    .flatMap(words)
+    .join("\n\n");
+  return offers(said).includes(typed);
 }
 
 /** How much of Markdown that is still being written stands in whole
