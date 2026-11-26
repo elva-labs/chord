@@ -310,8 +310,11 @@ pub const RUN_UNASKED: &[&str] = &[
 
 /// The tools left off [`RUN_UNASKED`] on purpose, so they ask as the
 /// user's approval policy says, with Codex's question the only one before
-/// they act. Named so that a tool added to the server is never left off
-/// either list by accident.
+/// they act. An integrated session that leads a team's run answers that
+/// question itself for a start, and for a send or a stop to a member of
+/// its run, where the user's configuration gives the tool no approval.
+/// Named so that a tool added to the server is never left off either list
+/// by accident.
 pub const ASK_AS_POLICY_SAYS: &[&str] = &[
     // Open a file the agent names, or its diff, in the viewer, where a
     // Markdown document can be drawn with images loaded from any address:
@@ -331,7 +334,7 @@ pub const ASK_AS_POLICY_SAYS: &[&str] = &[
     // account, which begins in the caller's mode, is not asked by the window
     // where the window knows that mode, or the caller is a Codex terminal,
     // unless a setting says to, so for that one Codex's question, where its
-    // policy asks, is the only one.
+    // policy asks, is the only one, and a lead's is answered unasked.
     "start",
     // Act in the workbench's browser, in sites the user signed into there.
     "browser_open",

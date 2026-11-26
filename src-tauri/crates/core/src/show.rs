@@ -300,7 +300,9 @@ pub const CONTAINED_TOOLS: &[&str] = &[
 /// changes files while a gate on the plan waits. It leaves a send or a stop
 /// to the mode only where the session it names is a member of its run,
 /// since another session it started is held by no run. Any other session
-/// that reads only is asked before each.
+/// that reads only is asked before each. A Codex lead in a conversation
+/// is not asked in the same cases, whatever its mode, unless the user's
+/// own configuration gives the tool an approval.
 pub const LEAD_TOOLS: &[&str] = &["start", "send", "stop"];
 
 /// The tool of the workbench's own server a tool name names, as the

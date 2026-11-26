@@ -110,6 +110,17 @@ fn handshake_with(
     account: Value,
     started: Value,
 ) -> (Vec<Value>, Vec<Event>) {
+    handshake_configured(driver, account, started, json!({"result": config()}))
+}
+
+/// The handshake, with the thread started and `config/read` answered as
+/// given: a `result` or an `error`.
+fn handshake_configured(
+    driver: &mut AppServer,
+    account: Value,
+    started: Value,
+    configured: Value,
+) -> (Vec<Value>, Vec<Event>) {
     let opening = written(&driver.opening());
     assert_eq!(opening[0]["method"], "initialize");
     let mut lines = opening.clone();
@@ -139,7 +150,11 @@ fn handshake_with(
         json!({"id": thread, "result": started}),
         json!({"id": id("model/list"), "result": models()}),
         json!({"id": id("account/read"), "result": account}),
-        json!({"id": id("config/read"), "result": config()}),
+        {
+            let mut answer = configured.clone();
+            answer["id"] = id("config/read");
+            answer
+        },
     ] {
         let reading = read(driver, answer);
         out.extend(reading.events);
@@ -3433,6 +3448,245 @@ fn elicited(driver: &mut AppServer, at: i64, server: &str, tool: &str) -> bool {
         [Event::PermissionAsked { reads_only, .. }] => *reads_only,
         other => panic!("{server} {tool}: {other:?}"),
     }
+}
+
+const MEMBER: &str = "5e55a0de-0000-4000-8000-000000000001";
+
+/// A session with the workbench's server attached, known as `token` to the
+/// workbench at `home`, whose `config/read` is answered as `configured`.
+fn in_a_run(home: &Path, token: &str, configured: Value) -> AppServer {
+    let vars: &'static HashMap<String, String> = Box::leak(Box::default());
+    let server: &'static Path = Box::leak(PathBuf::from("/opt/workbench/chord-remote").into());
+    let home: &'static Path = Box::leak(home.to_path_buf().into());
+    let token: &'static str = Box::leak(token.to_string().into_boxed_str());
+    let mut driver = launch_with(vars, |launch| {
+        launch.tool_server = Some(server);
+        launch.home = Some(home);
+        launch.token = Some(token);
+    });
+    handshake_configured(
+        &mut driver,
+        json!({"account": null, "requiresOpenaiAuth": false}),
+        thread_started(),
+        configured,
+    );
+    driver
+}
+
+/// A run led by "lead", whose reviewer "rev" is the session [`MEMBER`].
+fn a_run(label: &str) -> (crate::scratch::Scratch, crate::scratch::Scratch) {
+    let (home, folder) = crate::run::tests::started(label, crate::team::QUICK_FIX, &[]);
+    crate::run::join(
+        &home,
+        "lead",
+        "rev",
+        "Reviewer",
+        &folder,
+        Some(MEMBER),
+        true,
+        "brief",
+    )
+    .unwrap();
+    (home, folder)
+}
+
+/// What a call of `server`'s `tool` naming `session` comes to: "" where
+/// the driver answers it yes without asking, "ask" where the user is
+/// asked, and "ask reading only" where the ask carries that label.
+fn lead_called(
+    driver: &mut AppServer,
+    at: i64,
+    server: &str,
+    tool: &str,
+    session: Option<&str>,
+) -> &'static str {
+    let mut params = json!({});
+    if let Some(session) = session {
+        params["session"] = json!(session);
+    }
+    let reading = read(
+        driver,
+        server_request(
+            at,
+            "mcpServer/elicitation/request",
+            json!({"threadId": THREAD, "serverName": server, "message": "Run it?",
+                   "_meta": {"codex_approval_kind": "mcp_tool_call",
+                             "tool_name": tool, "tool_params": params}}),
+        ),
+    );
+    match (
+        written(&reading.writes).as_slice(),
+        reading.events.as_slice(),
+    ) {
+        ([answer], []) => {
+            assert_eq!(
+                *answer,
+                json!({"id": at, "result": {"action": "accept", "content": null}})
+            );
+            ""
+        }
+        ([], [Event::PermissionAsked { reads_only, .. }]) => {
+            if *reads_only {
+                "ask reading only"
+            } else {
+                "ask"
+            }
+        }
+        other => panic!("{server} {tool}: {other:?}"),
+    }
+}
+
+#[test]
+fn a_codex_lead_starts_writes_to_and_stops_its_members_unasked() {
+    let (home, _folder) = a_run("codex-lead-delegates");
+    for reads_only in [false, true] {
+        let mut lead = in_a_run(&home, "lead", json!({"result": config()}));
+        lead.control(&Control::SetReadsOnly(reads_only)).unwrap();
+        assert_eq!(lead_called(&mut lead, 1, "chord", "start", None), "");
+        for tool in ["send", "stop"] {
+            assert_eq!(
+                lead_called(&mut lead, 2, "chord", tool, Some(MEMBER)),
+                "",
+                "{tool}"
+            );
+            assert_eq!(
+                lead_called(&mut lead, 3, "chord", tool, Some("5e55a0de")),
+                "",
+                "{tool} by the start of its id"
+            );
+        }
+        // Another server's tool of the same name, and the workbench's
+        // other tools, ask as the mode says.
+        assert!(lead_called(&mut lead, 4, "other", "start", None).starts_with("ask"));
+        assert!(lead_called(&mut lead, 5, "chord", "terminal", None).starts_with("ask"));
+    }
+}
+
+#[test]
+fn a_codex_lead_is_asked_before_a_send_or_a_stop_to_a_session_outside_its_run() {
+    let (home, _folder) = a_run("codex-lead-outside");
+    let mut lead = in_a_run(&home, "lead", json!({"result": config()}));
+    for tool in ["send", "stop"] {
+        // Named by no one, by too little of an id, or by an id no member
+        // of the run has.
+        for session in [
+            None,
+            Some(""),
+            Some("5e55a0d"),
+            Some("0badc0de-0000-4000-8000-000000000002"),
+        ] {
+            assert_eq!(
+                lead_called(&mut lead, 1, "chord", tool, session),
+                "ask",
+                "{tool} {session:?}"
+            );
+        }
+    }
+    // Reading only, the ask keeps the label it has for any other tool.
+    lead.control(&Control::SetReadsOnly(true)).unwrap();
+    assert_eq!(
+        lead_called(&mut lead, 2, "chord", "stop", Some("0badc0de")),
+        "ask reading only"
+    );
+}
+
+#[test]
+fn a_codex_session_that_leads_no_run_is_asked_before_it_delegates() {
+    let (home, _folder) = a_run("codex-not-a-lead");
+    let calls: [(&str, Option<&str>); 3] = [
+        ("start", None),
+        ("send", Some(MEMBER)),
+        ("stop", Some(MEMBER)),
+    ];
+    // A member of the run, a session in no run, and a lead whose server
+    // the workbench did not attach.
+    let mut member = in_a_run(&home, "rev", json!({"result": config()}));
+    let mut outside = in_a_run(&home, "solo", json!({"result": config()}));
+    let home_path: &'static Path = Box::leak(home.to_path_buf().into());
+    let mut unattached = launch_with(Box::leak(Box::default()), |launch| {
+        launch.home = Some(home_path);
+        launch.token = Some("lead");
+    });
+    handshake(
+        &mut unattached,
+        json!({"account": null, "requiresOpenaiAuth": false}),
+    );
+    for (tool, session) in calls {
+        for (who, driver) in [
+            ("member", &mut member),
+            ("outside", &mut outside),
+            ("unattached", &mut unattached),
+        ] {
+            assert_eq!(
+                lead_called(driver, 1, "chord", tool, session),
+                "ask",
+                "{who} {tool}"
+            );
+        }
+    }
+
+    // With agents off the run holds nothing, and once it ends the session
+    // leads none: both are read at each call.
+    let mut lead = in_a_run(&home, "lead", json!({"result": config()}));
+    crate::run::tests::agents_switched(&home, false);
+    for (tool, session) in calls {
+        assert_eq!(
+            lead_called(&mut lead, 2, "chord", tool, session),
+            "ask",
+            "agents off {tool}"
+        );
+    }
+    crate::run::tests::agents_switched(&home, true);
+    assert_eq!(lead_called(&mut lead, 3, "chord", "start", None), "");
+    crate::run::end(&home, "lead").unwrap();
+    for (tool, session) in calls {
+        assert_eq!(
+            lead_called(&mut lead, 4, "chord", tool, session),
+            "ask",
+            "ended {tool}"
+        );
+    }
+}
+
+#[test]
+fn a_codex_lead_is_asked_where_the_user_set_an_approval_for_the_tool() {
+    let (home, _folder) = a_run("codex-lead-theirs");
+    let configured = |server: Value| {
+        let mut answer = json!({"result": config()});
+        answer["result"]["config"]["mcp_servers"] = json!({ "chord": server });
+        answer
+    };
+    // An approval of the tool's own holds for that tool only.
+    let mut lead = in_a_run(
+        &home,
+        "lead",
+        configured(json!({"tools": {"start": {"approval_mode": "prompt"}}})),
+    );
+    assert_eq!(lead_called(&mut lead, 1, "chord", "start", None), "ask");
+    assert_eq!(lead_called(&mut lead, 2, "chord", "send", Some(MEMBER)), "");
+    // One for the whole server holds for every tool.
+    let mut lead = in_a_run(
+        &home,
+        "lead",
+        configured(json!({"default_tools_approval_mode": "prompt"})),
+    );
+    assert_eq!(lead_called(&mut lead, 1, "chord", "start", None), "ask");
+    assert_eq!(
+        lead_called(&mut lead, 2, "chord", "stop", Some(MEMBER)),
+        "ask"
+    );
+    // Where the configuration could not be read, what the user set is not
+    // known.
+    let mut lead = in_a_run(
+        &home,
+        "lead",
+        json!({"error": {"code": -32603, "message": "no"}}),
+    );
+    assert_eq!(lead_called(&mut lead, 1, "chord", "start", None), "ask");
+    assert_eq!(
+        lead_called(&mut lead, 2, "chord", "send", Some(MEMBER)),
+        "ask"
+    );
 }
 
 #[test]
