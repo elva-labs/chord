@@ -64,19 +64,47 @@ or a folder one of them is in. A path the lead leaves out puts its gate off
 until the change touches it, and by then the building the gate was meant
 to approve first is done.
 
-The change is what each checkout the run's work is in holds, committed or
-not, untracked files included, as a hash of its files, called its tree, and
-the paths changed there. The lead's checkout counts from the commit the run
-began at, and a member's own folder or worktree from the newest commit it
-shares with that one. A folder nothing changed in is left out, and so are
-the folders of members that only read, and a member's folder that no longer
-exists, which `gates` names. While nothing changed anywhere the change is
-the lead's folder.
+The change is the work in each checkout the run's work is in, committed
+or not, untracked files included: the lines it adds and removes in each
+file from its base, as a hash, and the paths changed there. A file's lines
+count without the lines around them and without where in the file they
+stand. Its path, its mode, a rename, a deletion and the contents of a
+binary file count as well. The lead's checkout counts from the commit the
+run began at, and a member's own folder or worktree from the newest commit
+it shares with that one. A folder nothing changed in is left out, and so
+are the folders of members that only read, and a member's folder that no
+longer exists, which `gates` names. While nothing changed anywhere the
+change is the lead's folder.
+
+A rebase on the project's main branch moves the base with the work. The
+base is then the newest commit the checkout shares with the default branch
+of one of its remotes, as it was last fetched, when that commit is the one
+the change counted from or comes after it. The paths changed count from it
+too, so main's own paths do not make a gate on paths needed. The
+checkout's own branches never move the base, so a commit, a merge, or a
+branch moved by hand leaves the change counting from where it did. When
+the remotes' branches disagree, or the commit the change counted from was
+rewritten, the change counts from that commit, and a rebase puts its
+approval out of date.
+
+Measuring the change by its lines has two weaknesses:
+
+- the same lines at another place in the same file read as the same
+  change, so lines moved within a file keep an approval;
+- what came in from main is not reviewed together with the work, so a
+  rebase that keeps the approval may put the work beside code it was
+  never read with.
+
+It errs the other way as well: where main's edits beside the work make
+git pair the lines differently, a rebase puts the approval out of date
+though the work is as it was.
 
 A member that only reads may read the change in its own folder or worktree,
 with the change checked out there. A verdict naming that folder is on the
-change in the run's folder whose tree it has, and is refused when that tree
-is the change in none of them, or in more than one, which then names the
+change in the run's folder whose tree it has, or failing that whose change
+it has, counted from its own base as above, so a member that read the work
+before a rebase approves it after one. It is refused when its folder has
+the change in none of them, or in more than one, which then names the
 folder it is on. `gates` tells such a member which change its folder has.
 
 Paths are measured from the run's folder, the one the lead started in, the
@@ -85,12 +113,20 @@ started in a subfolder of a repository, `src/app.rs` is in that subfolder,
 and a path outside it begins with `../`.
 
 A verdict names what it was given on: the plan's version, or the change's
-tree and, when the work is in more than one folder, the folder. A verdict
-on a plan or a tree that no longer stands is refused, and the member reads
-it again. An approval goes out of date when what it named changes after
-it, so an edit in a member's folder puts the approvals of the change there
-out of date. A rebase that leaves the files as they were keeps the
-approval.
+hash and, when the work is in more than one folder, the folder. A verdict
+on a plan or a change that no longer stands is refused, and the member
+reads it again. An approval goes out of date when what it named changes
+after it, so an edit in a member's folder puts the approvals of the change
+there out of date. A rebase on main that leaves the work's lines as they
+were keeps the approval: a clean one, and one whose conflicts were
+resolved without touching them. A conflict resolved by altering them, or
+main changing a line the work replaces, puts it out of date. Work that has
+reached the remote's default branch, with nothing left changed from it,
+keeps the approval it had.
+
+A verdict recorded on a folder's tree, a hash of all its files, by a
+Chord that measured the change that way, stands while the folder has that
+tree, and a rebase puts it out of date.
 
 A gate stands as one of:
 
@@ -157,7 +193,7 @@ A session in a run has tools of the run beside the
   the change it read, or asks for changes with findings that say what must
   change, on each gate its agent approves;
 - `gates`, for every session in the run: the plan, its version and hash,
-  the tree of the change in each folder, and each gate's agent, when it
+  the hash of the change in each folder, and each gate's agent, when it
   holds, how it stands and why, and the last verdict's findings.
 
 ## What a run holds
@@ -173,9 +209,8 @@ stop with the work done, and no session in the run pushes, or opens or
 merges a pull request, from whichever folder it works in.
 
 Only commits go out, so an approval of the change holds the hand-over as
-well while the approved tree differs from the tree of the last commit in
-that folder: work approved and not yet committed, or committed with more
-left beside it. Commit the approved work, or remove what should not go out,
+well while the files in that folder differ from its last commit: work
+approved and not yet committed, or committed with more left beside it. Commit the approved work, or remove what should not go out,
 and the hand-over is free. Uncommitted work does not hold the lead's stop.
 
 | Hold | Claude Code in Chord | Codex in Chord | Either in a terminal |
@@ -287,3 +322,8 @@ What the holds do not see:
 - the window's own routes. A session with a shell can reach
   `chord-remote serve` as the window does, and so waive a gate or end a
   run, as it can write the store.
+- a remote's default branch moved by other means than a fetch of what
+  the remote holds, such as `git update-ref`, or a commit made in a
+  remote that is a folder on the same machine. Moved onto the work, it
+  moves the change's base there and so leaves out of the change the work
+  it passes.
