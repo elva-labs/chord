@@ -204,11 +204,14 @@ in that order. The model's chip is always there. The effort's is there
 whenever the session has an effort, because the harness names no default
 effort. The mode's, the workflow's and going on's show while their value is
 away from the default: a mode that asks before anything changes, no
-workflow, going on off. At the default a chip is behind the `+` chip, and it
-goes again once the value is back at the default and the pointer and the
+workflow, going on off. At the default a chip is behind the `+` chip (with
+agents and teams on, the workflow's is not offered there), and it goes
+again once the value is back at the default and the pointer and the
 keyboard have left the chip row; while either is in the row, or a menu of
-it is open, no chip is taken away, so nothing moves under the pointer. The model's says Default before the model's name while no
-model is chosen for the session, which then runs on the one the harness's
+it is open, no chip is taken away, so nothing moves under the pointer. The
+one exception is the workflow's with agents and teams on: once the workflow
+is left it has nothing to pick, so it goes at once. The model's says
+Default before the model's name while no model is chosen for the session, which then runs on the one the harness's
 own configuration names. In a Codex session given none, picking the model
 Codex already runs on chooses nothing, and the chip still says Default;
 picking it back after another model chooses it, and the chip names it
@@ -227,10 +230,11 @@ Going on after a limit, and a workflow while agents and teams are off, sit
 behind one `+` chip on the composer while they are at their default; each
 shows as a chip of its own once set. With agents and teams on the `+` offers
 no workflow, and the workflow's chip shows only for a session that follows
-one, to leave it. The `+` opens a menu of what it holds, which also brings up the
-mode. The composer's box says `Message` and the harness's name until
-something is typed. Mode, effort, workflow and going on keep their shortcuts,
-and a change by shortcut to a value away from the default shows the chip. Every chip stays a stop on Tab.
+one, to leave it. The `+` opens a menu of what it holds, which also brings
+up the mode. The composer's box says `Message` and the harness's name until
+something is typed. Mode, effort and going on keep their shortcuts, and a
+change by shortcut to a value away from the default shows the chip. Every
+chip stays a stop on Tab.
 
 A thread gives its messages no time each. A quiet time stands between them
 where more than five minutes passed, or the day changed, before the next
@@ -1010,10 +1014,9 @@ a new conversation takes stays as it was.
 
 A conversation whose turn the session window's limit cut short can go on
 by itself once that window starts over. It is the conversation's own
-choice, kept behind the composer's `+` chip
-until it is on, and then a chip of its own on the composer, off unless the
-user turns it on. The last choice made is kept with the
-settings, and a conversation takes it when its run first starts in the
+choice, kept behind the composer's `+` chip until it is on, and then a
+chip of its own on the composer, off unless the user turns it on. The last
+choice made is kept with the settings, and a conversation takes it when its run first starts in the
 window. A session another session started has no choice of its own: it
 goes by the choice of the session that started it, for as long as the
 window has that one, and its chip says so.

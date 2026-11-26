@@ -971,7 +971,8 @@ in order, grey once the run has passed it, in the accent where the run
 stands and empty for a step to come, and the words for where it stands.
 The chip says what the workbench knows and no more. An in-Chord session
 shows it from its first message on; before that its composer names the
-workflow, which can still be changed there.
+workflow, which can still be left there, or changed while agents and teams
+are off.
 
 Before anything is started the words are the workflow's name, marked
 deleted where it follows the copy it kept. Then they name the step where

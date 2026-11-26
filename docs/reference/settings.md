@@ -434,7 +434,7 @@ on to begin with, kept as `agentsOn`. Off:
 while agents and teams are off. While they are on, a project that follows a
 workflow still starts new sessions under it, and the
 [palette](#workflows) and the [composer](sessions.md#sessions-in-chord)
-offer no other.
+offer no workflow to pick.
 
 A session that already works as an agent keeps working as one. A team's
 run already going on is kept as it is, its plan, gates and verdicts, but
