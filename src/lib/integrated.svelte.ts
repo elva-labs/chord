@@ -423,7 +423,9 @@ function deliver(key: string, link: Link, body: IntegratedEventBody) {
   if (body.type === "command" && link.offered.has(body.command) && body.state !== "queued" && body.state !== "running") {
     link.offered.delete(body.command);
     const command = link.conversation.commands[body.command];
-    const recorded = body.state === "done" || body.state === "stopped" || body.state === "timedOut";
+    // A record the core could not write never comes to the agent.
+    const recorded =
+      body.error === null && (body.state === "done" || body.state === "stopped" || body.state === "timedOut");
     if (recorded && command !== undefined) {
       link.recorded = [...link.recorded, { ...command }];
       offeredRan(key, link.recorded);
