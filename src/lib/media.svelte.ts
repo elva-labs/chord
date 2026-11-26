@@ -30,6 +30,7 @@ import {
   type TokensList,
 } from "marked";
 import { runnable } from "$lib/bang";
+import type { Entry } from "$lib/conversation.svelte";
 import { core, type Media, type PresentRequest } from "$lib/core";
 import { wholeLineageOf } from "$lib/goingOn.svelte";
 import { forProject, sessions } from "$lib/sessions.svelte";
@@ -1134,6 +1135,33 @@ export function saidBlocks(markdown: string, flat = false): string[] {
     flat,
   );
   return out;
+}
+
+/** The commands Markdown an agent wrote offers the user to run, without
+    their `!`: those the conversation puts a Run after, found as it finds
+    them. */
+export function offers(markdown: string): string[] {
+  const drawn = document.createElement("template");
+  drawn.innerHTML = renderSaid(markdown, true);
+  const found: string[] = [];
+  for (const held of drawn.content.querySelectorAll("[data-run]")) {
+    const command = runnable(held.textContent ?? "");
+    if (command !== null) found.push(command);
+  }
+  return found;
+}
+
+/** Whether a line the user typed after a `!` is one the agent offered in
+    what it last said: the words of its last reply in the thread, with
+    the line and each command compared trimmed. */
+export function offeredLast(entries: readonly Entry[], line: string): boolean {
+  const last = entries.findLast((entry) => entry.kind === "agent");
+  if (last?.kind !== "agent") return false;
+  const words = last.parts
+    .flatMap((part) => (part.kind === "text" ? [part.text] : []))
+    .join("\n\n");
+  const typed = line.trim();
+  return typed !== "" && offers(words).includes(typed);
 }
 
 /** How much of Markdown that is still being written stands in whole

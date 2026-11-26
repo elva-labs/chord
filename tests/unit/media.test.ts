@@ -6,6 +6,8 @@ import {
   load,
   loadMedia,
   lookForGone,
+  offeredLast,
+  offers,
   SETTLE,
   media,
   openItem,
@@ -30,6 +32,7 @@ import {
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetHeld, switched } from "$lib/show.svelte";
 import { resetGoingOn } from "$lib/goingOn.svelte";
+import type { Entry } from "$lib/conversation.svelte";
 
 /** A README naming images of its project, and what was read for it. */
 const project = vi.hoisted(() => ({
@@ -1550,5 +1553,42 @@ describe("copies of files from outside the project", () => {
     presented(request(["/one/a.png"]));
     expect(media.items).toHaveLength(1000);
     expect(disk.forgotten).toEqual(["/kept/old/0.png"]);
+  });
+});
+
+describe("a command the agent offered", () => {
+  /** What the agent said in a turn, as the thread keeps it. */
+  const said = (...texts: string[]) =>
+    ({
+      kind: "agent",
+      key: "",
+      turn: 1,
+      at: null,
+      parts: texts.map((text, at) => ({ kind: "text", block: `b${at}`, text, done: true, gap: false })),
+    }) as unknown as Entry;
+  const user = { kind: "user", key: "", message: "m" } as Entry;
+
+  it("is each command a code span or a line of a code block offers, as the run marks find them", () => {
+    expect(offers("Run `! git push origin :refs/tags/v1` and then\n\n```\n! npm login\nnot one\n```")).toEqual([
+      "git push origin :refs/tags/v1",
+      "npm login",
+    ]);
+    expect(offers("`ls` is not one, nor is `!ls`")).toEqual([]);
+  });
+
+  it("is a line typed as the agent offered it in what it last said, by its words once trimmed", () => {
+    const entries = [said("Run `! gh auth login`, then"), user, said("Next, `! git push origin :refs/tags/v1`")];
+    expect(offeredLast(entries, "  git push origin :refs/tags/v1 ")).toBe(true);
+    expect(offeredLast(entries, "git push origin :refs/tags/v2")).toBe(false);
+    expect(offeredLast(entries, "")).toBe(false);
+  });
+
+  it("is not one only an earlier answer offered, nor any while the agent has said nothing", () => {
+    expect(offeredLast([said("`! gh auth login`"), user, said("Done.")], "gh auth login")).toBe(false);
+    expect(offeredLast([user], "gh auth login")).toBe(false);
+  });
+
+  it("is found in any text part of the answer, not only its last", () => {
+    expect(offeredLast([said("`! npm login`", "Then tell me.")], "npm login")).toBe(true);
   });
 });

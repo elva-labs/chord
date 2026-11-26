@@ -11,6 +11,7 @@
   import { agentOfRow } from "$lib/sessionAgents.svelte";
   import { openNewAgent } from "$lib/settings.svelte";
   import { bangLine } from "$lib/bang";
+  import { offeredLast } from "$lib/media.svelte";
   import { layout, overlayHoldsKeyboard } from "$lib/layout.svelte";
   import {
     choose,
@@ -784,7 +785,7 @@
       heldJudged = false;
       return true;
     }
-    if (run(sessionKey, line) === null) return false;
+    if (run(sessionKey, line, offeredLast(link.conversation.entries, line)) === null) return false;
     notice = null;
     link.draft = "";
     link.mentions = [];

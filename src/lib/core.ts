@@ -2065,9 +2065,11 @@ export interface Core {
   integratedWithdraw(id: string, message: string): Promise<void>;
   /** Runs `text`, a line the user typed after a `!`, in the session's
       folder, under `command`, an id the window chose that no message or
-      command of the session has. Resolves once the core took it; where it
-      stands comes as `command` events, its output as `commandOutput`. */
-  integratedRun(id: string, command: string, text: string): Promise<void>;
+      command of the session has. `offered` says the agent offered it to
+      the user, and the agent then goes on from its result in a turn.
+      Resolves once the core took it; where it stands comes as `command`
+      events, its output as `commandOutput`. */
+  integratedRun(id: string, command: string, text: string, offered: boolean): Promise<void>;
   /** Stops a running command; it ends as stopped. */
   integratedStopCommand(id: string, command: string): Promise<void>;
   /** Compacts the conversation, in the agent's own way, with what the
@@ -2756,7 +2758,7 @@ const tauriCore: Core = {
   integratedInterrupt: (id) => invoke<void>("integrated_interrupt", { id }),
   integratedSendNow: (id) => invoke<IntegratedSentNow>("integrated_send_now", { id }),
   integratedWithdraw: (id, message) => invoke<void>("integrated_withdraw", { id, message }),
-  integratedRun: (id, command, text) => invoke<void>("integrated_run", { id, command, text }),
+  integratedRun: (id, command, text, offered) => invoke<void>("integrated_run", { id, command, text, offered }),
   integratedStopCommand: (id, command) => invoke<void>("integrated_stop_command", { id, command }),
   integratedCompact: (id, instructions) =>
     invoke<void>("integrated_compact", { id, instructions: instructions ?? null }),

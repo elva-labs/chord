@@ -419,7 +419,7 @@
         takeBack: (command) => void takeBackCommand(session.key, command.id),
         putBack: (command) => restoreCommand(session.key, command),
       }}
-      onRun={(command) => void run(session.key, command)}
+      onRun={(command) => void run(session.key, command, true)}
       agentSettings={(title) => {
         const named = agentByTitle(title, session.project);
         return named === undefined ? "" : agentSettings(conversation, named, session.agent);

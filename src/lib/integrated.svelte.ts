@@ -171,6 +171,13 @@ export class Link {
   /** The commands this window asked to take back, kept until the core
       lets go of each, when its line goes back to the composer. */
   commandsBack = new Map<string, Command>();
+  /** The commands the agent offered the user to run that this window ran
+      and that have not ended: each goes to the agent as a turn once it
+      ends. */
+  offered = new Set<string>();
+  /** The commands the agent offered that ended with a record no turn has
+      taken yet, oldest first: the next turn to start takes them. */
+  recorded: Command[] = [];
   /** The messages Up took back, oldest first, with the words, mentions
       and images of each the agent has let go of, the place among the
       messages sent the oldest of them had, and the composer's words as Up
@@ -411,6 +418,17 @@ function deliver(key: string, link: Link, body: IntegratedEventBody) {
   if (granting !== null) link.granted = [...link.granted, granting];
   if (back !== undefined) restore(key, back);
   if (backRun !== undefined) restoreCommand(key, backRun);
+  // A turn that starts takes every record that waits for one.
+  if (body.type === "turnStarted") link.recorded = [];
+  if (body.type === "command" && link.offered.has(body.command) && body.state !== "queued" && body.state !== "running") {
+    link.offered.delete(body.command);
+    const command = link.conversation.commands[body.command];
+    const recorded = body.state === "done" || body.state === "stopped" || body.state === "timedOut";
+    if (recorded && command !== undefined) {
+      link.recorded = [...link.recorded, { ...command }];
+      offeredRan(key, link.recorded);
+    }
+  }
   // What failed to go now, or to come back, is old news once the waiting
   // messages or the turn move on.
   if (body.type === "message" || body.type === "command" || body.type === "turnStarted" || body.type === "turnEnded")
@@ -1270,6 +1288,21 @@ export function notesFrom(how: (key: string) => Note | null) {
   noteFor = how;
 }
 
+let offeredRan: (key: string, commands: readonly Command[]) => void = () => {};
+
+/** What is done when a command the agent offered the user ends with a
+    record that goes to the agent, done, stopped or out of time: given the
+    session's offered commands whose records no turn has taken yet. */
+export function onOfferedRan(how: (key: string, commands: readonly Command[]) => void) {
+  offeredRan = how;
+}
+
+/** The commands the agent offered the user that ended with a record the
+    agent has not taken yet, oldest first. */
+export function offeredWaiting(key: string): readonly Command[] {
+  return links.get(key)?.recorded ?? [];
+}
+
 /** A file put back while the conversation stayed as it was. */
 interface FileBack {
   path: string;
@@ -1447,15 +1480,19 @@ export function send(
 }
 
 /** Runs a line the user typed after a `!`, without it, in the session's
-    folder, under an id of the window's own. Null when there is no agent
-    to run it for, or nothing to run. */
-export function run(key: string, text: string): string | null {
+    folder, under an id of the window's own. One the agent `offered` the
+    user to run goes to a Claude Code agent as a turn once it ends; any
+    other, and any to Codex, is context the agent reads with its next. Null
+    when there is no agent to run it for, or nothing to run. */
+export function run(key: string, text: string, offered = false): string | null {
   const link = links.get(key);
   const session = byKey(key);
   if (link === undefined || link.handle === null || session === null) return null;
   const line = text.trim();
   if (line === "") return null;
   const id = crypto.randomUUID();
+  const turns = offered && session.agent === "claude-code";
+  if (turns) link.offered.add(id);
   link.conversation.running(id, line);
   link.backSaid = null;
   link.nowError = null;
@@ -1463,8 +1500,11 @@ export function run(key: string, text: string): string | null {
   session.engaged = true;
   userWrote(key);
   core()
-    .integratedRun(link.handle, id, line)
-    .catch((error) => link.conversation.runFailed(id, message(error)));
+    .integratedRun(link.handle, id, line, turns)
+    .catch((error) => {
+      link.offered.delete(id);
+      link.conversation.runFailed(id, message(error));
+    });
   return id;
 }
 

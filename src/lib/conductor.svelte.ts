@@ -94,6 +94,7 @@ import {
   type SessionStatus,
 } from "$lib/sessions.svelte";
 import type { HarnessId, ReviewStep, Workflow, WorkflowStep, WorkStep } from "$lib/core";
+import type { Command } from "$lib/conversation.svelte";
 import { CODEX_DEFAULT } from "$lib/models";
 import { hostOf } from "$lib/remote.svelte";
 import { forgetNotes } from "$lib/notes";
@@ -117,6 +118,8 @@ import {
   handleOf,
   linkOf,
   notesFrom,
+  offeredWaiting,
+  onOfferedRan,
   send as sendIntegrated,
   sendAsWorkbench,
   userWaiting,
@@ -1572,6 +1575,52 @@ export function cancelled(id: string) {
 export const USER_WROTE =
   "The user wrote to you, which ends this wait. If their message has not reached you yet, end your turn now so that it does. Answer it as the final message of your turn and end the turn there without calling wait again: the workbench writes to you when one of your sessions stops or asks.";
 
+/** The most of a command's output a wait's answer carries: its end. */
+const RAN_OUTPUT = 4000;
+
+/** The longest run of backticks in some text: none is 0. */
+function longestTicks(text: string): number {
+  return Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
+}
+
+/** How an offered command ended, after its line. */
+function ranHow(command: Command): string {
+  if (command.state === "stopped") return "was stopped";
+  if (command.state === "timedOut") return "ran out of time and was stopped";
+  return `exited with ${command.exitCode ?? 0}`;
+}
+
+/** What a wait answers once commands the agent offered the user to run
+    have ended with records it has not taken: each line, how it ended and
+    the end of its output, and that the records come as a turn of their
+    own once this one ends, where the agent goes on from them. */
+export function offeredRanAnswer(commands: readonly Command[]): string {
+  const head =
+    commands.length === 1
+      ? "The user ran the command you offered them to run, which ends this wait."
+      : "The user ran commands you offered them to run, which ends this wait.";
+  const each = commands.map((command) => {
+    const cut = command.output.length > RAN_OUTPUT;
+    const output = cut ? command.output.slice(-RAN_OUTPUT) : command.output;
+    const fence = "`".repeat(Math.max(3, longestTicks(output) + 1));
+    const printed =
+      output.trim() === ""
+        ? "It printed nothing."
+        : `${cut ? "The end of its output" : "Its output"}:\n${fence}\n${output.replace(/\n$/, "")}\n${fence}`;
+    const ticks = "`".repeat(longestTicks(command.text) + 1);
+    return `${ticks} ! ${command.text} ${ticks} ${ranHow(command)}. ${printed}`;
+  });
+  const records =
+    commands.length === 1
+      ? "Its record comes to you as a message of its own"
+      : "Their records come to you as a message of their own";
+  return [
+    head,
+    ...each,
+    `${records} once this turn ends, and you go on from the result there. End your turn now without calling wait again: the workbench writes to you when one of your sessions stops or asks.`,
+  ].join("\n\n");
+}
+
 /** Ends the waits these callers hold, each with the answer given. */
 function endWaits(callers: string[], answer: string) {
   for (const held of [...waiting.values()])
@@ -2216,6 +2265,14 @@ function tellAs(key: string, rest: Rest | null) {
 // puts the note in ahead of the words, tells it once the agent takes the
 // message, and ends the session's waits, so the message is not held behind
 // one.
+// A command the agent offered the user to run, once it ends, ends the
+// session's waits, so the turn that holds them ends and its record starts
+// the next.
+onOfferedRan((key, commands) => {
+  const row = byKey(key);
+  if (row !== null) endWaits([row.token], offeredRanAnswer(commands));
+});
+
 notesFrom((key) => {
   const row = byKey(key);
   if (row === null) return null;
@@ -3969,6 +4026,9 @@ async function waitFor(request: Placed): Promise<Answered> {
   const calling = callingSession(request);
   if (calling !== null && calling.kind === "integrated" && userWaiting(calling.key))
     return said(USER_WROTE);
+  // So does the record of a command the agent offered that has ended.
+  const recorded = calling !== null && calling.kind === "integrated" ? offeredWaiting(calling.key) : [];
+  if (recorded.length > 0) return said(offeredRanAnswer(recorded));
   cut.delete(owner);
   conductor.listening[owner] = (conductor.listening[owner] ?? 0) + 1;
   try {

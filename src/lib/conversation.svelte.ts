@@ -85,7 +85,7 @@ export type CommandState =
 
 /** A command of the user's: a line typed with a leading `!`, which runs
     in the session's folder and whose output the agent takes without a
-    turn. */
+    turn, unless the agent offered it. */
 export interface Command {
   id: string;
   /** The command as typed, without its `!`. */

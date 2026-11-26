@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
 import type { ConductRequest } from "$lib/core";
-import { allow, conductor, handle, refuse, resetConductor, START_WAIT, STOP_WHEN_DONE, stopStarted, unheard, USER_WROTE, WAKE_AFTER, WAKES_MAX, watchStops } from "$lib/conductor.svelte";
-import { conversationOf, handleOf, launch, linkFor, listenIntegrated, resetIntegrated, resume, send, userWaiting } from "$lib/integrated.svelte";
+import { allow, conductor, handle, offeredRanAnswer, refuse, resetConductor, START_WAIT, STOP_WHEN_DONE, stopStarted, unheard, USER_WROTE, WAKE_AFTER, WAKES_MAX, watchStops } from "$lib/conductor.svelte";
+import { conversationOf, handleOf, launch, linkFor, listenIntegrated, offeredWaiting, resetIntegrated, resume, run, send, userWaiting } from "$lib/integrated.svelte";
 import { byKey, close, create, ended as endedTerminal, failed, forProject, identified as identifiedRow, keepName, label, reopenOtherWay, reset as resetSessions, sessions, started, titled, type Session } from "$lib/sessions.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
@@ -747,6 +747,57 @@ describe("the orchestrator's tools with an integrated session", () => {
       expect(sentTexts().at(-1)).toBe(
         `${REPORTS_HEAD}\nStill at work when the user wrote: kid-1. Answer the user as your turn's final message when there is something to tell them, and end the turn there; the workbench writes to you when one of them stops or asks.\n\nStop for a moment`,
       );
+    });
+
+    /** Runs a line in the session's composer, offered by its agent or not,
+        and hands back the command's id. */
+    async function ran(key: string, line: string, offered: boolean): Promise<string> {
+      await run(key, line, offered);
+      const made = fake.calls.filter((call) => call.method === "run").at(-1) as { command: string };
+      return made.command;
+    }
+
+    it("goes on waiting while a command the user typed runs and ends", async () => {
+      const { key, token, kid, handle: core } = await starter();
+      fake.startTurn(core);
+      const waiting = { ...call("wait", { seconds: 60 }), session: token };
+      const waited = handle(waiting);
+      await settle();
+      fake.finishCommand(core, await ran(key, "ls", false), { output: "a\n" });
+      flushSync();
+      await settle();
+      expect(answerTo(waiting)).toBeUndefined();
+      kid.working = false;
+      flushSync();
+      await waited;
+      expect(answerTo(waiting)?.content).toBe(`Session kid-1 stopped working. It has left no line.\n${STOP_WHEN_DONE}`);
+    });
+
+    it("ends a wait it holds with the record of a command it offered, once the command ends", async () => {
+      const { key, token, handle: core } = await starter();
+      fake.startTurn(core);
+      const waiting = { ...call("wait", { seconds: 60 }), session: token };
+      const waited = handle(waiting);
+      await settle();
+      const command = await ran(key, "git push origin :refs/tags/v1", true);
+      await settle();
+      expect(answerTo(waiting)).toBeUndefined();
+      fake.finishCommand(core, command, { exitCode: 1, output: "denied\n" });
+      await waited;
+      const content = answerTo(waiting)?.content ?? "";
+      expect(content).toBe(offeredRanAnswer([conversationOf(key).commands[command]]));
+      expect(content).toContain("` ! git push origin :refs/tags/v1 ` exited with 1. Its output:\n```\ndenied\n```");
+      expect(content).toContain("End your turn now without calling wait again");
+      // The next wait in the same turn hears it at once, until a turn takes
+      // the record.
+      const again = { ...call("wait", { seconds: 60 }), session: token };
+      await handle(again);
+      expect(answerTo(again)?.content).toBe(content);
+      expect(offeredWaiting(key)).toHaveLength(1);
+      fake.endTurn(core);
+      fake.startTurn(core);
+      flushSync();
+      expect(offeredWaiting(key)).toEqual([]);
     });
 
     it("goes with nothing of the workbench's when there is nothing to tell", async () => {
