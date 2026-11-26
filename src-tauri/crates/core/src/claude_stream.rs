@@ -557,6 +557,9 @@ enum StopSaid {
 /// The most of what a hook said that a notice shows.
 const HOOK_SAID_KEEP: usize = 600;
 
+/// The start of the subtype of the agent's lines on a hook's run.
+const HOOK_SUBTYPE: &[u8] = br#""subtype":"hook_"#;
+
 /// The agent's line telling of a hook that sent it back to work, before
 /// what the hook said.
 const STOP_FEEDBACK: &str = "Stop hook feedback:";
@@ -2886,6 +2889,15 @@ impl Driver for Stream {
         self.skipped_tail = seen[keep.min(seen.len())..].to_vec();
     }
 
+    /// A hook's run, which the stream tells only for the Stop hooks'
+    /// failures and which says too little to want past a cut.
+    fn does_without(&self, head: &[u8]) -> bool {
+        head.starts_with(br#"{"type":"system""#)
+            && head
+                .windows(HOOK_SUBTYPE.len())
+                .any(|window| window == HOOK_SUBTYPE)
+    }
+
     /// A result too long to read finishes its call as cut short, with no
     /// output, so the call does not wait for the end of the turn.
     fn skipped(&mut self) -> Reading {
@@ -3608,6 +3620,17 @@ mod tests {
             ],
             "what a hook said is told once"
         );
+    }
+
+    #[test]
+    fn a_hooks_run_too_long_to_read_is_done_without() {
+        let stream = stream();
+        assert!(stream.does_without(
+            br#"{"type":"system","subtype":"hook_response","hook_id":"h1","output":"xxxx"#
+        ));
+        assert!(stream.does_without(br#"{"type":"system","subtype":"hook_progress","stdout":"x"#));
+        assert!(!stream.does_without(br#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"\"subtype\":\"hook_"#));
+        assert!(!stream.does_without(br#"{"type":"system","subtype":"init","x":"#));
     }
 
     #[test]

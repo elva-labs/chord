@@ -1150,7 +1150,8 @@ kept apart and reads defensively, as the transcript readers are: an
 unknown message or field is ignored, a line that is not JSON is skipped,
 and a request from the harness that the workbench does not handle is refused
 rather than left unanswered. A line longer than a few megabytes is skipped,
-with an error that says so. The driver still sees its bytes pass, and a
+with an error that says so, unless it tells of a hook's run, which the
+thread can do without. The driver still sees its bytes pass, and a
 tool call whose result was in it finishes at once as failed and cut short.
 
 Every wait on the process has a limit. The harness has a minute and a half
