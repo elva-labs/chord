@@ -94,10 +94,10 @@ fn given(
             )
         }
         When::Change => {
-            let tree = now.places[0].tree.clone().unwrap_or_default();
+            let change = now.places[0].change.clone().unwrap_or_default();
             let read = Read::Change {
                 folder: None,
-                tree: &tree,
+                change: &change,
             };
             verdict(home, token, read, approved, findings, version)
         }
@@ -463,11 +463,11 @@ fn a_verdict_keeps_who_gave_it_on_what() {
     assert_eq!(given.brief, "brief");
     assert_eq!(given.findings, "Name it better.");
     assert_eq!(given.plan, None);
-    let tree = state(home.path(), "lead").unwrap().unwrap().places[0]
-        .tree
+    let change = state(home.path(), "lead").unwrap().unwrap().places[0]
+        .change
         .clone()
         .unwrap();
-    assert_eq!(given.on, tree);
+    assert_eq!(given.on, change);
 }
 
 #[test]
@@ -827,7 +827,7 @@ fn a_push_from_a_members_worktree_is_judged_on_the_change_there() {
         "rev",
         Read::Change {
             folder: None,
-            tree: &tree,
+            change: &tree,
         },
         true,
         "",
@@ -966,12 +966,12 @@ fn given_in(home: &Path, folder: Option<&Path>) -> Result<Vec<GateState>, String
         Some(folder) => now.places.iter().find(|place| same(&place.folder, folder)),
         None => now.places.first(),
     };
-    let tree = place
-        .and_then(|place| place.tree.clone().ok())
+    let change = place
+        .and_then(|place| place.change.clone().ok())
         .unwrap_or_else(|| "0".repeat(40));
     let read = Read::Change {
         folder,
-        tree: &tree,
+        change: &change,
     };
     verdict(home, "rev", read, true, "", None)
 }
@@ -989,7 +989,7 @@ fn a_reviewer_reading_in_its_own_folder_approves_the_change_with_its_tree() {
     assert_eq!(Ok(&tree), now.places[0].tree.as_ref());
     let read = Read::Change {
         folder: Some(&own),
-        tree: &tree,
+        change: &tree,
     };
     let gates = verdict(home.path(), "rev", read, true, "", None).unwrap();
     assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
@@ -1004,7 +1004,7 @@ fn a_reviewer_reading_in_its_own_folder_approves_the_change_with_its_tree() {
     assert_eq!(gate.standing, Standing::OutOfDate, "{}", gate.reason);
     let read = Read::Change {
         folder: Some(&own),
-        tree: &tree,
+        change: &tree,
     };
     let refused = verdict(home.path(), "rev", read, true, "", None).unwrap_err();
     assert!(
@@ -1063,7 +1063,7 @@ fn a_verdict_on_a_tree_that_changed_since_it_was_read_is_refused() {
     write(&dir, "src/main.rs", "fn main() { two() }\n");
     let old = Read::Change {
         folder: None,
-        tree: &read,
+        change: &read,
     };
     let refused = verdict(home.path(), "rev", old, true, "", None).unwrap_err();
     assert!(refused.contains(&format!("not {read}.")), "{refused}");
@@ -1329,6 +1329,7 @@ fn the_window_reads_a_run_in_camel_case_with_its_lines_from_any_of_its_sessions(
     assert!(gate["gate"]["who"].is_string(), "{gate}");
     let place = &value["places"][0];
     assert!(place["tree"]["ok"].is_string(), "{place}");
+    assert!(place["change"]["ok"].is_string(), "{place}");
     assert!(place["changed"]["ok"].is_array(), "{place}");
 }
 
@@ -1337,8 +1338,10 @@ fn a_place_that_cannot_be_read_says_why_in_its_own_field() {
     let place = Place {
         folder: PathBuf::from("/gone"),
         base: None,
+        start: None,
         head: None,
         tree: Err("no such folder".into()),
+        change: Err("no such folder".into()),
         changed: Err("no such folder".into()),
     };
     let value = serde_json::to_value(&place).unwrap();

@@ -795,6 +795,154 @@ pub fn changed_paths(
         .collect())
 }
 
+/// The hash of the change from a commit to a tree: for each path that
+/// differs, its old and new names, its old and new modes, whether it was
+/// added, deleted, renamed or changed, and the lines taken out and put in,
+/// in the order they stand, with no lines around them and no line numbers;
+/// for a binary file or a submodule, its old and new contents' ids. A
+/// renamed file is found by its contents, and its lines are the ones that
+/// differ from its old name. So the same lines taken out of and put into
+/// the same files read as the same change on any commit they are put on,
+/// wherever in those files they land. With no commit, every file of the
+/// tree is added. Only the files that differ are read.
+pub fn change_hash(dir: &Path, since: Option<&str>, tree: &str) -> Result<String, String> {
+    let repo = open(dir)?;
+    let failed = |e: git2::Error| e.message().to_string();
+    let new = repo
+        .find_tree(git2::Oid::from_str(tree).map_err(failed)?)
+        .map_err(failed)?;
+    let old = match since {
+        Some(commit) => Some(
+            repo.revparse_single(commit)
+                .and_then(|object| object.peel_to_tree())
+                .map_err(failed)?,
+        ),
+        None => None,
+    };
+    let mut options = DiffOptions::new();
+    options
+        .context_lines(0)
+        .interhunk_lines(0)
+        .indent_heuristic(false)
+        .ignore_submodules(false);
+    let mut diff = repo
+        .diff_tree_to_tree(old.as_ref(), Some(&new), Some(&mut options))
+        .map_err(failed)?;
+    let mut similar = git2::DiffFindOptions::new();
+    similar.renames(true).copies(false);
+    diff.find_similar(Some(&mut similar)).map_err(failed)?;
+
+    let mut records: Vec<(Vec<u8>, Vec<u8>, Vec<u8>)> = Vec::new();
+    for at in 0..diff.deltas().len() {
+        let patch = git2::Patch::from_diff(&diff, at).map_err(failed)?;
+        let Some(patch) = patch else { continue };
+        let delta = patch.delta();
+        let name = |file: &git2::DiffFile| {
+            file.path()
+                .map(|path| path.to_string_lossy().into_owned().into_bytes())
+                .unwrap_or_default()
+        };
+        let (old_file, new_file) = (delta.old_file(), delta.new_file());
+        let mut record = Vec::new();
+        let mut field = |bytes: &[u8]| {
+            record.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+            record.extend_from_slice(bytes);
+        };
+        field(&[delta.status() as u8]);
+        field(&name(&old_file));
+        field(&name(&new_file));
+        field(&u32::from(old_file.mode()).to_be_bytes());
+        field(&u32::from(new_file.mode()).to_be_bytes());
+        let opaque = delta.flags().is_binary()
+            || old_file.mode() == git2::FileMode::Commit
+            || new_file.mode() == git2::FileMode::Commit;
+        if opaque {
+            field(old_file.id().as_bytes());
+            field(new_file.id().as_bytes());
+        } else {
+            let (mut out, mut put, mut ends) = (Vec::new(), Vec::new(), Vec::new());
+            for hunk in 0..patch.num_hunks() {
+                for at in 0..patch.num_lines_in_hunk(hunk).map_err(failed)? {
+                    let line = patch.line_in_hunk(hunk, at).map_err(failed)?;
+                    let into = match line.origin() {
+                        '-' => &mut out,
+                        '+' => &mut put,
+                        '<' | '>' | '=' => &mut ends,
+                        _ => continue,
+                    };
+                    into.push(line.origin() as u8);
+                    into.extend_from_slice(&(line.content().len() as u64).to_be_bytes());
+                    into.extend_from_slice(line.content());
+                }
+            }
+            field(&out);
+            field(&put);
+            field(&ends);
+        }
+        records.push((name(&new_file), name(&old_file), record));
+    }
+    records.sort();
+    let mut all = Vec::new();
+    for (_, _, record) in records {
+        all.extend_from_slice(&(record.len() as u64).to_be_bytes());
+        all.extend(record);
+    }
+    git2::Oid::hash_object(git2::ObjectType::Blob, &all)
+        .map(|oid| oid.to_string())
+        .map_err(failed)
+}
+
+/// The commit the change in the folder counts from, given the one it
+/// began at: the newest commit the folder's branch shares with the default
+/// branch of a remote, as the folder last fetched it, when that commit is
+/// the one it began at or comes after it, so a rebase on that branch moves
+/// it there; otherwise the one it began at. A remote's default branch is
+/// the one its `HEAD` names, or else its `main` or `master`. Where several
+/// remotes give one, the newest is taken when it comes after all the
+/// others, and none is taken when they part. The folder's own branches,
+/// local `main` among them, never move it, so committing work or merging it
+/// locally does not take it out of the change.
+pub fn moved_base(dir: &Path, start: Option<&str>) -> Option<String> {
+    let start_text = start?;
+    let moved = (|| -> Option<String> {
+        let repo = open(dir).ok()?;
+        let start = git2::Oid::from_str(start_text).ok()?;
+        let head = repo.head().ok()?.peel_to_commit().ok()?.id();
+        let remotes = repo.remotes().ok()?;
+        let mut shared: Vec<git2::Oid> = Vec::new();
+        for at in 0..remotes.len() {
+            let Some(remote) = remotes.get(at).ok().flatten() else {
+                continue;
+            };
+            let tip = ["HEAD", "main", "master"].iter().find_map(|name| {
+                repo.find_reference(&format!("refs/remotes/{remote}/{name}"))
+                    .ok()?
+                    .resolve()
+                    .ok()?
+                    .peel_to_commit()
+                    .ok()
+                    .map(|commit| commit.id())
+            });
+            let Some(tip) = tip else { continue };
+            let Ok(base) = repo.merge_base(head, tip) else {
+                continue;
+            };
+            if (base == start || repo.graph_descendant_of(base, start).unwrap_or(false))
+                && !shared.contains(&base)
+            {
+                shared.push(base);
+            }
+        }
+        let newest = shared.iter().find(|one| {
+            shared.iter().all(|other| {
+                other == *one || repo.graph_descendant_of(**one, *other).unwrap_or(false)
+            })
+        })?;
+        Some(newest.to_string())
+    })();
+    Some(moved.unwrap_or_else(|| start_text.to_string()))
+}
+
 /// Adds a worktree of the project under `.claude/worktrees`, on a new
 /// branch of the same name, and says where it is, absolute. The name is a
 /// plain identifier, and a worktree that is already there is left alone.

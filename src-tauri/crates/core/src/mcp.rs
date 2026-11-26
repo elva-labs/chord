@@ -2273,14 +2273,14 @@ pub fn gate_add_tool() -> Value {
 pub fn verdict_tool() -> Value {
     json!({
         "name": "verdict",
-        "description": format!("Gives your verdict on the plan or the change of the team's run you were started in, on each gate your agent approves. Name what you read, as the gates tool shows it: the plan's version, or the change's tree and, when the change is in more than one folder, the folder. A verdict on a plan or a tree that no longer stands is refused; read it again and give the verdict on what stands. Approve it, or ask for changes and say what must change in the findings. A change made after you approve puts the approval out of date, and the lead asks again. After as many asks as the gate's rounds the gate waits for the user. Findings are at most {} characters.", crate::run::FINDINGS_MOST),
+        "description": format!("Gives your verdict on the plan or the change of the team's run you were started in, on each gate your agent approves. Name what you read, as the gates tool shows it: the plan's version, or the change's hash and, when the change is in more than one folder, the folder. A verdict on a plan or a change that no longer stands is refused; read it again and give the verdict on what stands. Approve it, or ask for changes and say what must change in the findings. A change made after you approve puts the approval out of date, and the lead asks again. After as many asks as the gate's rounds the gate waits for the user. Findings are at most {} characters.", crate::run::FINDINGS_MOST),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "on": { "type": "string", "enum": ["plan", "change"], "description": "What the verdict is on." },
                 "plan": { "type": "integer", "description": "On the plan: the version you read." },
-                "tree": { "type": "string", "description": "On the change: the tree you read." },
-                "folder": { "type": "string", "description": "On the change: the folder whose tree you read, when the change is in more than one, or your own folder when you read in it and it has the change of one of them." },
+                "change": { "type": "string", "description": "On the change: the hash of the change you read." },
+                "folder": { "type": "string", "description": "On the change: the folder whose change you read, when the change is in more than one, or your own folder when you read in it and it has the change of one of them." },
                 "approved": { "type": "boolean", "description": "true to approve, false to ask for changes." },
                 "findings": { "type": "string", "description": "What you found; what must change, when you ask for changes." }
             },
@@ -2292,7 +2292,7 @@ pub fn verdict_tool() -> Value {
 pub fn gates_tool() -> Value {
     json!({
         "name": "gates",
-        "description": "Reads the team's run you are in: the plan, its version and hash, the tree of the change in each folder the work is in, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A tree is the folder's files as they are, committed or not, but only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
+        "description": "Reads the team's run you are in: the plan, its version and hash, the hash of the change in each folder the work is in, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A change is the lines taken out and put in since the commit the work counts from, in the folder's files as they are, committed or not, so a rebase that puts the same lines on a newer base keeps an approval; but only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
         "inputSchema": { "type": "object", "properties": {} }
     })
 }
@@ -2423,7 +2423,10 @@ fn gate_add_call(home: &Path, session: Option<&str>, arguments: &Value) -> Resul
 fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
     let token = session.ok_or(crate::run::NOT_A_MEMBER)?;
     let on = when_of(arguments, "on")?;
-    let tree = arguments.get("tree").and_then(Value::as_str);
+    let change = arguments
+        .get("change")
+        .or_else(|| arguments.get("tree"))
+        .and_then(Value::as_str);
     let folder = arguments
         .get("folder")
         .and_then(Value::as_str)
@@ -2437,7 +2440,7 @@ fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result
         },
         crate::team::When::Change => crate::run::Read::Change {
             folder,
-            tree: tree.ok_or("tree is the tree of the change you read.")?,
+            change: change.ok_or("change is the hash of the change you read.")?,
         },
     };
     let approved = arguments
@@ -2501,8 +2504,9 @@ fn own_folder_line(
     let own = member.folder.display();
     Ok(Some(match state.read_in(&member.folder) {
         Ok(place) => format!(
-            "You read in {own}, which has the change in {}: a verdict naming {own} is on that change.",
-            place.folder.display()
+            "You read in {own}, which has the change in {}: a verdict naming {own} is on that change, {}.",
+            place.folder.display(),
+            place.change.as_deref().unwrap_or("which cannot be read")
         ),
         Err(e) => format!("You read in {own}, so a verdict naming it is refused: {e}"),
     }))
@@ -2534,7 +2538,7 @@ fn gate_line(gate: &crate::run::GateState) -> String {
 /// The run's gates, each on its line with the last verdict's findings
 /// and, on the change in more than one folder, how it stands in each
 /// under it, after the line the window shows and what a verdict names:
-/// the plan's version and hash, and the tree of the change in each folder.
+/// the plan's version and hash, and the hash of the change in each folder.
 fn gates_text(state: &crate::run::State) -> String {
     let mut lines = vec![state.line()];
     if let Some(plan) = &state.plan {
@@ -2544,8 +2548,8 @@ fn gates_text(state: &crate::run::State) -> String {
         ));
     }
     for place in &state.places {
-        lines.push(match &place.tree {
-            Ok(tree) => format!("The change in {} has tree {tree}.", place.folder.display()),
+        lines.push(match &place.change {
+            Ok(change) => format!("The change in {} is {change}.", place.folder.display()),
             Err(e) => format!(
                 "The change in {} cannot be read: {e}",
                 place.folder.display()
@@ -5019,7 +5023,7 @@ mod tests {
             !read.contains("You read in"),
             "a member in the lead's folder reads the change there: {read}"
         );
-        assert!(read.contains(" has tree "), "{read}");
+        assert!(read.contains("The change in "), "{read}");
         let approved = called(
             &home,
             "sec",

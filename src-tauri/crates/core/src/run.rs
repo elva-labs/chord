@@ -7,19 +7,26 @@
 //! adds; none is ever removed. A plan is kept in versions, each with a
 //! hash of its text and its paths sorted. The run's work is in places:
 //! the lead's folder and each folder a member that changes files joined
-//! in; a member's folder that is gone is left out. The change in a place
-//! is the tree of its checkout as it stands, untracked files included, and
-//! the paths changed there since the run began, or for a folder other than
-//! the lead's, since the newest commit it shares with the run's. Paths, in
-//! the change and in a gate, are measured from the run's folder. A verdict
-//! names the plan version or the place and tree its member read, is
-//! refused when that is no longer what stands, and records the hash it was
-//! given on, so a plan or a tree that changed since makes an approval out
-//! of date, and a rebase that keeps the tree keeps it. A member that only
-//! reads makes no place of its folder; reading there, it approves the
-//! change in the place whose tree that folder has. A gate on the change
-//! is judged in each place something changed in, and a push is judged
-//! against them all, since worktrees share their branches.
+//! in; a member's folder that is gone is left out. A place's checkout is
+//! read as it stands, untracked files included, as its tree. Its change
+//! counts from its base: the commit the run began at, or for a folder
+//! other than the lead's, the newest commit it shares with the run's, or
+//! where a rebase on a remote's default branch moved it, the newest commit
+//! the branch shares with that branch as last fetched; see
+//! [`git::moved_base`]. The change is the paths changed since the base and
+//! a hash of the lines taken out and put in there, with no lines around
+//! them and no line numbers; see [`git::change_hash`]. Paths, in the change
+//! and in a gate, are measured from the run's folder. A verdict names the
+//! plan version or the place and change its member read, is refused when
+//! that is no longer what stands, and records the hash it was given on, so
+//! a plan or a change that differs since makes an approval out of date,
+//! and a rebase that puts the same lines on a newer base keeps it. A
+//! verdict recorded on a tree approves while the place has that tree. A
+//! member that only reads makes no place of its folder; reading there, it
+//! approves the change in the place whose tree, or failing that whose
+//! change, that folder has. A gate on the change is judged in each place
+//! something changed in, and a push is judged against them all, since
+//! worktrees share their branches.
 //!
 //! A gate is Waiting, Approved, Out of date, Waived or Not needed. While a
 //! gate on the plan is open, building is held: starting a session that
@@ -220,7 +227,8 @@ pub struct Verdict {
     pub agent: String,
     /// The version of the agent it ran as, where it is one of the user's.
     pub agent_version: Option<String>,
-    /// The hash of the plan or the tree it was given on.
+    /// The hash of the plan or the change it was given on, or for a
+    /// verdict recorded before changes were hashed, the tree.
     pub on: String,
     /// The version of the plan it was given on, for a gate on the plan.
     pub plan: Option<i64>,
@@ -303,11 +311,18 @@ pub struct Place {
     pub folder: PathBuf,
     /// The commit the change there counts from.
     pub base: Option<String>,
+    /// The commit the change there began at, which a rebase on a remote's
+    /// default branch moves the base on from.
+    pub start: Option<String>,
     /// The tree of the commit the folder's branch is on.
     pub head: Option<String>,
     /// The folder's tree, or why it could not be read.
     #[serde(serialize_with = "outcome")]
     pub tree: Result<String, String>,
+    /// The hash of the change from the base to the tree, or why it could
+    /// not be read.
+    #[serde(serialize_with = "outcome")]
+    pub change: Result<String, String>,
     /// The paths changed there since the base, or why they could not be
     /// read.
     #[serde(serialize_with = "outcome")]
@@ -332,13 +347,19 @@ fn outcome<T: Serialize, S: serde::Serializer>(
 }
 
 impl Place {
-    /// The place a folder is, with the paths changed there measured from
-    /// `from`, where the run's folder is in the repository.
-    fn read(folder: &Path, from: &str, base: Option<&str>) -> Place {
+    /// The place a folder is, its change counted from where `start` moved
+    /// to, with the paths changed there measured from `from`, where the
+    /// run's folder is in the repository.
+    fn read(folder: &Path, from: &str, start: Option<&str>) -> Place {
+        let base = git::moved_base(folder, start);
         let tree = git::tree_hash(folder);
+        let change = tree
+            .clone()
+            .and_then(|tree| git::change_hash(folder, base.as_deref(), &tree))
+            .map_err(|e| format!("the change in {} cannot be read: {e}", folder.display()));
         let changed = tree
             .clone()
-            .and_then(|tree| git::changed_paths(folder, from, base, &tree))
+            .and_then(|tree| git::changed_paths(folder, from, base.as_deref(), &tree))
             .map_err(|e| {
                 format!(
                     "what the change in {} touches cannot be read: {e}",
@@ -347,11 +368,24 @@ impl Place {
             });
         Place {
             folder: folder.to_path_buf(),
-            base: base.map(str::to_string),
+            base,
+            start: start.map(str::to_string),
             head: git::head_tree(folder),
             tree,
+            change,
             changed,
         }
+    }
+
+    /// Whether an approval given on `on` stands for the place: `on` is its
+    /// change, or its tree, as a verdict recorded before changes were
+    /// hashed names it; or the base moved on to a remote's default branch
+    /// that holds all of the change, so nothing is left in it.
+    fn approves(&self, on: &str) -> bool {
+        self.change.as_deref() == Ok(on)
+            || self.tree.as_deref() == Ok(on)
+            || (self.base != self.start
+                && self.changed.as_ref().is_ok_and(|paths| paths.is_empty()))
     }
 
     /// Whether anything changed there since its base, or that cannot be
@@ -419,33 +453,47 @@ impl State {
 
     /// The place whose change a member that reads in a folder of its own,
     /// which is no place of the run's work, reads there: the one place
-    /// whose tree is the tree that folder has now. None has it, or more
-    /// than one does, and the member reads the change where it is and
-    /// names that folder.
+    /// whose tree is the tree that folder has now, or failing that, the one
+    /// whose change is the change that folder has, counted from where the
+    /// place's start moved to in that folder. None has it, or more than
+    /// one does, and the member reads the change where it is and names
+    /// that folder.
     pub fn read_in(&self, own: &Path) -> Result<&Place, String> {
         let tree =
             git::tree_hash(own).map_err(|e| format!("{} cannot be read: {e}", own.display()))?;
-        let with: Vec<&Place> = self
+        let mut with: Vec<&Place> = self
             .places
             .iter()
             .filter(|place| place.tree.as_ref() == Ok(&tree))
             .collect();
+        if with.is_empty() {
+            with = self
+                .places
+                .iter()
+                .filter(|place| {
+                    place.change.as_ref().is_ok_and(|change| {
+                        let base = git::moved_base(own, place.start.as_deref());
+                        git::change_hash(own, base.as_deref(), &tree).as_ref() == Ok(change)
+                    })
+                })
+                .collect();
+        }
         match with.as_slice() {
             [one] => Ok(one),
             [] => Err(format!(
-                "{} has tree {tree}, which is the change in none of the run's folders: {}. Check the change out there, or read it in the folder it is in and name that folder.",
+                "{} has tree {tree}, which is the change in none of the run's folders, by its tree or its lines: {}. Check the change out there, or read it in the folder it is in and name that folder.",
                 own.display(),
                 self.places
                     .iter()
-                    .map(|place| match &place.tree {
-                        Ok(tree) => format!("{} has {tree}", place.folder.display()),
+                    .map(|place| match &place.change {
+                        Ok(change) => format!("{} has change {change}", place.folder.display()),
                         Err(_) => format!("{} cannot be read", place.folder.display()),
                     })
                     .collect::<Vec<_>>()
                     .join(", ")
             )),
             several => Err(format!(
-                "{} has the tree of the change in more than one folder, so a verdict names the one it is on: {}.",
+                "{} has the change in more than one folder, so a verdict names the one it is on: {}.",
                 own.display(),
                 several
                     .iter()
@@ -1426,7 +1474,7 @@ pub fn state(home: &Path, lead: &str) -> Result<Option<State>, String> {
     let from = git::prefix(&run.folder).unwrap_or_default();
     let places: Vec<Place> = folders
         .iter()
-        .map(|(folder, base)| Place::read(folder, &from, *base))
+        .map(|(folder, start)| Place::read(folder, &from, *start))
         .collect();
     let mut paths: Vec<String> = plan
         .as_ref()
@@ -1530,8 +1578,14 @@ fn stand(
             );
         }
         let last = verdicts.last().copied();
-        let (standing, at_limit, reason) =
-            judge(&who, "the plan", last, &plan.hash, asks, gate.rounds);
+        let (standing, at_limit, reason) = judge(
+            &who,
+            "the plan",
+            last,
+            |on| on == plan.hash,
+            asks,
+            gate.rounds,
+        );
         return state(standing, at_limit, reason, Vec::new());
     }
     let judged = judged_places(places);
@@ -1544,19 +1598,20 @@ fn stand(
             } else {
                 "the change".to_string()
             };
-            let (standing, reason) = match (&place.tree, &place.changed) {
+            let (standing, reason) = match (&place.change, &place.changed) {
                 (Err(e), _) => (Standing::Waiting, format!("{of} cannot be read: {e}")),
                 (Ok(_), Ok(changed)) if !touched(changed) => (
                     Standing::NotNeeded,
                     format!("{of} touches nothing {who} approves"),
                 ),
-                (Ok(tree), _) => {
+                (Ok(_), _) => {
                     let last = verdicts
                         .iter()
                         .rev()
                         .find(|v| v.folder.as_deref().is_some_and(|f| same(f, &place.folder)))
                         .copied();
-                    let (standing, _, reason) = judge(&who, &of, last, tree, asks, gate.rounds);
+                    let (standing, _, reason) =
+                        judge(&who, &of, last, |on| place.approves(on), asks, gate.rounds);
                     (standing, reason)
                 }
             };
@@ -1587,19 +1642,19 @@ fn stand(
 }
 
 /// How a gate stands on the plan or on the change in one place, by the
-/// last verdict it was given there and the hash that stands now, and
-/// whether it waits for the user.
+/// last verdict it was given there and whether what it was given on
+/// stands now, and whether it waits for the user.
 fn judge(
     who: &str,
     of: &str,
     last: Option<&Verdict>,
-    current: &str,
+    stands: impl Fn(&str) -> bool,
     asks: u32,
     rounds: u32,
 ) -> (Standing, bool, String) {
     let at_limit = asks >= rounds;
     match last {
-        Some(last) if last.approved && last.on == current => {
+        Some(last) if last.approved && stands(&last.on) => {
             (Standing::Approved, false, format!("{who} approved {of}"))
         }
         Some(last) if last.approved => (
@@ -1635,19 +1690,20 @@ pub const NOT_A_MEMBER: &str =
 pub enum Read<'a> {
     /// The version of the plan it read.
     Plan { version: i64 },
-    /// The tree of the change it read, in the folder named, which may be
-    /// left out while the change is judged in one place.
+    /// The hash of the change it read, in the folder named, which may be
+    /// left out while the change is judged in one place. The hash of the
+    /// folder's tree stands for its change as well.
     Change {
         folder: Option<&'a Path>,
-        tree: &'a str,
+        change: &'a str,
     },
 }
 
 /// Records the verdict of the session `token` names on what it read, the
-/// plan's version or the change's tree in one place, on each gate of the
-/// run its agent approves then. A member that reads in a folder of its
-/// own, which is no place of the run's work, and names it, gives its
-/// verdict on the change in the place whose tree that folder has; see
+/// plan's version or the change in one place, on each gate of the run its
+/// agent approves then, recording the change's hash. A member that reads
+/// in a folder of its own, which is no place of the run's work, and names
+/// it, gives its verdict on the change in the place that folder has; see
 /// [`State::read_in`]. A verdict on something that no longer
 /// stands is refused, saying what changed. A gate the user waived, or one
 /// that waits for the user, takes none. Asking for changes says what must
@@ -1705,7 +1761,7 @@ pub fn verdict(
             }
             (plan.hash.clone(), Some(plan.version), None)
         }
-        Read::Change { folder, tree } => {
+        Read::Change { folder, change } => {
             let own = folder.filter(|folder| {
                 same(folder, &member.folder)
                     && !now_state
@@ -1717,16 +1773,16 @@ pub fn verdict(
                 Some(own) => now_state.read_in(own)?,
                 None => now_state.place_for(folder)?,
             };
-            let now = place.tree.clone().map_err(|e| {
+            let now = place.change.clone().map_err(|e| {
                 format!(
                     "The change in {} cannot be read: {e}",
                     place.folder.display()
                 )
             })?;
-            let tree = tree.trim();
-            if now != tree {
+            let read = change.trim();
+            if now != read && place.tree.as_deref() != Ok(read) {
                 return Err(format!(
-                    "The change in {} is not the one read: its tree is {now} now, not {tree}. Read it again with the gates tool and give the verdict on it.",
+                    "The change in {} is not the one read: it is {now} now, not {read}. Read it again with the gates tool and give the verdict on it.",
                     place.folder.display()
                 ));
             }
