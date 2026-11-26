@@ -441,6 +441,17 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: false });
   });
 
+  it("sends a command by another name the agent takes for it alone, ahead of the briefing", async () => {
+    const { key, handle } = await wentCold();
+    fake.commands(handle, [
+      { name: "rename", aliases: ["name"], description: null, hint: null, skill: false, builtin: true, source: null },
+    ]);
+    await settled();
+    send(key, "/name The plan");
+    expect(sentTexts().at(-1)).toBe("/name The plan");
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: false });
+  });
+
   it("puts the briefing ahead of a command sent with an image, which the agent reads as words", async () => {
     const { key } = await wentCold();
     send(key, "/context", [{ mediaType: "image/png", data: "one" }]);

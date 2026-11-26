@@ -65,6 +65,15 @@ describe("slash commands", () => {
     expect(goesAsCommand("see /review", 0, COMMANDS)).toBe(false);
   });
 
+  it("go to the agent as a command by another name the agent takes for one it lists", () => {
+    const listed = [...COMMANDS, command("rename", { aliases: ["name", "kit:rename"] })];
+    expect(goesAsCommand("/name The new one", 0, listed)).toBe(true);
+    expect(goesAsCommand("/kit:rename", 0, listed)).toBe(true);
+    expect(goesAsCommand("/names", 0, listed)).toBe(false);
+    expect(goesAsCommand("/name", 1, listed)).toBe(false);
+    expect(named("/name The new one", listed)).toBeNull();
+  });
+
   it("go as a command by its shape alone before the agent lists any", () => {
     for (const commands of [null, []]) {
       expect(goesAsCommand("/compact Keep the notes", 0, commands)).toBe(true);
