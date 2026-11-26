@@ -137,6 +137,8 @@ let givenNames: Record<string, string> = {};
 /** The agent whose history directory cannot be read, if any. */
 let unreadable: string | null = null;
 const spawned: SpawnOptions[] = [];
+/** How many spawns to come fail. */
+let spawnsFailing = 0;
 /** How the core judges taking each conversation up again; one it is not
     given fails, which resumes whole. */
 const takenUp: Record<string, unknown> = {};
@@ -149,6 +151,7 @@ vi.mock("$lib/core", () => ({
     },
     spawn: async (options: SpawnOptions) => {
       spawned.push(options);
+      if (spawnsFailing > 0 && spawnsFailing--) throw new Error("the agent would not start");
       if (options.profile === "gone") throw new Error('there is no Codex profile "gone" in /home/.codex');
       return { ptyId: `pty-${spawned.length}`, sessionId: options.session ?? `sid-${spawned.length}` };
     },
@@ -204,6 +207,7 @@ beforeEach(() => {
   // A session follows no workflow here unless a test gives it one.
   resetWorkflows();
   spawned.length = 0;
+  spawnsFailing = 0;
   for (const id of Object.keys(takenUp)) delete takenUp[id];
   reset();
   resetShells();
@@ -1130,6 +1134,26 @@ describe("a terminal row whose conversation holds nothing", () => {
     await launch(session.key, 80, 24, () => {});
     expect(spawned.at(-1)).toMatchObject({ session: "fresh-1", prompt: `BRIEFING\n\n${GOING_ON_WAIT}` });
     expect(byKey(session.key)!.resumedFrom).toBe("fresh-1");
+    expect(JSON.parse(localStorage.getItem("chord.briefings")!)).toEqual({});
+  });
+
+  it("puts the briefing back where the start that carried it fails, for the next start", async () => {
+    const kept = { from: "old-1", context: 400_000, briefing: "BRIEFING", spoken: false };
+    localStorage.setItem("chord.briefings", JSON.stringify({ "fresh-1": kept }));
+    resetGoingOn();
+    takenUp["fresh-1"] = { context: 1_000, idle: 60, goesOn: false, briefing: null };
+    const session = create(A, "fresh-1");
+    spawnsFailing = 1;
+    await launch(session.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ prompt: `BRIEFING\n\n${GOING_ON_WAIT}` });
+    expect(going.runs[session.key]).toMatchObject({ briefing: "BRIEFING", spoken: false });
+    expect(JSON.parse(localStorage.getItem("chord.briefings")!)).toMatchObject({ "fresh-1": { briefing: "BRIEFING" } });
+    // The conversation opened again starts briefed.
+    close(session.key);
+    const again = create(A, "fresh-1");
+    await launch(again.key, 80, 24, () => {});
+    expect(spawned).toHaveLength(2);
+    expect(spawned.at(-1)).toMatchObject({ session: "fresh-1", prompt: `BRIEFING\n\n${GOING_ON_WAIT}` });
     expect(JSON.parse(localStorage.getItem("chord.briefings")!)).toEqual({});
   });
 
