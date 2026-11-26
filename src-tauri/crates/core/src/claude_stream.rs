@@ -2126,10 +2126,10 @@ impl Stream {
     /// only, a tool that edits files is refused; one that only reads, a
     /// command, and the workbench's own tools that change no file and reach
     /// nothing outside it, where its server is attached, are left to the
-    /// mode, as are the workbench's tools a lead delegates with in a
-    /// session that leads a team's run; and any other is put to the user
-    /// whatever the mode or the allow rules say. Off, every tool is left to
-    /// the mode.
+    /// mode, as is a start in a session that leads a team's run, and a send
+    /// or a stop there to a member of that run; and any other is put to the
+    /// user whatever the mode or the allow rules say. Off, every tool is
+    /// left to the mode.
     fn hooked(&self, id: &str, input: &Value) -> Value {
         let tool = input["tool_name"].as_str().unwrap_or_default();
         let handing_over = (tool == "Bash")
@@ -2152,7 +2152,7 @@ impl Stream {
             || crate::agents::READING_TOOLS.contains(&tool)
             || LEFT_TO_MODE.contains(&tool)
             || (self.attached && crate::show::contained_tool(tool))
-            || (self.attached && crate::show::lead_tool(tool) && self.leads())
+            || (self.attached && self.delegates(tool, input))
         {
             json!({})
         } else if crate::agents::CHANGING_TOOLS.contains(&tool) {
@@ -2166,12 +2166,21 @@ impl Stream {
         })
     }
 
-    /// Whether the session leads a team's run that holds, read from the
-    /// run's store at each call.
-    fn leads(&self) -> bool {
-        self.run
-            .as_ref()
-            .is_some_and(|(home, token)| crate::run::leads(home, token))
+    /// Whether a call is one the session delegates with as the lead of a
+    /// team's run that holds: a start, or a send or a stop to a member of
+    /// that run, named as the tool server takes it. Read from the run's
+    /// store at each call.
+    fn delegates(&self, tool: &str, input: &Value) -> bool {
+        let Some((home, token)) = self.run.as_ref() else {
+            return false;
+        };
+        match crate::show::lead_tool(tool) {
+            Some("start") => crate::run::leads(home, token),
+            Some(_) => input["tool_input"]["session"]
+                .as_str()
+                .is_some_and(|session| crate::run::leads_member(home, token, session)),
+            None => false,
+        }
     }
 
     /// The answer to the team hold for a turn about to end: a lead whose
@@ -4348,14 +4357,64 @@ mod tests {
         }
     }
 
+    /// What the reads-only hook decides for `tool` called with `session`
+    /// as the session it names, from the session or from a subagent of it.
+    fn delegated(stream: &mut Stream, tool: &str, session: Option<&str>, subagent: bool) -> String {
+        let mut input =
+            json!({ "hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": {} });
+        if let Some(session) = session {
+            input["tool_input"]["session"] = json!(session);
+        }
+        if subagent {
+            input["agent_id"] = json!("a91f5de28f08fa653");
+            input["agent_type"] = json!("general-purpose");
+        }
+        called_back(stream, READS_ONLY_HOOK, input)["hookSpecificOutput"]["permissionDecision"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    const MEMBER: &str = "5e55a0de-0000-4000-8000-000000000001";
+
+    /// A stream of the lead that reads only with the workbench's server
+    /// attached, in a run whose reviewer "rev" is known as [`MEMBER`].
+    fn a_lead_reading_only(
+        label: &str,
+    ) -> (Stream, crate::scratch::Scratch, crate::scratch::Scratch) {
+        let (mut lead, home, folder) = in_a_run(label, "lead");
+        crate::run::join(
+            &home,
+            "lead",
+            "rev",
+            "Reviewer",
+            &folder,
+            Some(MEMBER),
+            true,
+            "brief",
+        )
+        .unwrap();
+        lead.attached = true;
+        lead.control(&Control::SetReadsOnly(true)).unwrap();
+        (lead, home, folder)
+    }
+
     #[test]
     fn a_lead_reading_only_starts_writes_to_and_stops_its_members_unasked() {
         let delegating = ["mcp__chord__start", "mcp__chord__send", "mcp__chord__stop"];
-        let (mut lead, home, _folder) = in_a_run("stream-lead-delegates", "lead");
-        lead.attached = true;
-        lead.control(&Control::SetReadsOnly(true)).unwrap();
-        for tool in delegating {
-            assert_eq!(decided(&mut lead, tool), "", "{tool}");
+        let (mut lead, home, _folder) = a_lead_reading_only("stream-lead-delegates");
+        assert_eq!(decided(&mut lead, "mcp__chord__start"), "");
+        for tool in ["mcp__chord__send", "mcp__chord__stop"] {
+            assert_eq!(
+                delegated(&mut lead, tool, Some(MEMBER), false),
+                "",
+                "{tool}"
+            );
+            assert_eq!(
+                delegated(&mut lead, tool, Some("5e55a0de"), false),
+                "",
+                "{tool} prefix"
+            );
         }
         assert_eq!(decided(&mut lead, "mcp__other__start"), "ask");
         assert_eq!(decided(&mut lead, "mcp__chord__terminal"), "ask");
@@ -4371,8 +4430,16 @@ mod tests {
         outside.attached = true;
         outside.control(&Control::SetReadsOnly(true)).unwrap();
         for tool in delegating {
-            assert_eq!(decided(&mut member, tool), "ask", "member {tool}");
-            assert_eq!(decided(&mut outside, tool), "ask", "outside {tool}");
+            assert_eq!(
+                delegated(&mut member, tool, Some(MEMBER), false),
+                "ask",
+                "member {tool}"
+            );
+            assert_eq!(
+                delegated(&mut outside, tool, Some(MEMBER), false),
+                "ask",
+                "outside {tool}"
+            );
         }
 
         // Where the workbench attached no server, the names may be the
@@ -4393,11 +4460,125 @@ mod tests {
             assert_eq!(decided(&mut lead, tool), "ask", "agents off {tool}");
         }
         crate::run::tests::agents_switched(&home, true);
-        assert_eq!(decided(&mut lead, "mcp__chord__start"), "");
+        assert_eq!(
+            delegated(&mut lead, "mcp__chord__send", Some(MEMBER), false),
+            ""
+        );
         assert!(crate::run::end(&home, "lead").unwrap());
         for tool in delegating {
-            assert_eq!(decided(&mut lead, tool), "ask", "ended {tool}");
+            assert_eq!(
+                delegated(&mut lead, tool, Some(MEMBER), false),
+                "ask",
+                "ended {tool}"
+            );
         }
+    }
+
+    #[test]
+    fn a_lead_reading_only_is_asked_before_a_send_or_a_stop_to_a_session_outside_its_run() {
+        let (mut lead, home, folder) = a_lead_reading_only("stream-lead-outside");
+        for tool in ["mcp__chord__send", "mcp__chord__stop"] {
+            // Named by no one, by too little of an id, or by an id no
+            // member of the run has: a session it started outside the run.
+            for session in [
+                None,
+                Some(""),
+                Some("5e55a0d"),
+                Some("0badc0de-0000-4000-8000-000000000002"),
+            ] {
+                assert_eq!(
+                    delegated(&mut lead, tool, session, false),
+                    "ask",
+                    "{tool} {session:?}"
+                );
+            }
+        }
+        // A start that names more than one member names none.
+        let other = "5e55a0de-0000-4000-8000-000000000003";
+        crate::run::join(
+            &home,
+            "lead",
+            "rev2",
+            "Reviewer",
+            &folder,
+            Some(other),
+            true,
+            "brief",
+        )
+        .unwrap();
+        for tool in ["mcp__chord__send", "mcp__chord__stop"] {
+            assert_eq!(
+                delegated(&mut lead, tool, Some("5e55a0de"), false),
+                "ask",
+                "{tool}"
+            );
+            assert_eq!(delegated(&mut lead, tool, Some(other), false), "", "{tool}");
+        }
+        // A member of another lead's run is not this lead's.
+        let elsewhere = "e15e0000-0000-4000-8000-000000000004";
+        let team = crate::run::tests::team(crate::team::QUICK_FIX);
+        crate::run::begin(&home, "lead2", &team, &folder).unwrap();
+        crate::run::join(
+            &home,
+            "lead2",
+            "rev3",
+            "Reviewer",
+            &folder,
+            Some(elsewhere),
+            true,
+            "brief",
+        )
+        .unwrap();
+        assert_eq!(
+            delegated(&mut lead, "mcp__chord__send", Some(elsewhere), false),
+            "ask"
+        );
+        assert_eq!(
+            delegated(&mut lead, "mcp__chord__send", Some(MEMBER), false),
+            ""
+        );
+    }
+
+    #[test]
+    fn a_subagent_of_a_lead_reading_only_delegates_as_the_lead_does() {
+        let (mut lead, _home, _folder) = a_lead_reading_only("stream-lead-subagent");
+        assert_eq!(delegated(&mut lead, "mcp__chord__start", None, true), "");
+        assert_eq!(
+            delegated(&mut lead, "mcp__chord__send", Some(MEMBER), true),
+            ""
+        );
+        assert_eq!(
+            delegated(
+                &mut lead,
+                "mcp__chord__send",
+                Some("0badc0de-0000-4000-8000-000000000002"),
+                true
+            ),
+            "ask"
+        );
+        assert_eq!(delegated(&mut lead, "Edit", None, true), "deny");
+    }
+
+    #[test]
+    fn a_lead_reading_only_is_asked_where_its_run_cannot_be_read() {
+        let (mut lead, home, _folder) = a_lead_reading_only("stream-lead-unread");
+        let store = crate::run::folder(&home);
+        for entry in std::fs::read_dir(&store).unwrap().flatten() {
+            std::fs::remove_file(entry.path()).unwrap();
+        }
+        std::fs::write(store.join(crate::run::FILE), "not a database, not at all").unwrap();
+        assert_eq!(
+            delegated(&mut lead, "mcp__chord__start", None, false),
+            "ask"
+        );
+        for tool in ["mcp__chord__send", "mcp__chord__stop"] {
+            assert_eq!(
+                delegated(&mut lead, tool, Some(MEMBER), false),
+                "ask",
+                "{tool}"
+            );
+        }
+        assert_eq!(decided(&mut lead, "mcp__chord__gates"), "");
     }
 
     #[test]

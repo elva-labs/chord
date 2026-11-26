@@ -294,10 +294,13 @@ pub const CONTAINED_TOOLS: &[&str] = &[
 ];
 
 /// The workbench's tools a team's lead delegates with: it starts its
-/// members, writes to them and stops them. A lead that reads only leaves
-/// these to the mode, as the run holds what they start: the team's agents
-/// only, and none that changes files while a gate on the plan waits. Any
-/// other session that reads only is asked before each.
+/// members, writes to them and stops them. A lead that reads only leaves a
+/// start to the mode, as the run holds what it starts: the team's agents
+/// only, a session resumed only where it is the run's member, and none that
+/// changes files while a gate on the plan waits. It leaves a send or a stop
+/// to the mode only where the session it names is a member of its run,
+/// since another session it started is held by no run. Any other session
+/// that reads only is asked before each.
 pub const LEAD_TOOLS: &[&str] = &["start", "send", "stop"];
 
 /// The tool of the workbench's own server a tool name names, as the
@@ -320,10 +323,10 @@ pub fn contained_tool(name: &str) -> bool {
     own_tool(name).is_some_and(|tool| CONTAINED_TOOLS.contains(&tool))
 }
 
-/// Whether a tool, as the harness names it, is one of the workbench's
-/// [`LEAD_TOOLS`]. See [`own_tool`] for when the name is the workbench's.
-pub fn lead_tool(name: &str) -> bool {
-    own_tool(name).is_some_and(|tool| LEAD_TOOLS.contains(&tool))
+/// Which of the workbench's [`LEAD_TOOLS`] a tool, as the harness names
+/// it, is, if one. See [`own_tool`] for when the name is the workbench's.
+pub fn lead_tool(name: &str) -> Option<&str> {
+    own_tool(name).filter(|tool| LEAD_TOOLS.contains(tool))
 }
 
 /// A call the agent made on one of the settings tools. The window answers

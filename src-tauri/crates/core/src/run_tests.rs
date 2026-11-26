@@ -35,7 +35,7 @@ fn commit(dir: &Path) {
     }
 }
 
-fn team(name: &str) -> Team {
+pub(crate) fn team(name: &str) -> Team {
     shipped()
         .into_iter()
         .find(|team| team.name == name)

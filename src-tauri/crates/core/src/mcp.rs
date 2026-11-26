@@ -3066,14 +3066,18 @@ mod tests {
         assert!(!show::contained_tool("mcp__other__notes"));
         for tool in show::LEAD_TOOLS {
             assert!(names.contains(tool), "{tool}");
-            assert!(show::lead_tool(&format!("mcp__chord__{tool}")), "{tool}");
+            assert_eq!(
+                show::lead_tool(&format!("mcp__chord__{tool}")),
+                Some(*tool),
+                "{tool}"
+            );
             assert!(
                 !show::contained_tool(&format!("mcp__chord__{tool}")),
                 "{tool}"
             );
         }
-        assert!(!show::lead_tool("mcp__other__start"));
-        assert!(!show::lead_tool("start"));
+        assert_eq!(show::lead_tool("mcp__other__start"), None);
+        assert_eq!(show::lead_tool("start"), None);
     }
 
     #[test]
