@@ -40,6 +40,7 @@ import { conductor, resetConductor } from "$lib/conductor.svelte";
 import "$lib/orchestrator.svelte";
 import { resetFolder } from "$lib/orchestratorFolder.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
+import { resetSwitches, switches } from "$lib/switches.svelte";
 import { pickProfile, profileToStart, readProfiles, resetProfiles } from "$lib/codexProfiles.svelte";
 import { paletteChanged, resetPluginPalette } from "$lib/pluginPalette.svelte";
 import { flash } from "$lib/flash.svelte";
@@ -95,6 +96,7 @@ beforeEach(() => {
   picks.refuse = null;
   // No workflows unless a test has some.
   resetWorkflows();
+  resetSwitches();
   harnesses.availability = "ready";
   harnesses.installed = ["claude-code"];
   harnesses.integrable = [];
@@ -883,11 +885,15 @@ describe("a new chat", () => {
   });
 });
 
-describe("how a new session runs", () => {
-  const quick = () => ({
-    ...defaultWorkflow(),
-    name: "Quick fix",
-    steps: [defaultWorkflow().steps[0]],
+const quick = () => ({
+  ...defaultWorkflow(),
+  name: "Quick fix",
+  steps: [defaultWorkflow().steps[0]],
+});
+
+describe("how a new session runs, with agents and teams off", () => {
+  beforeEach(() => {
+    switches.agents = false;
   });
 
   it("offers the defaults alone, with nothing to change, and starts on Enter with one agent and no workflow", () => {
@@ -982,6 +988,31 @@ describe("how a new session runs", () => {
     outcome = choose("Claude Code");
     if (outcome.type === "close") outcome.then();
     expect(sessions.all[2]).toMatchObject({ agent: "claude-code", workflow: null, model: null });
+  });
+});
+
+describe("how a new session runs, with agents and teams on", () => {
+  it("offers no workflow, and starts under the one the project follows from its line", () => {
+    adoptWorkflows({ list: [quick(), defaultWorkflow()], default: null, overrides: { [A]: "Build and review" } });
+    beginNew(A);
+    const [line] = stepItems("");
+    expect(line.kind === "ready" && line.detail).toBe("Build and review");
+    // Typed on the line, a workflow's name finds nothing to change to.
+    expect(stepItems("quick").filter((item) => item.kind === "choice")).toEqual([]);
+    start();
+    expect(sessions.all[0].workflow?.name).toBe("Build and review");
+  });
+
+  it("offers the agents alone under Change, with the cursor on the last used, and starts the one picked alone", () => {
+    adoptWorkflows({ list: [quick(), defaultWorkflow()], default: "Build and review", overrides: {} });
+    expect(stepsLeft([{ kind: "project", path: A }])).toEqual(["agent"]);
+    beginNew(A);
+    choose("Change");
+    expect(stepItems("").map((item) => [item.group, item.label])).toEqual([["No workflow", "Claude Code"]]);
+    expect(startingId()).toBe("agent:claude-code");
+    const outcome = choose("Claude Code");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "claude-code", workflow: null, model: null });
   });
 });
 

@@ -78,6 +78,7 @@ import { canGoBack, openBack } from "$lib/rewind.svelte";
 import { compact } from "$lib/compact.svelte";
 import { browser } from "$lib/browser.svelte";
 import { paletteCommands, pickPluginCommand, type PluginCommand } from "$lib/pluginPalette.svelte";
+import { switches } from "$lib/switches.svelte";
 
 /**
  * The palette: one field over the workbench in two lists. Go to narrows the
@@ -103,8 +104,11 @@ import { paletteCommands, pickPluginCommand, type PluginCommand } from "$lib/plu
  * named, then how it runs: under one of the workflows, the project's own
  * first, or as one agent with no workflow. The workflows are offered where
  * the project follows one, by its own choice or by the default for new
- * sessions. Codex alone then asks which of the account's Codex profiles it
- * runs under, where the account has any. Each answer becomes a chip, and a
+ * sessions, and only while agents and teams are off; while they are on, a
+ * project that follows a workflow starts under it from the line of
+ * defaults, and Change offers the agents to run alone. Codex alone then
+ * asks which of the account's Codex profiles it runs under, where the
+ * account has any. Each answer becomes a chip, and a
  * step with nothing to choose is not asked. The session starts on the last
  * answer.
  *
@@ -648,14 +652,14 @@ function shadows(label: string, taken: Set<string>): boolean {
 /** The question a new session asks next given the answers so far, or null
     when it has all it needs. How it runs is asked as "agent", and answered
     by an agent or a workflow; it is asked when there is more than one
-    agent, or a workflow on offer in the project, to pick between. The
+    agent, or a workflow the project follows, to pick between. The
     profile is asked of Codex alone, where the account has profiles. */
 export function nextStep(steps: Step[]): StepKind | null {
   const has = (kind: StepKind) => steps.some((step) => step.kind === kind);
   if (!has("project")) return "project";
   if (hasAccounts() && !has("account")) return "account";
   const project = projectOfSteps(steps);
-  const how = installed().length > 1 || (project !== null && offered(project).length > 0);
+  const how = installed().length > 1 || (project !== null && workflowOf(project) !== null);
   if (how && !has("agent") && !has("workflow")) return "agent";
   if (project !== null && !has("profile") && !has("workflow") && harnessOfSteps(steps, project) === "codex")
     if (profilesOf(project, accountOfSteps(steps, project)).length > 0) return "profile";
@@ -724,9 +728,10 @@ export const WORKFLOWS = "Workflows";
 export const ALONE = "No workflow";
 
 /** The workflows a new session in a project is offered: none unless the
-    project follows one, by its own choice or by the default. */
+    project follows one, by its own choice or by the default, and none
+    while agents and teams are on. */
 function offered(project: string) {
-  return workflowOf(project) === null ? [] : workflows.list;
+  return switches.agents || workflowOf(project) === null ? [] : workflows.list;
 }
 
 /** What the last question offers, as titled lists drawn in order: the
@@ -1006,7 +1011,7 @@ export function startingId(): string | null {
   const asking = nextStep(palette.steps);
   if (asking === "account") return `account:${accountToStart(project) ?? ""}`;
   if (asking === "agent") {
-    const own = workflowOf(project);
+    const own = offered(project).length === 0 ? null : workflowOf(project);
     return own === null ? `agent:${defaultAgent(project)}` : `workflow:${own.name}`;
   }
   if (asking === "profile")

@@ -6,7 +6,8 @@ import { BUILD_AND_REVIEW, PROJECT, installFakeCore, leaveRow, startNew } from "
  * workflow the session follows, opens the workflows to pick from before the
  * first message, and goes once one is sent. Picking one starts the unused
  * session again as the workflow's orchestrator, on the same row, with the
- * words being written and the keyboard where they were.
+ * words being written and the keyboard where they were. All of this is with
+ * agents and teams off; while they are on, no workflow is offered.
  */
 
 const AGENT = "section[data-pane='agent']";
@@ -30,11 +31,11 @@ function calls(page: Page): Promise<Call[]> {
 const starts = async (page: Page) => (await calls(page)).filter((call) => call.method === "start");
 
 /** A new integrated session in a project that follows no workflow, with
-    the workflows given in the settings. */
+    the workflows given in the settings and agents and teams off. */
 async function open(page: Page, list: unknown[] = [BUILD_AND_REVIEW, PLAN_WORK_REVIEW], extra: Record<string, unknown> = {}, bring = true) {
   await installFakeCore(page, {
     open: [PROJECT],
-    settings: { integrated: ["claude-code"], workflows: { list, default: null, overrides: {} } },
+    settings: { integrated: ["claude-code"], agentsOn: false, workflows: { list, default: null, overrides: {} } },
     ...extra,
   });
   await page.goto("/");
@@ -95,7 +96,7 @@ test("a new conversation offers the workflows beside the model, each saying what
 // A fresh install has two workflows, neither turned on: Build and review,
 // and Direct, which hands each piece to a session of its own on any model.
 test("offers the shipped workflows on a fresh install, Direct among them", async ({ page }) => {
-  await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
+  await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], agentsOn: false } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
   await startNew(page);
@@ -130,7 +131,11 @@ test("picking a workflow makes the session its orchestrator, as New session unde
   const direct = await elsewhere.newPage();
   await installFakeCore(direct, {
     open: [PROJECT],
-    settings: { integrated: ["claude-code"], workflows: { list: [BUILD_AND_REVIEW], default: "Build and review", overrides: {} } },
+    settings: {
+      integrated: ["claude-code"],
+      agentsOn: false,
+      workflows: { list: [BUILD_AND_REVIEW], default: "Build and review", overrides: {} },
+    },
   });
   await direct.goto("/");
   await direct.getByTestId("start-agent").click();
@@ -366,4 +371,45 @@ test("leaves the composer once the session has ended unspoken, and the header na
   await expect(page.getByTestId("resume-session")).toBeVisible();
   await expect(chip(page)).toHaveCount(0);
   await expect(page.getByTestId("run-words")).toHaveText("Build and review");
+});
+
+test("with agents and teams on, the plus offers no workflow to a session that follows none", async ({ page }) => {
+  await installFakeCore(page, {
+    open: [PROJECT],
+    settings: {
+      integrated: ["claude-code"],
+      workflows: { list: [BUILD_AND_REVIEW, PLAN_WORK_REVIEW], default: null, overrides: {} },
+    },
+  });
+  await page.goto("/");
+  await page.getByTestId("start-agent").click();
+  await startNew(page);
+  await expect(page.getByTestId("model-chip")).toBeEnabled();
+  await page.getByTestId("more-chip").click();
+  await expect(page.getByTestId("more-menu")).toBeVisible();
+  await expect(page.getByTestId("more-option").filter({ hasText: "Workflow" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(chip(page)).toHaveCount(0);
+});
+
+test("with agents and teams on, a session under the project's workflow shows it and may leave it for the agent alone", async ({ page }) => {
+  await installFakeCore(page, {
+    open: [PROJECT],
+    settings: {
+      integrated: ["claude-code"],
+      workflows: { list: [BUILD_AND_REVIEW, PLAN_WORK_REVIEW], default: "Build and review", overrides: {} },
+    },
+  });
+  await page.goto("/");
+  await page.getByTestId("start-agent").click();
+  await startNew(page);
+  await expect(chip(page)).toHaveText("Build and review");
+  await chip(page).click();
+  await expect(options(page).locator(".name")).toHaveText(["No workflow", "Build and review"]);
+  await expect(options(page).nth(1)).toHaveAttribute("aria-checked", "true");
+  const before = (await starts(page)).length;
+  await options(page).filter({ hasText: "No workflow" }).click();
+  await expect.poll(async () => (await starts(page)).length).toBe(before + 1);
+  expect((await starts(page)).at(-1)!.options!.instructions).toBeUndefined();
+  await expect(page.getByTestId("model-chip")).toBeEnabled();
 });

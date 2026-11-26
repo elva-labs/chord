@@ -5,6 +5,7 @@ import { agentEffort, defaultOffered, effortScale, lowerEffort } from "$lib/inte
 import type { Agent } from "$lib/agents.svelte";
 import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
+import { resetSwitches, switches } from "$lib/switches.svelte";
 
 const MODELS = [
   { value: "haiku", name: "Haiku", description: null, efforts: [] as string[] },
@@ -154,12 +155,16 @@ describe("the workflows a new conversation can follow", () => {
 
   beforeEach(() => {
     resetWorkflows();
+    switches.agents = false;
     applyDetect(
       { id: "claude-code", path: "/bin/claude", caps: { resumable: true, titles: true, acp: false, integrated: true }, fromLoginShell: true },
       true,
     );
   });
-  afterEach(() => resetHarnesses());
+  afterEach(() => {
+    resetHarnesses();
+    resetSwitches();
+  });
 
   it("are none first, then each workflow with who directs, works and reviews, the one followed ticked", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: null, overrides: {} });
@@ -192,6 +197,16 @@ describe("the workflows a new conversation can follow", () => {
       ["No workflow", false],
       ["Build and review", true],
       ["Codex directs", false],
+    ]);
+  });
+
+  it("list only the one the session follows while agents and teams are on", () => {
+    switches.agents = true;
+    adoptWorkflows({ list: [defaultWorkflow(), codexFlow], default: null, overrides: {} });
+    expect(workflowChoices("claude-code", "Claude", null).map((choice) => choice.name)).toEqual(["No workflow"]);
+    expect(workflowChoices("claude-code", "Claude", defaultWorkflow()).map((choice) => [choice.name, choice.on])).toEqual([
+      ["No workflow", false],
+      ["Build and review", true],
     ]);
   });
 });

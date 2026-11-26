@@ -5,6 +5,7 @@ import { agentEffort, configure, linkOf } from "$lib/integrated.svelte";
 import { choose as keepChoice } from "$lib/lastChosen.svelte";
 import { modelLabel } from "$lib/models";
 import { byKey, cannotDirect } from "$lib/sessions.svelte";
+import { switches } from "$lib/switches.svelte";
 import { modelName, offeredModel } from "$lib/thread";
 import { workflowGist, workflows } from "$lib/workflows.svelte";
 
@@ -198,9 +199,10 @@ export function choose(
 /** The workflows a new conversation can follow, after none: the agent
     alone. Each says in a line who directs, works and reviews, or why it
     cannot direct a conversation here. The one the session follows is
-    ticked, and kept in the list though the settings have dropped it. */
+    ticked, and kept in the list though the settings have dropped it. While
+    agents and teams are on, it is the only workflow listed. */
 export function workflowChoices(agent: HarnessId, name: string, following: Workflow | null): Choice[] {
-  const list = workflows.list;
+  const list = switches.agents ? [] : workflows.list;
   const all =
     following !== null && !list.some((known) => known.name === following.name) ? [following, ...list] : list;
   return [

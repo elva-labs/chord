@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { BUILD_AND_REVIEW, PROJECT, installFakeCore, startNew } from "./fake";
+import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // A team picked in the composer's agent list before the first message: the
 // session starts again as the team's lead, reading only, and keeps the
@@ -81,23 +81,6 @@ test("keeps the team for the run once something is said", async ({ page }) => {
   await expect(chip(page, "agent")).toBeDisabled();
   await expect.poll(async () => (await starts(page)).at(-1)?.options?.session).toBeTruthy();
   for (const start of await starts(page)) expect(start.options?.team).toBeUndefined();
-});
-
-test("a workflow picked over a team ends the team's run before the session starts again", async ({ page }) => {
-  await open(page, [SHIP], { workflows: { list: [BUILD_AND_REVIEW], default: null, overrides: {} } });
-  const ended = () =>
-    page.evaluate(() => (window as unknown as { __runsEnded?: { token: string }[] }).__runsEnded ?? []);
-  await page.getByTestId("agent-option").filter({ hasText: "Ship with checks" }).click();
-  await expect.poll(async () => (await starts(page)).at(-1)?.options).toMatchObject({ team: "Ship with checks" });
-  const led = (await starts(page)).length;
-  expect(await ended()).toEqual([]);
-
-  await chip(page, "more").click();
-  await page.getByTestId("more-option").filter({ hasText: "Workflow" }).click();
-  await page.getByTestId("workflow-option").filter({ hasText: "Build and review" }).click();
-  await expect.poll(async () => (await starts(page)).length).toBeGreaterThan(led);
-  expect(await ended()).toHaveLength(1);
-  expect((await starts(page)).at(-1)?.options?.team).toBeUndefined();
 });
 
 test("a team that does not start only leads without reading only", async ({ page }) => {

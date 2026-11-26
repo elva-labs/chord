@@ -368,6 +368,7 @@ for (const look of LOOKS)
     test(`nothing solid in a card: the workflow chip and its menu, ${look}, ${appearance}`, async ({ page }) => {
       await open(page, look, appearance, {
         integrated: ["claude-code"],
+        agentsOn: false,
         workflows: { list: [BUILD_AND_REVIEW], default: null, overrides: {} },
       });
       await page.getByTestId("start-agent").click();
