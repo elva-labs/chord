@@ -416,9 +416,10 @@
   });
 
   /** Whether the project's menu offers filing it under Inactive: only a
-      project in the list that nothing running or waiting holds there. */
+      project in the list that nothing running or waiting holds there. The
+      orchestrator folder is listed by its own rule and is never filed. */
   function canFile(path: string): boolean {
-    return split.active.some((project) => project.path === path) && !holdsActive(path);
+    return startsIn(path) && split.active.some((project) => project.path === path) && !holdsActive(path);
   }
 
   /** What the project's menu holds, as the ⋯ names it. */
