@@ -3504,6 +3504,17 @@ fn lead_called(
     if let Some(session) = session {
         params["session"] = json!(session);
     }
+    lead_called_with(driver, at, server, tool, params)
+}
+
+/// [`lead_called`], with the tool's arguments as given.
+fn lead_called_with(
+    driver: &mut AppServer,
+    at: i64,
+    server: &str,
+    tool: &str,
+    params: Value,
+) -> &'static str {
     let reading = read(
         driver,
         server_request(
@@ -3555,10 +3566,46 @@ fn a_codex_lead_starts_writes_to_and_stops_its_members_unasked() {
                 "{tool} by the start of its id"
             );
         }
-        // Another server's tool of the same name, and the workbench's
-        // other tools, ask as the mode says.
+        // Another server's tool of the same name, the workbench's other
+        // tools, and a name that is only like a lead's, ask as the mode
+        // says.
         assert!(lead_called(&mut lead, 4, "other", "start", None).starts_with("ask"));
         assert!(lead_called(&mut lead, 5, "chord", "terminal", None).starts_with("ask"));
+        for tool in ["Start", "STOP", "chord_start", "start_", "sen"] {
+            assert!(
+                lead_called(&mut lead, 6, "chord", tool, Some(MEMBER)).starts_with("ask"),
+                "{tool}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_codex_lead_s_subagent_is_turned_down_before_it_delegates() {
+    let (home, _folder) = a_run("codex-lead-subagent");
+    let mut lead = in_a_run(&home, "lead", json!({"result": config()}));
+    // A subagent asks on a thread of its own, which is not this session's.
+    for (at, tool, session) in [(1, "start", None), (2, "send", Some(MEMBER))] {
+        let mut params = json!({});
+        if let Some(session) = session {
+            params["session"] = json!(session);
+        }
+        let reading = read(
+            &mut lead,
+            server_request(
+                at,
+                "mcpServer/elicitation/request",
+                json!({"threadId": "thread-sub", "serverName": "chord", "message": "Run it?",
+                       "_meta": {"codex_approval_kind": "mcp_tool_call",
+                                 "tool_name": tool, "tool_params": params}}),
+            ),
+        );
+        assert_eq!(reading.events, [], "{tool}");
+        assert_eq!(
+            written(&reading.writes),
+            [json!({"id": at, "result": {"action": "decline", "content": null}})],
+            "{tool}"
+        );
     }
 }
 
@@ -3581,6 +3628,19 @@ fn a_codex_lead_is_asked_before_a_send_or_a_stop_to_a_session_outside_its_run() 
                 "{tool} {session:?}"
             );
         }
+    }
+    // A session named by anything but a string.
+    for session in [
+        json!(5),
+        json!(null),
+        json!([MEMBER]),
+        json!({"id": MEMBER}),
+    ] {
+        assert_eq!(
+            lead_called_with(&mut lead, 1, "chord", "send", json!({ "session": session })),
+            "ask",
+            "{session}"
+        );
     }
     // Reading only, the ask keeps the label it has for any other tool.
     lead.control(&Control::SetReadsOnly(true)).unwrap();
@@ -3675,18 +3735,25 @@ fn a_codex_lead_is_asked_where_the_user_set_an_approval_for_the_tool() {
         lead_called(&mut lead, 2, "chord", "stop", Some(MEMBER)),
         "ask"
     );
-    // Where the configuration could not be read, what the user set is not
-    // known.
-    let mut lead = in_a_run(
-        &home,
-        "lead",
+    // Where the configuration could not be read, or came without its
+    // object, what the user set is not known.
+    for configured in [
         json!({"error": {"code": -32603, "message": "no"}}),
-    );
-    assert_eq!(lead_called(&mut lead, 1, "chord", "start", None), "ask");
-    assert_eq!(
-        lead_called(&mut lead, 2, "chord", "send", Some(MEMBER)),
-        "ask"
-    );
+        json!({"result": {"origins": {}}}),
+        json!({"result": {"config": null}}),
+    ] {
+        let mut lead = in_a_run(&home, "lead", configured.clone());
+        assert_eq!(
+            lead_called(&mut lead, 1, "chord", "start", None),
+            "ask",
+            "{configured}"
+        );
+        assert_eq!(
+            lead_called(&mut lead, 2, "chord", "send", Some(MEMBER)),
+            "ask",
+            "{configured}"
+        );
+    }
 }
 
 #[test]

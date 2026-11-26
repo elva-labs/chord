@@ -195,8 +195,12 @@ fn configured_workspace(config: &Value) -> Option<Value> {
 /// as `config/read` gives it, sets no approval for: none of its own in the
 /// workbench's server's entry, and none for the whole server. The
 /// workbench writes neither for these tools, so one that is there is the
-/// user's.
+/// user's. A configuration that is not an object says nothing of what the
+/// user set, so it leaves every tool theirs.
 fn unapproved(config: &Value) -> Vec<&'static str> {
+    if !config.is_object() {
+        return vec![];
+    }
     let entry = &config["mcp_servers"][crate::adapter::CODEX_SERVER_KEY];
     if !entry[CODEX_APPROVAL_SETTING].is_null() {
         return vec![];
