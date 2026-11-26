@@ -200,8 +200,18 @@ call is asked about where the mode asks for it. The window's own questions
 stand as well: before a start in another project, on another harness or
 under another account, before every start while the settings say so, and
 before a round of review past its limit (see
-[orchestrator](orchestrator.md#what-the-user-is-asked)). A Codex lead is
-asked as its [approval policy](hooks.md#the-agents-tools) says.
+[orchestrator](orchestrator.md#what-the-user-is-asked)).
+
+A Codex lead in Chord is not asked by Codex before a start, or before a
+send or a stop where the session it names is a member of its run, while
+agents are switched on. A lead that reads only in Full access is the
+exception: Codex turns these calls down itself, without asking. Where the
+user's own Codex configuration gives one of these tools an approval of its
+own, or gives one to the workbench's server as a whole, that approval
+decides instead. Until Codex gives the workbench its configuration, or
+where it gives none, these calls are asked as well. Any other call of them, and a Codex lead in a terminal, is asked as the
+[approval policy](hooks.md#the-agents-tools) says, and the window's own
+questions stand as for a Claude Code lead.
 
 A shell command hands the work over when git or gh is a command the shell
 runs and it pushes, with `git push`, `git send-pack` or `git subtree

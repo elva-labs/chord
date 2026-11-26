@@ -136,7 +136,8 @@ a line of its own, `tools.notify.approval_mode = "approve"`:
 
 It says nothing for the server as a whole, so every other tool asks as
 the user's approval policy says, with Codex's question the only one before
-it acts:
+it acts, but for the calls of a [team's lead](teams.md#what-a-run-holds)
+in Chord that the workbench answers itself:
 
 - `show` and `diff`, which open a file the agent names, or its diff, in
   the viewer, where a Markdown document can be drawn with images loaded

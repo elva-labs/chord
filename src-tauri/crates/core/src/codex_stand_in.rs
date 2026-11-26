@@ -1756,6 +1756,23 @@ mod model {
         let mut events = vec![json!({"type": "response.created", "response": {"id": id}})];
         events.extend(if outputs(&input) > 0 {
             said("Done.")
+        } else if let Some(rest) = prompt.split("LEAD ").nth(1) {
+            // A lead's call of the workbench's `start`, `send` or `stop`,
+            // naming the session that follows the tool, where one does.
+            let mut words = rest.split_whitespace();
+            let tool = words.next().unwrap_or_default();
+            let mut arguments = json!({"text": "hi"});
+            if let Some(session) = words.next() {
+                arguments["session"] = json!(session);
+            }
+            let own = |namespace: &Option<String>, name: &str| {
+                name == format!("mcp__chord__{tool}")
+                    || (name == tool && namespace.as_deref().is_some_and(|n| n.contains("chord")))
+            };
+            match tools.iter().find(|(namespace, name)| own(namespace, name)) {
+                Some((namespace, name)) => called(name, namespace.as_deref(), arguments),
+                None => said(&format!("no {tool} tool in {tools:?}")),
+            }
         } else if prompt.contains("PATCH") {
             run(
                 "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: notes.txt\n+hello\n*** End Patch\nEOF\n",
@@ -1814,6 +1831,21 @@ while IFS= read -r line; do
   case "$line" in
     *'"method":"initialize"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"echo","version":"0"}}}\n' "$id" ;;
     *'"method":"tools/list"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"echo","description":"Echo.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}}}},{"name":"notify","description":"Note.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}}}}]}}\n' "$id" ;;
+    *'"method":"tools/call"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"echoed"}]}}\n' "$id" ;;
+    *) printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id" ;;
+  esac
+done
+"#;
+
+/// An MCP server in shell standing in for the workbench's, with the three
+/// tools a team's lead delegates with. Every call answers "echoed".
+const LEAD_SERVER: &str = r#"#!/bin/sh
+while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  [ -z "$id" ] && continue
+  case "$line" in
+    *'"method":"initialize"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"lead","version":"0"}}}\n' "$id" ;;
+    *'"method":"tools/list"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"start","description":"Start.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}}}},{"name":"send","description":"Send.","inputSchema":{"type":"object","properties":{"session":{"type":"string"},"text":{"type":"string"}}}},{"name":"stop","description":"Stop.","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}}]}}\n' "$id" ;;
     *'"method":"tools/call"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"echoed"}]}}\n' "$id" ;;
     *) printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id" ;;
   esac
@@ -2279,6 +2311,153 @@ fn real_codex_holds_turns_approvals_an_interrupt_and_a_resume() {
     assert_eq!(refused["error"], true, "{refused:#?}");
     assert_ne!(refused["output"], "echoed", "{refused:#?}");
     assert_eq!(events.last().unwrap()["outcome"], "done", "{events:#?}");
+    assert_eq!(h.stop()["clean"], true);
+}
+
+/// The lead of a team's run as a Codex conversation, on the real `codex
+/// app-server` against the stand-in for the model, in `mode` and reading
+/// only where `reads_only`. The run's home and folder ride along so they
+/// last as long as the session.
+fn real_codex_lead(
+    label: &str,
+    mode: &str,
+    reads_only: bool,
+) -> (Harness, crate::scratch::Scratch, crate::scratch::Scratch) {
+    let port = model::serve();
+    let base = Arc::new(Scratch::new(label));
+    let home = base.join("home");
+    let work = base.join("work");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::write(
+        home.join("config.toml"),
+        format!(
+            "model = \"mock-1\"\nmodel_provider = \"mock\"\n\n[model_providers.mock]\nname = \"mock\"\nbase_url = \"http://127.0.0.1:{port}/v1\"\nwire_api = \"responses\"\n"
+        ),
+    )
+    .unwrap();
+    let server = base.join("lead-server");
+    crate::executable::write(&server, LEAD_SERVER).unwrap();
+    let (run, folder) = crate::run::tests::started(label, crate::team::QUICK_FIX, &[]);
+    crate::run::join(
+        &run,
+        "lead",
+        "rev",
+        "Reviewer",
+        &folder,
+        Some(MEMBER),
+        true,
+        "brief",
+    )
+    .unwrap();
+    let environment = crate::env::environment();
+    let sessions = Arc::new(Sessions::default());
+    let recorder = Arc::new(Recorder::default());
+    let launch = Launch {
+        project: &work,
+        env: &environment.vars,
+        session: None,
+        token: Some("lead"),
+        resume: false,
+        model: None,
+        mode: Some(mode),
+        effort: None,
+        config_dir: Some(&home),
+        tool_server: Some(&server),
+        orchestrator: false,
+        instructions: None,
+        start_only: false,
+        afresh: false,
+        compact_at: None,
+        spending: &[],
+        resume_at: None,
+        reads_only,
+        profile: &[],
+        home: Some(&run),
+    };
+    let started = super::start(
+        recorder.clone(),
+        Arc::clone(&sessions),
+        &CODEX_APP_SERVER,
+        &launch,
+        Box::new(|_| {}),
+        Box::new(|_| {}),
+    )
+    .unwrap();
+    let h = Harness {
+        dir: base,
+        sessions,
+        recorder,
+        id: started.id,
+        waits: Waits::default(),
+    };
+    let ready = h.until(|e| e["type"] == "ready" || e["type"] == "ended");
+    assert_eq!(ready.last().unwrap()["type"], "ready", "{:#?}", h.events());
+    (h, run, folder)
+}
+
+/// The member the run of [`real_codex_lead`] holds.
+const MEMBER: &str = "5e55a0de-0000-4000-8000-000000000001";
+
+/// What a lead's turn calling `prompt` came to: the call's output and
+/// whether it failed, or `None` where the user was asked, after turning the
+/// question down.
+fn lead_turn(h: &Harness, prompt: &str) -> Option<(Value, Value)> {
+    h.send(prompt);
+    let events = h.until(|e| e["type"] == "permissionAsked" || e["type"] == "turnEnded");
+    let last = events.last().unwrap();
+    if last["type"] == "permissionAsked" {
+        answer(
+            &h.sessions,
+            &h.id,
+            last["request"].as_str().unwrap(),
+            Choice::Deny,
+            None,
+        )
+        .unwrap();
+        h.until_type("turnEnded");
+        return None;
+    }
+    let call = events
+        .iter()
+        .find(|e| e["type"] == "toolFinished")
+        .unwrap_or_else(|| panic!("{events:#?}"));
+    println!("{prompt}: {} {}", call["output"], call["error"]);
+    Some((call["output"].clone(), call["error"].clone()))
+}
+
+/// A team's lead as a Codex conversation, on the real `codex app-server`
+/// against the stand-in for the model: its start, and its send and stop to
+/// its member, run without Codex's question reaching the user, while a
+/// send or a stop to a session outside its run still asks. A lead that
+/// reads only in Full access, which Codex runs with approval policy `never`
+/// and a read-only sandbox, is refused its start. Run by hand:
+/// `cargo test -p chord-core real_codex_lead -- --ignored --nocapture`.
+#[test]
+#[ignore = "runs the real codex app-server on PATH"]
+fn real_codex_lead_delegates_to_its_run_unasked() {
+    let (h, _run, _folder) = real_codex_lead("real-codex-lead", "read-only", false);
+    let ran = Some((json!("echoed"), json!(false)));
+    assert_eq!(lead_turn(&h, "LEAD start"), ran);
+    assert_eq!(lead_turn(&h, &format!("LEAD send {MEMBER}")), ran);
+    assert_eq!(lead_turn(&h, "LEAD stop 5e55a0de"), ran);
+    let outsider = "77777777-7777-4777-8777-777777777777";
+    assert_eq!(lead_turn(&h, &format!("LEAD send {outsider}")), None);
+    assert_eq!(lead_turn(&h, &format!("LEAD stop {outsider}")), None);
+    assert_eq!(h.stop()["clean"], true);
+
+    let (h, _run, _folder) = real_codex_lead("real-codex-lead-full", "full-access", true);
+    // Codex turns the call down itself and never asks, so there is no
+    // question for the workbench to answer.
+    let (output, error) = lead_turn(&h, "LEAD start").unwrap();
+    assert_eq!(error, true);
+    assert!(
+        output
+            .as_str()
+            .unwrap()
+            .contains("approval policy is never"),
+        "{output}"
+    );
     assert_eq!(h.stop()["clean"], true);
 }
 

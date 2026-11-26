@@ -30,9 +30,9 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::adapter::{
-    codex_developer_instructions, prepare_process, process, CODEX_APPROVE, CODEX_HOME_VAR,
-    CODEX_NO_SUBAGENTS, CODEX_TOOLS, CODEX_TOOL_APPROVAL, CONVERSATION_VIEW, ORCHESTRATOR_ROLE,
-    ROLE_VAR, SESSION_VAR, VIEW_VAR,
+    codex_developer_instructions, prepare_process, process, CODEX_APPROVAL_SETTING, CODEX_APPROVE,
+    CODEX_HOME_VAR, CODEX_NO_SUBAGENTS, CODEX_TOOLS, CODEX_TOOL_APPROVAL, CONVERSATION_VIEW,
+    ORCHESTRATOR_ROLE, ROLE_VAR, SESSION_VAR, VIEW_VAR,
 };
 use crate::env::find_on_path;
 use crate::hook;
@@ -189,6 +189,27 @@ fn configured_workspace(config: &Value) -> Option<Value> {
         }
     }
     Some(policy)
+}
+
+/// The workbench's [`crate::show::LEAD_TOOLS`] the user's configuration,
+/// as `config/read` gives it, sets no approval for: none of its own in the
+/// workbench's server's entry, and none for the whole server. The
+/// workbench writes neither for these tools, so one that is there is the
+/// user's. A configuration that is not an object says nothing of what the
+/// user set, so it leaves every tool theirs.
+fn unapproved(config: &Value) -> Vec<&'static str> {
+    if !config.is_object() {
+        return vec![];
+    }
+    let entry = &config["mcp_servers"][crate::adapter::CODEX_SERVER_KEY];
+    if !entry[CODEX_APPROVAL_SETTING].is_null() {
+        return vec![];
+    }
+    crate::show::LEAD_TOOLS
+        .iter()
+        .copied()
+        .filter(|tool| entry[CODEX_TOOLS][tool][CODEX_TOOL_APPROVAL].is_null())
+        .collect()
 }
 
 /// The mode an approval policy and a sandbox make: one of the modes when
@@ -792,6 +813,11 @@ struct AppServer {
     /// The core's home and the session's token, where a team's run it
     /// leads or is in may hold handing the work over.
     run: Option<(PathBuf, String)>,
+    /// The workbench's [`crate::show::LEAD_TOOLS`] the user's own
+    /// configuration gives no approval, for this session's folder, once
+    /// `config/read` has said. Only these does a lead's call answer
+    /// without asking.
+    unapproved: Option<Vec<&'static str>>,
 
     next: i64,
     sent: HashMap<i64, Sent>,
@@ -1451,6 +1477,7 @@ impl AppServer {
                 .home
                 .zip(launch.token)
                 .map(|(home, token)| (home.to_path_buf(), token.to_string())),
+            unapproved: None,
             next: 0,
             sent: HashMap::new(),
             version: None,
@@ -1623,7 +1650,9 @@ impl AppServer {
             // the user about every time, run without asking, each by an
             // approval of its own. Its other tools, and the servers the
             // user configured, ask as the approval policy says, and the
-            // question docks in the conversation as a permission.
+            // question docks in the conversation as a permission, but for
+            // the calls a team's lead delegates with, which are answered
+            // here.
             let tools: Map<String, Value> = crate::mcp::RUN_UNASKED
                 .iter()
                 .map(|tool| {
@@ -1863,6 +1892,7 @@ impl AppServer {
                         self.workspace = configured_workspace(&result["config"]);
                     }
                     self.configured_model = text(&result["config"]["model"]);
+                    self.unapproved = Some(unapproved(&result["config"]));
                 }
                 self.config_known = true;
                 self.introduce(out);
@@ -2715,6 +2745,13 @@ impl AppServer {
                 // the thread and is not offered.
                 let attached =
                     self.tool_server.is_some() && server == crate::adapter::CODEX_SERVER_KEY;
+                if attached && self.delegates(&tool, &input) {
+                    out.writes.push(
+                        json!({ "id": id, "result": { "action": "accept", "content": null } })
+                            .to_string(),
+                    );
+                    return;
+                }
                 let persist = params["_meta"]["persist"]
                     .as_array()
                     .into_iter()
@@ -2787,6 +2824,31 @@ impl AppServer {
             choices: asked.offers(),
         });
         self.asked.insert(key, asked);
+    }
+
+    /// Whether a call of the workbench's own server's `tool` is one the
+    /// session delegates with as the lead of a team's run that holds: a
+    /// start, or a send or a stop to a member of that run, named as the
+    /// tool server takes it. Read from the run's store at each call. A tool
+    /// the user's own configuration gives an approval, or any while that
+    /// configuration is not known, is left to ask as Codex does.
+    fn delegates(&self, tool: &str, input: &Value) -> bool {
+        let Some((home, token)) = self.run.as_ref() else {
+            return false;
+        };
+        if !self
+            .unapproved
+            .as_ref()
+            .is_some_and(|tools| tools.contains(&tool))
+        {
+            return false;
+        }
+        match tool {
+            "start" => crate::run::leads(home, token),
+            _ => input["session"]
+                .as_str()
+                .is_some_and(|session| crate::run::leads_member(home, token, session)),
+        }
     }
 
     /// The thread this session holds, once Codex has said which.
