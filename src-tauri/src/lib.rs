@@ -128,6 +128,7 @@ async fn pty_spawn(
     start_only: Option<bool>,
     afresh: Option<bool>,
     compact_at: Option<u64>,
+    cache_ttl: Option<String>,
     bring_back: Option<bool>,
     starter: Option<String>,
     made_worktree: Option<bool>,
@@ -161,6 +162,7 @@ async fn pty_spawn(
                 start_only.unwrap_or(false),
                 afresh.unwrap_or(false),
                 compact_at,
+                cache_ttl.as_deref(),
                 bring_back.unwrap_or(false),
                 starter.as_deref(),
                 made_worktree.unwrap_or(false),
@@ -175,7 +177,7 @@ async fn pty_spawn(
             let connection = remotes.connection(&host)?;
             let spawned = connection.call(
                 "pty_spawn",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "prompt": prompt, "model": model, "mode": mode, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "bringBack": bring_back.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start, "cols": cols, "rows": rows }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "prompt": prompt, "model": model, "mode": mode, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "cacheTtl": cache_ttl, "bringBack": bring_back.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start, "cols": cols, "rows": rows }),
             )?;
             let id = spawned["ptyId"].as_str().ok_or("no pty id")?.to_string();
             connection.attach_output(&id, to_channel(on_output));
@@ -207,6 +209,7 @@ async fn integrated_start(
     start_only: Option<bool>,
     afresh: Option<bool>,
     compact_at: Option<u64>,
+    cache_ttl: Option<String>,
     reads_only: Option<bool>,
     starter: Option<String>,
     made_worktree: Option<bool>,
@@ -236,6 +239,7 @@ async fn integrated_start(
             start_only.unwrap_or(false),
             afresh.unwrap_or(false),
             compact_at,
+            cache_ttl.as_deref(),
             reads_only.unwrap_or(false),
             starter.as_deref(),
             made_worktree.unwrap_or(false),
@@ -246,7 +250,7 @@ async fn integrated_start(
         Route::Remote { host, rest } => {
             let started = remotes.connection(&host)?.call(
                 "integrated_start",
-                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "readsOnly": reads_only.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start, "team": team, "joining": joining }),
+                json!({ "agent": agent, "project": rest, "cwd": cwd, "session": session, "token": token, "model": model, "mode": mode, "effort": effort, "configDir": config_dir, "profile": profile, "instructions": instructions, "startOnly": start_only.unwrap_or(false), "afresh": afresh.unwrap_or(false), "compactAt": compact_at, "cacheTtl": cache_ttl, "readsOnly": reads_only.unwrap_or(false), "starter": starter, "madeWorktree": made_worktree.unwrap_or(false), "pluginStart": plugin_start, "team": team, "joining": joining }),
             )?;
             let id = started["id"].as_str().ok_or("no session id")?;
             let id = with_host_id(&host, id);

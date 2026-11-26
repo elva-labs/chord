@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use portable_pty::CommandBuilder;
 use serde::Serialize;
+use serde_json::{Map, Value};
 
 use crate::env::{find_on_path, is_shell_script};
 
@@ -101,6 +102,9 @@ pub struct LaunchCtx<'a> {
     /// The context, in tokens, at which the agent compacts the conversation
     /// on its own, for an agent that takes one. Its own default when None.
     pub compact_at: Option<u64>,
+    /// Variables added to the agent's environment over the captured ones,
+    /// as [`claude_spending`] gives them for Claude Code. Empty for none.
+    pub spending: &'a [(String, String)],
     /// Whether the workbench hears the session's turns end, so it can wake
     /// the agent once a session it started stops or asks: given to the
     /// agent's environment as [`WAKE_VAR`], which decides what the tool
@@ -397,12 +401,217 @@ fn claude_workflow(ctx: &LaunchCtx) -> Vec<String> {
 }
 
 /// What Claude Code is given for the context at which it compacts the
-/// conversation on its own, when the session names one.
+/// conversation on its own, when the session names one. The launch names
+/// none where the user set one, as [`claude_compacts_as_set`] says.
 fn claude_compaction(ctx: &LaunchCtx) -> Vec<String> {
     match ctx.compact_at {
         Some(tokens) => vec!["--autocompact".to_string(), tokens.to_string()],
         None => Vec::new(),
     }
+}
+
+/// The variable that turns Claude Code's tool search on: the tools of its
+/// servers stay out of the context until the model loads one by name.
+pub const TOOL_SEARCH_VAR: &str = "ENABLE_TOOL_SEARCH";
+
+/// The models Claude Code does not search tools on, by a part of their
+/// names that holds whatever the provider puts around them.
+const NO_TOOL_SEARCH: &[&str] = &[
+    "claude-3-opus",
+    "claude-3-sonnet",
+    "claude-3-haiku",
+    "claude-3-5-sonnet",
+    "claude-3-5-haiku",
+    "claude-3-7-sonnet",
+];
+
+/// The variable that sends Claude Code to Vertex AI, where a model before
+/// 4.5 refuses tool search and an older Claude Code asks for it anyway.
+const VERTEX_VAR: &str = "CLAUDE_CODE_USE_VERTEX";
+
+/// The first Claude version Vertex AI searches tools on.
+const VERTEX_TOOL_SEARCH: (u32, u32) = (4, 5);
+
+/// The version a Claude model's name holds, major and minor: 4.1 in
+/// `claude-opus-4-1@20250805`, 3.7 in
+/// `us.anthropic.claude-3-7-sonnet-20250219-v1:0`, 4.0 in
+/// `claude-sonnet-4-20250514`. None for a name with none, such as an
+/// alias.
+fn claude_version(model: &str) -> Option<(u32, u32)> {
+    let name = &model[model.find("claude-")? + "claude-".len()..];
+    let name = name.split(['@', ':', '[']).next()?;
+    let number = |part: &str| {
+        (!part.is_empty() && part.len() <= 2)
+            .then(|| part.parse::<u32>().ok())
+            .flatten()
+    };
+    let mut parts = name.split('-').skip_while(|part| number(part).is_none());
+    let major = number(parts.next()?)?;
+    let minor = parts.next().and_then(number).unwrap_or(0);
+    Some((major, minor))
+}
+
+/// Whether a variable's value turns a switch on, as Claude Code reads it.
+fn truthy(value: &str) -> bool {
+    ["1", "true", "yes", "on"].contains(&value.trim().to_lowercase().as_str())
+}
+
+/// The variable Claude Code reads its prompt cache's lifetime from, `5m`
+/// or `1h`.
+pub const CACHE_TTL_VAR: &str = "CLAUDE_CODE_PROMPT_CACHE_TTL";
+
+/// The lifetimes Claude Code takes for its prompt cache.
+pub const CACHE_TTLS: &[&str] = &["5m", "1h"];
+
+/// What else says how long Claude Code's prompt cache lasts, below
+/// [`CACHE_TTL_VAR`]: a variable for the hour, and a setting of its own.
+const CACHE_TTL_ASKED: &str = "ENABLE_PROMPT_CACHING_1H";
+const CACHE_TTL_SETTING: &str = "promptCacheTtl";
+
+/// The variable Claude Code reads the model from when it is given none.
+const MODEL_VAR: &str = "ANTHROPIC_MODEL";
+
+/// Claude Code's settings files that apply to a session in `project` under
+/// the configuration directory `claude_dir`, each read as an object, the
+/// one that wins first: the managed ones, the project's own, the shared
+/// project's, the user's. A file that is not there, or not an object, is
+/// left out.
+pub fn claude_settings(claude_dir: &Path, project: &Path) -> Vec<Map<String, Value>> {
+    let mut files = managed_settings();
+    files.push(project.join(crate::hook::CLAUDE_LOCAL));
+    files.push(project.join(".claude").join("settings.json"));
+    files.push(claude_dir.join("settings.json"));
+    files
+        .iter()
+        .map(|file| crate::hook::read_settings(file))
+        .filter(|settings| !settings.is_empty())
+        .collect()
+}
+
+/// Where Claude Code's managed settings are on this system: the files
+/// dropped in beside the main one, the last one first, then the main one.
+fn managed_settings() -> Vec<PathBuf> {
+    let dir = Path::new(if cfg!(target_os = "macos") {
+        "/Library/Application Support/ClaudeCode"
+    } else if cfg!(windows) {
+        r"C:\Program Files\ClaudeCode"
+    } else {
+        "/etc/claude-code"
+    });
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir.join("managed-settings.d"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    files.reverse();
+    files.push(dir.join("managed-settings.json"));
+    files
+}
+
+/// The variable and the setting Claude Code reads the context it compacts
+/// at from, the setting for every model or, under `modelSettings`, for one.
+const COMPACT_VAR: &str = "CLAUDE_CODE_AUTO_COMPACT_WINDOW";
+const COMPACT_SETTING: &str = "autoCompactWindow";
+const MODEL_SETTINGS: &str = "modelSettings";
+
+/// Whether the user said where Claude Code compacts, in `vars`, in the
+/// `env` of one of the `settings` files, or as the setting in one of them
+/// for any model. Claude Code takes `--autocompact` over the setting, so a
+/// session that names a context is launched without it there, and the
+/// user's own figure wins.
+pub fn claude_compacts_as_set(
+    vars: &HashMap<String, String>,
+    settings: &[Map<String, Value>],
+) -> bool {
+    vars.contains_key(COMPACT_VAR)
+        || settings.iter().any(|file| {
+            file.get("env")
+                .and_then(Value::as_object)
+                .is_some_and(|env| env.contains_key(COMPACT_VAR))
+                || file.contains_key(COMPACT_SETTING)
+                || file
+                    .get(MODEL_SETTINGS)
+                    .and_then(Value::as_object)
+                    .is_some_and(|models| {
+                        models.values().any(|model| {
+                            model
+                                .as_object()
+                                .is_some_and(|model| model.contains_key(COMPACT_SETTING))
+                        })
+                    })
+        })
+}
+
+/// What Claude Code is given in its environment so a session spends fewer
+/// tokens: tool search on, and the prompt cache's lifetime where
+/// `cache_ttl` names one. A variable the user set, in `vars` or in the
+/// `env` of one of the `settings` files, is theirs and left alone, and so
+/// is a lifetime they asked for any other way. Tool search is left out on
+/// a model Claude Code does not search tools on, and on Vertex AI on a
+/// model before 4.5: the one the session runs on where it names one, else
+/// the one the user set.
+pub fn claude_spending(
+    vars: &HashMap<String, String>,
+    settings: &[Map<String, Value>],
+    model: Option<&str>,
+    cache_ttl: Option<&str>,
+) -> Vec<(String, String)> {
+    let in_settings = |var: &str| {
+        settings.iter().find_map(|file| {
+            file.get("env")
+                .and_then(Value::as_object)
+                .and_then(|env| env.get(var))
+        })
+    };
+    let set = |var: &str| vars.contains_key(var) || in_settings(var).is_some();
+    let model = model
+        .map(str::to_string)
+        .or_else(|| {
+            in_settings(MODEL_VAR)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| vars.get(MODEL_VAR).cloned())
+        .or_else(|| {
+            settings
+                .iter()
+                .find_map(|file| file.get("model").and_then(Value::as_str))
+                .map(str::to_string)
+        })
+        .map(|model| model.to_lowercase());
+    let vertex = in_settings(VERTEX_VAR)
+        .map(|value| {
+            value
+                .as_str()
+                .map_or_else(|| value.to_string(), str::to_string)
+        })
+        .or_else(|| vars.get(VERTEX_VAR).cloned())
+        .is_some_and(|value| truthy(&value));
+    let searches = model.as_deref().is_none_or(|model| {
+        !NO_TOOL_SEARCH.iter().any(|old| model.contains(old))
+            && !(vertex
+                && claude_version(model).is_some_and(|version| version < VERTEX_TOOL_SEARCH))
+    });
+    let mut added = Vec::new();
+    if searches && !set(TOOL_SEARCH_VAR) {
+        added.push((TOOL_SEARCH_VAR.to_string(), "true".to_string()));
+    }
+    let ttl_set = set(CACHE_TTL_VAR)
+        || set(CACHE_TTL_ASKED)
+        || settings
+            .iter()
+            .any(|file| file.contains_key(CACHE_TTL_SETTING));
+    if let Some(ttl) = cache_ttl.filter(|ttl| CACHE_TTLS.contains(ttl)) {
+        if !ttl_set {
+            added.push((CACHE_TTL_VAR.to_string(), ttl.to_string()));
+        }
+    }
+    added
 }
 
 /// Why Codex does not start a session that follows a workflow in a
@@ -621,6 +830,9 @@ impl ClaudeCode {
         if let Some(dir) = ctx.config_dir {
             command.env(CLAUDE_CONFIG_VAR, dir);
         }
+        for (key, value) in ctx.spending {
+            command.env(key, value);
+        }
 
         Ok(Surface::Pty(command))
     }
@@ -819,6 +1031,7 @@ pub fn adapter_for(id: &str) -> Option<&'static dyn AgentAdapter> {
 mod tests {
     use super::*;
     use crate::scratch::Scratch;
+    use serde_json::json;
 
     #[test]
     fn the_agents_that_run_integrated_are_the_ones_whose_adapter_drives_them() {
@@ -890,6 +1103,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -938,6 +1152,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -993,6 +1208,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1038,6 +1254,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1114,6 +1331,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1192,6 +1410,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1433,6 +1652,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: true,
             profile: &[],
         };
@@ -1605,6 +1825,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1693,6 +1914,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1734,6 +1956,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1767,6 +1990,7 @@ mod tests {
             configured: Some(daemon),
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &profile,
         };
@@ -1807,6 +2031,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -1984,6 +2209,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2046,6 +2272,7 @@ mod tests {
                 configured: None,
                 afresh: false,
                 compact_at: None,
+                spending: &[],
                 wakes: false,
                 profile: &[],
             };
@@ -2092,6 +2319,7 @@ mod tests {
                 configured: None,
                 afresh: false,
                 compact_at: None,
+                spending: &[],
                 wakes,
                 profile: &[],
             };
@@ -2132,6 +2360,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2162,6 +2391,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2198,6 +2428,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2228,6 +2459,234 @@ mod tests {
         }
     }
 
+    fn settings(json: Value) -> Map<String, Value> {
+        json.as_object().unwrap().clone()
+    }
+
+    #[test]
+    fn claude_code_searches_tools_unless_the_user_or_the_model_says_otherwise() {
+        let on = vec![(TOOL_SEARCH_VAR.to_string(), "true".to_string())];
+        let none = HashMap::new();
+        assert_eq!(claude_spending(&none, &[], None, None), on);
+        assert_eq!(claude_spending(&none, &[], Some("opus"), None), on);
+        assert_eq!(
+            claude_spending(&none, &[], Some("claude-opus-4-1"), None),
+            on
+        );
+
+        // The user's own value, in the environment or in a settings file,
+        // whatever it says.
+        let theirs = HashMap::from([(TOOL_SEARCH_VAR.to_string(), "auto:5".to_string())]);
+        assert_eq!(claude_spending(&theirs, &[], None, None), []);
+        let file = settings(json!({ "env": { "ENABLE_TOOL_SEARCH": "false" } }));
+        assert_eq!(claude_spending(&none, &[file], None, None), []);
+        let elsewhere = settings(json!({ "env": { "OTHER": "1" }, "ENABLE_TOOL_SEARCH": "x" }));
+        assert_eq!(claude_spending(&none, &[elsewhere], None, None), on);
+
+        // A model that does not search tools, named for the session, in
+        // the environment, or in a settings file.
+        assert_eq!(
+            claude_spending(&none, &[], Some("claude-3-5-haiku-20241022"), None),
+            []
+        );
+        assert_eq!(
+            claude_spending(
+                &none,
+                &[],
+                Some("us.anthropic.claude-3-7-sonnet-20250219-v1:0"),
+                None
+            ),
+            []
+        );
+        let old = HashMap::from([("ANTHROPIC_MODEL".to_string(), "claude-3-opus".to_string())]);
+        assert_eq!(claude_spending(&old, &[], None, None), []);
+        let file = settings(json!({ "model": "claude-3-5-sonnet-latest" }));
+        assert_eq!(
+            claude_spending(&none, std::slice::from_ref(&file), None, None),
+            []
+        );
+        // The model the session names wins over the user's.
+        assert_eq!(claude_spending(&old, &[file], Some("sonnet"), None), on);
+    }
+
+    #[test]
+    fn the_users_own_compaction_window_is_left_to_win() {
+        let none = HashMap::new();
+        assert!(!claude_compacts_as_set(&none, &[]));
+        let theirs = HashMap::from([(
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW".to_string(),
+            "300000".to_string(),
+        )]);
+        assert!(claude_compacts_as_set(&theirs, &[]));
+        for file in [
+            json!({ "env": { "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "300000" } }),
+            json!({ "autoCompactWindow": 300000 }),
+            json!({ "modelSettings": { "claude-opus-4-6": { "autoCompactWindow": 300000 } } }),
+        ] {
+            assert!(
+                claude_compacts_as_set(&none, &[settings(file.clone())]),
+                "{file}"
+            );
+        }
+        for file in [
+            json!({ "env": { "OTHER": "1" }, "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1" }),
+            json!({ "modelSettings": { "claude-opus-4-6": { "other": 1 } } }),
+            json!({ "env": { "autoCompactWindow": 300000 } }),
+        ] {
+            assert!(
+                !claude_compacts_as_set(&none, &[settings(file.clone())]),
+                "{file}"
+            );
+        }
+    }
+
+    #[test]
+    fn claude_code_on_vertex_searches_tools_from_claude_4_5() {
+        let on = vec![(TOOL_SEARCH_VAR.to_string(), "true".to_string())];
+        let none = HashMap::new();
+        let vertex = HashMap::from([("CLAUDE_CODE_USE_VERTEX".to_string(), "1".to_string())]);
+        let in_file = settings(json!({ "env": { "CLAUDE_CODE_USE_VERTEX": "true" } }));
+        for older in [
+            "claude-sonnet-4@20250514",
+            "claude-opus-4-1@20250805",
+            "claude-opus-4-20250514",
+            "claude-3-5-haiku@20241022",
+        ] {
+            assert_eq!(
+                claude_spending(&vertex, &[], Some(older), None),
+                [],
+                "{older}"
+            );
+            assert_eq!(
+                claude_spending(&none, std::slice::from_ref(&in_file), Some(older), None),
+                [],
+                "{older}"
+            );
+            // Elsewhere only Claude 3 is left out.
+            let elsewhere = if older.starts_with("claude-3") {
+                vec![]
+            } else {
+                on.clone()
+            };
+            assert_eq!(
+                claude_spending(&none, &[], Some(older), None),
+                elsewhere,
+                "{older}"
+            );
+        }
+        for newer in [
+            "claude-sonnet-4-5@20250929",
+            "claude-opus-4-6[1m]",
+            "sonnet",
+            "claude-haiku-4-5",
+        ] {
+            assert_eq!(
+                claude_spending(&vertex, &[], Some(newer), None),
+                on,
+                "{newer}"
+            );
+        }
+        assert_eq!(claude_spending(&vertex, &[], None, None), on);
+        let off = HashMap::from([("CLAUDE_CODE_USE_VERTEX".to_string(), "0".to_string())]);
+        assert_eq!(
+            claude_spending(&off, &[], Some("claude-sonnet-4@20250514"), None),
+            on
+        );
+    }
+
+    #[test]
+    fn a_started_claude_code_session_keeps_its_cache_for_the_lifetime_asked_unless_the_user_set_one(
+    ) {
+        let none = HashMap::new();
+        let short = (CACHE_TTL_VAR.to_string(), "5m".to_string());
+        let lifetime = |vars: &HashMap<String, String>, files: &[Map<String, Value>]| {
+            claude_spending(vars, files, None, Some("5m"))
+                .into_iter()
+                .find(|(var, _)| var == CACHE_TTL_VAR)
+        };
+        assert_eq!(lifetime(&none, &[]), Some(short.clone()));
+        // The user's own session is given none, and nor is a lifetime
+        // Claude Code does not take.
+        assert!(claude_spending(&none, &[], None, None)
+            .iter()
+            .all(|(var, _)| var != CACHE_TTL_VAR));
+        assert_eq!(claude_spending(&none, &[], None, Some("2h")).len(), 1);
+
+        // A lifetime the user set, in the environment, in a settings
+        // file's environment, or as Claude Code's own setting.
+        for var in [CACHE_TTL_VAR, "ENABLE_PROMPT_CACHING_1H"] {
+            let theirs = HashMap::from([(var.to_string(), "1".to_string())]);
+            assert_eq!(lifetime(&theirs, &[]), None, "{var}");
+            let file = settings(json!({ "env": { var: "1h" } }));
+            assert_eq!(lifetime(&none, &[file]), None, "{var}");
+        }
+        let file = settings(json!({ "promptCacheTtl": "1h" }));
+        assert_eq!(lifetime(&none, &[file]), None);
+        let elsewhere = settings(json!({ "env": { "OTHER": "1" } }));
+        assert_eq!(lifetime(&none, &[elsewhere]), Some(short));
+    }
+
+    #[test]
+    fn claude_settings_are_read_from_the_project_and_the_configuration_directory() {
+        let root = Scratch::new("adapter-settings");
+        let (project, config) = (root.join("project"), root.join("config"));
+        std::fs::create_dir_all(project.join(".claude")).unwrap();
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(
+            project.join(".claude").join("settings.local.json"),
+            r#"{"env":{"A":"local"}}"#,
+        )
+        .unwrap();
+        std::fs::write(project.join(".claude").join("settings.json"), "not json").unwrap();
+        std::fs::write(config.join("settings.json"), r#"{"env":{"A":"user"}}"#).unwrap();
+        let read = claude_settings(&config, &project);
+        let ours: Vec<_> = read
+            .iter()
+            .filter_map(|file| file.get("env")?.get("A")?.as_str())
+            .collect();
+        assert_eq!(ours, ["local", "user"]);
+    }
+
+    #[test]
+    fn claude_code_is_given_the_variables_that_spend_fewer_tokens() {
+        let dir = fake_claude("adapter-spending");
+        let vars = vars_with_path(&dir);
+        let spending = [
+            (TOOL_SEARCH_VAR.to_string(), "true".to_string()),
+            (CACHE_TTL_VAR.to_string(), "5m".to_string()),
+        ];
+        let ctx = LaunchCtx {
+            project: Path::new("/tmp"),
+            env: &vars,
+            config_dir: None,
+            session: None,
+            token: None,
+            prompt: None,
+            model: None,
+            mode: None,
+            orchestrator: false,
+            instructions: None,
+            start_only: false,
+            server: None,
+            instructions_file: None,
+            server_file: None,
+            configured: None,
+            afresh: false,
+            compact_at: None,
+            spending: &spending,
+            wakes: false,
+            profile: &[],
+        };
+        for surface in [
+            ClaudeCode.launch(&ctx, "abc").unwrap(),
+            ClaudeCode.resume(&ctx, "abc").unwrap(),
+        ] {
+            let Surface::Pty(command) = surface;
+            assert_eq!(command.get_env(TOOL_SEARCH_VAR), Some("true".as_ref()));
+            assert_eq!(command.get_env(CACHE_TTL_VAR), Some("5m".as_ref()));
+        }
+    }
+
     #[test]
     fn resume_passes_the_session_id_through() {
         let dir = fake_claude("adapter-resume");
@@ -2250,6 +2709,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2292,6 +2752,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2331,6 +2792,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };
@@ -2365,6 +2827,7 @@ mod tests {
             configured: None,
             afresh: false,
             compact_at: None,
+            spending: &[],
             wakes: false,
             profile: &[],
         };

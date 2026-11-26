@@ -508,6 +508,14 @@
   color: var(--ink-3);
 }
 
+/* A field for a number of tokens, wide enough for a million and for its
+   placeholder. */
+.s-field.s-tokens {
+  width: calc(9ch + 22px);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* A row that opens what is under it, and a row that adds one more. */
 .s-fold,
 .s-add {

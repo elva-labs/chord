@@ -23,6 +23,7 @@ import {
   workflowsKnown,
 } from "$lib/workflows.svelte";
 import { persist } from "$lib/persist";
+import { compactAt } from "$lib/compactAt.svelte";
 import { identifiedZoom } from "$lib/zoom.svelte";
 import { HARNESSES, harnessLabel, harnessProfile, installed } from "$lib/harness.svelte";
 import { attention } from "$lib/attention.svelte";
@@ -1927,14 +1928,16 @@ export interface Told {
   afresh?: boolean;
   /** The context at which the agent compacts on its own. */
   compactAt?: number;
+  /** How long the agent keeps its prompt cache. */
+  cacheTtl?: "5m" | "1h";
 }
 
-/** The context, in tokens, at which a session another session started
-    compacts its conversation, on an agent that takes one: every turn reads
-    the whole context, and a started session's work seldom needs its
-    oldest turns word for word. The user's own sessions keep the agent's
+/** How long a session another session started keeps its prompt cache, on
+    an agent that takes one: its turns follow one another while it works
+    and it seldom waits long on anyone, so the cheaper five-minute cache
+    write is the one that pays. The user's own sessions keep the agent's
     default. */
-export const STARTED_CONTEXT = 150_000;
+export const STARTED_CACHE = "5m";
 
 /**
  * What the agent behind a starting row is told of its workflow, the same
@@ -1974,7 +1977,18 @@ export function toldFor(session: Session): Told {
           startOnly: startsOnly(session.workflow),
         }),
     ...(afresh ? { afresh: true } : {}),
-    ...(session.agent === "claude-code" && starterOf(session.key) !== null ? { compactAt: STARTED_CONTEXT } : {}),
+    ...(session.agent === "claude-code" ? spending(starterOf(session.key) !== null) : {}),
+  };
+}
+
+/** Where a Claude Code session compacts and how long it keeps its cache:
+    the settings' figure for a started session or the user's own, and the
+    short cache for a started one. */
+function spending(started: boolean): Told {
+  const tokens = started ? compactAt.started : compactAt.own;
+  return {
+    ...(tokens === null ? {} : { compactAt: tokens }),
+    ...(started ? { cacheTtl: STARTED_CACHE } : {}),
   };
 }
 

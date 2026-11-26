@@ -144,6 +144,28 @@ fn the_standing_is_read_from_the_last_request_and_its_cache() {
     );
 }
 
+/// A started session keeps its cache for five minutes, and its
+/// conversation is judged cold by the lifetime its last request wrote, not
+/// by the hour a subscription's own sessions get.
+#[test]
+fn a_conversation_that_cached_for_five_minutes_is_cold_after_them() {
+    let home = Scratch::new("going-on-five-minutes");
+    let short = transcript(
+        &home,
+        &[user("Build it."), assistant("Done.", 400_000, false)],
+    );
+    let later = AT + 6 * 60 * 1000;
+    let judged = judge(&short, |_| None, later, None);
+    assert!(judged.goes_on);
+    assert_eq!(judged.context, Some(400_000));
+    assert!(!judge(&short, |_| None, AT + 60 * 1000, None).goes_on);
+    let long = transcript(
+        &home,
+        &[user("Build it."), assistant("Done.", 400_000, true)],
+    );
+    assert!(!judge(&long, |_| None, later, None).goes_on);
+}
+
 /// The owner's case: a conversation of close to a million tokens, opened
 /// after a pause, goes on from a briefing of a few thousand tokens however
 /// long it is.

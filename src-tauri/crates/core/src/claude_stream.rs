@@ -287,6 +287,9 @@ impl Protocol for ClaudeStream {
         if let Some(dir) = launch.config_dir {
             command.env(CLAUDE_CONFIG_VAR, dir);
         }
+        for (key, value) in launch.spending {
+            command.env(key, value);
+        }
         Ok(Prepared { command, files })
     }
 

@@ -181,6 +181,8 @@ const USERS_OWN = new Set([
   "agentsOn",
   "lastChosen",
   "autoResume",
+  "ownCompactAt",
+  "startedCompactAt",
   "workflowOverrides",
   "workflowOverride",
   "projectWorkflow",

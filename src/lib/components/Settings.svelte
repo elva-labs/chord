@@ -90,6 +90,14 @@
   import { wrap, setWrap } from "$lib/wrap.svelte";
   import { notify, setChime, setNotifications } from "$lib/notify.svelte";
   import { setAskEveryStart, startAsk } from "$lib/startAsk.svelte";
+  import {
+    FEWEST_COMPACT_AT,
+    MOST_COMPACT_AT,
+    compactAt,
+    fitsCompactAt,
+    setOwnCompactAt,
+    setStartedCompactAt,
+  } from "$lib/compactAt.svelte";
   import { setAgentsOn, setNotesOn, switches } from "$lib/switches.svelte";
   import { anyChosen, chosenFor, forget as forgetChosen } from "$lib/lastChosen.svelte";
   import { modelLabel } from "$lib/models";
@@ -358,6 +366,39 @@
   $effect(() => {
     if (accountOverridden > 0) accountOverridesOpen = true;
   });
+
+  /** The rows that say where Claude Code sessions compact. */
+  const COMPACT_ROWS = [
+    { which: "own", label: "Compact my sessions at", hint: "The sessions you start yourself." },
+    { which: "started", label: "Compact started sessions at", hint: "The sessions another session starts." },
+  ] as const;
+  /** Each row's refusal, kept until a figure in that row is taken. */
+  const compactProblems = $state<Record<"own" | "started", string | null>>({ own: null, started: null });
+
+  /** A figure as the field shows it, with separators between its
+      thousands, and empty for Claude Code's default. */
+  function shownTokens(tokens: number | null): string {
+    return tokens === null ? "" : tokens.toLocaleString("en");
+  }
+
+  /** Sets where a kind of session compacts from what its field holds:
+      empty for Claude Code's default, or a whole number in range, with
+      or without separators between its thousands. A figure refused puts
+      the field back to the one kept, under the row's refusal. */
+  function changeCompactAt(which: "own" | "started", field: HTMLInputElement) {
+    const trimmed = field.value.replace(/[\s,_]/g, "");
+    const tokens = trimmed === "" ? null : /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
+    if (tokens !== null && !fitsCompactAt(tokens)) {
+      compactProblems[which] =
+        `${field.value.trim()} is not taken: a whole number of tokens from ${FEWEST_COMPACT_AT.toLocaleString("en")} to ${MOST_COMPACT_AT.toLocaleString("en")}, or empty for Claude Code's default.`;
+      field.value = shownTokens(compactAt[which]);
+      return;
+    }
+    compactProblems[which] = null;
+    if (which === "own") setOwnCompactAt(tokens);
+    else setStartedCompactAt(tokens);
+    field.value = shownTokens(tokens);
+  }
 
   /** What new sessions of an agent start on, as its row says it. */
   function chosenLine(agent: HarnessId): string {
@@ -955,6 +996,44 @@
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div class="s-grp">
+                <div class="s-head"><h3 class="s-title">Claude Code context</h3></div>
+                <UnreadEntries field={["ownCompactAt", "startedCompactAt"]} />
+                <div class="s-card">
+                  {#each COMPACT_ROWS as row (row.which)}
+                    <div class="s-row" class:problem={compactProblems[row.which] !== null}>
+                      <label class="s-name" for="compact-at-{row.which}">{row.label}<small>{row.hint}</small></label>
+                      <div class="s-ctl">
+                        <input
+                          id="compact-at-{row.which}"
+                          class="s-field s-tokens"
+                          type="text"
+                          inputmode="numeric"
+                          spellcheck="false"
+                          autocomplete="off"
+                          placeholder="Default"
+                          value={shownTokens(compactAt[row.which])}
+                          onchange={(e) => changeCompactAt(row.which, e.currentTarget)}
+                          aria-invalid={compactProblems[row.which] !== null}
+                          aria-describedby={compactProblems[row.which] === null ? undefined : `compact-at-${row.which}-problem`}
+                          data-testid="compact-at-{row.which}"
+                        />
+                        <span class="s-fixed">tokens</span>
+                      </div>
+                    </div>
+                    {#if compactProblems[row.which] !== null}
+                      <p class="s-problem" id="compact-at-{row.which}-problem" data-testid="compact-at-{row.which}-problem">
+                        {compactProblems[row.which]}
+                      </p>
+                    {/if}
+                  {/each}
+                </div>
+                <p class="s-after">
+                  Every turn reads the whole context, so a smaller one costs less. Empty leaves it to Claude Code. A session
+                  takes the figure when it starts or is resumed.
+                </p>
               </div>
 
               <div class="s-grp">

@@ -736,6 +736,8 @@ export async function installFakeCore(
         notesOn: true,
         agentsOn: true,
         lastChosen: {},
+        ownCompactAt: null,
+        startedCompactAt: 150_000,
       };
       const allowed: Record<string, string[]> = {
         appearance: ["system", "light", "dark"],
@@ -2217,6 +2219,9 @@ export async function installFakeCore(
                 throw new Error(`only ${integrable.join(", ")} can run integrated, not ${JSON.stringify(value)}`);
             } else if (["userStyles", "notifications", "chime", "askEveryStart", "notesOn", "agentsOn", "compact", "autoResume", "wordWrap"].includes(field)) {
               if (typeof value !== "boolean") throw new Error(`${field} is true or false`);
+            } else if (field === "ownCompactAt" || field === "startedCompactAt") {
+              if (value !== null && (!Number.isInteger(value) || (value as number) < 100_000 || (value as number) > 1_000_000))
+                throw new Error(`${field} is a whole number of tokens from 100000 to 1000000, or null`);
             } else if (field === "backgrounds") {
               if (typeof value !== "object" || value === null || Array.isArray(value))
                 throw new Error("backgrounds is a table of backgrounds by palette or theme");

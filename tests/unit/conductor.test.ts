@@ -24,6 +24,7 @@ import {
   GATHER,
   GATHER_MOST,
   COLD_AFTER,
+  COLD_AFTER_STARTED,
   COLD_MOST,
   wakeHeld,
   WAKE_QUIET,
@@ -98,7 +99,7 @@ import {
   started as cameUp,
   titled,
   typed,
-  STARTED_CONTEXT,
+  STARTED_CACHE,
   originOf,
   toldFor,
   WORK_BYTES,
@@ -121,6 +122,7 @@ import Started from "$lib/components/conversation/Started.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetFolder } from "$lib/orchestratorFolder.svelte";
 import { resetStartAsk, startAsk } from "$lib/startAsk.svelte";
+import { STARTED_CONTEXT, compactAt, resetCompactAt } from "$lib/compactAt.svelte";
 import { heardOffers, resetLastChosen } from "$lib/lastChosen.svelte";
 import { defaultWorkflow, describeWorkflow, reset as resetWorkflows, stepFacts } from "$lib/workflows.svelte";
 import { instructionLines } from "$lib/workflowInstructions";
@@ -373,6 +375,7 @@ beforeEach(() => {
   // A session follows no workflow here unless a test gives it one.
   resetWorkflows();
   resetStartAsk();
+  resetCompactAt();
   resetAccounts();
   resetLastChosen();
   vi.useFakeTimers();
@@ -1668,12 +1671,27 @@ describe("a start in the caller's own project", () => {
     expect(originOf(later)).toEqual({});
   });
 
-  it("caps the context of a session it starts, and leaves the caller's own to the agent", async () => {
+  it("caps the context and the cache of a session it starts, and leaves the caller's own to the agent", async () => {
     const caller = live(A, "pty-caller", "caller-1");
     heard("caller-1");
     const row = await unasked({ project: A }, "sid-1");
     expect(toldFor(row).compactAt).toBe(STARTED_CONTEXT);
     expect(toldFor(caller).compactAt).toBeUndefined();
+    expect(toldFor(row).cacheTtl).toBe(STARTED_CACHE);
+    expect(toldFor(caller).cacheTtl).toBeUndefined();
+  });
+
+  it("compacts at the figures the settings give, each left to the agent where none is set", async () => {
+    const caller = live(A, "pty-caller", "caller-1");
+    heard("caller-1");
+    const row = await unasked({ project: A }, "sid-1");
+    compactAt.own = 400_000;
+    compactAt.started = 200_000;
+    expect(toldFor(caller).compactAt).toBe(400_000);
+    expect(toldFor(row).compactAt).toBe(200_000);
+    compactAt.started = null;
+    expect(toldFor(row).compactAt).toBeUndefined();
+    expect(toldFor(row).cacheTtl).toBe(STARTED_CACHE);
   });
 
   it("is the project of a caller that runs in a worktree of it", async () => {
@@ -2829,6 +2847,28 @@ describe("waking an idle starter", () => {
     await wakeGoes();
     expect(typedInto("pty-0")).toContain("Still at work: sid-3.");
     expect(typedInto("pty-0")).toContain("Session sid-2 stopped working.");
+  });
+
+  it("takes a Claude Code starter another session started for cold once its five-minute cache has lapsed", async () => {
+    const starter = own(A, "pty-0", "caller-1");
+    exact("caller-1", "prompt");
+    exact("caller-1", "stop");
+    flushSync();
+    const one = atWork("pty-1", "sid-1");
+    atWork("pty-2", "sid-2");
+    await vi.advanceTimersByTimeAsync(COLD_AFTER_STARTED);
+    stops(one);
+    await vi.advanceTimersByTimeAsync(GATHER_MOST * 2);
+    expect(typedInto("pty-0")).toBe("");
+    expect(wakeHeld(starter)).toBe("cold");
+
+    // The user's own starter, rested as long, is still warm.
+    const mine = idleStarter("caller-9", "pty-9");
+    const three = atWork("pty-3", "sid-3", "caller-9");
+    atWork("pty-4", "sid-4", "caller-9");
+    await vi.advanceTimersByTimeAsync(COLD_AFTER_STARTED);
+    stops(three);
+    expect(wakeHeld(mine)).toBe("gathering");
   });
 
   it("wakes a cold starter a moment after the last of its sessions is done", async () => {
