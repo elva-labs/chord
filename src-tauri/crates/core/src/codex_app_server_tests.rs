@@ -4215,9 +4215,17 @@ const C1: &str = "44444444-4444-4444-8444-444444444444";
 /// Hands a command of the user's over, answers it, and starts its turn:
 /// the request written and the events.
 fn shell(driver: &mut AppServer) -> (Value, Vec<Event>) {
-    let line: Value =
-        serde_json::from_str(&driver.run(C1, "ls nope", Duration::from_secs(600)).unwrap())
-            .unwrap();
+    shell_as(driver, false)
+}
+
+/// As [`shell`], for a command the agent `offered` or one the user typed.
+fn shell_as(driver: &mut AppServer, offered: bool) -> (Value, Vec<Event>) {
+    let line: Value = serde_json::from_str(
+        &driver
+            .run(C1, "ls nope", Duration::from_secs(600), offered)
+            .unwrap(),
+    )
+    .unwrap();
     let out = events(
         driver,
         &[
@@ -4430,7 +4438,9 @@ fn stop_interrupts_the_command_s_turn_and_ends_it_stopped() {
 #[test]
 fn a_stop_before_the_command_s_turn_starts_is_sent_once_it_does() {
     let mut driver = ready();
-    let line = driver.run(C1, "sleep 5", Duration::from_secs(600)).unwrap();
+    let line = driver
+        .run(C1, "sleep 5", Duration::from_secs(600), false)
+        .unwrap();
     let line: Value = serde_json::from_str(&line).unwrap();
     assert_eq!(driver.stop_command(C1), Ok(None));
     let reading = read(&mut driver, json!({"id": line["id"], "result": {}}));
@@ -4480,8 +4490,12 @@ fn a_command_codex_timed_out_or_refused_says_so() {
         ),
         "{out:?}"
     );
-    let line: Value =
-        serde_json::from_str(&driver.run(C1, "ls", Duration::from_secs(600)).unwrap()).unwrap();
+    let line: Value = serde_json::from_str(
+        &driver
+            .run(C1, "ls", Duration::from_secs(600), false)
+            .unwrap(),
+    )
+    .unwrap();
     let out = events(
         &mut driver,
         &[json!({"id": line["id"], "error": {"code": -32600, "message": "no such thread"}})],
@@ -4491,6 +4505,210 @@ fn a_command_codex_timed_out_or_refused_says_so() {
         if error == "no such thread"),
         "{out:?}"
     );
+}
+
+/// The turns started among `writes`.
+fn turn_starts(writes: &[String]) -> Vec<Value> {
+    written(writes)
+        .into_iter()
+        .filter(|line| line["method"] == "turn/start")
+        .collect()
+}
+
+/// Ends the command's turn with the command exited `code`, or stopped
+/// where there is none: what was read.
+fn shell_ends(driver: &mut AppServer, code: Option<i64>) -> Reading {
+    let mut done = user_shell("failed");
+    done["exitCode"] = json!(code.unwrap_or(-1));
+    done["aggregatedOutput"] = json!("ls: nope: No such file\n");
+    read(driver, shell_item("item/completed", done));
+    let status = if code.is_some() {
+        "completed"
+    } else {
+        "interrupted"
+    };
+    read(driver, shell_done(status))
+}
+
+#[test]
+fn an_offered_command_that_ends_starts_a_turn_with_the_workbench_s_input_and_a_typed_one_none() {
+    for offered in [false, true] {
+        let mut driver = ready();
+        shell_as(&mut driver, offered);
+        let reading = shell_ends(&mut driver, Some(2));
+        assert!(
+            matches!(
+                &reading.events[..],
+                [Event::Command {
+                    state: CommandState::Done,
+                    exit_code: Some(2),
+                    ..
+                }]
+            ),
+            "{:?}",
+            reading.events
+        );
+        let starts = turn_starts(&reading.writes);
+        assert_eq!(driver.recording(), offered);
+        if !offered {
+            assert!(starts.is_empty(), "{starts:?}");
+            continue;
+        }
+        let [start] = &starts[..] else {
+            panic!("{starts:?}")
+        };
+        assert_eq!(
+            start["params"],
+            json!({"threadId": THREAD, "clientUserMessageId": format!("{OFFERED_INPUT}{C1}"),
+                   "input": [{"type": "text", "text": OFFERED_TEXT, "text_elements": []}]})
+        );
+        // The turn answers no message of the user's, and its end is a stop
+        // like any other.
+        let out = events(
+            &mut driver,
+            &[
+                json!({"id": start["id"], "result": {"turn": {"id": "turn-1", "status": "inProgress", "items": []}}}),
+                notification(
+                    "turn/started",
+                    json!({"threadId": THREAD, "turn": {"id": "turn-1", "status": "inProgress", "items": []}}),
+                ),
+                item(
+                    "item/started",
+                    json!({"type": "userMessage", "id": "u1", "clientId": format!("{OFFERED_INPUT}{C1}"),
+                           "content": [{"type": "text", "text": OFFERED_TEXT}]}),
+                ),
+            ],
+        );
+        assert_eq!(out, [Event::TurnStarted { messages: vec![] }]);
+        assert!(!driver.recording());
+        let out = events(&mut driver, &[completed("completed")]);
+        assert!(
+            matches!(
+                &out[..],
+                [
+                    ..,
+                    Event::TurnEnded {
+                        outcome: Outcome::Done,
+                        ..
+                    }
+                ]
+            ),
+            "{out:?}"
+        );
+    }
+}
+
+#[test]
+fn an_offered_command_stopped_or_timed_out_starts_a_turn_and_one_codex_did_not_run_none() {
+    let mut driver = ready();
+    shell_as(&mut driver, true);
+    driver.stop_command(C1).unwrap();
+    let reading = shell_ends(&mut driver, None);
+    assert!(
+        matches!(
+            &reading.events[..],
+            [Event::Command {
+                state: CommandState::Stopped,
+                ..
+            }]
+        ),
+        "{:?}",
+        reading.events
+    );
+    assert_eq!(turn_starts(&reading.writes).len(), 1);
+
+    let mut driver = ready();
+    shell_as(&mut driver, true);
+    let mut done = user_shell("failed");
+    done["exitCode"] = json!(-1);
+    done["aggregatedOutput"] = json!("Sandbox(Timeout(..))");
+    read(&mut driver, shell_item("item/completed", done));
+    let reading = read(&mut driver, shell_done("completed"));
+    assert!(
+        matches!(
+            &reading.events[..],
+            [Event::Command {
+                state: CommandState::TimedOut,
+                ..
+            }]
+        ),
+        "{:?}",
+        reading.events
+    );
+    assert_eq!(turn_starts(&reading.writes).len(), 1);
+
+    let mut driver = ready();
+    shell_as(&mut driver, true);
+    let reading = read(
+        &mut driver,
+        notification(
+            "turn/completed",
+            json!({"threadId": THREAD, "turn": {"id": "turn-s", "status": "failed", "items": [],
+                   "error": {"message": "sandbox refused"}}}),
+        ),
+    );
+    assert!(
+        matches!(
+            &reading.events[..],
+            [Event::Command {
+                state: CommandState::Failed,
+                ..
+            }]
+        ),
+        "{:?}",
+        reading.events
+    );
+    assert!(turn_starts(&reading.writes).is_empty());
+    assert!(!driver.recording());
+}
+
+#[test]
+fn the_offered_command_s_turn_carries_the_settings_and_tells_when_it_does_not_start() {
+    let mut driver = ready();
+    driver.control(&Control::SetModel("gpt-b".into())).unwrap();
+    shell_as(&mut driver, true);
+    let reading = shell_ends(&mut driver, Some(0));
+    let start = &turn_starts(&reading.writes)[0];
+    assert_eq!(start["params"]["model"], "gpt-b");
+    let out = events(
+        &mut driver,
+        &[json!({"id": start["id"], "error": {"code": -32600, "message": "thread is busy"}})],
+    );
+    assert!(
+        matches!(&out[..], [Event::Notice { level: NoticeLevel::Warning, message }]
+        if message.ends_with("thread is busy")),
+        "{out:?}"
+    );
+    assert!(!driver.recording());
+    // The change goes with the next turn instead.
+    let line: Value = serde_json::from_str(&driver.message(M1, "go", &[]).unwrap()).unwrap();
+    assert_eq!(line["params"]["model"], "gpt-b");
+}
+
+#[test]
+fn an_interrupt_before_the_offered_command_s_turn_starts_stops_it_once_it_does() {
+    let mut driver = ready();
+    shell_as(&mut driver, true);
+    let reading = shell_ends(&mut driver, Some(0));
+    let start = &turn_starts(&reading.writes)[0];
+    assert!(matches!(
+        driver.control(&Control::Interrupt).unwrap(),
+        Sending::Local { .. }
+    ));
+    read(
+        &mut driver,
+        json!({"id": start["id"], "result": {"turn": {"id": "turn-1", "status": "inProgress", "items": []}}}),
+    );
+    let reading = read(
+        &mut driver,
+        notification(
+            "turn/started",
+            json!({"threadId": THREAD, "turn": {"id": "turn-1", "status": "inProgress", "items": []}}),
+        ),
+    );
+    let writes = written(&reading.writes);
+    assert_eq!(writes[0]["method"], "turn/interrupt");
+    assert_eq!(writes[0]["params"]["turnId"], "turn-1");
 }
 
 #[test]

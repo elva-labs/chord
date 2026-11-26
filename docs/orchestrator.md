@@ -478,9 +478,10 @@ complete. The note on that message is what says which sessions are still
 out.
 
 A command the user runs from the session's composer ends no wait, unless
-it is one the session's agent offered and the session runs Claude Code
-integrated, which takes its record as a turn (see [commands the user
-runs](integrated.md#commands-the-user-runs)). Such a command ending, once
+it is one the session's agent offered and the session runs integrated,
+where it starts a turn of the agent's (see [commands the user
+runs](integrated.md#commands-the-user-runs)). Codex runs a command only
+while no turn runs, so its commands end no wait. Such a command ending, once
 its record is written, cuts short a wait the session holds, and a wait it
 calls while the record is not yet taken answers at once. The answer is
 headed as the workbench's own, says the fenced text is what each command

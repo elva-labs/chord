@@ -68,6 +68,16 @@ const WINDOW_KEYS: &[&str] = &["usedPercent", "windowDurationMins", "resetsAt"];
 /// The oldest Codex whose app-server this driver has been run against.
 const OLDEST: (u64, u64, u64) = (0, 168, 0);
 
+/// The start of the id of the workbench's input that starts the turn a
+/// command the agent offered goes on in, which the command's id follows.
+/// A message of the user's goes under the window's id, which never starts
+/// so.
+pub(crate) const OFFERED_INPUT: &str = "chord-offered:";
+
+/// The workbench's input for the turn a command the agent offered goes on
+/// in. Codex records the command with its output and exit code already.
+const OFFERED_TEXT: &str = "From the workbench, not the user: the user ran the command above, the one you offered them to run, and it is recorded with its output and exit code. Go on from its result with what you offered it for, whether it succeeded, failed or was stopped.";
+
 /// The media types the agent takes an image in.
 const IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
 
@@ -372,6 +382,9 @@ enum Sent {
     ShellInterrupt,
     /// The turn a lead goes on in after the team's run held its stop.
     Hold,
+    /// The turn the agent goes on in from a command it offered, with the
+    /// changes of settings it carries.
+    Offered(Next),
 }
 
 /// A command of the user's Codex runs, in a turn of its own that is not
@@ -380,6 +393,9 @@ enum Sent {
 struct Shell {
     command: String,
     text: String,
+    /// The agent offered it to the user, so the agent goes on from its
+    /// result once it ends.
+    offered: bool,
     /// The turn it runs in and the item it is, once Codex names them.
     turn: Option<String>,
     item: Option<String>,
@@ -853,6 +869,9 @@ struct AppServer {
     turn: Option<String>,
     /// The request that starts a turn for a message, until it is answered.
     starting: Option<i64>,
+    /// Whether the turn the agent goes on in from a command it offered is
+    /// on its way: from its request until it starts, or fails to.
+    offering: bool,
     /// A message whose turn Codex named in its answer, until that turn
     /// starts: the turn's id, where the answer gave one, and the message.
     awaited: Option<(Option<String>, String)>,
@@ -1503,6 +1522,7 @@ impl AppServer {
             workspace: None,
             turn: None,
             starting: None,
+            offering: false,
             awaited: None,
             ended: None,
             interrupt_wanted: false,
@@ -1938,6 +1958,18 @@ impl AppServer {
             },
             Sent::Interrupt => out.replies.push((id.to_string(), reply)),
             Sent::LateInterrupt | Sent::ShellInterrupt => {}
+            Sent::Offered(carried) => {
+                if let Err(error) = reply {
+                    self.changes = std::mem::take(&mut self.changes).or(carried);
+                    if std::mem::take(&mut self.offering) {
+                        self.interrupt_wanted = false;
+                    }
+                    out.events.push(Event::Notice {
+                        level: NoticeLevel::Warning,
+                        message: format!("The agent did not go on from the command: {error}"),
+                    });
+                }
+            }
             Sent::Hold => {
                 // A turn that does not start leaves the held one ended.
                 if reply.is_err() {
@@ -1997,7 +2029,9 @@ impl AppServer {
         if self.held.take().is_some() {
             self.going_on = true;
         } else {
-            self.answers = !messages.is_empty();
+            // The turn that goes on from an offered command answers the
+            // user's command, as a message's turn answers the message.
+            self.answers = !messages.is_empty() || std::mem::take(&mut self.offering);
             self.base = self.total;
             self.lasts = Tokens::default();
             out.events.push(Event::TurnStarted { messages });
@@ -2048,7 +2082,7 @@ impl AppServer {
         }
         // The first turn after a command of the user's is handed over,
         // while no other runs or is on its way, is the one it runs in.
-        let quiet = self.starting.is_none() && self.awaited.is_none();
+        let quiet = self.starting.is_none() && self.awaited.is_none() && !self.offering;
         let running = self.turn.clone();
         if let Some(shell) = self.shell.as_mut().filter(|shell| {
             shell.turn.is_some()
@@ -2092,7 +2126,7 @@ impl AppServer {
             .shell
             .take_if(|shell| id.is_some() && shell.turn.as_deref() == id)
         {
-            out.events.push(shell.ended.take().unwrap_or_else(|| {
+            let ended = shell.ended.take().unwrap_or_else(|| {
                 let state = if shell.stopping {
                     CommandState::Stopped
                 } else {
@@ -2103,14 +2137,32 @@ impl AppServer {
                         .unwrap_or_else(|| "Codex did not run the command".into())
                 });
                 shell.ended_as(state, None, None, error)
-            }));
+            });
+            // A command Codex did not run leaves the agent nothing to go
+            // on from.
+            let ran = matches!(
+                ended,
+                Event::Command {
+                    state: CommandState::Done | CommandState::Stopped | CommandState::TimedOut,
+                    ..
+                }
+            );
+            out.events.push(ended);
+            if shell.offered && ran {
+                if let Some(line) = self.go_on(&shell.command) {
+                    out.writes.push(line);
+                }
+            }
             return;
         }
         if let (None, Some(ended)) = (&self.turn, turn["id"].as_str()) {
-            // The end of a message's turn never seen to start.
+            // The end of a message's turn never seen to start, or of the
+            // one an offered command goes on in.
             if matches!(&self.awaited, Some((Some(awaited), _)) if awaited == ended) {
                 let message = self.awaited.take().expect("matched above").1;
                 self.begin(ended, vec![message], out);
+            } else if self.offering && self.starting.is_none() && self.awaited.is_none() {
+                self.begin(ended, vec![], out);
             }
         }
         let outcome = match turn["status"].as_str() {
@@ -2198,6 +2250,52 @@ impl AppServer {
             json!({ "threadId": thread, "input": input }),
         );
         Some(line)
+    }
+
+    /// The turn the agent goes on in from a command it offered, with the
+    /// workbench's input under an id made of the command's.
+    fn go_on(&mut self, command: &str) -> Option<String> {
+        let thread = self.thread.clone()?;
+        let input = user_input(OFFERED_TEXT, &[]).ok()?;
+        let mut params = json!({
+            "threadId": thread,
+            "input": input,
+            "clientUserMessageId": format!("{OFFERED_INPUT}{command}"),
+        });
+        let carried = self.carry(&mut params);
+        let (line, _) = self.request(Sent::Offered(carried), "turn/start", params);
+        self.offering = true;
+        Some(line)
+    }
+
+    /// Puts the changes of settings waiting for the next turn on the
+    /// request that starts one, and hands them back to come back should it
+    /// fail.
+    fn carry(&mut self, params: &mut Value) -> Next {
+        let carried = std::mem::take(&mut self.changes);
+        if let Some(model) = &carried.model {
+            params["model"] = json!(model);
+        }
+        if let Some(effort) = &carried.effort {
+            params["effort"] = json!(effort);
+        }
+        if let Some(mode) = carried.mode.as_deref().and_then(mode) {
+            params["approvalPolicy"] = json!(mode.approval);
+        }
+        // Codex keeps a turn's sandbox for the turns after it, so it is sent
+        // when the mode or reading only changed: read only while the session
+        // reads only, the mode's own otherwise.
+        if carried.mode.is_some() || carried.reads_only.is_some() {
+            let sandbox = if self.reads_only {
+                Some(json!({ "type": "readOnly" }))
+            } else {
+                self.mode_sandbox()
+            };
+            if let Some(sandbox) = sandbox {
+                params["sandboxPolicy"] = sandbox;
+            }
+        }
+        carried
     }
 
     /// The command of the user's that runs, where `item` is it.
@@ -2928,7 +3026,19 @@ impl Driver for AppServer {
         true
     }
 
-    fn run(&mut self, command: &str, text: &str, timeout: Duration) -> Result<String, String> {
+    /// The turn an offered command goes on in is on its way, so what the
+    /// user sends after the command waits for it to start.
+    fn recording(&self) -> bool {
+        self.offering
+    }
+
+    fn run(
+        &mut self,
+        command: &str,
+        text: &str,
+        timeout: Duration,
+        offered: bool,
+    ) -> Result<String, String> {
         let thread = self
             .thread
             .clone()
@@ -2939,6 +3049,7 @@ impl Driver for AppServer {
         self.shell = Some(Shell {
             command: command.to_string(),
             text: text.to_string(),
+            offered,
             ..Shell::default()
         });
         // The core ends the command when its time is up; Codex's own limit
@@ -2988,29 +3099,7 @@ impl Driver for AppServer {
             "clientUserMessageId": message,
         });
         // The changes go with this turn, and come back if it fails.
-        let carried = std::mem::take(&mut self.changes);
-        if let Some(model) = &carried.model {
-            params["model"] = json!(model);
-        }
-        if let Some(effort) = &carried.effort {
-            params["effort"] = json!(effort);
-        }
-        if let Some(mode) = carried.mode.as_deref().and_then(mode) {
-            params["approvalPolicy"] = json!(mode.approval);
-        }
-        // Codex keeps a turn's sandbox for the turns after it, so it is sent
-        // when the mode or reading only changed: read only while the session
-        // reads only, the mode's own otherwise.
-        if carried.mode.is_some() || carried.reads_only.is_some() {
-            let sandbox = if self.reads_only {
-                Some(json!({ "type": "readOnly" }))
-            } else {
-                self.mode_sandbox()
-            };
-            if let Some(sandbox) = sandbox {
-                params["sandboxPolicy"] = sandbox;
-            }
-        }
+        let carried = self.carry(&mut params);
         let (line, id) = self.request(
             Sent::Turn(message.to_string(), carried),
             "turn/start",
@@ -3111,8 +3200,10 @@ impl Driver for AppServer {
                 }
                 _ => {
                     // A turn on its way is stopped once it has an id.
-                    self.interrupt_wanted =
-                        self.starting.is_some() || self.awaited.is_some() || self.held.is_some();
+                    self.interrupt_wanted = self.starting.is_some()
+                        || self.awaited.is_some()
+                        || self.held.is_some()
+                        || self.offering;
                     local(Value::Null, vec![])
                 }
             },

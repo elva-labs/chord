@@ -1483,9 +1483,9 @@ export function send(
 
 /** Runs a line the user typed after a `!`, without it, in the session's
     folder, under an id of the window's own. One the agent `offered` the
-    user to run goes to a Claude Code agent as a turn once it ends; any
-    other, and any to Codex, is context the agent reads with its next. Null
-    when there is no agent to run it for, or nothing to run. */
+    user to run goes to the agent as a turn once it ends; any other is
+    context the agent reads with its next. Null when there is no agent to
+    run it for, or nothing to run. */
 export function run(key: string, text: string, offered = false): string | null {
   const link = links.get(key);
   const session = byKey(key);
@@ -1493,8 +1493,7 @@ export function run(key: string, text: string, offered = false): string | null {
   const line = text.trim();
   if (line === "") return null;
   const id = crypto.randomUUID();
-  const turns = offered && session.agent === "claude-code";
-  if (turns) link.offered.add(id);
+  if (offered) link.offered.add(id);
   link.conversation.running(id, line);
   link.backSaid = null;
   link.nowError = null;
@@ -1502,7 +1501,7 @@ export function run(key: string, text: string, offered = false): string | null {
   session.engaged = true;
   userWrote(key);
   core()
-    .integratedRun(link.handle, id, line, turns)
+    .integratedRun(link.handle, id, line, offered)
     .catch((error) => {
       link.offered.delete(id);
       link.conversation.runFailed(id, message(error));

@@ -744,7 +744,7 @@ A line the user sends with a leading `!` is a command of their own. It
 runs in the session's folder, on the machine the harness runs on, and what
 it prints goes to the harness as context, with no turn of the harness's own:
 the harness reads it with the next message. A command the agent offered
-is the exception for Claude Code, as below. One runs at a time, and a
+is the exception, as below. One runs at a time, and a
 message or a command sent while one runs or waits waits behind it, in the
 order sent. Each harness takes a command its own way.
 
@@ -777,25 +777,36 @@ order sent. Each harness takes a command its own way.
   ends with the turn it runs in. Should Codex end while the command runs,
   what is left in the command's process group is ended with it.
 
-A command the agent offered the user goes to Claude Code as a turn of its
-own. The window counts a command as offered when the user ran it from the
+A command the agent offered the user starts a turn of the agent's once it
+ends. The window counts a command as offered when the user ran it from the
 run mark after a `! command` in the agent's words, or typed in the
 composer the same line, once trimmed, as one offered in the words of the
 agent's last turn that said anything, across all of that turn's words; it
-finds those as it places the marks. The core then gives Claude
-Code the same record headed by a line from the workbench, not the user,
-saying the user ran the command the agent offered and to go on from its
-result, and leaves out what keeps the record from asking the model. So it
-starts a turn of its own once it ends, whatever its exit code, stopped or
-timed out, and a command that ends while a turn runs starts its turn after that one,
-never cutting it short; several that end during one turn are taken
-together in the next. Stopping the running turn does not drop such a
-record: it starts its turn right after, and it cannot be taken back,
-being written once the command ends. The thread shows the command as the user's, with no
-message of the user's beside it. A command the user typed on their own
-stays context. For Codex every command stays context: its command runs as
-a turn that asks no model, and asking the model after it would take a
-turn of the workbench's that Codex keeps as a message of the user's.
+finds those as it places the marks. It starts its turn whatever its exit
+code, stopped or timed out, and one that ends while a turn runs starts its
+turn after that one, never cutting it short. The thread shows the command
+as the user's, with no message of the user's beside it, as it runs and
+once read back. A command the user typed on their own stays context.
+
+- **Claude Code** is given the same record headed by a line from the
+  workbench, not the user, saying the user ran the command the agent
+  offered and to go on from its result, without what keeps the record
+  from asking the model. Several that end during one turn are taken
+  together in the next. Stopping the running turn does not drop such a
+  record: it starts its turn right after, and it cannot be taken back,
+  being written once the command ends.
+- **Codex** keeps the command with its output and exit code in its
+  thread already, so once the command's own turn ends the core starts a
+  turn with a line from the workbench, not the user, saying the user ran
+  the command the agent offered, that it is recorded, and to go on from
+  its result. Codex keeps that line as a message of the user's, under an
+  id of the workbench's that reading the thread back and going back both
+  leave out. Codex runs a command only while no turn runs, so several
+  offered commands each start a turn of their own, one after another, and
+  a message sent while one runs waits for its turn to end. A command
+  Codex could not run starts none, stopping the agent before its turn has
+  begun stops that turn once it does, and should Codex refuse the turn, a
+  warning says the agent did not go on from the command.
 
 What a command prints streams to the window as it comes, up to a megabyte.
 The harness is given at most thirty thousand bytes of each stream, standard

@@ -1556,6 +1556,16 @@ describe("an integrated session behind its row", () => {
     expect(link.draft).toBe("something new\n\n!git status");
   });
 
+  it("runs a command the agent offered as offered, for Codex as for Claude Code", async () => {
+    await install({ mints: true });
+    const session = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    await launch(session.key);
+    const handle = handleOf(session.key)!;
+    const id = run(session.key, "npm login", true)!;
+    await settled();
+    expect(fake.calls).toContainEqual({ method: "run", id: handle, command: id, text: "npm login", offered: true });
+  });
+
   it("says why a command it could not take back began first", async () => {
     const { session, handle } = await started();
     const link = linkFor(session.key);

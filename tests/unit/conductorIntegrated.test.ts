@@ -473,8 +473,8 @@ describe("the orchestrator's tools with an integrated session", () => {
 
   describe("a starter that runs integrated", () => {
     /** An integrated starter and a terminal session it started, at work. */
-    async function starter() {
-      const row = create(A, null, "claude-code", null, null, null, null, undefined, "integrated");
+    async function starter(agent: "claude-code" | "codex" = "claude-code") {
+      const row = create(A, null, agent, null, null, null, null, undefined, "integrated");
       await launch(row.key);
       const token = byKey(row.key)!.token;
       const kid = create(A, null, "claude-code", null);
@@ -797,6 +797,29 @@ describe("the orchestrator's tools with an integrated session", () => {
       expect(answerTo(again)?.content).toBe(content);
       expect(offeredWaiting(key)).toHaveLength(1);
       fake.endTurn(core);
+      fake.startTurn(core);
+      flushSync();
+      expect(offeredWaiting(key)).toEqual([]);
+    });
+
+    it("goes on waiting while Codex holds a command it offered behind the turn, whose record the next turn takes", async () => {
+      const { key, token, kid, handle: core } = await starter("codex");
+      fake.startTurn(core);
+      const waiting = { ...call("wait", { seconds: 60 }), session: token };
+      const waited = handle(waiting);
+      await settle();
+      const command = await ran(key, "npm login", true);
+      await settle();
+      expect(conversationOf(key).commands[command].state).toBe("queued");
+      kid.working = false;
+      flushSync();
+      await waited;
+      expect(answerTo(waiting)?.content).toContain("Session kid-1 stopped working.");
+      fake.endTurn(core);
+      await settle();
+      fake.finishCommand(core, command, { exitCode: 1, output: "denied\n" });
+      flushSync();
+      expect(offeredWaiting(key)).toHaveLength(1);
       fake.startTurn(core);
       flushSync();
       expect(offeredWaiting(key)).toEqual([]);

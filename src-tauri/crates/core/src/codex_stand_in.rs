@@ -1921,6 +1921,133 @@ fn codex_runs_a_command_of_the_user_s_in_a_turn_that_is_not_shown() {
     let events = h.until_type("turnEnded");
     let started = events.iter().find(|e| e["type"] == "turnStarted").unwrap();
     assert_eq!(started["messages"], json!([message]));
+    // A command the user typed starts no turn of its own.
+    assert_eq!(h.sent("turn/start").len(), 1);
+    h.stop();
+}
+
+/// The agent taking the workbench's input that goes on from an offered
+/// command as the turn given.
+fn take_offered(turn: &str) -> String {
+    [
+        format!(r#"expect "{}"#, crate::codex_app_server::OFFERED_INPUT),
+        format!(r#"reply {{"id":@ID@,"result":{{"turn":{{"id":"{turn}","status":"inProgress","items":[]}}}}}}"#),
+        notify("turn/started", &format!(r#"{{"threadId":"{THREAD}","turn":{{"id":"{turn}","status":"inProgress","items":[]}}}}"#)),
+    ]
+    .join("\n")
+}
+
+/// The turns told among `events`, by kind, with their events.
+fn told_turns(events: &[Value]) -> Vec<(&str, &Value)> {
+    events
+        .iter()
+        .filter(|e| e["type"] == "turnStarted" || e["type"] == "turnEnded")
+        .map(|e| (e["type"].as_str().unwrap(), e))
+        .collect()
+}
+
+#[test]
+fn an_offered_command_that_fails_starts_one_turn_with_the_workbench_s_input() {
+    let scenario = [
+        ready_scenario(),
+        r#"expect "method":"thread/shellCommand""#.into(),
+        r#"reply {"id":@ID@,"result":{}}"#.into(),
+        notify("turn/started", &format!(r#"{{"threadId":"{THREAD}","turn":{{"id":"shell-1","status":"inProgress","items":[]}}}}"#)),
+        user_shell("item/started", "inProgress", r#""aggregatedOutput":null,"exitCode":null,"durationMs":null"#),
+        "await sent".into(),
+        user_shell("item/completed", "failed", r#""aggregatedOutput":"hi","exitCode":3,"durationMs":5"#),
+        done("shell-1", "completed"),
+        take_offered("turn-1"),
+        done("turn-1", "completed"),
+        take("turn-2"),
+        done("turn-2", "completed"),
+        "drain".into(),
+    ]
+    .join("\n");
+    let h = start("offered-shell", &scenario);
+    h.until_type("ready");
+    run(&h.sessions, &h.id, C1, "printf hi; exit 3", true).unwrap();
+    h.until(|event| event["type"] == "command" && event["state"] == "running");
+    // A message sent while the command runs waits for the turn that goes
+    // on from it to end.
+    let message = h.send("and then?");
+    std::fs::write(h.dir.join("sent"), "").unwrap();
+    h.until_type("turnEnded");
+    let events = h.until_type("turnEnded");
+    let ended = commands(&events).pop().unwrap().clone();
+    assert_eq!(ended["state"], "done");
+    assert_eq!(ended["exitCode"], 3);
+    let turns = told_turns(&events);
+    let kinds: Vec<&str> = turns.iter().map(|(kind, _)| *kind).collect();
+    assert_eq!(
+        kinds,
+        ["turnStarted", "turnEnded", "turnStarted", "turnEnded"],
+        "{events:?}"
+    );
+    // The turn that goes on from the command answers no message of the
+    // user's, and the message has its own after it.
+    assert_eq!(turns[0].1["messages"], json!([]));
+    assert_eq!(turns[2].1["messages"], json!([message]));
+    let starts = h.sent("turn/start");
+    assert_eq!(starts.len(), 2);
+    let offered = &starts[0]["params"];
+    assert_eq!(
+        offered["clientUserMessageId"],
+        format!("{}{C1}", crate::codex_app_server::OFFERED_INPUT)
+    );
+    let text = offered["input"][0]["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("From the workbench, not the user:"),
+        "{text}"
+    );
+    assert_eq!(starts[1]["params"]["clientUserMessageId"], message);
+    h.stop();
+}
+
+#[test]
+fn an_offered_command_that_ends_during_a_turn_starts_its_turn_after_it() {
+    let scenario = [
+        ready_scenario(),
+        take("turn-1"),
+        "await queued".into(),
+        done("turn-1", "completed"),
+        r#"expect "method":"thread/shellCommand""#.into(),
+        r#"reply {"id":@ID@,"result":{}}"#.into(),
+        notify("turn/started", &format!(r#"{{"threadId":"{THREAD}","turn":{{"id":"shell-1","status":"inProgress","items":[]}}}}"#)),
+        user_shell("item/started", "inProgress", r#""aggregatedOutput":null,"exitCode":null,"durationMs":null"#),
+        user_shell("item/completed", "completed", r#""aggregatedOutput":"hi","exitCode":0,"durationMs":5"#),
+        done("shell-1", "completed"),
+        take_offered("turn-2"),
+        done("turn-2", "completed"),
+        "drain".into(),
+    ]
+    .join("\n");
+    let h = start("offered-during", &scenario);
+    h.until_type("ready");
+    let message = h.send("push the tag away");
+    h.until_type("turnStarted");
+    run(&h.sessions, &h.id, C1, "printf hi", true).unwrap();
+    h.until(|event| event["type"] == "command" && event["state"] == "queued");
+    std::fs::write(h.dir.join("queued"), "").unwrap();
+    h.until_type("turnEnded");
+    let events = h.until_type("turnEnded");
+    let turns = told_turns(&events);
+    let kinds: Vec<&str> = turns.iter().map(|(kind, _)| *kind).collect();
+    assert_eq!(
+        kinds,
+        ["turnStarted", "turnEnded", "turnStarted", "turnEnded"],
+        "{events:?}"
+    );
+    assert_eq!(turns[0].1["messages"], json!([message]));
+    assert_eq!(
+        turns[1].1["outcome"], "done",
+        "the first turn was not cut short"
+    );
+    assert_eq!(turns[2].1["messages"], json!([]));
+    assert!(
+        h.sent("turn/interrupt").is_empty(),
+        "the command interrupted nothing"
+    );
     h.stop();
 }
 

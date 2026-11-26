@@ -1272,7 +1272,7 @@ click runs it as if the user had typed it in the composer, leaving what is
 written there as it is; nothing runs without the click, and each click
 runs it again. A command the agent offered, run from its mark or typed in
 the composer as the same line, once trimmed, as one offered in the words
-of the agent's last turn that said anything, goes to a Claude Code agent
+of the agent's last turn that said anything, goes to the agent
 as a turn of its own once it ends, whatever its exit code, stopped or
 timed out, so the agent goes on from its result without the user writing; one that ends while a turn runs starts its turn after that
 one and never cuts it short. The thread still shows it as the user's

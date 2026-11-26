@@ -1265,6 +1265,89 @@ fn a_command_the_user_ran_comes_back_as_typed_and_its_turn_as_no_turn() {
     );
 }
 
+/// A command the agent offered stays the user's, and the turn the
+/// workbench began after it reads back as no message of anyone's, while a
+/// message taken into that turn stays the user's.
+#[test]
+fn the_workbench_s_input_after_an_offered_command_reads_back_as_nothing() {
+    let offered = format!("{OFFERED_INPUT}sh-1");
+    let (history, _) = read_all(vec![(
+        "thread/turns/list",
+        page(
+            vec![
+                turn(
+                    "turn-2",
+                    "completed",
+                    1_200,
+                    vec![
+                        user("u-2", Some(&offered), "From the workbench", 1_200_000),
+                        agent("msg-2", "It failed, so", 1_200_300),
+                        user("u-3", Some("m-3"), "Also this", 1_200_400),
+                    ],
+                ),
+                turn(
+                    "turn-1",
+                    "completed",
+                    1_100,
+                    vec![shell(
+                        "sh-1",
+                        "/bin/zsh -lc 'exit 3'",
+                        "failed",
+                        3,
+                        "",
+                        1_100_000,
+                    )],
+                ),
+            ],
+            None,
+        ),
+    )]);
+    assert_eq!(
+        outline(&history),
+        [
+            "1100000 command",
+            "1200000 turnStarted",
+            "1200300 text msg-2",
+            "1200400 message m-3",
+            "1202000 turnEnded",
+        ]
+    );
+    assert!(history.items.iter().any(|said| matches!(
+        &said.event,
+        Event::TurnStarted { messages } if messages.is_empty()
+    )));
+    assert_eq!(
+        commands(&history),
+        ["sh-1 Done exit 3 Some(3) Some(\"\") None"]
+    );
+
+    let mut codex = Scripted::new(vec![
+        (
+            "thread/read",
+            Answer::Result(
+                json!({ "thread": { "id": THREAD, "historyMode": "paginated", "ephemeral": false } }),
+            ),
+        ),
+        (
+            "thread/turns/list",
+            page(
+                vec![summary(
+                    "turn-2",
+                    vec![
+                        user("u-2", Some(&offered), "From the workbench", 1_200_000),
+                        user("u-3", Some("m-3"), "Also this", 1_200_400),
+                    ],
+                )],
+                None,
+            ),
+        ),
+    ]);
+    assert_eq!(
+        marks_of(&mut codex, THREAD).unwrap().0,
+        [mark("m-3", "turn-2", false)]
+    );
+}
+
 #[test]
 fn a_command_line_not_run_through_a_posix_shell_is_kept_whole() {
     assert_eq!(typed("pwsh -Command ls"), "pwsh -Command ls");
