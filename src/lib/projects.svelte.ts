@@ -11,8 +11,9 @@ import { isChatsFolder } from "$lib/chats.svelte";
  * A project is active while a session drawn under it is live or unread,
  * while it is the one on screen, or while it was in use within a span the
  * settings name. The rest fold under Inactive at the foot of the pane.
- * Nothing is filed by hand: a project moves between the two as it is used
- * and left alone.
+ * The user may also file a project there by hand: until something happens
+ * in it after that, only a live or unread session, or being on screen, keeps
+ * it active, whatever the span.
  *
  * The order is the user's alone: when a project was last brought forward,
  * or had a session started or picked in it, and for a project the window
@@ -21,11 +22,15 @@ import { isChatsFolder } from "$lib/chats.svelte";
  */
 
 const USED_KEY = "chord.used";
+const FILED_KEY = "chord.filed";
 
 export const projects = $state({
   /** When each project was last brought forward, in milliseconds, by
       path. Kept between runs. */
   used: {} as Record<string, number>,
+  /** When each project was last filed under Inactive by hand, in
+      milliseconds, by path. Kept between runs. */
+  filed: {} as Record<string, number>,
   /** How long a project goes unused before it folds under Inactive. */
   inactiveAfter: "week" as InactiveAfter,
 });
@@ -73,41 +78,58 @@ export function touch(path: string, now = Date.now()) {
   // The chats folder is never a project, so it is never used as one.
   if (isChatsFolder(path)) return;
   projects.used[path] = now;
-  saveUsed();
+  save(USED_KEY, projects.used);
 }
 
-/** Drops a closed project from the record, so the record holds no more
-    than the projects the user keeps open. */
-export function forgetUsed(path: string) {
-  if (!(path in projects.used)) return;
-  delete projects.used[path];
-  saveUsed();
+/** The user filed the project under Inactive. The mark is never earlier
+    than the latest activity known, which a machine whose clock runs ahead
+    may date after now. */
+export function file(path: string, now = Date.now()) {
+  projects.filed[path] = Math.max(now, lastActive(path) ?? now);
+  save(FILED_KEY, projects.filed);
 }
 
-function saveUsed() {
+/** Drops a closed project from the records, so they hold no more than the
+    projects the user keeps open. */
+export function forgetProject(path: string) {
+  if (path in projects.used) {
+    delete projects.used[path];
+    save(USED_KEY, projects.used);
+  }
+  if (path in projects.filed) {
+    delete projects.filed[path];
+    save(FILED_KEY, projects.filed);
+  }
+}
+
+function save(key: string, times: Record<string, number>) {
   try {
-    localStorage.setItem(USED_KEY, JSON.stringify(projects.used));
+    localStorage.setItem(key, JSON.stringify(times));
   } catch {
-    // Non-fatal: the time does not survive a restart, and the project's
-    // own transcripts still say when it was last worked in.
+    // Non-fatal: the time does not survive a restart.
   }
 }
 
 /** What is remembered between runs. A corrupt entry reads as nothing
     remembered. */
 export function loadUsed() {
+  projects.used = load(USED_KEY) ?? projects.used;
+  projects.filed = load(FILED_KEY) ?? projects.filed;
+}
+
+function load(key: string): Record<string, number> | null {
   try {
-    const raw = localStorage.getItem(USED_KEY);
-    if (raw === null) return;
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
     const stored: unknown = JSON.parse(raw);
-    if (typeof stored !== "object" || stored === null) return;
-    const used: Record<string, number> = {};
+    if (typeof stored !== "object" || stored === null) return null;
+    const times: Record<string, number> = {};
     for (const [path, at] of Object.entries(stored)) {
-      if (typeof at === "number" && Number.isFinite(at)) used[path] = at;
+      if (typeof at === "number" && Number.isFinite(at)) times[path] = at;
     }
-    projects.used = used;
+    return times;
   } catch {
-    // Nothing remembered, then.
+    return null;
   }
 }
 
@@ -212,22 +234,29 @@ export function lastActive(path: string): number | null {
   return latest;
 }
 
+/** Whether a session drawn under the project is live or waiting for the
+    user, which keeps it active however long ago it was used or filed. */
+export function holdsActive(path: string): boolean {
+  return drawnUnder(path).some((session) => isLive(session) || session.unread);
+}
+
 /** Whether a project is active: a session drawn under it is live or
     waiting for the user, it is the one on screen, or something happened
-    in it within the span. With the span set to never, every project is. */
+    in it within the span, and since it was filed if it was. With the span
+    set to never, every project not filed since its last activity is. */
 export function isActive(
   path: string,
   current: string | null,
   now = Date.now(),
 ): boolean {
-  if (path === current) return true;
+  if (path === current || holdsActive(path)) return true;
+  const at = lastActive(path);
+  const filed = projects.filed[path];
+  if (filed !== undefined && (at === null || at <= filed)) return false;
   const span = INACTIVE_AFTER.find(
     (choice) => choice.choice === projects.inactiveAfter,
   )?.ms;
   if (span === null || span === undefined) return true;
-  if (drawnUnder(path).some((session) => isLive(session) || session.unread))
-    return true;
-  const at = lastActive(path);
   return at !== null && now - at <= span;
 }
 
@@ -324,6 +353,7 @@ export function steady(shown: string[], next: string[]): string[] {
 /** Test seam. */
 export function resetProjects() {
   projects.used = {};
+  projects.filed = {};
   projects.inactiveAfter = "week";
   quietAt = -Infinity;
 }

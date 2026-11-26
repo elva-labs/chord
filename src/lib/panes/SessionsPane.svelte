@@ -57,6 +57,7 @@
     close as closeProject,
     goTo,
     onScreen,
+    makeInactive,
     pick,
     projectLabel,
     resumeChat,
@@ -102,7 +103,7 @@
     type PaneId,
     type ProjectSort,
   } from "$lib/layout.svelte";
-  import { lastUsed, splitProjects, steady, touch } from "$lib/projects.svelte";
+  import { holdsActive, lastUsed, splitProjects, steady, touch } from "$lib/projects.svelte";
   import { unfoldSessions, viewerSettled } from "$lib/viewers.svelte";
   import { isStartedFolded, setStartedFolded } from "$lib/startedFolds.svelte";
   import { compact } from "$lib/compact.svelte";
@@ -359,17 +360,18 @@
   ]);
 
   /** A project's own menu, from the ⋯ on its header or its row under
-      Inactive, or a right click on either: a new session in it, and
-      closing it. It opens upwards when the row is near the pane's foot,
-      and its keyboard cursor walks the items while it is open. */
-  let projectMenu = $state<{ path: string; up: boolean } | null>(null);
+      Inactive, or a right click on either: a new session in it, filing it
+      under Inactive, and closing it. It opens upwards when the row is near the pane's foot,
+      and its keyboard cursor walks the items while it is open. Which items
+      it has is settled as it opens, so none moves under the cursor or the
+      pointer; one that no longer applies is disabled. */
+  let projectMenu = $state<{ path: string; up: boolean; other: SessionKind | null; fileable: boolean } | null>(null);
   let projectMenuAt = $state(0);
 
   let projectItems = $derived.by((): MenuItem[] => {
     if (projectMenu === null) return [];
-    const path = projectMenu.path;
+    const { path, other, fileable } = projectMenu;
     const agent = defaultAgent(path);
-    const other = startsIn(path) ? otherWay(path) : null;
     return [
       ...(startsIn(path)
         ? [{ id: "project-menu-new", label: "New session", disabled: !isReady(), run: () => startIn(path) }]
@@ -390,6 +392,19 @@
               },
             },
           ]),
+      ...(fileable
+        ? [
+            {
+              id: "project-menu-inactive",
+              label: "Make inactive",
+              disabled: holdsActive(path),
+              run: () => {
+                makeInactive(path);
+                nav?.focus();
+              },
+            },
+          ]
+        : []),
       {
         id: "close-project",
         label: "Close project",
@@ -400,6 +415,20 @@
     ];
   });
 
+  /** Whether the project's menu offers filing it under Inactive: only a
+      project in the list that nothing running or waiting holds there. The
+      orchestrator folder is listed by its own rule and is never filed. */
+  function canFile(path: string): boolean {
+    return startsIn(path) && split.active.some((project) => project.path === path) && !holdsActive(path);
+  }
+
+  /** What the project's menu holds, as the ⋯ names it. */
+  function moreTitle(path: string): string {
+    const words = [startsIn(path) ? "new session" : null, canFile(path) ? "make inactive" : null, "close"];
+    const said = words.filter((word) => word !== null).join(", ");
+    return said.charAt(0).toUpperCase() + said.slice(1);
+  }
+
   function openProjectMenu(path: string, e: MouseEvent) {
     e.preventDefault();
     if (projectMenu?.path === path && e.type === "click") {
@@ -408,14 +437,18 @@
     }
     const row = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-row]");
     const tree = nav?.querySelector<HTMLElement>(".tree");
-    const up =
-      row !== null && tree !== null && tree !== undefined
-        ? row.getBoundingClientRect().bottom > tree.getBoundingClientRect().bottom - 90
-        : false;
+    // Upwards only with the room above: what overflows the foot scrolls into
+    // reach, and what overflows the head does not.
+    let up = false;
+    if (row !== null && tree !== null && tree !== undefined) {
+      const at = row.getBoundingClientRect();
+      const within = tree.getBoundingClientRect();
+      up = at.bottom > within.bottom - 125 && at.top - within.top >= 125;
+    }
     menuOpen = false;
     sortOpen = false;
     sessionMenu = null;
-    projectMenu = { path, up };
+    projectMenu = { path, up, other: startsIn(path) ? otherWay(path) : null, fileable: canFile(path) };
     projectMenuAt = 0;
     if (row?.dataset.row !== undefined) cursor = row.dataset.row;
     nav?.focus();
@@ -2255,7 +2288,7 @@
     aria-haspopup="menu"
     aria-expanded={projectMenu?.path === path}
     aria-label="More for {projectLabel(path)}"
-    title={startsIn(path) ? "New session, close" : "Close"}
+    title={moreTitle(path)}
     data-testid="project-more"
     ><svg class="glyph" viewBox="0 0 16 16" aria-hidden="true"
       ><circle cx="3.5" cy="8" r=".9" /><circle cx="8" cy="8" r=".9" /><circle cx="12.5" cy="8" r=".9" /></svg

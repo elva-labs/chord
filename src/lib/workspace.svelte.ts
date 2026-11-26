@@ -17,7 +17,7 @@ import {
   type Session,
 } from "$lib/sessions.svelte";
 import { closeProject as closeShells } from "$lib/terminals.svelte";
-import { drawnIn, forgetUsed, sortProjects, touch } from "$lib/projects.svelte";
+import { drawnIn, file, forgetProject, isActive, sortProjects, touch } from "$lib/projects.svelte";
 import {
   closeFolder,
   folderShown,
@@ -204,16 +204,29 @@ export function chatInFront(): boolean {
 }
 
 /** The session that was on screen is gone with none in its place: when it
-    was a chat, the chats folder leaves the front for the open project the
+    was a chat, the chats folder leaves the front for the active project the
     user last used, with no session on screen, or for none when no project
-    is open. */
+    is active. */
 export function chatClosed(was: string | null) {
   if (was === null || sessions.active !== null || byKey(was) !== null || !chatInFront()) return;
-  const open = workspace.open.map((project) => project.path);
-  const next = sortProjects(open, "used")[0] ?? null;
-  workspace.active = next;
-  if (next !== null) activate(next);
-  else save();
+  leaveFront(chats.dir);
+}
+
+/** Takes a path out of the front: of the other open projects that are
+    active, the one the user last used is in front, with no session on
+    screen, or none when no other is active. */
+function leaveFront(leaving: string | null) {
+  const others = workspace.open
+    .map((project) => project.path)
+    .filter((path) => path !== leaving && isActive(path, null));
+  const next = sortProjects(others, "used")[0];
+  if (next !== undefined) {
+    activate(next);
+    return;
+  }
+  workspace.active = null;
+  sessions.active = null;
+  save();
 }
 
 /** The user brought a project forward, from the sessions pane, go to or
@@ -365,7 +378,7 @@ export function close(path: string) {
   closeShells(path);
   void closeOwner({ kind: "project", path });
   workspace.open = workspace.open.filter((project) => project.path !== path);
-  forgetUsed(path);
+  forgetProject(path);
 
   if (workspace.active !== path) {
     save();
@@ -375,6 +388,14 @@ export function close(path: string) {
   workspace.active = next;
   if (next !== null) activate(next);
   else save();
+}
+
+/** Files a project under Inactive. The project on screen is active by rule,
+    so one on screen leaves the front. */
+export function makeInactive(path: string) {
+  const shown = onScreen() === path;
+  file(path);
+  if (shown) leaveFront(path);
 }
 
 function save() {

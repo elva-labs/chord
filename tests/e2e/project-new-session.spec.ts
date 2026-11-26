@@ -208,3 +208,35 @@ for (const look of ["modern", "terminal"] as const) {
     }
   });
 }
+
+test("a project made inactive folds at once, and picking it brings it back", async ({ page }) => {
+  await installFakeCore(page, { open: [PROJECT, OTHER] });
+  await page.goto("/");
+  await expect(order(page)).toHaveText(["demo", "other"]);
+
+  // The project in front leaves the front for the other one.
+  await head(page, "demo").click({ button: "right" });
+  await page.getByTestId("project-menu-inactive").click();
+  await expect(order(page)).toHaveText(["other"]);
+  await expect(head(page, "other")).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId("inactive-project")).toHaveCount(0);
+
+  await page.getByTestId("inactive-fold").click();
+  const filed = page.getByTestId("inactive-project");
+  await expect(filed).toContainText("demo");
+  await expect(filed).toBeInViewport();
+  await filed.click();
+  await expect(head(page, "demo")).toBeVisible();
+  await expect(head(page, "demo")).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId("inactive-fold")).toHaveCount(0);
+});
+
+test("filing the only project leaves the keyboard in the pane and asks to pick one", async ({ page }) => {
+  await installFakeCore(page, { open: [PROJECT] });
+  await page.goto("/");
+  await head(page, "demo").click({ button: "right" });
+  await page.getByTestId("project-menu-inactive").click();
+  await expect(page.getByTestId("inactive-fold")).toBeVisible();
+  await expect(page.locator("section[data-pane='sessions'] .nav")).toBeFocused();
+  await expect(page.getByTestId("agent-status")).toContainText("Pick a project to start.");
+});

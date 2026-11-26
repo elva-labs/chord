@@ -32,7 +32,7 @@ A click on a project's header, or a pick of it in go to, puts the project in fro
 
 ## Active and inactive
 
-A project you have not used for a week folds under Inactive at the foot of the pane. A project with a session running or waiting for you stays in the list. The span is a [setting](settings.md#sessions). See [active and inactive](reference/sessions.md#active-and-inactive).
+A project you have not used for a week folds under Inactive at the foot of the pane. A project with a session running or waiting for you stays in the list. Make inactive, in a project's menu, folds it there at once. The span is a [setting](settings.md#sessions). See [active and inactive](reference/sessions.md#active-and-inactive).
 
 ## Past sessions
 

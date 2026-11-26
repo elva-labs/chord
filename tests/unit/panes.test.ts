@@ -821,6 +821,59 @@ describe("SessionsPane", () => {
     expect(screen.queryByTestId("project-menu")).toBeNull();
   });
 
+  it("keeps an open menu's items in place, Make inactive disabled once something holds the project", async () => {
+    workspace.open.push(repo("/repo", "repo"), repo("/other", "other"));
+    workspace.active = "/repo";
+    touch("/other");
+    render(SessionsPane);
+    const head = document.querySelector<HTMLElement>('[data-row="project:/other"]')!;
+    const more = within(head).getByTestId("project-more");
+    expect(more).toHaveAttribute("title", "New session, make inactive, close");
+    await fireEvent.click(more);
+    const item = within(head).getByTestId("project-menu-inactive");
+    const items = () => within(head).getAllByRole("menuitem").map((one) => one.textContent!.trim());
+    const before = items();
+    const pane = head.closest<HTMLElement>(".nav")!;
+    for (let at = 0; at < before.indexOf("Make inactive"); at += 1) await fireEvent.keyDown(pane, { key: "ArrowDown" });
+
+    const live = create("/other");
+    started(live.key, "pty-1", "s-1");
+    await waitFor(() => expect(item).toBeDisabled());
+    expect(items()).toEqual(before);
+    expect(item).toHaveClass("at");
+    await fireEvent.keyDown(pane, { key: "Enter" });
+    expect(workspace.open).toHaveLength(2);
+    expect(projects.filed).toEqual({});
+    expect(more).toHaveAttribute("title", "New session, close");
+  });
+
+  it("offers Make inactive only for a listed project nothing running holds there", async () => {
+    workspace.open.push(repo("/repo", "repo"), repo("/old", "old"));
+    workspace.active = "/repo";
+    touch("/old", Date.now() - 30 * 24 * 3600 * 1000);
+    render(SessionsPane);
+    await waitFor(() => expect(screen.getByTestId("inactive-fold")).toBeInTheDocument());
+    const head = document.querySelector<HTMLElement>('[data-row="project:/repo"]')!;
+    await fireEvent.click(within(head).getByTestId("project-more"));
+    const item = within(head).getByTestId("project-menu-inactive");
+    expect(item).toHaveTextContent("Make inactive");
+    expect(item).not.toHaveClass("destructive");
+    expect(item.nextElementSibling).toHaveAttribute("role", "separator");
+
+    const live = create("/repo");
+    started(live.key, "pty-1", "s-1");
+    await fireEvent.click(within(head).getByTestId("project-more"));
+    await fireEvent.click(within(head).getByTestId("project-more"));
+    expect(within(head).getByTestId("close-project")).toBeInTheDocument();
+    expect(within(head).queryByTestId("project-menu-inactive")).toBeNull();
+
+    await fireEvent.click(screen.getByTestId("inactive-fold"));
+    const idle = document.querySelector<HTMLElement>('[data-row="idle:/old"]')!;
+    await fireEvent.click(within(idle).getByTestId("project-more"));
+    expect(within(idle).getByTestId("close-project")).toBeInTheDocument();
+    expect(within(idle).queryByTestId("project-menu-inactive")).toBeNull();
+  });
+
   // Projects split by themselves: the one on screen, one with a live
   // session and one used within the span are in use; the rest fold under
   // Inactive at the foot, closed, each with when it was last used.

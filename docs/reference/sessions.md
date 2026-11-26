@@ -106,7 +106,7 @@ the next one in front the same way.
 
 ## Active and inactive
 
-The projects split by themselves into two. A project is active while a
+The projects split into two. A project is active while a
 session drawn under it is running or waiting for you, while it is the one
 on screen, and for a span
 after anything last happened in it; the span is a
@@ -121,7 +121,23 @@ which is using it, and it is active again, and the pane scrolls to where it
 lands among the others. Its ⋯, in the place of its time while the pointer is
 on it, opens the same menu as a header's. Its New session does what a
 header's does, and the project stands among the active ones once the
-session starts. Nothing is filed by hand.
+session starts.
+
+Make inactive, in a header's menu, folds a project under Inactive at once,
+whatever the span, Never included. After that only what happens later makes
+it active: it is back once it is used, a session under it
+runs or waits for you, a row under it changes or a transcript of its own is
+written. It is not offered while a session under the project is running or
+waiting for you, nor under Inactive, nor for the orchestrator's folder; should one start while the menu is open,
+the item stays in its place, disabled. Filing the project on screen puts in
+front, with no session opened, the one you last used of the other active
+projects, so none filed or folded comes back by it. With no other active
+project none is in front, and the next start puts the first open project in
+front, which is active while it is on screen.
+While the session on screen hangs under its starter in another project, the
+project it runs in is in front but not on screen. Filed then, it folds and the
+session stays, with the changes, the terminal and the window's title still
+following it. It is active again once it is on screen.
 
 What happens in a project is the user using it, a row drawn under it
 changing what it says, and one of its own transcripts being written, which
@@ -141,7 +157,8 @@ project with no such record, when one of its own transcripts was last
 written. The window putting a project in front as it opens, and an agent
 asking to show something in one, is not the user using it. What the agents do keeps a project out of
 Inactive but never moves it. When each project was last used is kept in the
-window's own storage, and a project's record goes when it is closed. The
+window's own storage, as is when it was last filed, and both records go when
+it is closed. Filing leaves when it was last used as it was. The
 choice of order is kept there too, and Inactive is listed in the same order.
 The sessions inside a project are in the order they last changed, the latest
 first, with one exception: its past sessions come after every session still
@@ -1748,8 +1765,9 @@ presents or shows something; asking for the terminal says that a chat has
 none. The header shows the chat's mark and its name, with no model. The
 status bar says Chat where a project's branch would be, and the account the
 chat runs under when [accounts](#accounts) are set up. Closing the chat on
-screen with none to take its place puts the open project you last used in
-front, with no session opened.
+screen with none to take its place puts the active project you last used in
+front, with no session opened, or none when no project is
+[active](#active-and-inactive).
 
 A chat is a session like any other in everything else: it is marked
 unread, working and waiting like a row in a project, counts toward the
