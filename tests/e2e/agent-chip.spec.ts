@@ -168,6 +168,11 @@ test("the palette's new session asks which agent it works as, starts as the one 
   await expect(page.getByTestId("palette-group")).toHaveText(["Agents"]);
   const chosen = page.locator("[data-testid='palette-row'][aria-selected='true']");
   await expect(chosen).toContainText("No agent");
+  // Home and End are the list's while the field is empty.
+  await page.keyboard.press("End");
+  await expect(chosen).toHaveAttribute("id", (await page.getByTestId("palette-row").last().getAttribute("id"))!);
+  await page.keyboard.press("Home");
+  await expect(chosen).toContainText("No agent");
   await page.keyboard.type("reviewer");
   const reviewer = page
     .getByTestId("palette-row")

@@ -242,6 +242,10 @@ or the commands, with what was typed there still in the field. The last answer, 
 session, and the keyboard goes to the new agent. Backing out starts nothing and
 changes nothing.
 
+In every list <kbd>Home</kbd> and <kbd>End</kbd> move the cursor to the first
+and the last row while the field is empty, so <kbd>Home</kbd> reaches No
+agent; with text in the field they move the caret in it.
+
 <kbd>Escape</kbd> puts the palette away from any step, and so does the shortcut
 of the list that is up: <kbd>Cmd</kbd><kbd>P</kbd> for go to,
 <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd> for the commands and a new session.

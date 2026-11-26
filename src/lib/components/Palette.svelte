@@ -91,6 +91,12 @@
     }
   }
 
+  /** The cursor moves to the first item that does something, or the last. */
+  function edge(direction: 1 | -1) {
+    const found = direction === 1 ? items.find(pickable) : items.findLast(pickable);
+    if (found !== undefined) chosen = found.id;
+  }
+
   /** The id an item's option carries, which follows the item and not its
       place in the list. */
   const optionId = (item: PaletteItem) =>
@@ -157,6 +163,13 @@
         break;
       case "ArrowUp":
         step(-1);
+        break;
+      case "Home":
+      case "End":
+        // The caret's keys while the field holds text, the list's while it
+        // holds none.
+        if (palette.query !== "") return;
+        edge(e.key === "Home" ? 1 : -1);
         break;
       case "Enter":
         void run(items[cursor], isMac() ? e.metaKey : e.ctrlKey);
