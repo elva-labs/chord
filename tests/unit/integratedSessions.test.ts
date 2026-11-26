@@ -426,6 +426,21 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(sentTexts().at(-1)).toBe(carried ? `BRIEFING\n\n${words}` : words);
   });
 
+  it("sends a command that mentions a file alone, and goes on no further before the briefing went", async () => {
+    const { key, handle } = await wentCold();
+    asked = 0;
+    send(key, "/review src/app.ts", [], null, [{ start: 8, end: 18, path: "src/app.ts" }]);
+    expect(sentTexts().at(-1)).toBe("/review src/app.ts");
+    fake.turn(handle, "", { output: 0 });
+    await settled();
+    // Neither a later message nor the limit going on starts another run.
+    expect(await goOnIfCold(key, Date.now() + 86_400_000, true)).toBe(false);
+    expect(await goOnAfterLimit(key, Date.now())).toBe(true);
+    expect(asked).toBe(0);
+    expect(handleOf(key)).toBe(handle);
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: false });
+  });
+
   it("puts the briefing ahead of a command sent with an image, which the agent reads as words", async () => {
     const { key } = await wentCold();
     send(key, "/context", [{ mediaType: "image/png", data: "one" }]);
