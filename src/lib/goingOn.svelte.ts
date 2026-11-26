@@ -47,6 +47,9 @@ const LINEAGE_KEY = "chord.wentOn";
 const HELD_KEY = "chord.briefings";
 /** The most briefings kept. */
 const HELD_MOST = 100;
+/** How long a briefing is kept from when it was last written, in
+    milliseconds. One kept without a time is kept until it goes. */
+const HELD_FOR = 30 * 86_400_000;
 /** The most ids kept as going on from another. */
 const LINEAGE_MOST = 500;
 /** The most conversations one row's earlier messages are read from. */
@@ -66,6 +69,8 @@ const whole = new Set<string>();
 /** Each fresh conversation whose briefing has not gone yet, by its id,
     with what its row's run held: what its next start goes on with. */
 let held: Record<string, Went> | null = null;
+/** When each briefing kept was last written, where that is known. */
+const heldAt: Record<string, number> = {};
 
 let loaded = false;
 
@@ -104,10 +109,17 @@ function heldBriefings(): Record<string, Went> {
   held = {};
   try {
     const kept: unknown = JSON.parse(localStorage.getItem(HELD_KEY) ?? "{}");
+    const now = Date.now();
     if (kept !== null && typeof kept === "object" && !Array.isArray(kept))
       for (const [id, entry] of Object.entries(kept)) {
         const went = heldFrom(entry);
-        if (went !== null) held[id] = went;
+        if (went === null) continue;
+        const at = (entry as { at?: unknown }).at;
+        if (typeof at === "number" && Number.isFinite(at)) {
+          if (now - at > HELD_FOR) continue;
+          heldAt[id] = at;
+        }
+        held[id] = went;
       }
   } catch {
     // An unreadable record only means a run stopped before its briefing
@@ -124,15 +136,23 @@ function hold(went: Went) {
   if (went.briefing === null) {
     if (!(went.id in briefings)) return;
     delete briefings[went.id];
+    delete heldAt[went.id];
   } else {
     delete briefings[went.id];
     const { id: _, ...kept } = went;
     briefings[went.id] = kept;
+    heldAt[went.id] = Date.now();
   }
   const ids = Object.keys(briefings);
-  for (const id of ids.slice(0, Math.max(0, ids.length - HELD_MOST))) delete briefings[id];
+  for (const id of ids.slice(0, Math.max(0, ids.length - HELD_MOST))) {
+    delete briefings[id];
+    delete heldAt[id];
+  }
+  const stored = Object.fromEntries(
+    Object.entries(briefings).map(([id, kept]) => [id, id in heldAt ? { ...kept, at: heldAt[id] } : kept]),
+  );
   try {
-    localStorage.setItem(HELD_KEY, JSON.stringify(briefings));
+    localStorage.setItem(HELD_KEY, JSON.stringify(stored));
   } catch {
     // Kept for this run of the window only.
   }
@@ -494,5 +514,6 @@ export function resetGoingOn() {
   whole.clear();
   for (const key of Object.keys(lost)) delete lost[key];
   held = null;
+  for (const id of Object.keys(heldAt)) delete heldAt[id];
   loaded = false;
 }
