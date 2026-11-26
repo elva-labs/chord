@@ -115,16 +115,9 @@ export function startAs(key: string, agent: { key: string; title: string; readsO
   else startsAt.delete(key);
 }
 
-/** The row's session was started as `agent` with nothing said yet: the
-    conversation is told of the agent with its first message, and the
-    first run starts at `effort`, where that is not null, reading only as
-    the agent does. */
-export function beginAs(
-  key: string,
-  agent: { key: string; title: string; text: string; readsOnly: boolean },
-  effort: string | null,
-) {
-  pickAgent(key, null, agent);
+/** The row's first run starts at `effort`, its agent's, or at the
+    session's own where that is null. */
+export function startAtEffort(key: string, effort: string | null) {
   if (effort !== null) startsAt.set(key, effort);
   else startsAt.delete(key);
 }

@@ -56,6 +56,7 @@ import { leftOutOf, resetSenders, typedOf } from "$lib/senders.svelte";
 import type { IntegratedImage } from "$lib/core";
 import { stateWord } from "$lib/orchestrator.svelte";
 import { setAgentsOn, switches } from "$lib/switches.svelte";
+import { keepLastAgent, lastAgent } from "$lib/sessionAgents.svelte";
 import {
   agentNamed,
   byKey,
@@ -3306,6 +3307,56 @@ describe("the agent a session works as", () => {
       await settled();
       const sent = fake.calls.filter((call) => call.method === "send") as { text: string }[];
       expect(sent[0].text).toMatch(/work as the agent "Reviewer"/);
+    } finally {
+      setAgentsOn(true);
+    }
+  });
+
+  it("starts a row not yet begun on the agent's model and effort, and takes them back once agents are switched off", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    expect(session.model).toBeNull();
+    keepLastAgent("composer", null);
+    workAs(session.key, { ...reviewer, effort: "low" }, null);
+    expect(lastAgent("composer")).toBeNull();
+    expect(session.model).toBe("sonnet");
+    await launch(session.key);
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "start").at(-1)).toMatchObject({
+      options: { model: "sonnet", effort: "low", readsOnly: true },
+    });
+    try {
+      setAgentsOn(false);
+      await settled();
+      const back = fake.calls.filter((call) => call.method === "configure").at(-1) as { settings: Record<string, unknown> };
+      expect(back.settings.readsOnly).toBe(false);
+      expect(back.settings.model).toBe("default");
+      expect(conversationOf(session.key).readsOnly).toBe(false);
+      setAgentsOn(true);
+      await settled();
+      expect(fake.calls.filter((call) => call.method === "configure").at(-1)).toMatchObject({
+        settings: { model: "sonnet", effort: "low", readsOnly: true },
+      });
+    } finally {
+      setAgentsOn(true);
+    }
+  });
+
+  it("starts a row as no agent where agents are switched off before its first run is asked for", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    workAs(session.key, { ...reviewer, effort: "low" }, null);
+    try {
+      setAgentsOn(false);
+      expect(session.model).toBeNull();
+      await launch(session.key);
+      await settled();
+      const begun = fake.calls.filter((call) => call.method === "start").at(-1) as unknown as {
+        options: Record<string, unknown>;
+      };
+      expect(begun.options.model).toBeUndefined();
+      expect(begun.options.effort).not.toBe("low");
+      expect(begun.options.readsOnly).toBeUndefined();
     } finally {
       setAgentsOn(true);
     }

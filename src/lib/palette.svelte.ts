@@ -80,10 +80,10 @@ import { browser } from "$lib/browser.svelte";
 import { paletteCommands, pickPluginCommand, type PluginCommand } from "$lib/pluginPalette.svelte";
 import { agentByKey, allAgents, loadInstalled, agents } from "$lib/agents.svelte";
 import { loadProjectTeams, teams, teamsFor, teamSummary } from "$lib/teams.svelte";
-import { agentPickedIn, beginAs, pickAgentIn } from "$lib/sessionAgents.svelte";
+import { agentPickedIn, pickAgentIn } from "$lib/sessionAgents.svelte";
 import { kindFor } from "$lib/sessionKind.svelte";
 import { switches } from "$lib/switches.svelte";
-import { lead } from "$lib/integrated.svelte";
+import { lead, workAs } from "$lib/integrated.svelte";
 
 /**
  * The palette: one field over the workbench in two lists. Go to narrows the
@@ -1231,12 +1231,7 @@ function startOn(steps: Step[], picked: (step: Step) => boolean) {
     return;
   }
   const role = as.agent === null ? undefined : agentByKey(as.agent, path);
-  if (role === undefined) return;
-  // An agent's model and effort are its own harness's: on another, the
-  // session keeps its own, and on a Codex profile the profile's model.
-  const own = role.model === null || role.model.harness === live.agent;
-  if (role.model !== null && own && live.profile === null) live.model = role.model.model;
-  beginAs(live.key, role, own ? role.effort : null);
+  if (role !== undefined) workAs(live.key, role, null);
 }
 
 /** Reads the agents and the teams a project's new session can be, the
