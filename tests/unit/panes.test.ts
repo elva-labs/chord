@@ -135,10 +135,12 @@ import { conductor, resetConductor } from "$lib/conductor.svelte";
 import { chordFor, describe as describeChord } from "$lib/keys.svelte";
 
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
+import { resetSwitches, switches } from "$lib/switches.svelte";
 
 beforeEach(() => {
   // A session follows no workflow here unless a test gives it one.
   resetWorkflows();
+  resetSwitches();
   vi.mocked(startSession).mockClear();
   resetRemote();
   resetResume();
@@ -352,6 +354,8 @@ describe("SessionsPane", () => {
   });
 
   it("offers the project's workflow first in its own choice, marked as the palette marks it, and starts it", async () => {
+    // Workflows are offered to pick only while agents and teams are off.
+    switches.agents = false;
     applyDetect({ id: "codex", path: "/usr/local/bin/codex", caps: null, fromLoginShell: true }, true);
     workspace.open.push(repo("/repo", "repo"));
     workspace.active = "/repo";
