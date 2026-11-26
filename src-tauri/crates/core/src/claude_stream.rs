@@ -542,19 +542,29 @@ impl Task {
     }
 }
 
-/// What the stream said of the Stop hooks as the agent was about to stop,
-/// which the agent's own notice of it leaves out.
+/// What the stream said of the main agent's Stop hooks as it was about to
+/// stop, which the agent's own notice of it leaves out.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct StopSaid {
+    /// The reason the workbench's team hold sent a lead back to work.
+    held: Option<String>,
+    /// What another Stop hook said.
+    hook: Option<HookSaid>,
+}
+
+/// What a Stop hook other than the workbench's said, without escape codes.
 #[derive(Debug, Clone, PartialEq)]
-enum StopSaid {
-    /// The workbench's team hold sent a lead back to work, for this reason.
-    Held(String),
-    /// A hook sent the agent back to work, saying this.
+enum HookSaid {
+    /// It sent the agent back to work, saying this.
     Fed(String),
-    /// A hook failed, printing this.
+    /// It failed, printing this.
     Failed(String),
 }
 
-/// The most of what a hook said that a notice shows.
+/// The most lines of what a hook said that a notice shows.
+const HOOK_SAID_LINES: usize = 3;
+
+/// The most bytes of what a hook said that a notice shows.
 const HOOK_SAID_KEEP: usize = 600;
 
 /// The start of the subtype of the agent's lines on a hook's run.
@@ -585,7 +595,7 @@ struct Stream {
     /// request: the window used up and when it starts over.
     refused: Option<(Option<LimitKind>, Option<u64>)>,
     /// What the Stop hooks said as the running turn was about to end.
-    stop_said: Option<StopSaid>,
+    stop_said: StopSaid,
     /// The models the agent offers.
     models: Vec<ModelInfo>,
     /// What the agent said of itself at the start, held until the
@@ -695,23 +705,84 @@ fn text(value: &Value) -> Option<String> {
     value.as_str().map(str::to_string)
 }
 
-/// A notice without the pointer the agent ends some with to a key of its
-/// terminal, such as "· ctrl+o to see", which the workbench has not.
+/// A notice of the agent's own without the pointer it ends some with to a
+/// key of its terminal, which the workbench has not: a last line's tail of
+/// " · ", a chord such as "ctrl+o", then "to" or "for" and what it does.
 fn unpointed(message: &str) -> &str {
     let Some((said, pointer)) = message.rsplit_once(" · ") else {
         return message;
     };
-    let key = pointer.split_whitespace().next().unwrap_or("");
-    let chord = key.split_once('+').is_some_and(|(modifier, _)| {
-        ["ctrl", "shift", "alt", "meta", "cmd", "option"]
-            .iter()
-            .any(|known| modifier.eq_ignore_ascii_case(known))
-    });
-    if chord {
+    let mut words = pointer.trim_end().split(' ');
+    let chord = words
+        .next()
+        .and_then(|key| key.split_once('+'))
+        .is_some_and(|(modifier, key)| {
+            !key.is_empty()
+                && ["ctrl", "shift", "alt", "meta", "cmd", "option"]
+                    .iter()
+                    .any(|known| modifier.eq_ignore_ascii_case(known))
+        });
+    let points = matches!(words.next(), Some("to" | "for"));
+    if chord && points && !pointer.contains('\n') {
         said.trim_end()
     } else {
         message
     }
+}
+
+/// Text a hook wrote, without the escape codes that colour a terminal.
+fn unescaped(text: &str) -> String {
+    let mut plain = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\x1b' {
+            plain.push(c);
+            continue;
+        }
+        match chars.next() {
+            // A control sequence ends at its final byte.
+            Some('[') => {
+                for c in chars.by_ref() {
+                    if ('\x40'..='\x7e').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            // An operating system command ends at a bell or at ESC \.
+            Some(']') => {
+                while let Some(c) = chars.next() {
+                    if c == '\x07' {
+                        break;
+                    }
+                    if c == '\x1b' {
+                        chars.next();
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    plain
+}
+
+/// What a notice shows of what a hook said: its first few lines that hold
+/// anything, at most [`HOOK_SAID_KEEP`] bytes, marked when there was more.
+fn hook_shown(said: &str) -> String {
+    let mut lines = said
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty());
+    let mut shown = lines
+        .by_ref()
+        .take(HOOK_SAID_LINES)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let more = lines.next().is_some();
+    if crate::integrated::cut(&mut shown, HOOK_SAID_KEEP) || more {
+        shown.push('…');
+    }
+    shown
 }
 
 pub(crate) fn text_of(content: &Value) -> String {
@@ -1124,7 +1195,7 @@ impl Stream {
             attached: false,
             run: None,
             refused: None,
-            stop_said: None,
+            stop_said: StopSaid::default(),
             models: Vec::new(),
             introduced: None,
             listed: Vec::new(),
@@ -1775,8 +1846,9 @@ impl Stream {
         self.fed(line, parent.as_deref());
     }
 
-    /// Keeps what a Stop hook said in sending the agent back to work, which
-    /// comes as a message of the user's the agent made itself.
+    /// Keeps what the Stop hooks said in sending the agent back to work,
+    /// which comes as a message of the user's the agent made itself, less
+    /// the workbench's own reason when its team hold was one of them.
     fn fed(&mut self, line: &Value, parent: Option<&str>) {
         if line["isSynthetic"] != true || parent.is_some() {
             return;
@@ -1785,9 +1857,14 @@ impl Stream {
         let Some(said) = said.trim_start().strip_prefix(STOP_FEEDBACK) else {
             return;
         };
-        if !matches!(self.stop_said, Some(StopSaid::Held(_))) {
-            self.stop_said = Some(StopSaid::Fed(said.trim().to_string()));
+        let mut said = unescaped(said);
+        if let Some(held) = &self.stop_said.held {
+            said = said.replacen(&crate::run::told_to_go_on(held), "", 1);
+            if said.trim().is_empty() {
+                return;
+            }
         }
+        self.stop_said.hook = Some(HookSaid::Fed(said.trim().to_string()));
     }
 
     fn system(&mut self, line: &Value, out: &mut Reading) {
@@ -1985,21 +2062,26 @@ impl Stream {
                     Some("high" | "immediate") => NoticeLevel::Warning,
                     _ => NoticeLevel::Info,
                 };
-                self.notice(level, text(&line["text"]), out);
+                let message = text(&line["text"]).map(|said| unpointed(&said).to_string());
+                self.notice(level, message, out);
             }
+            // A subagent's Stop hook gives the same lines with nothing to
+            // tell them from the main agent's by, so only the main agent's
+            // are kept. A hook that sent the agent back fails as well, and
+            // what it fed the agent tells more.
             Some("hook_response")
-                if matches!(line["hook_event"].as_str(), Some("Stop" | "SubagentStop"))
+                if line["hook_event"] == "Stop"
                     && line["outcome"] == "error"
-                    && self.stop_said.is_none() =>
+                    && self.stop_said.hook.is_none() =>
             {
                 let printed = text(&line["output"])
-                    .map(|output| output.trim().to_string())
+                    .map(|output| unescaped(&output).trim().to_string())
                     .filter(|output| !output.is_empty());
                 let said = printed.unwrap_or_else(|| match line["exit_code"].as_i64() {
                     Some(code) => format!("it exited with code {code}"),
                     None => "it said nothing".to_string(),
                 });
-                self.stop_said = Some(StopSaid::Failed(said));
+                self.stop_said.hook = Some(HookSaid::Failed(said));
             }
             Some("informational") => {
                 let level = match line["level"].as_str() {
@@ -2008,7 +2090,8 @@ impl Stream {
                     // Shown only in the terminal's transcript view.
                     _ => return,
                 };
-                self.notice(level, text(&line["content"]), out);
+                let message = text(&line["content"]).map(|said| unpointed(&said).to_string());
+                self.notice(level, message, out);
             }
             Some("model_fallback") => {
                 let said = text(&line["content"]).filter(|said| !said.is_empty());
@@ -2145,7 +2228,6 @@ impl Stream {
     }
 
     fn notice(&mut self, level: NoticeLevel, message: Option<String>, out: &mut Reading) {
-        let message = message.map(|message| unpointed(&message).to_string());
         if let Some(message) = message.filter(|message| !message.trim().is_empty()) {
             out.events.push(Event::Notice { level, message });
         }
@@ -2155,35 +2237,27 @@ impl Stream {
     /// in place of its own, which only points at its terminal's transcript:
     /// what the hook said, or why the workbench sent a lead back to work.
     fn stop_notice(&mut self) -> (NoticeLevel, String) {
-        let shown = |said: String| {
-            let mut said = said;
-            if crate::integrated::cut(&mut said, HOOK_SAID_KEEP) {
-                said.push('…');
-            }
-            said
+        let StopSaid { held, hook } = std::mem::take(&mut self.stop_said);
+        let level = match (&held, &hook) {
+            (_, Some(HookSaid::Failed(_))) | (None, None) => NoticeLevel::Warning,
+            _ => NoticeLevel::Info,
         };
-        match self.stop_said.take() {
-            Some(StopSaid::Held(held)) => (
-                NoticeLevel::Info,
-                format!("Chord sent this lead back to work. {held}"),
+        let message = match (held, hook) {
+            (Some(held), Some(HookSaid::Fed(said) | HookSaid::Failed(said))) => format!(
+                "Chord sent this lead back to work. {held} Another stop hook also spoke: {}",
+                hook_shown(&said)
             ),
-            Some(StopSaid::Fed(said)) if !said.is_empty() => (
-                NoticeLevel::Info,
-                format!("A stop hook sent the agent back to work: {}", shown(said)),
-            ),
-            Some(StopSaid::Fed(_)) => (
-                NoticeLevel::Info,
-                "A stop hook sent the agent back to work.".to_string(),
-            ),
-            Some(StopSaid::Failed(said)) => (
-                NoticeLevel::Warning,
-                format!("A stop hook failed: {}", shown(said)),
-            ),
-            None => (
-                NoticeLevel::Warning,
-                "A stop hook reported a problem and said nothing more.".to_string(),
-            ),
-        }
+            (Some(held), None) => format!("Chord sent this lead back to work. {held}"),
+            (None, Some(HookSaid::Fed(said))) => match hook_shown(&said) {
+                shown if shown.is_empty() => "A stop hook sent the agent back to work.".to_string(),
+                shown => format!("A stop hook sent the agent back to work: {shown}"),
+            },
+            (None, Some(HookSaid::Failed(said))) => {
+                format!("A stop hook failed: {}", hook_shown(&said))
+            }
+            (None, None) => "A stop hook reported a problem.".to_string(),
+        };
+        (level, message)
     }
 
     /// Tells what the conversation takes of the context window, when that
@@ -2235,7 +2309,7 @@ impl Stream {
         self.open
             .retain(|(message, _), _| messages.contains(message));
         self.closed.retain(|message, _| messages.contains(message));
-        self.stop_said = None;
+        self.stop_said = StopSaid::default();
     }
 
     /// The answer to the reads-only hook for one tool use. A command that
@@ -2316,7 +2390,7 @@ impl Stream {
         let decision = match held {
             Some(held) => {
                 let reason = crate::run::told_to_go_on(&held);
-                self.stop_said = Some(StopSaid::Held(held));
+                self.stop_said.held = Some(held);
                 json!({ "decision": "block", "reason": reason })
             }
             None => json!({}),
@@ -3615,11 +3689,154 @@ mod tests {
                 },
                 Event::Notice {
                     level: NoticeLevel::Warning,
-                    message: "A stop hook reported a problem and said nothing more.".into()
+                    message: "A stop hook reported a problem.".into()
                 },
             ],
             "what a hook said is told once"
         );
+    }
+
+    #[test]
+    fn a_hook_is_told_by_its_first_lines_without_the_terminals_colours() {
+        let mut stream = stream();
+        let out = events(
+            &mut stream,
+            &[
+                json!({"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","output":"\u{1b}[31mone\u{1b}[0m\n\u{1b}]8;;https://x.dev\u{7}two\u{1b}]8;;\u{1b}\\\n\nthree\nfour\n","exit_code":1,"outcome":"error"}),
+                stop_hook_error(),
+                stop_feedback("\u{1b}[1mfix it\u{1b}[22m\n"),
+                stop_hook_error(),
+            ],
+        );
+        assert_eq!(
+            notices(&out),
+            [
+                Event::Notice {
+                    level: NoticeLevel::Warning,
+                    message: "A stop hook failed: one\ntwo\nthree…".into()
+                },
+                Event::Notice {
+                    level: NoticeLevel::Info,
+                    message: "A stop hook sent the agent back to work: fix it".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_subagents_stop_hook_is_not_told_as_the_agents() {
+        let mut stream = stream();
+        let out = events(
+            &mut stream,
+            &[
+                json!({"type":"system","subtype":"hook_response","hook_name":"SubagentStop","hook_event":"SubagentStop","output":"subagent hook broke\n","exit_code":1,"outcome":"error"}),
+                stop_hook_error(),
+                json!({"type":"system","subtype":"hook_response","hook_name":"SubagentStop","hook_event":"SubagentStop","output":"subagent hook broke\n","exit_code":1,"outcome":"error"}),
+                json!({"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","output":"main hook broke\n","exit_code":1,"outcome":"error"}),
+                stop_hook_error(),
+            ],
+        );
+        assert_eq!(
+            notices(&out),
+            [
+                Event::Notice {
+                    level: NoticeLevel::Warning,
+                    message: "A stop hook reported a problem.".into()
+                },
+                Event::Notice {
+                    level: NoticeLevel::Warning,
+                    message: "A stop hook failed: main hook broke".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn what_a_stop_hook_said_ends_with_the_turn() {
+        let failed = || json!({"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","output":"stale\n","exit_code":1,"outcome":"error"});
+        for ended in [
+            json!({"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0}),
+            json!({"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":1,"terminal_reason":"aborted_streaming"}),
+        ] {
+            let mut stream = stream();
+            let out = events(&mut stream, &[failed(), ended.clone(), stop_hook_error()]);
+            assert_eq!(
+                notices(&out),
+                [Event::Notice {
+                    level: NoticeLevel::Warning,
+                    message: "A stop hook reported a problem.".into()
+                }],
+                "{ended}"
+            );
+        }
+    }
+
+    #[test]
+    fn two_stop_hooks_in_one_stop_are_told_together() {
+        let mut stream = stream();
+        let out = events(
+            &mut stream,
+            &[
+                json!({"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","output":"boom\n","exit_code":1,"outcome":"error"}),
+                stop_feedback("[/tmp/hooks/lint.sh]: lint failed"),
+                stop_hook_error(),
+            ],
+        );
+        assert_eq!(
+            notices(&out),
+            [Event::Notice {
+                level: NoticeLevel::Info,
+                message:
+                    "A stop hook sent the agent back to work: [/tmp/hooks/lint.sh]: lint failed"
+                        .into()
+            }],
+            "what a hook fed the agent tells more than a failure"
+        );
+
+        let (mut stream, _home, _folder) = in_a_run("stream-stop-two", "lead");
+        let stop = json!({ "hook_event_name": "Stop", "stop_hook_active": false });
+        type Beside = fn(&str) -> Value;
+        let cases: [(Beside, NoticeLevel, &str); 2] = [
+            (
+                stop_feedback_of_both,
+                NoticeLevel::Info,
+                "[/tmp/hooks/lint.sh]: lint failed",
+            ),
+            (failed_beside, NoticeLevel::Warning, "boom"),
+        ];
+        for (other, level, words) in cases {
+            let sent_back = called_back(&mut stream, TEAM_HOLD_HOOK, stop.clone());
+            let reason = sent_back["reason"].as_str().unwrap().to_string();
+            let out = events(&mut stream, &[other(&reason), stop_hook_error()]);
+            let [Event::Notice {
+                level: told,
+                message,
+            }] = &notices(&out)[..]
+            else {
+                panic!("one notice: {out:?}");
+            };
+            assert_eq!(*told, level);
+            assert!(
+                message.starts_with("Chord sent this lead back to work. Handing over is held: "),
+                "{message}"
+            );
+            assert!(
+                message.ends_with(&format!(" Another stop hook also spoke: {words}")),
+                "{message}"
+            );
+            assert!(!message.contains("gates tool"), "{message}");
+        }
+    }
+
+    /// The agent's feedback line when the team hold and another hook both
+    /// sent it back.
+    fn stop_feedback_of_both(reason: &str) -> Value {
+        stop_feedback(&format!("{reason}\n\n[/tmp/hooks/lint.sh]: lint failed"))
+    }
+
+    /// A Stop hook that failed beside the team hold's block.
+    fn failed_beside(_reason: &str) -> Value {
+        json!({"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","output":"boom\n","exit_code":1,"outcome":"error"})
     }
 
     #[test]
@@ -3643,6 +3860,10 @@ mod tests {
                 json!({"type":"system","subtype":"notification","key":"summarize-ctrl-o-hint","text":"Conversation compacted · ctrl+o for history","priority":"low"}),
                 json!({"type":"system","subtype":"notification","key":"k","text":"Something new · Shift+Tab to switch","priority":"low"}),
                 json!({"type":"system","subtype":"notification","key":"k","text":"Plan · Build · Ship","priority":"low"}),
+                json!({"type":"system","subtype":"notification","key":"k","text":"Rebound · Ctrl+K now opens search","priority":"low"}),
+                json!({"type":"system","subtype":"informational","level":"notice","content":"Two lines · ctrl+o to see\nthen more"}),
+                json!({"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","output":"waiting · ctrl+c to cancel","exit_code":1,"outcome":"error"}),
+                stop_hook_error(),
             ],
         );
         let said: Vec<String> = notices(&out)
@@ -3655,11 +3876,15 @@ mod tests {
         assert_eq!(
             said,
             [
-                "A stop hook reported a problem and said nothing more.",
+                "A stop hook reported a problem.",
                 "Conversation compacted",
                 "Something new",
                 "Plan · Build · Ship",
-            ]
+                "Rebound · Ctrl+K now opens search",
+                "Two lines · ctrl+o to see\nthen more",
+                "A stop hook failed: waiting · ctrl+c to cancel",
+            ],
+            "only the agent's own pointer is dropped, never a hook's words"
         );
     }
 

@@ -580,13 +580,17 @@ naming the session and its kind:
   before the turn's end, and for no turn that ended any other way.
 - **notice**: something the harness says that is neither an error nor part
   of a turn, such as that it fell back to another model, as information or
-  as a warning. A notice never ends with a pointer to a key of the
-  harness's terminal, such as one to open its transcript, which the window
-  does not have. When a Stop hook keeps the agent from stopping or fails,
-  the notice says what the hook said, cut to a few lines: as information
-  when it sent the agent back to work, as a warning when it failed. When
-  Chord's own hold sent a team's lead back, the notice says so in Chord's
-  words, with the gate that holds.
+  as a warning. Claude Code ends some notices with a pointer to a key of
+  its terminal, such as "· ctrl+o for history", which the window does not
+  have, and Chord drops it; it leaves what a hook wrote as written. When
+  the main agent's Stop hook keeps it from stopping or fails, the notice
+  says what the hook said, without its colour codes and cut to its first
+  three lines: as information when it sent the agent back to work, as a
+  warning when it failed. A subagent's Stop hook is not told apart from
+  the main agent's in what the harness writes, so its notice says only
+  that a stop hook reported a problem. When Chord's own hold sent a team's
+  lead back, the notice says so in Chord's words, with the gate that
+  holds, and with what another stop hook said in the same stop.
 - **retrying**: a request to the model failed and the harness tries again;
   the turn goes on.
 - **skipped**: streamed pieces left out because the window or its
