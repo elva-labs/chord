@@ -46,6 +46,9 @@ interface FakeOptions {
   /** A machine whose settings hold no workflows at all, so a new session
       has nothing to ask about how it runs where one agent is installed. */
   noWorkflows?: boolean;
+  /** Agents and teams switched off in the machine's settings, so new
+      sessions are offered the workflows. */
+  agentsOff?: boolean;
 }
 
 declare global {
@@ -122,6 +125,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
       withWorkflow,
       workflowElsewhere,
       noWorkflows,
+      agentsOff,
       workflow,
     }) => {
       const read = (term: any) => {
@@ -325,12 +329,14 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
         settingsAnswer: async () => {},
         // A machine that keeps no settings: the window's own copy holds.
         settingsGet: async () => {
+          const switched = agentsOff ? { agentsOn: false } : {};
           if (noWorkflows)
-            return { stored: true, settings: { workflows: { list: [], default: null, overrides: {} } } };
+            return { stored: true, settings: { ...switched, workflows: { list: [], default: null, overrides: {} } } };
           if (workflowElsewhere)
             return {
               stored: true,
               settings: {
+                ...switched,
                 workflows: { list: [workflow], default: null, overrides: { "/home/ada/dev/two": "Build and review" } },
               },
             };
@@ -338,6 +344,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
             return {
               stored: true,
               settings: {
+                ...switched,
                 workflows: { list: [workflow], default: "Build and review", overrides: {} },
               },
             };
@@ -437,6 +444,7 @@ async function installFakeCore(page: Page, options: FakeOptions = {}) {
       withWorkflow: options.withWorkflow ?? false,
       workflowElsewhere: options.workflowElsewhere ?? false,
       noWorkflows: options.noWorkflows ?? false,
+      agentsOff: options.agentsOff ?? false,
       workflow: BUILD_AND_REVIEW,
     },
   );
@@ -2845,7 +2853,7 @@ test.describe("a new session from the palette", () => {
   test("offers the workflows above the agents, the project's own first, and starts what is picked", async ({
     page,
   }) => {
-    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true });
+    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true, agentsOff: true });
     await askNew(page, "new session in");
     // The project follows the workflow, so the defaults say so.
     await expect(ready(page).getByTestId("palette-detail")).toHaveText("Build and review");
@@ -2881,7 +2889,7 @@ test.describe("a new session from the palette", () => {
   test("starts the project's workflow from the project's + on the defaults, and an agent from Change", async ({
     page,
   }) => {
-    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true });
+    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true, agentsOff: true });
     await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
     await expect(ready(page).getByTestId("palette-detail")).toHaveText("Build and review");
     await page.keyboard.press("Enter");
@@ -2906,14 +2914,35 @@ test.describe("a new session from the palette", () => {
   });
 
   test("marks a workflow the project chose as the project's workflow", async ({ page }) => {
-    await open(page, { open: [TWO], codex: "/usr/local/bin/codex", workflowElsewhere: true });
+    await open(page, { open: [TWO], codex: "/usr/local/bin/codex", workflowElsewhere: true, agentsOff: true });
     await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
     await change(page).click();
     await expect(entries(page).filter({ hasText: "project's workflow" })).toHaveCount(1);
   });
 
+  test("with agents and teams on, starts the project's workflow from the defaults and offers only the agents on Change", async ({
+    page,
+  }) => {
+    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true });
+    await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Build and review");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => spawnCount(page)).toBe(1);
+    expect((await spawns(page))[0].instructions).toContain('workflow "Build and review"');
+
+    await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
+    await change(page).click();
+    await expect(entries(page)).toHaveCount(2);
+    await expect(entries(page).filter({ hasText: "Build and review" })).toHaveCount(0);
+    await expect(chosen(page)).toContainText("Claude Code");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => spawnCount(page)).toBe(2);
+    expect((await spawns(page))[1].agent).toBe("claude-code");
+    expect((await spawns(page))[1].instructions).toBeUndefined();
+  });
+
   test("offers no workflow where the project follows none", async ({ page }) => {
-    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", workflowElsewhere: true });
+    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", workflowElsewhere: true, agentsOff: true });
     await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
     await change(page).click();
     await expect(entries(page)).toHaveCount(2);

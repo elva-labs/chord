@@ -195,8 +195,9 @@ session` with what it starts on, such as `Claude Code · Work`, and
 <kbd>Enter</kbd> starts it: the project's account and its workflow, else the
 harness last started in it. Under it, where there is anything to choose,
 Change asks the rest a step at a time. Typing on the line lists everything
-Change would ask, narrowed by what is typed: the workflows and harnesses, then
-the accounts, each under its heading. <kbd>Enter</kbd> on one starts the
+Change would ask, narrowed by what is typed: the harnesses, with the
+workflows while agents and teams are off, then the accounts, each under its
+heading. <kbd>Enter</kbd> on one starts the
 session with that one answer changed, so `cod` and <kbd>Enter</kbd> start
 Codex under the account the line named. With nothing to choose, the line
 takes no text. While a session that another started in a
@@ -205,12 +206,15 @@ different project is on screen, the project on screen is the starter's, as
 a session in the project on screen. Change asks the account, when accounts are named in the
 [settings](reference/settings.md#accounts), with the project's own under the cursor;
 then how it runs, when there is a workflow or more than one harness to pick
-between: the workflows under one heading, offered once a workflow has been
+between: with agents and teams off, the workflows under one heading, offered once a workflow has been
 turned on for new sessions or for a project, the project's own first and
 marked as the project's workflow or the default, each with the models it
-runs on, and under another the harnesses to run alone, with no workflow. The cursor starts on the
-project's workflow, else on the harness last started in the project. A step
-with nothing to choose is not asked. Each
+runs on, and under another the harnesses to run alone, with no workflow. With
+them on, only the harnesses to run alone, so in a project that follows a
+workflow, going through Change leaves the workflow, while an account typed
+on the line keeps it. The cursor starts on the project's workflow where one
+is offered, else on the harness last started in the project. A step with
+nothing to choose is not asked. Each
 answer stays in the field as a chip, and <kbd>Backspace</kbd> on an empty
 field takes the last one back, one step to a press however long the key is
 held; with none taken it goes back to the line of defaults, and from that

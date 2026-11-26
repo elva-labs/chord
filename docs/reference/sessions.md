@@ -1159,10 +1159,14 @@ session is not ready.
 
 A new session, until its first message, also shows the
 [workflow](../orchestrator.md#following-a-workflow) it follows in a chip
-after the mode: the project's workflow to begin with, or none. The chip
-opens a menu of no workflow, the agent working alone on the model the user
-picks, then each workflow with a line saying which model directs, works and
-reviews. A workflow directed by a harness that is not installed, or that
+after the mode: the project's workflow to begin with, or none. With agents
+and teams off, the plus offers Workflow to bring the chip up while the
+session follows none, and the chip opens a menu of no workflow, the agent
+working alone on the model the user picks, then each workflow with a line
+saying which model directs, works and reviews. With them on, the plus
+offers no workflow: the chip shows only for a session that follows one, and
+its menu holds no workflow and that one, so the session can leave it but
+not pick another. A workflow directed by a harness that is not installed, or that
 runs only in a terminal, is listed with why and cannot be picked. Picking a
 workflow makes the session its orchestrator, as starting a session under it
 does: the session starts again on the orchestrator's harness and model, told

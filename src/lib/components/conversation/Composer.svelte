@@ -123,7 +123,9 @@
    *
    * A new conversation nothing has been said in yet offers the workflows
    * beside the model and the mode: picking one makes the session its
-   * orchestrator, picking none makes it the agent alone. Once a message
+   * orchestrator, picking none makes it the agent alone. While agents and
+   * teams are on, none is offered: a session that follows one shows it in
+   * the chip, whose menu leaves it for the agent alone. Once a message
    * is sent the choice is kept, and the chip goes. While the session
    * follows a workflow the model chip shows the orchestrator's model and
    * holds it, saying the workflow sets it.
@@ -1243,7 +1245,8 @@
 
   /** Chips kept while the pointer or the keyboard is in the row or a menu
       of it is open, so nothing moves under the pointer; they go once the
-      row is left. */
+      row is left. While agents and teams are on, a workflow left has
+      nothing to pick, so its chip goes at once. */
   let kept = $state({ agent: false, mode: false, effort: false, workflow: false, resume: false });
   let pointerIn = $state(false);
   let focusIn = $state(false);
@@ -1263,7 +1266,7 @@
   let showAgent = $derived(switches.agents && (away.agent || kept.agent));
   let showEffort = $derived(away.effort || kept.effort);
   let showMode = $derived(away.mode || kept.mode);
-  let showWorkflow = $derived(away.workflow || kept.workflow);
+  let showWorkflow = $derived(away.workflow || (kept.workflow && !switches.agents));
   let showResume = $derived(away.resume || kept.resume);
 
   /** What the plus offers: the settings the agent and the session take that
@@ -1274,7 +1277,7 @@
       list.push({ value: "agent", name: "Agent", about: "Who the session works as" });
     if (modes.length > 0 && mode !== null && !showMode)
       list.push({ value: "mode", name: "Mode", about: "What the session may do without asking" });
-    if (choosable && !showWorkflow && working === null)
+    if (choosable && !showWorkflow && working === null && !switches.agents)
       list.push({ value: "workflow", name: "Workflow", about: "Who directs, works and reviews" });
     if (resumable && resumeFollows === null && !showResume)
       list.push({ value: "resume", name: "Auto-resume", about: "Go on by itself when the usage limit resets" });

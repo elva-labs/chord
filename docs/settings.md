@@ -45,7 +45,7 @@ Let sessions talk to Chord, in the Sessions tab. Off, the app learns what a sess
 - **Claude Code context**: the tokens of context at which Claude Code sessions compact. Compact my sessions at is for those you start yourself, empty to begin with, which leaves it to Claude Code. Compact started sessions at is for those another session starts, 150,000 to begin with. A figure runs from 100,000 to 1,000,000. A session takes it when it starts or is resumed.
 - **Fold inactive projects after**: 1 day, 7 days, 30 days or never, 7 days to begin with.
 - **Keep notes**: on to begin with. Off, a session is not asked to keep notes, and a conversation is always resumed whole rather than going on from its notes. One too large for the model is left to the harness's own compaction.
-- **Agents and teams**: on to begin with. Off, nothing offers an agent, a team or a gate: the composer has no agent chip, the Agents tab is gone, and a session cannot start another as an agent. A team's run already going on stops holding anything until they are on again, so work it held goes through. Workflows stay offered, since they name harnesses, not agents.
+- **Agents and teams**: on to begin with. Off, nothing offers an agent, a team or a gate: the composer has no agent chip, the Agents tab is gone, and a session cannot start another as an agent. A team's run already going on stops holding anything until they are on again, so work it held goes through. Workflows are offered for new sessions only while agents and teams are off.
 
 A remote machine follows both switches. Neither switch deletes anything. Turned on again, the notes, agents, teams and runs are all as they were.
 
@@ -57,7 +57,7 @@ An agent is a role: a title, a description whose first line is what lists show, 
 
 ## Workflows
 
-A workflow names the model a session starts on, and the models it may hand work and review to. The roles are fixed: the orchestrator you talk to, workers that do a piece of work, and reviewers that check it. Each project can follow a workflow of its own. Workflows are kept in the settings file, with no tab of their own: the window offers teams in their place, and a workflow in the file still starts sessions from the palette. See [workflows](reference/settings.md#workflows) and [orchestrator](orchestrator.md).
+A workflow names the model a session starts on, and the models it may hand work and review to. The roles are fixed: the orchestrator you talk to, workers that do a piece of work, and reviewers that check it. Each project can follow a workflow of its own. Workflows are kept in the settings file, with no tab of their own: the window offers teams in their place. A project that follows a workflow in the file still starts new sessions under it, and a session under one keeps it. While agents and teams are on, nothing offers a workflow to pick. See [workflows](reference/settings.md#workflows) and [orchestrator](orchestrator.md).
 
 ## Teams
 
