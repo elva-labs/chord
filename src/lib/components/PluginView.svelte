@@ -13,6 +13,9 @@
    * takes the page's height, which the page reports through the bridge put
    * in front of it.
    *
+   * While a background shows, the page's `html` and `body` are clear, so it
+   * is painted as the card it lies on.
+   *
    * The bridge is the whole of what crosses. From the page: a place to open
    * in the viewer, a line for the agent, a message for the plugin, a session
    * of the project to bring on screen. To the page: the data its plugin
@@ -39,7 +42,7 @@
   // height: the bottom of its last block, which is what the frame should
   // show without a scrollbar.
   const BRIDGE =
-    '<script>(function(){var handler=null,target=null,onTarget=null,onContext=null;window.workbench={context:null,open:function(path,from,to,note){parent.postMessage({workbench:"open",path:path,from:from,to:to,note:note===undefined?null:note},"*")},agent:function(text){parent.postMessage({workbench:"agent",text:text},"*")},send:function(payload){parent.postMessage({workbench:"send",payload:payload},"*")},onData:function(fn){handler=fn},onTarget:function(fn){onTarget=fn;if(target!==null)fn(target)},onContext:function(fn){onContext=fn;if(window.workbench.context!==null)fn(window.workbench.context)},show:function(session){parent.postMessage({workbench:"show",session:session},"*")}};addEventListener("message",function(e){var m=e.data;if(m&&m.workbench==="data"&&handler)handler(m.data);if(m&&m.workbench==="target"){target=m.target;if(onTarget)onTarget(target)}if(m&&m.workbench==="context"){var c=m.context,s=document.documentElement.style;window.workbench.context=c;for(var k in c.tokens)s.setProperty("--workbench-"+k,c.tokens[k]);if(onContext)onContext(c)}});function h(){var c=document.body?document.body.children:[],m=0;for(var i=0;i<c.length;i++){var b=c[i].getBoundingClientRect().bottom;if(b>m)m=b}return m>0?m+16:document.documentElement.scrollHeight}function r(){parent.postMessage({workbenchHeight:h()},"*")}addEventListener("load",r);if(window.ResizeObserver&&document.documentElement)new ResizeObserver(r).observe(document.documentElement);setTimeout(r,0)})()<\/script>';
+    '<script>(function(){var handler=null,target=null,onTarget=null,onContext=null;window.workbench={context:null,open:function(path,from,to,note){parent.postMessage({workbench:"open",path:path,from:from,to:to,note:note===undefined?null:note},"*")},agent:function(text){parent.postMessage({workbench:"agent",text:text},"*")},send:function(payload){parent.postMessage({workbench:"send",payload:payload},"*")},onData:function(fn){handler=fn},onTarget:function(fn){onTarget=fn;if(target!==null)fn(target)},onContext:function(fn){onContext=fn;if(window.workbench.context!==null)fn(window.workbench.context)},show:function(session){parent.postMessage({workbench:"show",session:session},"*")}};addEventListener("message",function(e){var m=e.data;if(m&&m.workbench==="data"&&handler)handler(m.data);if(m&&m.workbench==="target"){target=m.target;if(onTarget)onTarget(target)}if(m&&m.workbench==="context"){var c=m.context,s=document.documentElement.style;window.workbench.context=c;for(var k in c.tokens)s.setProperty("--workbench-"+k,c.tokens[k]);var y=document.getElementById("workbench-clear");if(m.clear){if(!y){y=document.createElement("style");y.id="workbench-clear";document.documentElement.appendChild(y)}y.textContent=":root{color-scheme:"+c.scheme+"!important;background:transparent!important}html body{background:transparent!important}"}else if(y)y.remove();if(onContext)onContext(c)}});function h(){var c=document.body?document.body.children:[],m=0;for(var i=0;i<c.length;i++){var b=c[i].getBoundingClientRect().bottom;if(b>m)m=b}return m>0?m+16:document.documentElement.scrollHeight}function r(){parent.postMessage({workbenchHeight:h()},"*")}addEventListener("load",r);if(window.ResizeObserver&&document.documentElement)new ResizeObserver(r).observe(document.documentElement);setTimeout(r,0)})()<\/script>';
 
   let frame: HTMLIFrameElement;
   let height = $state(360);
@@ -146,15 +149,20 @@
   });
 
   // What is around the page, told once it is there and again when the
-  // session on screen or the theme changes.
+  // session on screen, the theme or the background changes. The tokens are
+  // read where the frame stands, so they are those of the card it lies on.
+  // While a background shows, the bridge also clears the page's own ground,
+  // which needs the page in the app's colour scheme: a frame whose scheme
+  // differs from the page's is painted opaque.
   $effect(() => {
     if (loaded !== page.html) return;
     void theme.painted;
-    const context = contextFor(page.project, tokenReader(document.documentElement));
-    const said = `${loads}\n${JSON.stringify(context)}`;
+    const clear = theme.behind !== null;
+    const context = contextFor(page.project, tokenReader(frame));
+    const said = `${loads}\n${clear}\n${JSON.stringify(context)}`;
     if (said === told) return;
     told = said;
-    frame?.contentWindow?.postMessage({ workbench: "context", context }, "*");
+    frame?.contentWindow?.postMessage({ workbench: "context", context, clear }, "*");
   });
 </script>
 
@@ -183,6 +191,11 @@
     border: 0;
     border-radius: var(--radius);
     background: Canvas;
+  }
+
+  /* Over a background the page lies on the card itself. */
+  :global(:root[data-background]) iframe {
+    background: transparent;
   }
 
   /* Until its page has loaded, the frame holds the browser's own empty

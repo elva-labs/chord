@@ -85,6 +85,6 @@
   /* Where the cards let a background through, the ask is laid over the
      card's paint so it still covers what is under it. */
   :global(:root[data-cards]) .over > :global(.ask-card.floating) {
-    background: linear-gradient(var(--surface), var(--surface)), var(--paint-surface);
+    background: var(--paint-surface);
   }
 </style>

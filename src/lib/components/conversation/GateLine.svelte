@@ -412,7 +412,7 @@
     max-width: 740px;
     margin: 0 auto 6px;
     border-radius: calc(var(--radius) + 5px);
-    background: var(--surface);
+    background: var(--clear-surface);
     box-shadow: inset 0 0 0 1px var(--divider, var(--rule));
     font-family: var(--chrome);
   }
@@ -653,7 +653,7 @@
     margin: 0;
     padding: 11px 12px 12px;
     border-radius: calc(var(--radius) + 2px);
-    background: var(--surface);
+    background: var(--paint-surface);
     box-shadow:
       0 0 0 1px var(--divider, var(--rule)),
       0 12px 32px color-mix(in srgb, black 24%, transparent);

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PROJECT, installFakeCore, startNew } from "./fake";
 
 // A session in a team run shows the run's gates on one line above the
@@ -77,8 +77,8 @@ function run(lead: string, line: string) {
   };
 }
 
-async function open(page: Page, lead?: string) {
-  await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
+async function open(page: Page, lead?: string, settings: Record<string, unknown> = {}) {
+  await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"], ...settings } });
   await page.goto("/");
   await page.getByTestId("start-agent").click();
   await startNew(page);
@@ -277,3 +277,21 @@ test("offers to end the run from a member when its lead has no row", async ({ pa
   await expect(ask).toHaveCount(0);
   expect(own).not.toBe("gone-lead-token");
 });
+
+for (const look of ["modern", "terminal"])
+  test(`over a background the line shows its card and a popover is painted as one, ${look}`, async ({ page }) => {
+    const lagoon = { dots: [{ hue: 192, chroma: 0.9 }], harmony: "free", strength: 0.6, grain: 0.25 };
+    await open(page, undefined, { look, backgrounds: { teal: lagoon }, cards: { teal: 0.25 } });
+    await expect(page.locator(":root")).toHaveAttribute("data-cards", /.*/);
+    const paint = (locator: Locator) =>
+      locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return `${style.backgroundColor} ${style.backgroundImage} ${style.backgroundAttachment}`;
+      });
+    const agent = "section[data-pane='agent']";
+    const card = await paint(page.locator(look === "modern" ? `${agent} > .body` : agent));
+    expect(await paint(page.getByTestId("gate-line"))).toBe("rgba(0, 0, 0, 0) none scroll");
+    await page.getByTestId("gate-line-toggle").click();
+    await page.getByTestId("gate-waive").click();
+    expect(await paint(page.getByTestId("gate-waive-ask"))).toBe(card);
+  });

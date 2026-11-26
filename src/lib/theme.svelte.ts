@@ -137,6 +137,9 @@ export const theme = $state<{
   /** The share the cards let through now: the one asked while a
       background shows and the system asks for no more contrast, else none. */
   cardsShown: number;
+  /** What the background on screen is painted from, a new value for each
+      one, or null while none shows. */
+  behind: string | null;
 }>({
   choice: "system",
   palette: "teal",
@@ -149,6 +152,7 @@ export const theme = $state<{
   preview: null,
   painted: 0,
   cardsShown: 0,
+  behind: null,
 });
 
 function isPalette(value: unknown): value is string {
@@ -471,16 +475,12 @@ let resting: ReturnType<typeof setTimeout> | null = null;
     out from, with the appearances whose gradient in it is drawn small, and
     the images it names: a repaint that changes none of it works nothing
     out again, unless it is the one that draws one of those at full size. */
-type Worked = {
-  from: string;
-  css: string;
-  rough: Appearance[];
-  urls: string[];
-};
+type Worked = Drawn & { css: string };
 
-/** What a background is painted with, sheet or root: the appearances whose
-    gradient is drawn small, and the images it names. */
-type Drawn = { rough: Appearance[]; urls: string[] };
+/** What a background is painted with, sheet or root: what it was worked
+    out from, the appearances whose gradient is drawn small, and the images
+    it names. */
+type Drawn = { from: string; rough: Appearance[]; urls: string[] };
 let worked: Worked | null = null;
 
 /** The sheet the rested stamp stands for, or is waiting to: it goes on
@@ -519,7 +519,7 @@ function stampRested(sheet: Drawn | null) {
     whole window's style and layout be worked out again, every element
     of it, where a property changed on the root costs only the style of
     what inherits it. */
-type Laid = Drawn & { from: string; values: Record<string, string> };
+type Laid = Drawn & { values: Record<string, string> };
 let laid: Laid | null = null;
 
 /** Lays a background being picked on the root, changing only the
@@ -564,6 +564,7 @@ function paintBackground(full: readonly Appearance[] = []) {
     stampRested(null);
     stamp("cards", null);
     theme.cardsShown = 0;
+    theme.behind = null;
     layOnRoot(null);
     if (sheet.textContent !== "") sheet.textContent = "";
     return;
@@ -605,6 +606,7 @@ function paintBackground(full: readonly Appearance[] = []) {
   stampRested(painting);
   theme.cardsShown = cards;
   stamp("cards", cards > 0 ? "" : null);
+  theme.behind = painting.from;
 }
 
 /** What the colours read back from the page follow, as last painted. */
