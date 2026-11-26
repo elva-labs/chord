@@ -173,6 +173,8 @@ test("the palette's new session asks which agent it works as, starts as the one 
     .getByTestId("palette-row")
     .filter({ has: page.locator("[data-testid='palette-label']", { hasText: /^Reviewer$/ }) });
   await expect(reviewer.getByTestId("palette-lock")).toBeVisible();
+  await expect(reviewer).toHaveAccessibleName(/^Reviewer .*Reads only$/);
+  await expect(page.getByRole("group", { name: "Agents" })).toBeVisible();
   await expect(reviewer.getByTestId("palette-icon")).toHaveAttribute("data-icon", "agent");
   await reviewer.click();
   await expect(page.getByTestId("palette")).toHaveCount(0);

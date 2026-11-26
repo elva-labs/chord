@@ -361,7 +361,7 @@
               {:else if item.kind === "choice"}
                 <span class="detail" data-testid="palette-detail">{item.detail}</span>
                 <span class="end" data-testid="palette-end"
-                  >{item.end}{#if item.lock}<span class="lock" data-testid="palette-lock" title="Reads only"
+                  >{item.end}{#if item.lock}<span class="lock" role="img" aria-label="Reads only" data-testid="palette-lock" title="Reads only"
                       ><Icon name="lock" size={12} /></span
                     >{/if}</span
                 >
