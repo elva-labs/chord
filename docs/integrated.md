@@ -730,7 +730,8 @@ comes, whatever the command answers.
 A line the user sends with a leading `!` is a command of their own. It
 runs in the session's folder, on the machine the harness runs on, and what
 it prints goes to the harness as context, with no turn of the harness's own:
-the harness reads it with the next message. One runs at a time, and a
+the harness reads it with the next message. A command the agent offered
+is the exception for Claude Code, as below. One runs at a time, and a
 message or a command sent while one runs or waits waits behind it, in the
 order sent. Each harness takes a command its own way.
 
@@ -762,6 +763,23 @@ order sent. Each harness takes a command its own way.
   command sent while a turn runs waits for that turn to end. The command
   ends with the turn it runs in. Should Codex end while the command runs,
   what is left in the command's process group is ended with it.
+
+A command the agent offered the user goes to Claude Code as a turn of its
+own. The window counts a command as offered when the user ran it from the
+run mark after a `! command` in the agent's words, or typed in the
+composer the same line, once trimmed, as one the agent's last answer
+offers; it finds those as it places the marks. The core then gives Claude
+Code the same record headed by a line from the workbench, not the user,
+saying the user ran the command the agent offered and to go on from its
+result, and leaves out what keeps the record from asking the model. So it
+starts a turn of its own once it ends, done, failed, stopped or timed out,
+and a command that ends while a turn runs starts its turn after that one,
+never cutting it short; several that end during one turn are taken
+together in the next. The thread shows the command as the user's, with no
+message of the user's beside it. A command the user typed on their own
+stays context. For Codex every command stays context: its command runs as
+a turn that asks no model, and asking the model after it would take a
+turn of the workbench's that Codex keeps as a message of the user's.
 
 What a command prints streams to the window as it comes, up to a megabyte.
 The harness is given at most thirty thousand bytes of each stream, standard

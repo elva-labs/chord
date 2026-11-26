@@ -1253,8 +1253,8 @@ in stands where the context share was, files cannot be attached, and Enter
 runs it in that folder, as [sessions in Chord](../integrated.md#commands-the-user-runs)
 describes; before the harness is ready the composer says it runs once it
 is. What it prints goes to the agent as context for the next message,
-with no turn of its own. The thread shows it as the user's, the `!` and the
-line, with what it prints under it as it comes; past twelve lines only the
+with no turn of its own, unless the agent offered it, as below. The thread
+shows it as the user's, the `!` and the line, with what it prints under it as it comes; past twelve lines only the
 last show, with how many there are and Show all. A line under it says it
 runs, with Stop; that it waits for the agent to finish what it is doing,
 with Take back, which puts the line back in the composer; or how it ended
@@ -1270,7 +1270,13 @@ agent is told to write one it wants the user to run themselves, such as a
 login. A quiet run mark stands after it once the words are whole, and a
 click runs it as if the user had typed it in the composer, leaving what is
 written there as it is; nothing runs without the click, and each click
-runs it again. Prose, the user's messages, the agent's thinking and plan,
+runs it again. A command the agent offered, run from its mark or typed in
+the composer as the same line, once trimmed, as one the agent's last answer
+offers, goes to a Claude Code agent as a turn of its own once it ends,
+done, failed or stopped, so the agent goes on from its result without the
+user writing; one that ends while a turn runs starts its turn after that
+one and never cuts it short. The thread still shows it as the user's
+command, with no message beside it. Prose, the user's messages, the agent's thinking and plan,
 a tool's output and a subagent's words get no mark.
 
 A session at rest goes back to before one of the user's own messages, as
