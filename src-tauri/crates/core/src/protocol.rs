@@ -319,6 +319,9 @@ struct IntegratedRunParams {
     id: String,
     command: String,
     text: String,
+    /// A peer that predates it sends none: the command counts as typed.
+    #[serde(default)]
+    offered: bool,
 }
 
 #[derive(Deserialize)]
@@ -790,7 +793,7 @@ pub fn dispatch(
         }
         "integrated_run" => {
             let p: IntegratedRunParams = parse(params)?;
-            core.integrated_run(&p.id, &p.command, &p.text)?;
+            core.integrated_run(&p.id, &p.command, &p.text, p.offered)?;
             Ok(Value::Null)
         }
         "integrated_stop_command" => {

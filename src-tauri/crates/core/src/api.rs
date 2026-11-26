@@ -1351,8 +1351,14 @@ impl Core {
     /// Runs a command the user typed in the session, `text`, under the id
     /// the window chose for it. It waits for what runs before it; its
     /// output and its end come as events.
-    pub fn integrated_run(&self, id: &str, command: &str, text: &str) -> Result<(), String> {
-        crate::integrated::run(&self.integrated, id, command, text)
+    pub fn integrated_run(
+        &self,
+        id: &str,
+        command: &str,
+        text: &str,
+        offered: bool,
+    ) -> Result<(), String> {
+        crate::integrated::run(&self.integrated, id, command, text, offered)
     }
 
     /// Stops the user's command that runs.

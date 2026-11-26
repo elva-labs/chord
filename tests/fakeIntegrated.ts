@@ -33,7 +33,7 @@ export type IntegratedCall =
   | { method: "interrupt"; id: string }
   | { method: "sendNow"; id: string }
   | { method: "withdraw"; id: string; message: string }
-  | { method: "run"; id: string; command: string; text: string }
+  | { method: "run"; id: string; command: string; text: string; offered: boolean }
   | { method: "stopCommand"; id: string; command: string }
   | { method: "compact"; id: string; instructions: string | null }
   | {
@@ -136,8 +136,9 @@ export interface FakeIntegrated {
       refused as the core refuses it. One command runs at a time: it waits
       behind one that runs, and in a session of Codex behind a running
       turn too, and runs once that is over. Claude Code's runs while a turn
-      does. It keeps the session as it is, idle or working. */
-  run(id: string, command: string, text: string): void;
+      does. It keeps the session as it is, idle or working. `offered`
+      says the agent offered the line, kept on the call. */
+  run(id: string, command: string, text: string, offered?: boolean): void;
   /** Stops a running command; it ends stopped, with its output so far,
       after the call. */
   stopCommand(id: string, command: string): void;
@@ -703,13 +704,13 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
       if (fake.withdrawAnswer !== null) throw new Error(fake.withdrawAnswer);
     },
 
-    run(id, command, text) {
+    run(id, command, text, offered = false) {
       const session = live(id);
       if (!text.trim()) throw new Error("there is no command to run");
       if (!UUID.test(command)) throw new Error(`"${command}" is not a UUID`);
       if (session.used.has(command)) throw new Error(`command ${command} was sent already`);
       session.used.add(command);
-      fake.calls.push({ method: "run", id, command, text });
+      fake.calls.push({ method: "run", id, command, text, offered });
       fake.emit(id, {
         type: "command",
         command,

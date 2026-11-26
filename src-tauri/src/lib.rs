@@ -378,6 +378,7 @@ async fn integrated_run(
     id: String,
     command: String,
     text: String,
+    offered: bool,
 ) -> Result<Value, String> {
     let (named, typed) = (command.clone(), text.clone());
     routed(
@@ -385,8 +386,8 @@ async fn integrated_run(
         Arc::clone(&remotes),
         route(&id),
         "integrated_run",
-        move |rest| json!({ "id": rest, "command": named, "text": typed }),
-        move |core, id| core.integrated_run(id, &command, &text),
+        move |rest| json!({ "id": rest, "command": named, "text": typed, "offered": offered }),
+        move |core, id| core.integrated_run(id, &command, &text, offered),
     )
     .await
 }

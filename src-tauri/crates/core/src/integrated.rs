@@ -1206,9 +1206,10 @@ pub trait Driver: Send {
     }
 
     /// For an agent that does not run commands, the line that records a
-    /// command the core ran for the user, under the window's id, as
-    /// context the agent reads with the next message and no turn of its
-    /// own.
+    /// command the core ran for the user, under the window's id: context
+    /// the agent reads with the next message and no turn of its own, or,
+    /// for a command the agent offered, a turn after any that runs, in
+    /// which the agent goes on from the result.
     fn ran(&mut self, _command: &str, _ran: &Ran) -> Result<String, String> {
         Err("the agent takes no command".into())
     }
@@ -1236,6 +1237,9 @@ pub struct Ran<'a> {
     pub stdout: &'a str,
     pub stderr: &'a str,
     pub exit_code: Option<i32>,
+    /// The agent offered the command to the user, so the agent goes on
+    /// from its result in a turn of its own.
+    pub offered: bool,
 }
 
 /// The model, mode and effort the session runs on, as its events last
@@ -2136,6 +2140,8 @@ struct Held {
     images: Vec<Image>,
     /// A command of the user's, `text` being the command.
     command: bool,
+    /// A command the agent offered the user to run.
+    offered: bool,
     /// Where it was sent among the others.
     order: u64,
 }
@@ -2144,6 +2150,8 @@ struct Held {
 struct Running {
     command: String,
     text: String,
+    /// The agent offered it to the user to run.
+    offered: bool,
     /// The process group it runs in, once known: the core's own, or the
     /// agent's shell, looked for once the shell starts.
     group: Option<u32>,
@@ -2241,6 +2249,7 @@ impl Machine {
             text: text.to_string(),
             images: images.to_vec(),
             command,
+            offered: false,
             order: self.holds,
         });
     }
@@ -2542,7 +2551,7 @@ impl Live {
                     return;
                 }
                 let held = machine.held.pop_front().expect("held");
-                self.start_command(machine, held.message, held.text, out);
+                self.start_command(machine, held, out);
                 continue;
             }
             if !machine.tracker.pending.contains(&front.message) {
@@ -2574,13 +2583,13 @@ impl Live {
 
     /// Starts a command of the user's: the agent runs it, or the core
     /// does. One that cannot start fails.
-    fn start_command(
-        &self,
-        machine: &mut Machine,
-        command: String,
-        text: String,
-        out: &mut Vec<Event>,
-    ) {
+    fn start_command(&self, machine: &mut Machine, held: Held, out: &mut Vec<Event>) {
+        let Held {
+            message: command,
+            text,
+            offered,
+            ..
+        } = held;
         let started = if machine.driver.runs_commands() {
             machine
                 .driver
@@ -2598,6 +2607,7 @@ impl Live {
                 machine.running = Some(Running {
                     command,
                     text,
+                    offered,
                     group,
                     seeking: false,
                     sought: false,
@@ -2882,6 +2892,7 @@ impl Live {
             stdout,
             stderr: &stderr,
             exit_code,
+            offered: running.offered,
         };
         let error = match machine.driver.ran(command, &ran) {
             Ok(line) => self
@@ -3726,8 +3737,15 @@ pub fn send(
 /// window chose for it, a UUID it has not used before in the session.
 /// One runs at a time, and once the agent is ready; an agent that runs it
 /// itself takes it between turns. Till then it waits, and what is sent
-/// after it waits for it.
-pub fn run(sessions: &Sessions, id: &str, command: &str, text: &str) -> Result<(), String> {
+/// after it waits for it. `offered` says the agent offered it to the user,
+/// as a line the user ran from its message or typed as it was written.
+pub fn run(
+    sessions: &Sessions,
+    id: &str,
+    command: &str,
+    text: &str,
+    offered: bool,
+) -> Result<(), String> {
     let live = sessions.get(id)?;
     if text.trim().is_empty() {
         return Err("there is no command to run".into());
@@ -3744,6 +3762,9 @@ pub fn run(sessions: &Sessions, id: &str, command: &str, text: &str) -> Result<(
     }
     machine.tracker.claim(command, "command")?;
     machine.hold(command, text, &[], true);
+    if let Some(held) = machine.held.back_mut() {
+        held.offered = offered;
+    }
     let mut out = Vec::new();
     live.release(&mut machine, &mut out);
     if machine.held.iter().any(|held| held.message == command) {
@@ -5146,8 +5167,11 @@ mod tests {
         fn ran(&mut self, command: &str, ran: &Ran) -> Result<String, String> {
             self.recording = Some(command.to_string());
             Ok(format!(
-                "ran {command} {:?} {:?} {:?}",
-                ran.exit_code, ran.stdout, ran.stderr
+                "ran {command} {:?} {:?} {:?}{}",
+                ran.exit_code,
+                ran.stdout,
+                ran.stderr,
+                if ran.offered { " offered" } else { "" }
             ))
         }
 
@@ -6242,7 +6266,13 @@ mod tests {
     }
 
     fn run_command(bench: &Bench, command: &str, text: &str) -> Result<(), String> {
-        run(&bench.sessions, "int-bench", command, text)
+        run(&bench.sessions, "int-bench", command, text, false)
+    }
+
+    /// Runs a command the agent offered the user to run.
+    #[cfg(unix)]
+    fn run_offered(bench: &Bench, command: &str, text: &str) -> Result<(), String> {
+        run(&bench.sessions, "int-bench", command, text, true)
     }
 
     /// An agent that runs a command of the user's itself.
@@ -6310,6 +6340,19 @@ mod tests {
             "{printed:?}"
         );
         assert!(run_command(&bench, C1, "ls").is_err(), "an id is used once");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_command_the_agent_offered_goes_to_the_agent_marked_as_offered() {
+        let bench = shell_bench(Deadlines::default());
+        run_offered(&bench, C1, "echo gone; exit 1").unwrap();
+        assert_eq!(
+            recorded(&bench),
+            format!("ran {C1} Some(1) \"gone\\n\" \"\" offered")
+        );
+        bench.live.take("recorded");
+        assert_eq!(command_states(&bench.events(), C1), ["running", "done"]);
     }
 
     #[cfg(unix)]

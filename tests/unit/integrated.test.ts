@@ -48,7 +48,7 @@ describe("the seam's integrated sessions", () => {
     await seam.integratedInterrupt("int-1");
     await seam.integratedSendNow("int-1");
     await seam.integratedWithdraw("int-1", M2);
-    await seam.integratedRun("int-1", M3, "ls -la");
+    await seam.integratedRun("int-1", M3, "ls -la", true);
     await seam.integratedStopCommand("int-1", M3);
     await seam.integratedCompact("int-1");
     await seam.integratedCompact("int-1", "keep the API notes");
@@ -99,7 +99,7 @@ describe("the seam's integrated sessions", () => {
       ["integrated_interrupt", { id: "int-1" }],
       ["integrated_send_now", { id: "int-1" }],
       ["integrated_withdraw", { id: "int-1", message: M2 }],
-      ["integrated_run", { id: "int-1", command: M3, text: "ls -la" }],
+      ["integrated_run", { id: "int-1", command: M3, text: "ls -la", offered: true }],
       ["integrated_stop_command", { id: "int-1", command: M3 }],
       ["integrated_compact", { id: "int-1", instructions: null }],
       ["integrated_compact", { id: "int-1", instructions: "keep the API notes" }],

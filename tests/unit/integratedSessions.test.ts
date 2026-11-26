@@ -125,7 +125,8 @@ async function install(options: FakeIntegratedOptions = {}) {
     integratedInterrupt: async (id: string) => fake.interrupt(id),
     integratedSendNow: async (id: string) => fake.sendNow(id),
     integratedWithdraw: async (id: string, message: string) => fake.withdraw(id, message),
-    integratedRun: async (id: string, command: string, text: string) => fake.run(id, command, text),
+    integratedRun: async (id: string, command: string, text: string, offered?: boolean) =>
+      fake.run(id, command, text, offered),
     integratedStopCommand: async (id: string, command: string) => fake.stopCommand(id, command),
     integratedCompact: async (id: string, instructions?: string) => fake.compact(id, instructions),
     integratedAnswer: async (id: string, request: string, choice: never, message?: string) =>
@@ -1527,7 +1528,7 @@ describe("an integrated session behind its row", () => {
     expect(run(session.key, "   ")).toBeNull();
     const id = run(session.key, "  npm test ")!;
     await settled();
-    expect(fake.calls).toContainEqual({ method: "run", id: handle, command: id, text: "npm test" });
+    expect(fake.calls).toContainEqual({ method: "run", id: handle, command: id, text: "npm test", offered: false });
     expect(conversation.commands[id]).toMatchObject({ text: "npm test", state: "running" });
     expect(byKey(session.key)!.working).toBe(false);
     fake.commandOutput(handle, id, "ok 1\n");

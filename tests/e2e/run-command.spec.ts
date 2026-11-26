@@ -72,7 +72,7 @@ test("runs a line typed after a ! in the session's folder, streams what it print
   await expect(command).toHaveAttribute("data-state", "running");
   await expect(command.getByTestId("command-line")).toHaveText("!npm test");
   const id = await ran(page);
-  expect((await calls(page)).find((call) => call.method === "run")).toEqual({ method: "run", id: H, command: id, text: "npm test" });
+  expect((await calls(page)).find((call) => call.method === "run")).toEqual({ method: "run", id: H, command: id, text: "npm test", offered: false });
   // The session stays at rest while it runs: the composer still sends.
   await input(page).fill("hello");
   await expect(page.getByTestId("send")).toHaveAttribute("aria-label", "Send");
@@ -136,6 +136,28 @@ test("runs a command the agent wrote for the user by its mark, leaving the draft
   expect((await calls(page)).find((call) => call.method === "run")).toMatchObject({ text: "npm run lint" });
   await expect(input(page)).toHaveValue("half a thought");
 });
+
+for (const codex of [false, true])
+  test(`tells the core a command is one the agent offered, by its mark or typed as offered, ${codex ? "never for Codex" : "for Claude Code"}`, async ({
+    page,
+  }) => {
+    await open(page, { codex });
+    await say(page, "How do I check it?");
+    await agent(page, "turn", H, "Run `! npm test`, then:\n\n```sh\n! npm run lint\n```");
+    await page.getByTestId("run-command").first().click();
+    await agent(page, "finishCommand", H, await ran(page), { output: "ok\n" });
+    await say(page, "!  npm run lint ");
+    await agent(page, "finishCommand", H, await ran(page), { output: "ok\n" });
+    await say(page, "!git status");
+    await ran(page);
+    await expect
+      .poll(async () => (await calls(page)).filter((call) => call.method === "run").map((call) => [call.text, call.offered]))
+      .toEqual([
+        ["npm test", !codex],
+        ["npm run lint", !codex],
+        ["git status", false],
+      ]);
+  });
 
 test("holds a command behind Codex's turn, takes it back, and runs it once the turn ends", async ({ page }) => {
   await open(page, { codex: true });
