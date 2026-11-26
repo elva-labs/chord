@@ -184,17 +184,24 @@ and the hand-over is free. Uncommitted work does not hold the lead's stop.
 | A push or a pull request | refused before it runs | turned down when Codex asks to run it | not held |
 | The lead's stop | sent back to work | sent back to work | not held |
 
-A lead in Claude Code in Chord that only reads is not asked before it
-starts, writes to or stops its members, since the run starts only the
-team's agents and holds a start or a send as below (see
-[reading only](integrated.md#the-mode-a-session-starts-in)). A Codex lead
-is asked as its [approval policy](hooks.md#the-agents-tools) says.
-
 A start is held unless the session's agent only reads, or, for a session
 resumed, the member it resumes only read. A send is held to the same rule
 for the session it goes to. Both are refused by the workbench's tools, so
 they hold whatever runs the lead. A start is refused as well when the
 settings cannot be read, since what the agent may do is not known.
+
+A lead in Claude Code in Chord that only reads has start left to its mode,
+since the run starts only the team's agents and holds a start as above, and
+send and stop where the session they name is a member of its run. A send or
+a stop to any other session it started, which no run holds, is asked about
+as for any session that only reads (see [reading
+only](integrated.md#the-mode-a-session-starts-in)). Left to the mode, a
+call is asked about where the mode asks for it. The window's own questions
+stand as well: before a start in another project, on another harness or
+under another account, before every start while the settings say so, and
+before a round of review past its limit (see
+[orchestrator](orchestrator.md#what-the-user-is-asked)). A Codex lead is
+asked as its [approval policy](hooks.md#the-agents-tools) says.
 
 A shell command hands the work over when git or gh is a command the shell
 runs and it pushes, with `git push`, `git send-pack` or `git subtree
