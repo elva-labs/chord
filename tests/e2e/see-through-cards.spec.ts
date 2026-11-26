@@ -653,3 +653,52 @@ for (const look of LOOKS)
       // And the card stays apart from the ground beside it.
       for (const { card, ground } of [none, some, most]) expect(apart(card, ground)).toBeGreaterThan(6);
     });
+
+test.describe("a plugin's page", () => {
+  /** A page that paints its own ground from the theme, as a plugin's does. */
+  const PAGE = `<style>:root{color-scheme:dark}html,body{margin:0}body{background:var(--workbench-bg)}</style><p>rows</p>`;
+
+  /** What the frame and the page's own ground paint, and the page's scheme. */
+  async function paints(page: Page) {
+    const frame = await page.getByTestId("plugin-page").evaluate((element) => getComputedStyle(element).backgroundColor);
+    const inside = await page
+      .frameLocator("[data-testid='plugin-page']")
+      .locator("body")
+      .evaluate((body) => ({
+        body: getComputedStyle(body).backgroundColor,
+        scheme: getComputedStyle(document.documentElement).colorScheme,
+      }));
+    return { frame, ...inside };
+  }
+
+  for (const look of LOOKS) {
+    for (const appearance of APPEARANCES) {
+      for (const share of [0, 0.25]) {
+        test(`lies on the card itself, ${look} ${appearance}, cards ${share}`, async ({ page }) => {
+          await installFakeCore(page, {
+            open: [PROJECT],
+            settings: { appearance, look, backgrounds: { teal: LAGOON }, cards: { teal: share } },
+          });
+          await page.goto("/");
+          await expect(page.locator(AGENT)).toBeVisible();
+          await backgroundAtRest(page);
+          await page.evaluate(
+            ({ project, html }) =>
+              (window as unknown as { __pluginView: (event: unknown) => void }).__pluginView({
+                source: "src-1", plugin: "github", project, width: "wide", html, open: true,
+              }),
+            { project: PROJECT, html: PAGE },
+          );
+          const clear = "rgba(0, 0, 0, 0)";
+          await expect.poll(() => paints(page)).toEqual({ frame: clear, body: clear, scheme: appearance });
+
+          // With the background set aside the page paints its own ground.
+          await page.emulateMedia({ contrast: "more" });
+          await expect(page.locator(":root")).not.toHaveAttribute("data-background", /.*/);
+          await expect.poll(async () => (await paints(page)).body).not.toBe(clear);
+          expect((await paints(page)).frame).not.toBe(clear);
+        });
+      }
+    }
+  }
+});

@@ -250,7 +250,8 @@ the card's paint, so nothing in it looks patched: a list beside what is
 read lets the background through its own step toward the ground, and a
 hovered, chosen or selected row, a field, your message, inline code, a
 diff's rows and a find match let the ink or the accent through rather
-than laying a solid fill over it. A menu or popover takes the card's tint
+than laying a solid fill over it. A plugin's page has no ground of its own
+while a background shows, with or without Cards. A menu or popover takes the card's tint
 from the background, never from what is under it. In the terminal look
 the rules inside a see-through box are the text colour let through, as
 the lines on the ground are. The browser pane's page and media such as
