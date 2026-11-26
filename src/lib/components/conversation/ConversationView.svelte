@@ -529,7 +529,7 @@
 
   .foot {
     flex: none;
-    padding: 0 max(14px, min(var(--conv-gutter), var(--conv-wide))) max(12px, min(14px, var(--conv-wide)));
+    padding: 0 max(14px, min(var(--conv-gutter), var(--conv-wide))) 14px;
   }
 
   .ended {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROJECT, installFakeCore, startNew } from "./fake";
+import { PROJECT, columnsAtRest, installFakeCore, startNew } from "./fake";
 
 // A picture the user sent opens at full size in the viewer beside the
 // conversation, from the thumbnail in the message's bubble.
@@ -42,6 +42,9 @@ test("a click on a sent image opens it in the viewer and leaves the thread where
   const shown = page.getByTestId("viewer-picture").locator("img");
   await expect(shown).toHaveAttribute("src", /^data:image\/png;base64,/);
   await expect(page.locator(AGENT)).toBeVisible();
+  // The viewer opening narrows the conversation; the thread is read where
+  // that leaves it.
+  await columnsAtRest(page);
   const after = await page.evaluate(() => document.querySelector("[data-testid='thread']")!.scrollTop);
   expect(after).toBe(before);
   expect(Math.abs((await thumb.boundingBox())!.y - top)).toBeLessThan(2);
