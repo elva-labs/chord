@@ -519,6 +519,10 @@ pub struct ModeInfo {
 pub struct CommandInfo {
     /// Without the slash.
     pub name: String,
+    /// Other names, without the slash, that the agent takes as this one.
+    /// Left out when there are none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
     pub description: Option<String>,
     /// What the command takes after its name, for a placeholder.
     pub hint: Option<String>,
@@ -5094,6 +5098,7 @@ mod tests {
                 (Some("commands"), Some(name)) => vec![Event::Commands {
                     commands: vec![CommandInfo {
                         name: name.to_string(),
+                        aliases: vec![],
                         description: None,
                         hint: None,
                         skill: true,
