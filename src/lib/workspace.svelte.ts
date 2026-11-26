@@ -17,7 +17,7 @@ import {
   type Session,
 } from "$lib/sessions.svelte";
 import { closeProject as closeShells } from "$lib/terminals.svelte";
-import { drawnIn, forgetUsed, sortProjects, touch } from "$lib/projects.svelte";
+import { drawnIn, file, forgetProject, sortProjects, touch } from "$lib/projects.svelte";
 import {
   closeFolder,
   folderShown,
@@ -209,11 +209,22 @@ export function chatInFront(): boolean {
     is open. */
 export function chatClosed(was: string | null) {
   if (was === null || sessions.active !== null || byKey(was) !== null || !chatInFront()) return;
-  const open = workspace.open.map((project) => project.path);
-  const next = sortProjects(open, "used")[0] ?? null;
-  workspace.active = next;
-  if (next !== null) activate(next);
-  else save();
+  leaveFront(chats.dir);
+}
+
+/** Takes a path out of the front: the other open project the user last
+    used is in front, with no session on screen, or none when there is no
+    other. */
+function leaveFront(leaving: string | null) {
+  const others = workspace.open.map((project) => project.path).filter((path) => path !== leaving);
+  const next = sortProjects(others, "used")[0];
+  if (next !== undefined) {
+    activate(next);
+    return;
+  }
+  workspace.active = null;
+  sessions.active = null;
+  save();
 }
 
 /** The user brought a project forward, from the sessions pane, go to or
@@ -365,7 +376,7 @@ export function close(path: string) {
   closeShells(path);
   void closeOwner({ kind: "project", path });
   workspace.open = workspace.open.filter((project) => project.path !== path);
-  forgetUsed(path);
+  forgetProject(path);
 
   if (workspace.active !== path) {
     save();
@@ -375,6 +386,14 @@ export function close(path: string) {
   workspace.active = next;
   if (next !== null) activate(next);
   else save();
+}
+
+/** Files a project under Inactive. The project on screen is active by rule,
+    so one on screen leaves the front. */
+export function makeInactive(path: string) {
+  const shown = onScreen() === path;
+  file(path);
+  if (shown) leaveFront(path);
 }
 
 function save() {

@@ -17,6 +17,8 @@ vi.mock("$lib/core", () => ({
 
 import {
   adoptInactiveAfter,
+  file,
+  holdsActive,
   inactiveAfterSettings,
   historyDue,
   isActive,
@@ -48,7 +50,7 @@ import {
   since,
   started,
 } from "$lib/sessions.svelte";
-import { activate, bringForward, close, goTo, onScreen, openPath, reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
+import { activate, bringForward, close, goTo, makeInactive, onScreen, openPath, reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 10, 13, 12);
@@ -122,6 +124,18 @@ describe("last used", () => {
     close("/a");
     expect(projects.used).toEqual({ "/b": NOW - 2 * DAY, "/arriving": NOW - 3 * DAY });
     expect(JSON.parse(localStorage.getItem("chord.used")!)).not.toHaveProperty("/a");
+  });
+
+  it("keeps when a project was filed between runs, until it is closed", () => {
+    workspace.open.push({ path: "/a", name: "a", repository: "/a", isGit: true });
+    file("/a", NOW);
+    file("/b", NOW - DAY);
+    projects.filed = {};
+    loadUsed();
+    expect(projects.filed).toEqual({ "/a": NOW, "/b": NOW - DAY });
+    close("/a");
+    expect(projects.filed).toEqual({ "/b": NOW - DAY });
+    expect(JSON.parse(localStorage.getItem("chord.filed")!)).toEqual({ "/b": NOW - DAY });
   });
 
   // Only what the user does stamps a project: the window or an agent
@@ -215,6 +229,109 @@ describe("active and inactive", () => {
   it("breaks a tie by path", () => {
     expect(sortProjects(["/work/app", "/spike/app"], "name")).toEqual(["/spike/app", "/work/app"]);
     expect(sortProjects(["/work/app", "/spike/app"], "used")).toEqual(["/spike/app", "/work/app"]);
+  });
+});
+
+describe("a project filed by hand", () => {
+  it("is inactive within the span, until it is used again", () => {
+    touch("/repo", NOW - DAY);
+    expect(isActive("/repo", null, NOW)).toBe(true);
+    file("/repo", NOW);
+    expect(isActive("/repo", null, NOW)).toBe(false);
+    expect(lastUsed("/repo")).toBe(NOW - DAY);
+
+    touch("/repo", NOW + 1);
+    expect(isActive("/repo", null, NOW + 1)).toBe(true);
+    // The span counts from that activity as it does for any project.
+    expect(isActive("/repo", null, NOW + 8 * DAY)).toBe(false);
+  });
+
+  it("is inactive with the span at never, until a row changes or a transcript is written", () => {
+    projects.inactiveAfter = "never";
+    file("/rows", NOW);
+    file("/written", NOW);
+    expect(isActive("/rows", null, NOW)).toBe(false);
+
+    const row = create("/rows");
+    row.status = "exited";
+    row.changedAt = NOW - 1;
+    expect(isActive("/rows", null, NOW)).toBe(false);
+    row.changedAt = NOW + 1;
+    expect(isActive("/rows", null, NOW + 1)).toBe(true);
+
+    sessions.history["/written"] = [entry("a", NOW - DAY)];
+    expect(isActive("/written", null, NOW)).toBe(false);
+    sessions.history["/written"] = [entry("a", NOW + 1000)];
+    expect(isActive("/written", null, NOW + 1000)).toBe(true);
+  });
+
+  it("stays active while on screen, or while a session under it is live or unread", () => {
+    file("/repo", NOW);
+    expect(isActive("/repo", "/repo", NOW)).toBe(true);
+    const row = create("/repo");
+    started(row.key, "pty-1", "s-1");
+    row.changedAt = NOW - DAY;
+    expect(holdsActive("/repo")).toBe(true);
+    expect(isActive("/repo", null, NOW)).toBe(true);
+    row.status = "exited";
+    row.unread = true;
+    expect(isActive("/repo", null, NOW)).toBe(true);
+    row.unread = false;
+    expect(isActive("/repo", null, NOW)).toBe(false);
+  });
+
+  // A machine whose clock runs ahead dates its transcripts after now.
+  it("is inactive when its latest transcript is dated after now", () => {
+    sessions.history["/repo"] = [entry("a", NOW + DAY)];
+    file("/repo", NOW);
+    expect(isActive("/repo", null, NOW)).toBe(false);
+  });
+
+  it("splits under inactive in the order chosen", () => {
+    touch("/a", NOW - 2 * DAY);
+    touch("/b", NOW - DAY);
+    for (const path of ["/a", "/b"]) sessions.history[path] = [];
+    file("/b", NOW);
+    file("/a", NOW);
+    expect(splitProjects(["/a", "/b"], null, "used", NOW)).toEqual({ active: [], inactive: ["/b", "/a"] });
+  });
+
+  const three = () => {
+    for (const name of ["a", "b", "c"]) {
+      workspace.open.push({ path: `/${name}`, name, repository: `/${name}`, isGit: true });
+    }
+  };
+
+  it("leaves the front to the project last used, without using it again", () => {
+    three();
+    touch("/a", NOW - 2 * DAY);
+    touch("/c", NOW - DAY);
+    activate("/b");
+    makeInactive("/b");
+    expect(workspace.active).toBe("/c");
+    expect(sessions.active).toBeNull();
+    expect(projects.used).toEqual({ "/a": NOW - 2 * DAY, "/c": NOW - DAY });
+    expect(isActive("/b", onScreen())).toBe(false);
+    expect(JSON.parse(localStorage.getItem("chord.workspace")!).active).toBe("/c");
+
+    makeInactive("/c");
+    expect(workspace.active).toBe("/a");
+  });
+
+  it("leaves the front where it is when it is not on screen", () => {
+    three();
+    activate("/a");
+    makeInactive("/c");
+    expect(workspace.active).toBe("/a");
+  });
+
+  it("leaves nothing in front when it is the only project", () => {
+    workspace.open.push({ path: "/a", name: "a", repository: "/a", isGit: true });
+    activate("/a");
+    makeInactive("/a");
+    expect(workspace.active).toBeNull();
+    expect(workspace.open).toHaveLength(1);
+    expect(isActive("/a", onScreen())).toBe(false);
   });
 });
 
