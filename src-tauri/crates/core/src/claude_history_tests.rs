@@ -783,6 +783,31 @@ fn reads_a_command_the_user_ran_as_one_done_between_turns() {
 }
 
 #[test]
+fn reads_a_command_the_agent_offered_as_the_user_s_command_before_its_turn() {
+    let record = format!(
+        "{}\n<bash-input>npm test</bash-input>\n<bash-stdout></bash-stdout><bash-stderr>1 failed\n</bash-stderr>\n<bash-exit-code>1</bash-exit-code>",
+        crate::claude_stream::OFFERED_CAVEAT
+    );
+    let body = entries(&[
+        user("u-1", "How do I check it?"),
+        answer("a-1", "msg_1", "Run `! npm test`."),
+        user("c-1", &record),
+        answer("a-2", "msg_2", "One test failed."),
+    ]);
+    let (_home, path) = transcript("offered", PROJECT, &body);
+    let said = said(&read(&path));
+    assert!(
+        said.iter()
+            .any(|line| line == r#"command c-1 Done npm test exit Some(1): Some("1 failed\n")"#),
+        "{said:#?}"
+    );
+    assert!(
+        !said.iter().any(|line| line.starts_with("message Sent c-1")),
+        "{said:#?}"
+    );
+}
+
+#[test]
 fn a_command_whose_line_holds_the_record_s_tags_reads_back_whole() {
     let record = format!(
         "{}\n<bash-input>grep '&lt;/bash-input&gt;' a &amp;&amp; echo '&lt;bash-stdout&gt;'</bash-input>\n<bash-stdout>&lt;bash-stdout&gt;\n</bash-stdout><bash-stderr></bash-stderr>",

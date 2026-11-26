@@ -3038,6 +3038,22 @@ mod tests {
     }
 
     #[test]
+    fn an_offered_record_the_agent_drops_is_told_and_waits_no_longer() {
+        for how in ["cancelled", "discarded", "refused"] {
+            let mut stream = stream();
+            ran_offered(&mut stream, C1, Some(1));
+            assert!(stream.recording());
+            let out = events(&mut stream, &[lifecycle(C1, how)]);
+            assert!(
+                matches!(&out[..], [Event::Notice { level: NoticeLevel::Warning, message }]
+                    if message.contains("has not seen it")),
+                "{how}: {out:?}"
+            );
+            assert!(!stream.recording(), "{how}");
+        }
+    }
+
+    #[test]
     fn the_line_in_a_record_is_escaped_as_its_output_is() {
         let mut stream = stream();
         let line = stream
