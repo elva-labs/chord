@@ -2942,7 +2942,7 @@ test.describe("a new session from the palette", () => {
   });
 
   test("offers no workflow where the project follows none", async ({ page }) => {
-    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", workflowElsewhere: true });
+    await open(page, { open: [ONE], codex: "/usr/local/bin/codex", workflowElsewhere: true, agentsOff: true });
     await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
     await change(page).click();
     await expect(entries(page)).toHaveCount(2);

@@ -62,6 +62,22 @@ test("lists the teams under the agents, and a team picked starts the session aga
     .toBeUndefined();
 });
 
+test("no agent picked over a team ends the team's run before the session starts again", async ({ page }) => {
+  const ended = () =>
+    page.evaluate(() => (window as unknown as { __runsEnded?: { token: string }[] }).__runsEnded ?? []);
+  await open(page);
+  await page.getByTestId("agent-option").filter({ hasText: "Ship with checks" }).click();
+  await expect.poll(async () => (await starts(page)).at(-1)?.options).toMatchObject({ team: "Ship with checks" });
+  expect(await ended()).toEqual([]);
+
+  const before = (await starts(page)).length;
+  await chip(page, "agent").click();
+  await page.getByTestId("agent-option").filter({ hasText: "No agent" }).click();
+  await expect.poll(async () => (await starts(page)).length).toBeGreaterThan(before);
+  expect(await ended()).toHaveLength(1);
+  expect((await starts(page)).at(-1)?.options?.team).toBeUndefined();
+});
+
 test("keeps the team for the run once something is said", async ({ page }) => {
   await open(page);
   await page.getByTestId("agent-option").filter({ hasText: "Ship with checks" }).click();
