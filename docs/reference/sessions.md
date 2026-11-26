@@ -134,6 +134,10 @@ front, with no session opened, the one you last used of the other active
 projects, so none filed or folded comes back by it. With no other active
 project none is in front, and the next start puts the first open project in
 front, which is active while it is on screen.
+While the session on screen hangs under its starter in another project, the
+project it runs in is in front but not on screen. Filed then, it folds and the
+session stays, with the changes, the terminal and the window's title still
+following it. It is active again once it is on screen.
 
 What happens in a project is the user using it, a row drawn under it
 changing what it says, and one of its own transcripts being written, which
