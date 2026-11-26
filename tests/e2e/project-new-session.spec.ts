@@ -230,3 +230,13 @@ test("a project made inactive folds at once, and picking it brings it back", asy
   await expect(head(page, "demo")).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("inactive-fold")).toHaveCount(0);
 });
+
+test("filing the only project leaves the keyboard in the pane and asks to pick one", async ({ page }) => {
+  await installFakeCore(page, { open: [PROJECT] });
+  await page.goto("/");
+  await head(page, "demo").click({ button: "right" });
+  await page.getByTestId("project-menu-inactive").click();
+  await expect(page.getByTestId("inactive-fold")).toBeVisible();
+  await expect(page.locator("section[data-pane='sessions'] .nav")).toBeFocused();
+  await expect(page.getByTestId("agent-status")).toContainText("Pick a project to start.");
+});

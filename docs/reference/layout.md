@@ -12,10 +12,11 @@ comes back as it was.
 
 The agent pane with nothing on screen holds one centred line and one
 button in the accent. On first launch, with no project open, it reads
-`Open a project to start.` over Open project. With a project and no
-session in it on screen, it reads `No session open in` and the project's
-name, over New session, which asks for one in the palette as every new
-session does.
+`Open a project to start.` over Open project. With projects open and none
+in front, it reads `Pick a project to start.` over the same button. With a
+project and no session in it on screen, it reads `No session open in` and the
+project's name, over New session, which asks for one in the palette as every
+new session does.
 
 **Reviewing** is the changes pane grown into a file viewer, with the sessions
 pane folded. Inside the pane the tree keeps the left column and the

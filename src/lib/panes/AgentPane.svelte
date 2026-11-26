@@ -277,7 +277,7 @@
       </div>
     {:else if workspace.active === null}
       <div class="empty" data-testid="agent-status">
-        <p class="message">Open a project to start.</p>
+        <p class="message">{workspace.open.length === 0 ? "Open a project to start." : "Pick a project to start."}</p>
         <button class="primary" onclick={() => void pick()} disabled={workspace.opening} data-testid="empty-open"
           >Open project</button
         >
