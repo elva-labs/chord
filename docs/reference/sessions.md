@@ -1583,7 +1583,12 @@ item opened before that point and closed after it is given again among
 the open ones, marked as closed on such a turn, since its work may be
 undone; it does not count toward the twelve. The briefing goes ahead of the first message the fresh
 conversation is sent, the user's, a line from the session's starter, or
-the workbench's own; a terminal session is given it as its first prompt,
+the workbench's own. A message Claude Code would read as a slash command
+goes alone, as typed, and the briefing waits for the next message that
+is not one: until then the fresh conversation counts as not yet spoken
+to, and resume whole still goes back to the old one. Codex takes no
+slash commands here, so its briefing goes with whatever is sent first. A
+terminal session is given it as its first prompt,
 told to wait for the user when nothing else goes with it. Where the
 harness's command runs through the Windows command interpreter, a first
 prompt too long or with characters it would read as its own goes in a
