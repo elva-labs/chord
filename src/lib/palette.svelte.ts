@@ -1011,7 +1011,7 @@ export function startingId(): string | null {
   const asking = nextStep(palette.steps);
   if (asking === "account") return `account:${accountToStart(project) ?? ""}`;
   if (asking === "agent") {
-    const own = offered(project).length === 0 ? null : workflowOf(project);
+    const own = switches.agents ? null : workflowOf(project);
     return own === null ? `agent:${defaultAgent(project)}` : `workflow:${own.name}`;
   }
   if (asking === "profile")
