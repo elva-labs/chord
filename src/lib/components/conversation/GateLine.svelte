@@ -392,7 +392,7 @@
             {#if shown.waiver !== null}For this run only
             {:else if shown.asks > 0}Asked for changes {times(shown.asks)}
             {:else if shown.standing === "approved"}
-              Out of date if {shown.gate.when === "plan" ? "the plan" : "the change"} changes
+              Out of date if {shown.gate.when === "plan" ? "the plan" : "the work"} changes
             {/if}
           </span>
           {#if giver !== null}
