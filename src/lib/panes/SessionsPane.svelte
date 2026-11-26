@@ -57,6 +57,7 @@
     close as closeProject,
     goTo,
     onScreen,
+    makeInactive,
     pick,
     projectLabel,
     resumeChat,
@@ -102,7 +103,7 @@
     type PaneId,
     type ProjectSort,
   } from "$lib/layout.svelte";
-  import { lastUsed, splitProjects, steady, touch } from "$lib/projects.svelte";
+  import { holdsActive, lastUsed, splitProjects, steady, touch } from "$lib/projects.svelte";
   import { unfoldSessions, viewerSettled } from "$lib/viewers.svelte";
   import { isStartedFolded, setStartedFolded } from "$lib/startedFolds.svelte";
   import { compact } from "$lib/compact.svelte";
@@ -359,8 +360,8 @@
   ]);
 
   /** A project's own menu, from the ⋯ on its header or its row under
-      Inactive, or a right click on either: a new session in it, and
-      closing it. It opens upwards when the row is near the pane's foot,
+      Inactive, or a right click on either: a new session in it, filing it
+      under Inactive, and closing it. It opens upwards when the row is near the pane's foot,
       and its keyboard cursor walks the items while it is open. */
   let projectMenu = $state<{ path: string; up: boolean } | null>(null);
   let projectMenuAt = $state(0);
@@ -390,6 +391,10 @@
               },
             },
           ]),
+      // Only a project in the list that nothing running or waiting holds there.
+      ...(!split.active.some((project) => project.path === path) || holdsActive(path)
+        ? []
+        : [{ id: "project-menu-inactive", label: "Make inactive", disabled: false, run: () => makeInactive(path) }]),
       {
         id: "close-project",
         label: "Close project",
@@ -410,7 +415,7 @@
     const tree = nav?.querySelector<HTMLElement>(".tree");
     const up =
       row !== null && tree !== null && tree !== undefined
-        ? row.getBoundingClientRect().bottom > tree.getBoundingClientRect().bottom - 90
+        ? row.getBoundingClientRect().bottom > tree.getBoundingClientRect().bottom - 125
         : false;
     menuOpen = false;
     sortOpen = false;
