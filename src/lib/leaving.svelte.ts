@@ -20,7 +20,7 @@
 
 import { untrack } from "svelte";
 import { core } from "$lib/core";
-import { anyUnsaved, editor, leaveRequested } from "$lib/editor.svelte";
+import { anyUnsaved, confirmLeave, editor, leaveRequested } from "$lib/editor.svelte";
 import { conducting } from "$lib/orchestrator.svelte";
 import { byKey as sessionByKey, isLive, midTurn, sessions, shownName } from "$lib/sessions.svelte";
 import {
@@ -149,7 +149,7 @@ export async function leaveAsked(ask: { kind: "window" | "quit"; generation: num
   const busy = await busyShells();
   if (busy.length === 0 && running().count === 0 && !anyUnsaved()) {
     if (editor.asking?.kind === "leave") editor.asking = null;
-    void core().leaveConfirmed(ask.kind).catch(() => {});
+    confirmLeave(ask.kind);
     return;
   }
   leaving.busy = busy;
