@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { BUILD_AND_REVIEW, PROJECT, backgroundAtRest, installFakeCore, startNew } from "./fake";
 
 /**
@@ -702,3 +702,87 @@ test.describe("a plugin's page", () => {
     }
   }
 });
+
+/** What an element paints behind what it holds. */
+const paint = (locator: Locator) =>
+  locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return `${style.backgroundColor} ${style.backgroundImage} ${style.backgroundAttachment}`;
+  });
+
+const cardOf = (page: Page, look: string) => page.locator(look === "modern" ? `${AGENT} > .body` : AGENT);
+
+for (const look of LOOKS)
+  for (const appearance of APPEARANCES)
+    test(`a floating question is painted as a card, ${look}, ${appearance}`, async ({ page }) => {
+      await open(page, look, appearance);
+      await page.getByTestId("start-agent").click();
+      await startNew(page);
+      await expect(page.locator(TREE)).toBeVisible();
+      const card = await paint(cardOf(page, look));
+      const ask = page.locator(".ask-card");
+
+      // A session that asks to start another one.
+      await page.evaluate((project) => {
+        (window as unknown as { __conductRequest: (call: unknown) => void }).__conductRequest({
+          id: "a-1",
+          tool: "start",
+          arguments: { project, prompt: "Fix the flaky cache test" },
+          cwd: project,
+          session: "session-1",
+        });
+      }, PROJECT);
+      await expect(page.getByTestId("conduct-allow")).toBeVisible();
+      expect(await paint(ask)).toBe(card);
+      await page.getByTestId("conduct-allow").click();
+      await expect(ask).toHaveCount(0);
+
+      // A change to the settings, and the undo that follows it.
+      await page.evaluate((project) => {
+        (window as unknown as { __settingsRequest: (call: unknown) => void }).__settingsRequest({
+          id: "s-1",
+          tool: "settings_change",
+          arguments: { keys: { review: "g" }, reason: "The user asked for it." },
+          cwd: project,
+          session: null,
+        });
+      }, PROJECT);
+      await expect(page.getByTestId("settings-ask")).toBeVisible();
+      expect(await paint(ask)).toBe(card);
+      await page.getByTestId("settings-allow").click();
+      await page.getByTestId("settings-undo-button").hover();
+      await expect.poll(() => paint(page.getByTestId("settings-undo-button"))).toBe(card);
+    });
+
+for (const look of LOOKS)
+  for (const appearance of APPEARANCES)
+    test(`the question before leaving and the hooks offer are painted as cards, ${look}, ${appearance}`, async ({ page }) => {
+      // A setup from before hooks were a choice, which is offered them once.
+      const off = { everywhere: false, overrides: {} };
+      await installFakeCore(page, {
+        open: [PROJECT],
+        settings: { appearance, look, backgrounds: { teal: LAGOON }, cards: { teal: 0.25 }, hooks: off },
+      });
+      await page.addInitScript((off) => {
+        localStorage.setItem("chord.hooks", JSON.stringify(off));
+        localStorage.removeItem("chord.notices");
+      }, off);
+      await page.goto("/");
+      await expect(page.locator(":root")).toHaveAttribute("data-cards", /.*/);
+      await backgroundAtRest(page);
+      const card = await paint(cardOf(page, look));
+      await expect(page.getByTestId("hooks-notice")).toBeVisible();
+      expect(await paint(page.locator(".ask-card"))).toBe(card);
+      await page.getByTestId("hooks-notice-dismiss").click();
+
+      await page.getByTestId("start-agent").click();
+      await startNew(page);
+      await page.keyboard.press(`${MOD}+Shift+E`);
+      await expect(page.getByTestId("shell")).toHaveAttribute("data-mode", "editing");
+      await page.locator(TREE).getByText("README.md", { exact: true }).click();
+      await page.locator(".cm-content").click();
+      await page.keyboard.type("mine");
+      await page.evaluate(() => (window as unknown as { __quit: () => void }).__quit());
+      await expect(page.getByTestId("close-window-confirm")).toBeVisible();
+      expect(await paint(page.locator(".ask-card"))).toBe(await paint(cardOf(page, look)));
+    });

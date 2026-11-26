@@ -188,7 +188,7 @@
   /* Where the cards let a background through, the ask and the undo are
      laid over the card's paint so they still cover what is under them. */
   :global(:root[data-cards]) .over > :global(.ask-card.floating) {
-    background: linear-gradient(var(--surface), var(--surface)), var(--paint-surface);
+    background: var(--paint-surface);
   }
 
   :global(:root[data-cards]) .undo {
@@ -327,7 +327,7 @@
   }
 
   .go:hover {
-    background: var(--surface);
+    background: var(--paint-surface);
   }
 
   .close {

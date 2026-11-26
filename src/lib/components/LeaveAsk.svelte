@@ -152,6 +152,6 @@
   /* Where the cards let a background through, the sheet is laid over the
      card's paint so it still covers what is under it. */
   :global(:root[data-cards]) .leave > :global(.ask-card) {
-    background: linear-gradient(var(--surface), var(--surface)), var(--paint-surface);
+    background: var(--paint-surface);
   }
 </style>
