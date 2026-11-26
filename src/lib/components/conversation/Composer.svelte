@@ -47,7 +47,7 @@
     toList,
   } from "$lib/rewind.svelte";
   import { pieces } from "$lib/completion";
-  import { complete, named, slashGroups, slashWord, sourceOf, waitingHint } from "$lib/slash";
+  import { complete, goesAsCommand, named, slashGroups, slashWord, sourceOf, waitingHint } from "$lib/slash";
   import {
     forAgent,
     mentionSpans,
@@ -733,7 +733,9 @@
     // After a rest, a cold and large conversation goes on from its notes
     // before the message goes: it counts as starting again meanwhile, so
     // the message is held below and goes to whichever run is left, once.
-    if (!judged && reading === 0 && !link.restarting && link.goingBack === null)
+    // A command goes to the run as it is, which goes on at the next message.
+    const order = slash && goesAsCommand(link.draft, link.images.length, commands);
+    if (!judged && !order && reading === 0 && !link.restarting && link.goingBack === null)
       void goOnIfCold(sessionKey, Date.now(), true);
     if (reading > 0 || link.restarting || link.goingBack !== null) {
       held = true;

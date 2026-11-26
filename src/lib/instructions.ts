@@ -17,7 +17,7 @@ const OUTCOME_ASKED_BEFORE = "When you are done, or stuck, call the notify tool 
 
 /** The first and last lines of the briefing the core writes for a
     conversation that goes on fresh from its notes, which goes ahead of the
-    first message the fresh conversation is sent. */
+    first message the fresh conversation is sent that is not a command. */
 export const GOING_ON_HEAD =
   "From the workbench, not the user: this conversation goes on from an earlier one of yours, which was not read again, since reading all of it with its cache lapsed would cost far more. What you need to go on is below.";
 export const GOING_ON_END = "End of the workbench's briefing.";

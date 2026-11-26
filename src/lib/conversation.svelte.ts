@@ -418,15 +418,21 @@ export class Conversation {
    * that answered one after the limit reset, or at any such turn where
    * when it resets is not known. A message `aside` from them, a command
    * sent alone, is none of them, and a turn of only such messages neither
-   * opens the backlog nor ends it. None while a turn runs or a message is
-   * on its way to the agent, which then carries them or is answered
-   * with them.
+   * opens the backlog nor ends it, unless the limit refused it: then it
+   * opens the backlog with all its messages, which never reached the
+   * agent. None while a turn runs or a message is on its way to the
+   * agent, which then carries them or is answered with them, except a
+   * turn or a message aside from them.
    */
   unanswered(
     carries: (message: Message) => boolean = () => false,
     aside: (message: Message) => boolean = () => false,
   ): Message[] {
-    if (this.current !== null) return [];
+    const asideOnly = (turn: Turn | undefined) =>
+      turn !== undefined &&
+      turn.messages.length > 0 &&
+      turn.messages.every((id) => this.messages[id] !== undefined && aside(this.messages[id]));
+    if (this.current !== null && !asideOnly(this.turns[this.current])) return [];
     // The core says it is idle only with nothing of the window's waiting
     // in it: a message still sent or queued then was left behind.
     const idle = this.state === "idle";
@@ -434,7 +440,7 @@ export class Conversation {
     const ahead = (message: Message | undefined) =>
       message !== undefined &&
       (message.state === "sending" || ((message.state === "sent" || message.state === "queued") && !held(message)));
-    if (this.order.some((id) => ahead(this.messages[id]))) return [];
+    if (this.order.some((id) => ahead(this.messages[id]) && !aside(this.messages[id]))) return [];
     const of = new Map<string, Turn>();
     for (const turn of Object.values(this.turns))
       if (!this.#loose.has(turn.id)) for (const id of turn.messages) of.set(id, turn);
@@ -485,15 +491,13 @@ export class Conversation {
         continue;
       }
       const { turn } = item;
-      const messages = turn.messages
-        .map((id) => this.messages[id])
-        .filter((message) => message !== undefined)
-        .filter((message) => !aside(message));
-      if (messages.length === 0 && turn.messages.length > 0) continue;
+      const all = turn.messages.map((id) => this.messages[id]).filter((message) => message !== undefined);
+      const messages = all.filter((message) => !aside(message));
+      if (all.length > 0 && messages.length === 0 && turn.limit === null) continue;
       if (turn.limit !== null) {
         open = true;
         resetsAt = turn.limit.resetsAt;
-        messages.forEach(add);
+        all.forEach(add);
         continue;
       }
       if (!open) continue;

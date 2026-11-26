@@ -2501,9 +2501,12 @@ export async function launch(
     // The row follows the conversation it goes on with or from, and a row
     // with nothing to go on from follows none.
     if (!back && session.resumedFrom !== null) session.resumedFrom = resume ?? wentOn(key)?.from ?? null;
-    const briefing = resume === null && session.resumedFrom !== null ? briefingFor(key, session.prompt !== null) : null;
+    // A fresh run taken up again before its briefing went is briefed now.
+    const held = resume !== null && wentOn(key)?.id === resume;
+    const briefing =
+      (resume === null || held) && session.resumedFrom !== null ? briefingFor(key, session.prompt !== null) : null;
     // The row keeps the name it showed, which its old conversation gave.
-    if (briefing !== null) session.title ??= knownName(session);
+    if (briefing !== null && !held) session.title ??= knownName(session);
     const prompt =
       briefing === null
         ? (session.prompt ?? undefined)

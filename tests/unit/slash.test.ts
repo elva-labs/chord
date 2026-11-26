@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IntegratedCommand } from "$lib/core";
 import { pieces, rank } from "$lib/completion";
-import { complete, named, slashGroups, slashWord, sourceOf, waitingHint } from "$lib/slash";
+import { complete, goesAsCommand, named, slashGroups, slashWord, sourceOf, waitingHint } from "$lib/slash";
 
 function command(name: string, options: Partial<IntegratedCommand> = {}): IntegratedCommand {
   return { name, description: null, hint: null, skill: false, builtin: true, source: null, ...options };
@@ -53,6 +53,30 @@ describe("completing a word from a list", () => {
 });
 
 describe("slash commands", () => {
+  it("go to the agent as a command only where the message names one it lists, with no images", () => {
+    expect(goesAsCommand("/review", 0, COMMANDS)).toBe(true);
+    expect(goesAsCommand("/review src/app.ts", 0, COMMANDS)).toBe(true);
+    expect(goesAsCommand("/review\nthe diff, closely", 0, COMMANDS)).toBe(true);
+    expect(goesAsCommand("/kit:deploy now", 0, COMMANDS)).toBe(true);
+    expect(goesAsCommand(" /review", 0, COMMANDS)).toBe(false);
+    expect(goesAsCommand("/etc is odd", 0, COMMANDS)).toBe(false);
+    expect(goesAsCommand("/src/app.ts is broken", 0, COMMANDS)).toBe(false);
+    expect(goesAsCommand("/review", 1, COMMANDS)).toBe(false);
+    expect(goesAsCommand("see /review", 0, COMMANDS)).toBe(false);
+  });
+
+  it("go as a command by its shape alone before the agent lists any", () => {
+    for (const commands of [null, []]) {
+      expect(goesAsCommand("/compact Keep the notes", 0, commands)).toBe(true);
+      expect(goesAsCommand("/kit:deploy", 0, commands)).toBe(true);
+      expect(goesAsCommand("/etc is odd", 0, commands)).toBe(true);
+      expect(goesAsCommand("/src/app.ts is broken", 0, commands)).toBe(false);
+      expect(goesAsCommand("/", 0, commands)).toBe(false);
+      expect(goesAsCommand(" /compact", 0, commands)).toBe(false);
+      expect(goesAsCommand("/compact", 2, commands)).toBe(false);
+    }
+  });
+
   it("start only at the very beginning of a message, and end at the first space", () => {
     expect(slashWord("/", 1)).toEqual({ query: "", end: 1 });
     expect(slashWord("/re", 3)).toEqual({ query: "re", end: 3 });

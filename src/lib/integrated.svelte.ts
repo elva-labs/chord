@@ -28,7 +28,7 @@ import { limitEnded, runOver, setHands, settle as settleAutoResume, turnMoved } 
 import { modelLabel } from "$lib/models";
 import { harnessLabel, harnessProfile } from "$lib/harness.svelte";
 import { heardCatalog } from "$lib/modelCatalog.svelte";
-import { readsAsCommand } from "$lib/slash";
+import { goesAsCommand, readsAsCommand } from "$lib/slash";
 import { offeredModel, thoughtAnswers } from "$lib/thread";
 import { heardLimits } from "$lib/limits.svelte";
 import { hostOf, pathOn } from "$lib/remote.svelte";
@@ -52,6 +52,7 @@ import {
   forgetWent,
   identified,
   lostAt,
+  spoke,
   takeUp,
   wentOn,
   type Lost,
@@ -447,6 +448,15 @@ function deliver(key: string, link: Link, body: IntegratedEventBody) {
     if (body.state === "queued") void sendNow(key);
   }
   if (isWork(body)) link.worked = true;
+  // A run whose briefing waits is spoken to once a command makes it do
+  // something: run a tool, or answer with words of the model's own.
+  if (
+    (body.type === "toolStarted" ||
+      (body.type === "turnEnded" && (body.usage?.outputTokens ?? 0) + (body.usage?.reasoningTokens ?? 0) > 0)) &&
+    wentOn(key)?.briefing != null &&
+    wentOn(key)?.heard !== true
+  )
+    spoke(key);
   if (
     body.type === "compacting" ||
     body.type === "compacted" ||
@@ -677,7 +687,8 @@ export async function launch(key: string): Promise<void> {
       // The row follows the conversation it goes on with or from, and a row
       // with nothing to go on from follows none.
       starting.resumedFrom = resume ?? wentOn(key)?.from ?? null;
-      link.conversation.wentOn = wentOn(key) !== null;
+      // A fresh run resumed before its briefing went was not begun here.
+      link.conversation.wentOn = resume === null && wentOn(key) !== null;
       link.conversation.afterLimit = null;
       // A row whose id held nothing goes on with what is stored, and says so.
       const lost = lostAt(key);
@@ -749,11 +760,15 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     carried === null
       ? null
       : { model: carried.model, effort: effort ?? null, mode: mode === carried.mode ? carried.mode : null };
+  const went = wentOn(key);
   const started = await core().integratedStart({
     agent: starting.agent,
     project: starting.project,
     cwd: starting.startIn ?? undefined,
-    session: wentOn(key) === null ? (starting.resumedFrom ?? undefined) : undefined,
+    // A run that went on from notes starts fresh, unless the row follows
+    // that fresh run itself, taken up again before its briefing went.
+    session:
+      went === null || went.id === starting.resumedFrom ? (starting.resumedFrom ?? undefined) : undefined,
     token: starting.token,
     model: starting.model ?? undefined,
     mode,
@@ -1386,11 +1401,10 @@ export function send(
   const session = byKey(key);
   if (link === undefined || link.handle === null || session === null) return null;
   if (words.trim() === "" && images.length === 0) return null;
-  // A message the harness reads as a command goes alone, as typed: nothing
+  // A message the harness runs as a command goes alone, as typed: nothing
   // joined ahead of it would leave it a command. What waits to go ahead of
   // a message waits on for the next one that is not a command.
-  const commands = harnessProfile(session.agent).commands;
-  const command = commands && readsAsCommand(words);
+  const command = asCommand(session, link)({ text: words, images });
   const note = from === null && !command ? noteFor(key) : null;
   // Files put back while the conversation stayed are told ahead of the
   // user's own next message, and again where it never reaches the agent or
@@ -1422,7 +1436,7 @@ export function send(
     ? []
     : link.conversation.unanswered(
         (said) => carries(said.text) || leftOutOf(said.id) !== null,
-        (said) => commands && readsAsCommand(said.text),
+        asCommand(session, link),
       );
   let lost = 0;
   const went: string[] = [];
@@ -1607,12 +1621,25 @@ function wakeUpPending(conversation: Conversation): boolean {
   return timed > 0;
 }
 
-/** When the run's last turn ended, or null where none has. */
-function restedSince(conversation: Conversation): number | null {
+/** When the run's last turn ended, or null where none has. A turn of
+    commands alone, `aside` from the conversation, does not end a rest. */
+function restedSince(conversation: Conversation, aside: (said: Message) => boolean): number | null {
+  const commandsAlone = (ids: readonly string[]) =>
+    ids.length > 0 &&
+    ids.every((id) => conversation.messages[id] !== undefined && aside(conversation.messages[id]));
   const ended = Object.values(conversation.turns)
+    .filter((turn) => !commandsAlone(turn.messages))
     .map((turn) => turn.endedAt)
     .filter((at): at is number => at !== null);
   return ended.length === 0 ? null : Math.max(...ended);
+}
+
+/** Whether a message to the row's run goes, or went, to its agent as a
+    command, which is aside from the conversation's words. */
+function asCommand(session: Session, link: Link): (said: { text: string; images: readonly unknown[] }) => boolean {
+  if (!harnessProfile(session.agent).commands) return () => false;
+  const listed = link.conversation.ready?.commands ?? null;
+  return (said) => goesAsCommand(said.text, said.images.length, listed);
 }
 
 /** A row whose run is at rest with nothing on its way, and large: one a
@@ -1632,7 +1659,7 @@ function restingLarge(key: string, now: number): { session: Session; link: Link 
   if (used === null || used < LARGE) return null;
   if (link.conversation.tasks.some((task) => task.status === "running" && !task.ambient)) return null;
   if (wakeUpPending(link.conversation)) return null;
-  const rested = restedSince(link.conversation);
+  const rested = restedSince(link.conversation, asCommand(session, link));
   if (rested !== null && now - rested < REST_LEAST) return null;
   return { session, link };
 }
@@ -1661,7 +1688,7 @@ export async function goOnIfCold(key: string, now = Date.now(), sending = false)
   // A warm answer stands for a while, so the message held while it was
   // given goes at once rather than being judged again.
   if (now - (warmAt.get(key) ?? -Infinity) < WARM_STANDS) return false;
-  // A run that went on and has not been sent its first message is new.
+  // A run that went on and has not been briefed yet is new.
   if (wentOn(key)?.briefing != null) return false;
   const { session, link } = found;
   if (!sending && now - (looked.get(key) ?? 0) < LOOK_EVERY) return false;
@@ -1752,6 +1779,9 @@ export async function goOnAfterLimit(key: string, resetAt: number): Promise<bool
   const found = atRest(key);
   if (found === null || found.link.restarting) return false;
   if (!switches.notes) return true;
+  // A run that went on and has not been briefed yet goes on as it is: its
+  // next message carries the briefing.
+  if (wentOn(key)?.briefing != null) return true;
   const { session, link } = found;
   const id = session.id;
   const handle = link.handle;

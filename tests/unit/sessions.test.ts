@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpawnOptions, Transcript, Workflow } from "$lib/core";
 import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { stash } from "$lib/exits";
-import { OUTCOME_ASK, OUTCOME_ASK_TERMINAL } from "$lib/instructions";
+import { GOING_ON_WAIT, OUTCOME_ASK, OUTCOME_ASK_TERMINAL } from "$lib/instructions";
 import { resetZoom, zoom, zoomed } from "$lib/zoom.svelte";
 import { attention, resetAttention } from "$lib/attention.svelte";
 import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
@@ -1119,6 +1119,18 @@ describe("a terminal row whose conversation holds nothing", () => {
     expect(spawned.at(-1)?.session).toBeUndefined();
     expect(spawned.at(-1)?.prompt).toMatch(/^NOTES ALONE\n\n/);
     expect(lineageOf("dead-1")).toEqual(["dead-1"]);
+  });
+
+  it("resumes a fresh run stopped before its briefing went, briefed in its first prompt", async () => {
+    const kept = { from: "old-1", context: 400_000, briefing: "BRIEFING", spoken: false };
+    localStorage.setItem("chord.briefings", JSON.stringify({ "fresh-1": kept }));
+    resetGoingOn();
+    takenUp["fresh-1"] = { context: 1_000, idle: 60, goesOn: false, briefing: null };
+    const session = create(A, "fresh-1");
+    await launch(session.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ session: "fresh-1", prompt: `BRIEFING\n\n${GOING_ON_WAIT}` });
+    expect(byKey(session.key)!.resumedFrom).toBe("fresh-1");
+    expect(JSON.parse(localStorage.getItem("chord.briefings")!)).toEqual({});
   });
 
   it("starts fresh with no prompt where its only id holds nothing and there are no notes", async () => {

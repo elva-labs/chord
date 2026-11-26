@@ -82,6 +82,24 @@ export function readsAsCommand(line: string): boolean {
   return /^\/[^\s/]+(?:\s|$)/.test(line.trim());
 }
 
+/** A command's name as the agent runs one: what follows a slash that is
+    the message's very first character, up to a space or the end. */
+const COMMAND_NAME = /^\/([a-zA-Z0-9_][a-zA-Z0-9:_-]*)(?:\s|$)/;
+
+/** Whether a message goes to the agent as a command rather than words:
+    its very first character a slash, then the name of a command the
+    agent lists, or, before it lists any, a name shaped as one; and no
+    images, since the agent reads a message with images as words. */
+export function goesAsCommand(
+  text: string,
+  images: number,
+  commands: readonly IntegratedCommand[] | null,
+): boolean {
+  if (images > 0) return false;
+  if (commands !== null && commands.length > 0) return named(text, commands) !== null;
+  return COMMAND_NAME.test(text);
+}
+
 /** The argument hint to show after a command just completed: while the
     message is the command and a space, with nothing typed after it. */
 export function waitingHint(draft: string, commands: readonly IntegratedCommand[]): string | null {
