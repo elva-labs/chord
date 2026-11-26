@@ -2292,7 +2292,7 @@ pub fn verdict_tool() -> Value {
 pub fn gates_tool() -> Value {
     json!({
         "name": "gates",
-        "description": "Reads the team's run you are in: the plan, its version and hash, the hash of the change in each folder the work is in, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A change is the lines taken out and put in since the commit the work counts from, in the folder's files as they are, committed or not, so a rebase that puts the same lines on a newer base keeps an approval; but only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
+        "description": "Reads the team's run you are in: the plan, its version and hash, the hash of the change in each folder the work is in with the commit it is counted from, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A change is the lines taken out and put in since the commit the work counts from, in the folder's files as they are, committed or not, so a rebase that puts the same lines on a newer base keeps an approval; but only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
         "inputSchema": { "type": "object", "properties": {} }
     })
 }
@@ -2423,10 +2423,9 @@ fn gate_add_call(home: &Path, session: Option<&str>, arguments: &Value) -> Resul
 fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
     let token = session.ok_or(crate::run::NOT_A_MEMBER)?;
     let on = when_of(arguments, "on")?;
-    let change = arguments
-        .get("change")
-        .or_else(|| arguments.get("tree"))
-        .and_then(Value::as_str);
+    let change = ["change", "tree"]
+        .iter()
+        .find_map(|key| arguments.get(*key).and_then(Value::as_str));
     let folder = arguments
         .get("folder")
         .and_then(Value::as_str)
@@ -2538,7 +2537,8 @@ fn gate_line(gate: &crate::run::GateState) -> String {
 /// The run's gates, each on its line with the last verdict's findings
 /// and, on the change in more than one folder, how it stands in each
 /// under it, after the line the window shows and what a verdict names:
-/// the plan's version and hash, and the hash of the change in each folder.
+/// the plan's version and hash, and the hash of the change in each folder
+/// with the commit it is counted from.
 fn gates_text(state: &crate::run::State) -> String {
     let mut lines = vec![state.line()];
     if let Some(plan) = &state.plan {
@@ -2549,7 +2549,14 @@ fn gates_text(state: &crate::run::State) -> String {
     }
     for place in &state.places {
         lines.push(match &place.change {
-            Ok(change) => format!("The change in {} is {change}.", place.folder.display()),
+            Ok(change) => format!(
+                "The change in {} is {change}, counted from {}.",
+                place.folder.display(),
+                match &place.base {
+                    Some(base) => format!("the commit {base}"),
+                    None => "no commit, every file being new".to_string(),
+                }
+            ),
             Err(e) => format!(
                 "The change in {} cannot be read: {e}",
                 place.folder.display()
@@ -4972,6 +4979,53 @@ mod tests {
             ),
             Ok(None)
         );
+    }
+
+    #[test]
+    fn a_verdict_on_the_change_names_it_by_change_or_by_tree() {
+        let (home, folder) = in_a_run("run-change-keys");
+        std::fs::write(folder.join("more.txt"), "more\n").unwrap();
+        let started = crate::git::head(&folder).unwrap();
+        let gates = called(&home, "sec", "gates", json!({}));
+        let read = text_of(&gates);
+        let line = read
+            .lines()
+            .find(|line| line.starts_with("The change in "))
+            .unwrap_or_else(|| panic!("{read}"));
+        assert!(
+            line.ends_with(&format!(", counted from the commit {started}.")),
+            "{line}"
+        );
+        let change = line
+            .split(" is ")
+            .nth(1)
+            .and_then(|rest| rest.split(',').next())
+            .unwrap();
+
+        let unnamed = called(
+            &home,
+            "sec",
+            "verdict",
+            json!({ "on": "change", "change": null, "approved": true }),
+        );
+        assert_eq!(unnamed["isError"], true);
+        assert_eq!(
+            text_of(&unnamed),
+            "change is the hash of the change you read."
+        );
+        let tree = crate::git::tree_hash(&folder).unwrap();
+        for named in [
+            json!({ "on": "change", "tree": tree, "approved": true }),
+            json!({ "on": "change", "change": null, "tree": tree, "approved": true }),
+            json!({ "on": "change", "change": change, "approved": true }),
+        ] {
+            let kept = called(&home, "sec", "verdict", named.clone());
+            assert_ne!(kept["isError"], true, "{named}: {kept}");
+            assert!(
+                text_of(&kept).contains("Security reviewer, before handing over · Approved"),
+                "{named}: {kept}"
+            );
+        }
     }
 
     #[test]
