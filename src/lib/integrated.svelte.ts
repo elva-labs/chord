@@ -1386,23 +1386,29 @@ export function send(
   const session = byKey(key);
   if (link === undefined || link.handle === null || session === null) return null;
   if (words.trim() === "" && images.length === 0) return null;
-  const note = from === null ? noteFor(key) : null;
+  // A message the harness reads as a command goes alone, as typed: nothing
+  // joined ahead of it would leave it a command. What waits to go ahead of
+  // a message waits on for the next one that is not a command.
+  const commands = harnessProfile(session.agent).commands;
+  const command = commands && readsAsCommand(words);
+  const note = from === null && !command ? noteFor(key) : null;
   // Files put back while the conversation stayed are told ahead of the
   // user's own next message, and again where it never reaches the agent or
   // the conversation goes back on it.
-  const files = from === null ? link.filesBack : [];
+  const files = from === null && !command ? link.filesBack : [];
   const told = files.length === 0 ? null : filesBackNote(files);
-  // A run that went on from notes is briefed ahead of its first message,
-  // whoever sends it, the workbench's own wake among them.
-  const briefing = briefingFor(key);
+  // A run that went on from notes is briefed ahead of its first message
+  // that is not a command, whoever sends it, the workbench's own wake
+  // among them. It counts as spoken to only once briefed.
+  const briefing = command ? null : briefingFor(key);
   // The agent picked on the composer is told ahead of the user's own next
   // message, once. While agents are switched off the message goes plain
   // and the pick is let go: the conversation has begun without it.
-  if (from === null && !switches.agents && agentWaits(key)) {
+  if (from === null && !command && !switches.agents && agentWaits(key)) {
     pickAgent(key, session.id, null);
     link.picked = null;
   }
-  const agent = from === null && switches.agents ? agentAhead(key) : null;
+  const agent = from === null && !command && switches.agents ? agentAhead(key) : null;
   // The user's messages a usage limit left unanswered go with the next
   // message, whoever sends it, word for word with their images: what a
   // message that carried them held, and what the user typed of each. Only
@@ -1410,8 +1416,14 @@ export function send(
   // workbench joined to it or another's words. A message it can show to
   // be neither the user's typing nor another's is left out, and the
   // thread tells the user under this message to send it again. A message
-  // that left some out stands for them as one that carried them does.
-  const backlog = link.conversation.unanswered((said) => carries(said.text) || leftOutOf(said.id) !== null);
+  // that left some out stands for them as one that carried them does. A
+  // command carries none, and its turn neither joins them nor ends them.
+  const backlog = command
+    ? []
+    : link.conversation.unanswered(
+        (said) => carries(said.text) || leftOutOf(said.id) !== null,
+        (said) => commands && readsAsCommand(said.text),
+      );
   let lost = 0;
   const went: string[] = [];
   const carried = backlog.flatMap((said) => {
@@ -1436,7 +1448,7 @@ export function send(
   link.conversation.sending(id, text, sent);
   for (const said of went) link.conversation.wentWith(said);
   link.backSaid = null;
-  link.filesBack = from === null ? [] : link.filesBack;
+  if (files.length > 0) link.filesBack = [];
   if (note !== null || files.length > 0)
     notes.set(id, {
       key,

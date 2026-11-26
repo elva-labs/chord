@@ -416,11 +416,16 @@ export class Conversation {
    * the backlog starts again from it. It ends at a turn that answered a
    * message that carried it, or, where none carried it yet, at a turn
    * that answered one after the limit reset, or at any such turn where
-   * when it resets is not known. None while a turn runs or a message is
+   * when it resets is not known. A message `aside` from them, a command
+   * sent alone, is none of them, and a turn of only such messages neither
+   * opens the backlog nor ends it. None while a turn runs or a message is
    * on its way to the agent, which then carries them or is answered
    * with them.
    */
-  unanswered(carries: (message: Message) => boolean = () => false): Message[] {
+  unanswered(
+    carries: (message: Message) => boolean = () => false,
+    aside: (message: Message) => boolean = () => false,
+  ): Message[] {
     if (this.current !== null) return [];
     // The core says it is idle only with nothing of the window's waiting
     // in it: a message still sent or queued then was left behind.
@@ -476,11 +481,15 @@ export class Conversation {
     };
     for (const item of items) {
       if ("message" in item) {
-        if (open) add(item.message);
+        if (open && !aside(item.message)) add(item.message);
         continue;
       }
       const { turn } = item;
-      const messages = turn.messages.map((id) => this.messages[id]).filter((message) => message !== undefined);
+      const messages = turn.messages
+        .map((id) => this.messages[id])
+        .filter((message) => message !== undefined)
+        .filter((message) => !aside(message));
+      if (messages.length === 0 && turn.messages.length > 0) continue;
       if (turn.limit !== null) {
         open = true;
         resetsAt = turn.limit.resetsAt;

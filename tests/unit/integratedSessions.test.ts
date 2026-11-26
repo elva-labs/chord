@@ -161,6 +161,12 @@ async function install(options: FakeIntegratedOptions = {}) {
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+/** The texts of the row's messages, in the order sent. */
+const userTextsOf = (key: string) =>
+  conversationOf(key)
+    .order.map((id) => conversationOf(key).messages[id]?.text)
+    .filter((text) => text !== undefined);
+
 /** An integrated row, started, with its conversation's id known. */
 async function started(options: { prompt?: string; resumedFrom?: string } = {}) {
   const session = create(
@@ -313,6 +319,49 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(handleOf(key)).not.toBe(handle);
     expect(await goOnIfCold(key, Date.now(), true)).toBe(false);
     expect(asked).toBe(1);
+  });
+
+  it("sends a slash command alone to a run that went on, and briefs the next message that is not one", async () => {
+    const judged = judging();
+    const { key, session } = await large();
+    const before = session.id!;
+    const briefing = `${GOING_ON_HEAD}\n\nNo notes.\n${GOING_ON_END}`;
+    const going = goOnIfCold(key, Date.now(), true);
+    judged({ ...COLD, briefing });
+    expect(await going).toBe(true);
+    const texts = () => (fake.calls.filter((call) => call.method === "send") as { text: string }[]).map((call) => call.text);
+    send(key, "/rename ARM64 Containers");
+    expect(texts().at(-1)).toBe("/rename ARM64 Containers");
+    fake.turn(handleOf(key)!, "");
+    // The run is still unbriefed and unspoken: the briefing waits, the old
+    // conversation can still be resumed whole, and the run is not judged
+    // again.
+    expect(wentOn(key)).toMatchObject({ from: before, briefing, spoken: false });
+    expect(wholeOf(byKey(key)!)).toMatchObject({ from: before });
+    expect(await goOnIfCold(key, Date.now() + 3_600_000, true)).toBe(false);
+    send(key, "Where are we?");
+    expect(texts().at(-1)).toBe(`${briefing}\n\nWhere are we?`);
+    expect(wentOn(key)).toMatchObject({ briefing: null, spoken: true });
+    expect(wholeOf(byKey(key)!)).toBeNull();
+    // The thread draws the briefing under the message that carried it.
+    const said = userTextsOf(key);
+    expect(said.map((one) => spokenWords(one, true).briefing !== undefined)).toEqual([false, true]);
+    expect(said.map((one) => spokenWords(one, true).text)).toEqual(["/rename ARM64 Containers", "Where are we?"]);
+  });
+
+  it("puts the briefing ahead of a slash-led message to a Codex run, which takes no commands", async () => {
+    const judged = judging();
+    const row = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    await launch(row.key);
+    fake.emit(handleOf(row.key)!, { type: "context", used: 400_000, size: 1_000_000 });
+    await settled();
+    const going = goOnIfCold(row.key, Date.now(), true);
+    judged(COLD);
+    expect(await going).toBe(true);
+    send(row.key, "/rename ARM64 Containers");
+    const sent = fake.calls.filter((call) => call.method === "send").at(-1) as { text: string };
+    expect(sent.text).toBe("BRIEFING\n\n/rename ARM64 Containers");
+    expect(wentOn(row.key)).toMatchObject({ briefing: null, spoken: true });
   });
 
   it("goes on with a Codex row as with a Claude Code one", async () => {
@@ -683,6 +732,19 @@ describe("a session the usage limit cut short", () => {
     fake.turn(handleOf(key)!, "Done all three.");
     send(key, "Thanks.");
     expect(sends().at(-1)!.text).toBe("Thanks.");
+  });
+
+  it("sends a slash command alone, and its turn neither carries nor ends what the limit left unanswered", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    await settled();
+    send(key, "/rename Build");
+    expect(sends().at(-1)!.text).toBe("/rename Build");
+    // The command's turn ends after the reset, as an answered one would.
+    fake.turn(handle, "");
+    await settled();
+    send(key, "Go on.");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
   });
 
   it("shows each message once, in the order written, with its own images", async () => {
@@ -3281,6 +3343,19 @@ describe("the agent a session works as", () => {
     expect(sent[0].text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
     expect(sent[0].text.endsWith("Look at the cache change")).toBe(true);
     expect(sent.slice(1).every((call) => !call.text.includes("work as the agent"))).toBe(true);
+  });
+
+  it("sends a slash command alone and keeps the agent's note for the next message", async () => {
+    const { session } = await started();
+    workAs(session.key, reviewer);
+    await settled();
+    send(session.key, "/rename Cache review");
+    send(session.key, "Look at the cache change");
+    await settled();
+    const sent = fake.calls.filter((call) => call.method === "send") as { text: string }[];
+    expect(sent[0].text).toBe("/rename Cache review");
+    expect(sent[1].text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
+    expect(sent[1].text.endsWith("Look at the cache change")).toBe(true);
   });
 
   it("takes back what a pick set while agents are switched off, and sets it again once they are on", async () => {
