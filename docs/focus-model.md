@@ -205,11 +205,12 @@ different project is on screen, the project on screen is the starter's, as
 a session in the project on screen. Change asks the account, when accounts are named in the
 [settings](reference/settings.md#accounts), with the project's own under the cursor;
 then how it runs, when there is a workflow or more than one harness to pick
-between: the workflows under one heading, offered once a workflow has been
+between: with agents and teams off, the workflows under one heading, offered once a workflow has been
 turned on for new sessions or for a project, the project's own first and
 marked as the project's workflow or the default, each with the models it
-runs on, and under another the harnesses to run alone, with no workflow. The cursor starts on the
-project's workflow, else on the harness last started in the project. A step
+runs on, and under another the harnesses to run alone, with no workflow. With
+them on, only the harnesses to run alone. The cursor starts on the
+project's workflow where one is offered, else on the harness last started in the project. A step
 with nothing to choose is not asked. Each
 answer stays in the field as a chip, and <kbd>Backspace</kbd> on an empty
 field takes the last one back, one step to a press however long the key is

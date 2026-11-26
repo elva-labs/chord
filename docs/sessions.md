@@ -4,7 +4,7 @@ A session is one agent at work in one project. Open a folder as a project and st
 
 ## Starting and closing
 
-- Every new session starts in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. A project's New session and the + open it there with the project chosen. One line says what the session starts on, such as `Claude Code · Work`, and <kbd>Enter</kbd> starts it. Change picks another harness, account or workflow, and for Codex a [profile](reference/sessions.md#codex-profiles) where the account has any.
+- Every new session starts in the command palette, <kbd>Shift</kbd><kbd>Cmd</kbd><kbd>P</kbd>. A project's New session and the + open it there with the project chosen. One line says what the session starts on, such as `Claude Code · Work`, and <kbd>Enter</kbd> starts it. Change picks another harness, account or, while agents and teams are off, workflow, and for Codex a [profile](reference/sessions.md#codex-profiles) where the account has any.
 - <kbd>Cmd</kbd><kbd>P</kbd> goes to any session or project.
 - New session in Chord or New session in a terminal, in the project's ⋯ menu and the palette, starts one the other way from the setting.
 - The × on a live row stops the session and keeps it in the project's past sessions. Closing a project stops everything running in it.

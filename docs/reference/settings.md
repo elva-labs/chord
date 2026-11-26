@@ -430,8 +430,11 @@ on to begin with, kept as `agentsOn`. Off:
 - no team's run begins: a session picked as a team's lead starts as a
   plain one, which its conversation says, and so does a lead resumed.
 
-[Workflows](../orchestrator.md) are offered all the same, since they name
-harnesses and models, not agents.
+[Workflows](../orchestrator.md) are offered to pick for a new session only
+while agents and teams are off. While they are on, a project that follows a
+workflow still starts new sessions under it, and the
+[palette](#workflows) and the [composer](sessions.md#sessions-in-chord)
+offer no other.
 
 A session that already works as an agent keeps working as one. A team's
 run already going on is kept as it is, its plan, gates and verdicts, but
@@ -592,10 +595,11 @@ writes the setting only when it is off.
 A project's workflow is its own choice, else the one for new sessions, else
 none. A plain new session, where there is nothing to pick, follows it. In a
 project that follows a workflow, by its own choice or by the default, the
-palette's new session offers every workflow, the project's first, marked as
-the project's workflow or as the default, beside the harnesses to run alone.
-Its line of defaults starts the project's workflow, and Change picks
-another. In a project that follows none the palette offers no workflows,
+palette's line of defaults starts the project's workflow. With agents and
+teams off, its new session offers every workflow, the project's first,
+marked as the project's workflow or as the default, beside the harnesses to
+run alone, and Change picks another. With them on, Change offers only the
+harnesses to run alone. In a project that follows none the palette offers no workflows,
 whatever other projects chose, and with one harness installed and no
 account to pick its line has nothing to change. A harness picked anywhere
 starts alone. A

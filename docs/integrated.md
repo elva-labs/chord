@@ -223,9 +223,11 @@ names the model by the same name the model's chip uses, never its id. An
 effort set with the harness's own command is shown but is not the one a
 new session starts on; only a pick on the chip or the status bar is.
 
-A workflow and going on after a limit sit behind one `+` chip on the
-composer while they are at their default; each shows as a chip of its own
-once set. The `+` opens a menu of what it holds, which also brings up the
+Going on after a limit, and a workflow while agents and teams are off, sit
+behind one `+` chip on the composer while they are at their default; each
+shows as a chip of its own once set. With agents and teams on the `+` offers
+no workflow, and the workflow's chip shows only for a session that follows
+one, to leave it. The `+` opens a menu of what it holds, which also brings up the
 mode. The composer's box says `Message` and the harness's name until
 something is typed. Mode, effort, workflow and going on keep their shortcuts,
 and a change by shortcut to a value away from the default shows the chip. Every chip stays a stop on Tab.
@@ -1008,7 +1010,7 @@ a new conversation takes stays as it was.
 
 A conversation whose turn the session window's limit cut short can go on
 by itself once that window starts over. It is the conversation's own
-choice, kept behind the composer's `+` chip together with the workflow's
+choice, kept behind the composer's `+` chip
 until it is on, and then a chip of its own on the composer, off unless the
 user turns it on. The last choice made is kept with the
 settings, and a conversation takes it when its run first starts in the
