@@ -1237,8 +1237,12 @@ in-Chord session is stopped when the app exits, and when the daemon's
 stdin ends on another machine. On exit the windows and the Dock icon go at
 once, and the sessions are stopped while the app finishes in the
 background, with the same waits as ever; the app is gone when the last
-session is. A second quit meanwhile is ignored, and so is a second launch
-on Linux and Windows, which opens nothing. A connection to another machine that goes
+session is, and at the latest after 15 seconds. A second quit meanwhile
+is ignored, and nothing brings a window back. A second launch on Linux
+and Windows opens nothing, and on macOS the folders an `open` names
+meanwhile are dropped, so open them again once the app has gone.
+
+A connection to another machine that goes
 away ends its sessions for the window, once each, with an error saying
 why. The tool server's configuration for a Claude Code session, and a
 workflow's instructions for one, are each a file only its owner can read,

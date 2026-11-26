@@ -32,6 +32,10 @@ pub fn folders(args: impl IntoIterator<Item = String>, cwd: &Path) -> Vec<PathBu
 
 /// Puts folders on the list and tells the window.
 pub fn request(app: &AppHandle, folders: Vec<PathBuf>) {
+    if crate::ending::under_way(app) {
+        eprintln!("folders asked for while the app is exiting are dropped: {folders:?}");
+        return;
+    }
     let paths: Vec<String> = folders
         .into_iter()
         .filter_map(|path| path.into_os_string().into_string().ok())
@@ -65,6 +69,7 @@ pub fn on_event(app: &AppHandle, event: RunEvent) {
         let code = code.unwrap_or(0);
         let held = app.state::<crate::ending::Ending>().exit_requested(
             core.integrated_running(),
+            crate::ending::CEILING,
             || crate::ending::vanish(&app),
             move || stopping.integrated_stop_all(),
             {
@@ -102,10 +107,10 @@ pub fn on_event(app: &AppHandle, event: RunEvent) {
 #[cfg(any(target_os = "linux", windows))]
 pub fn single_instance() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_single_instance::init(|app, args, cwd| {
-        if app.state::<crate::ending::Ending>().under_way() {
+        request(app, folders(args, Path::new(&cwd)));
+        if crate::ending::under_way(app) {
             return;
         }
-        request(app, folders(args, Path::new(&cwd)));
         let welcome = app.get_webview_window(crate::welcome::WELCOME);
         if let Some(window) = welcome.or_else(|| app.get_webview_window("main")) {
             let _ = window.unminimize();

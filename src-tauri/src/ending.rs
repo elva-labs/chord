@@ -14,7 +14,8 @@
 //! later.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
 
@@ -26,6 +27,16 @@ pub fn vanish(app: &AppHandle) {
     }
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+}
+
+/// How long the sessions are given to stop before the app exits anyway:
+/// the longest the stop itself waits, and a margin.
+pub const CEILING: Duration = Duration::from_secs(15);
+
+/// Whether the app is being ended, with its sessions not yet gone.
+pub fn under_way(app: &AppHandle) -> bool {
+    app.try_state::<Ending>()
+        .is_some_and(|ending| ending.under_way())
 }
 
 /// How far the end of the app has come.
@@ -46,12 +57,15 @@ impl Ending {
 
     /// A request to exit has come. Returns whether the exit is to be held
     /// back: when sessions are running and the stop is not done, or when
-    /// the stop is under way. `hide` takes the app off the screen and
-    /// `stop` stops the sessions, and `exit` exits, both on a thread of
-    /// their own; they are called at most once.
+    /// the stop is under way. `hide` takes the app off the screen. `stop`
+    /// stops the sessions on a thread of its own, and `exit` exits once it
+    /// has returned or panicked, or once `ceiling` has passed, whichever
+    /// comes first, so the app never lives on without a window. `hide` is
+    /// called at most once and `exit` at most once.
     pub fn exit_requested(
         &self,
         running: bool,
+        ceiling: Duration,
         hide: impl FnOnce(),
         stop: impl FnOnce() + Send + 'static,
         exit: impl FnOnce() + Send + 'static,
@@ -67,13 +81,36 @@ impl Ending {
             return false;
         }
         hide();
-        let stopped = Arc::clone(&self.stopped);
+        let finish = Arc::new(Finish {
+            stopped: Arc::clone(&self.stopped),
+            exit: Mutex::new(Some(Box::new(exit))),
+        });
+        let watchdog = Arc::clone(&finish);
         std::thread::spawn(move || {
-            stop();
-            stopped.store(true, Ordering::SeqCst);
-            exit();
+            std::thread::sleep(ceiling);
+            watchdog.run();
+        });
+        std::thread::spawn(move || {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(stop));
+            finish.run();
         });
         true
+    }
+}
+
+/// The exit, which happens once, from whichever thread gets there first.
+struct Finish {
+    stopped: Arc<AtomicBool>,
+    exit: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+impl Finish {
+    fn run(&self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        let exit = self.exit.lock().ok().and_then(|mut exit| exit.take());
+        if let Some(exit) = exit {
+            exit();
+        }
     }
 }
 
@@ -81,18 +118,17 @@ impl Ending {
 mod tests {
     use super::*;
     use std::sync::mpsc;
-    use std::time::Duration;
+
+    const LONG: Duration = Duration::from_secs(60);
+
+    fn never() {
+        panic!("called");
+    }
 
     #[test]
     fn nothing_running_lets_the_exit_through() {
         let ending = Ending::default();
-        let held = ending.exit_requested(
-            false,
-            || panic!("hid"),
-            || panic!("stopped"),
-            || panic!("exited"),
-        );
-        assert!(!held);
+        assert!(!ending.exit_requested(false, LONG, never, never, never));
         assert!(!ending.under_way());
     }
 
@@ -105,6 +141,7 @@ mod tests {
         let started = std::time::Instant::now();
         let held = ending.exit_requested(
             true,
+            LONG,
             move || hid.send(()).unwrap(),
             move || {
                 released.recv().unwrap();
@@ -126,12 +163,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("exits once stopped");
         assert!(!ending.under_way());
-        assert!(!ending.exit_requested(
-            true,
-            || panic!("hid"),
-            || panic!("stopped"),
-            || panic!("exited")
-        ));
+        assert!(!ending.exit_requested(true, LONG, never, never, never));
     }
 
     #[test]
@@ -141,6 +173,7 @@ mod tests {
         let (done, exited) = mpsc::channel();
         assert!(ending.exit_requested(
             true,
+            LONG,
             || {},
             move || {
                 released.recv().unwrap();
@@ -148,18 +181,50 @@ mod tests {
             move || done.send(()).unwrap(),
         ));
         for _ in 0..3 {
-            assert!(ending.exit_requested(
-                true,
-                || panic!("hid again"),
-                || panic!("stopped again"),
-                || panic!("exited from the request"),
-            ));
+            assert!(ending.exit_requested(true, LONG, never, never, never));
         }
         release.send(()).unwrap();
         exited.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(
             exited.recv_timeout(Duration::from_millis(200)).is_err(),
             "one exit only"
+        );
+    }
+
+    #[test]
+    fn a_stop_that_panics_still_ends_in_an_exit() {
+        let ending = Ending::default();
+        let (done, exited) = mpsc::channel();
+        assert!(ending.exit_requested(
+            true,
+            LONG,
+            || {},
+            || panic!("a session wedged"),
+            move || done.send(()).unwrap(),
+        ));
+        exited
+            .recv_timeout(Duration::from_secs(5))
+            .expect("exits after the panic");
+    }
+
+    #[test]
+    fn a_stop_that_outlasts_the_ceiling_is_exited_over_once() {
+        let ending = Ending::default();
+        let (done, exited) = mpsc::channel();
+        assert!(ending.exit_requested(
+            true,
+            Duration::from_millis(100),
+            || {},
+            || std::thread::sleep(Duration::from_millis(600)),
+            move || done.send(()).unwrap(),
+        ));
+        exited
+            .recv_timeout(Duration::from_secs(5))
+            .expect("exits at the ceiling");
+        assert!(!ending.under_way());
+        assert!(
+            exited.recv_timeout(Duration::from_secs(1)).is_err(),
+            "the late stop does not exit again"
         );
     }
 }
