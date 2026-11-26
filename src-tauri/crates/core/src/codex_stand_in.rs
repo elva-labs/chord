@@ -1858,7 +1858,7 @@ fn codex_runs_a_command_of_the_user_s_in_a_turn_that_is_not_shown() {
     .join("\n");
     let h = start("user-shell", &scenario);
     h.until_type("ready");
-    run(&h.sessions, &h.id, C1, "printf hi; exit 3").unwrap();
+    run(&h.sessions, &h.id, C1, "printf hi; exit 3", false).unwrap();
     let events = h.until(|event| event["type"] == "command" && event["state"] == "done");
     let ran = commands(&events);
     let states: Vec<&str> = ran.iter().map(|e| e["state"].as_str().unwrap()).collect();
@@ -1910,7 +1910,7 @@ fn a_command_codex_runs_stopped_before_its_turn_is_named_is_interrupted_once_it_
     .join("\n");
     let h = start("user-shell-stop", &scenario);
     h.until_type("ready");
-    run(&h.sessions, &h.id, C1, "sleep 300").unwrap();
+    run(&h.sessions, &h.id, C1, "sleep 300", false).unwrap();
     h.until(|event| event["type"] == "command" && event["state"] == "running");
     stop_command(&h.sessions, &h.id, C1).unwrap();
     std::fs::write(h.dir.join("stopped"), "").unwrap();
@@ -1946,7 +1946,7 @@ fn a_command_codex_runs_ends_with_what_it_started_when_codex_dies() {
     let h = start("user-shell-dies", &scenario);
     let child = h.dir.join("command-child");
     h.until_type("ready");
-    run(&h.sessions, &h.id, C1, text).unwrap();
+    run(&h.sessions, &h.id, C1, text, false).unwrap();
     h.until(|event| event["type"] == "command" && event["state"] == "running");
 
     // Codex dies once the core holds its shell's group.

@@ -610,6 +610,9 @@ struct Stream {
     /// Commands the core ran and recorded, until the agent is done with
     /// their record.
     quiet: HashSet<String>,
+    /// Commands the agent offered the user that the core ran and recorded
+    /// for a turn, until the agent is done with their record.
+    offered: HashSet<String>,
     /// Whether every line the agent started since its last turn is a
     /// record, so the turn it opens for them is none to show.
     batch: Option<bool>,
@@ -647,6 +650,10 @@ struct Stream {
 
 /// What heads a command the user ran, in the agent's record of it.
 pub(crate) const RAN_CAVEAT: &str = "<local-command-caveat>The command below was run directly in Claude Code, not sent to you as a request, and its output goes straight to the user. It's recorded here as context for later messages.</local-command-caveat>";
+
+/// What heads a command the agent offered the user and the user ran, in
+/// the agent's record of it, which the agent answers in a turn.
+pub(crate) const OFFERED_CAVEAT: &str = "<local-command-caveat>From the workbench, not the user: the user ran the command below, the one you offered them to run, and it is recorded here with its output and, where it did not exit with 0, its exit code. Go on from its result with what you offered it for, whether it succeeded, failed or was stopped.</local-command-caveat>";
 
 /// The line and output in the agent's record of a command, escaped as the
 /// agent escapes output, so neither closes the tag it stands in.
@@ -1099,6 +1106,7 @@ impl Stream {
             tasks: HashMap::new(),
             lost: HashSet::new(),
             quiet: HashSet::new(),
+            offered: HashSet::new(),
             batch: None,
             hushed: false,
             turn: false,
@@ -1963,14 +1971,18 @@ impl Stream {
                     let record = self.quiet.contains(message);
                     self.batch = Some(self.batch.unwrap_or(true) && record);
                 }
+                // An offered command's record is read once its turn takes
+                // it: what is sent after it goes into that turn as into any.
+                self.offered.remove(message);
                 self.took(message, out);
             }
             Some("completed") => {
                 self.quiet.remove(message);
+                self.offered.remove(message);
                 self.done_with(message, out, false);
             }
             Some("cancelled" | "discarded" | "refused") => {
-                if self.quiet.remove(message) {
+                if self.quiet.remove(message) | self.offered.remove(message) {
                     self.notice(
                         NoticeLevel::Warning,
                         Some("The agent dropped the output of a command you ran, so it has not seen it".into()),
@@ -2467,11 +2479,19 @@ impl Driver for Stream {
     }
 
     /// The command goes in as the agent records one the user ran in its
-    /// own terminal: a caveat, the command and its output, as context for
-    /// the next message, with no turn of its own and taken as written.
+    /// own terminal: a caveat, the command and its output, taken as
+    /// written. A command of the user's own is context for the next
+    /// message, with no turn of its own; one the agent offered asks the
+    /// agent for a turn, after any that runs, with a caveat that says to go
+    /// on from it.
     fn ran(&mut self, command: &str, ran: &Ran) -> Result<String, String> {
+        let caveat = if ran.offered {
+            OFFERED_CAVEAT
+        } else {
+            RAN_CAVEAT
+        };
         let mut content = format!(
-            "{RAN_CAVEAT}\n<bash-input>{}</bash-input>\n<bash-stdout>{}</bash-stdout><bash-stderr>{}</bash-stderr>",
+            "{caveat}\n<bash-input>{}</bash-input>\n<bash-stdout>{}</bash-stdout><bash-stderr>{}</bash-stderr>",
             escape(ran.text),
             escape(ran.stdout),
             escape(ran.stderr),
@@ -2479,21 +2499,25 @@ impl Driver for Stream {
         if let Some(code) = ran.exit_code.filter(|&code| code != 0) {
             content.push_str(&format!("\n<bash-exit-code>{code}</bash-exit-code>"));
         }
-        self.quiet.insert(command.to_string());
-        Ok(json!({
+        let mut line = json!({
             "type": "user",
             "message": { "role": "user", "content": content },
             "parent_tool_use_id": null,
             "uuid": command,
-            "shouldQuery": false,
             "priority": "later",
             "client_composed": true,
-        })
-        .to_string())
+        });
+        if ran.offered {
+            self.offered.insert(command.to_string());
+        } else {
+            self.quiet.insert(command.to_string());
+            line["shouldQuery"] = json!(false);
+        }
+        Ok(line.to_string())
     }
 
     fn recording(&self) -> bool {
-        !self.quiet.is_empty()
+        !self.quiet.is_empty() || !self.offered.is_empty()
     }
 
     fn message(&mut self, message: &str, text: &str, images: &[Image]) -> Result<String, String> {
@@ -2905,6 +2929,7 @@ mod tests {
                     stdout: "a <b> & c\n",
                     stderr: "",
                     exit_code,
+                    offered: false,
                 },
             )
             .unwrap();
@@ -2951,6 +2976,67 @@ mod tests {
             .contains("bash-exit-code"));
     }
 
+    /// The record of a command the agent offered, which ended with `exit_code`.
+    fn ran_offered(stream: &mut Stream, command: &str, exit_code: Option<i32>) -> Value {
+        let line = stream
+            .ran(
+                command,
+                &Ran {
+                    text: "git push origin :refs/tags/v1",
+                    stdout: "",
+                    stderr: "denied\n",
+                    exit_code,
+                    offered: true,
+                },
+            )
+            .unwrap();
+        serde_json::from_str(&line).unwrap()
+    }
+
+    #[test]
+    fn a_command_the_agent_offered_is_recorded_to_ask_the_agent() {
+        let mut stream = stream();
+        let line = ran_offered(&mut stream, C1, Some(1));
+        assert_eq!(line["uuid"], C1);
+        assert_eq!(line["shouldQuery"], Value::Null, "{line}");
+        assert_eq!(line["priority"], "later");
+        assert_eq!(
+            line["message"]["content"],
+            format!(
+                "{OFFERED_CAVEAT}\n<bash-input>git push origin :refs/tags/v1</bash-input>\n<bash-stdout></bash-stdout><bash-stderr>denied\n</bash-stderr>\n<bash-exit-code>1</bash-exit-code>"
+            )
+        );
+    }
+
+    #[test]
+    fn an_offered_record_is_answered_in_a_turn_that_is_shown() {
+        let mut stream = stream();
+        ran_offered(&mut stream, C1, Some(0));
+        assert!(
+            stream.recording(),
+            "a message waits until the turn takes it"
+        );
+        let out = events(
+            &mut stream,
+            &[
+                lifecycle(C1, "started"),
+                init(),
+                json!({"type":"assistant","message":{"id":"a1","role":"assistant","content":[{"type":"text","text":"Gone."}]},"parent_tool_use_id":null}),
+                result(),
+            ],
+        );
+        assert_eq!(turns(&out), 2, "{out:?}");
+        assert!(
+            out.iter()
+                .any(|e| matches!(e, Event::Text { text, .. } if text == "Gone.")),
+            "{out:?}"
+        );
+        assert!(
+            !stream.recording(),
+            "a message sent now goes in as into any turn"
+        );
+    }
+
     #[test]
     fn the_line_in_a_record_is_escaped_as_its_output_is() {
         let mut stream = stream();
@@ -2962,6 +3048,7 @@ mod tests {
                     stdout: "",
                     stderr: "",
                     exit_code: Some(0),
+                    offered: false,
                 },
             )
             .unwrap();

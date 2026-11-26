@@ -2084,6 +2084,7 @@ fn a_command_the_user_runs_streams_to_the_window_and_goes_to_the_agent_before_th
         &h.id,
         C1,
         "printf 'out <1>\\n'; printf 'err\\n' >&2; exit 3",
+        false,
     )
     .unwrap();
     // Sent while the command runs, the message waits for its record.
@@ -2133,6 +2134,129 @@ fn a_command_the_user_runs_streams_to_the_window_and_goes_to_the_agent_before_th
     assert_eq!(h.stop()["clean"], true);
 }
 
+/// The agent taking the record of a command it offered, while no turn
+/// runs: a turn of its own that asks the model.
+const OFFERED: &str = r#"expect "priority":"later"
+reply {"type":"command_lifecycle","command_uuid":"@UUID@","state":"started"}
+say {"type":"system","subtype":"init","model":"claude-haiku","permissionMode":"default","session_id":"s"}
+say {"type":"assistant","message":{"id":"a1","role":"assistant","content":[{"type":"text","text":"It is gone."}]},"parent_tool_use_id":null}
+say {"type":"result","subtype":"success","is_error":false,"result":"ok","num_turns":1,"total_cost_usd":0.01,"duration_ms":5,"usage":{"input_tokens":3,"output_tokens":4}}
+reply {"type":"command_lifecycle","command_uuid":"@UUID@","state":"completed"}"#;
+
+/// Runs a command the agent offered and reads what the agent was given and
+/// the turns it took, once the turn its record started is over.
+fn offered_run(name: &str, command: &str) -> (Value, Vec<Value>) {
+    let scenario = [READY, OFFERED, "drain"].join("\n");
+    let h = start(name, &scenario);
+    h.until_type("ready");
+    run(&h.sessions, &h.id, C1, command, true).unwrap();
+    let events = h.until_type("turnEnded");
+    let record = h
+        .stdin()
+        .into_iter()
+        .find(|line| line["uuid"] == C1)
+        .expect("the agent was given the command");
+    assert_eq!(h.stop()["clean"], true);
+    (record, events)
+}
+
+#[test]
+fn an_offered_command_that_ends_starts_one_turn_with_its_record() {
+    let (record, events) = offered_run("offered", "printf 'gone\\n'");
+    assert_eq!(record["shouldQuery"], Value::Null, "{record}");
+    assert_eq!(record["priority"], "later");
+    assert_eq!(
+        record["message"]["content"],
+        format!(
+            "{}\n<bash-input>printf 'gone\\n'</bash-input>\n<bash-stdout>gone\n</bash-stdout><bash-stderr></bash-stderr>",
+            crate::claude_stream::OFFERED_CAVEAT
+        )
+    );
+    let turns: Vec<&Value> = events
+        .iter()
+        .filter(|event| event["type"] == "turnStarted")
+        .collect();
+    assert_eq!(turns.len(), 1, "{events:?}");
+    let ended = events.iter().rfind(|e| e["type"] == "turnEnded").unwrap();
+    assert_eq!(ended["outcome"], "done", "{ended}");
+    assert!(
+        events
+            .iter()
+            .any(|e| e["type"] == "text" && e["text"] == "It is gone."),
+        "{events:?}"
+    );
+}
+
+#[test]
+fn an_offered_command_that_fails_still_starts_a_turn_with_its_exit_code() {
+    let (record, events) = offered_run("offered-fails", "echo no >&2; exit 4");
+    assert_eq!(record["shouldQuery"], Value::Null, "{record}");
+    let content = record["message"]["content"].as_str().unwrap();
+    assert!(
+        content.starts_with(crate::claude_stream::OFFERED_CAVEAT),
+        "{content}"
+    );
+    assert!(
+        content.ends_with("<bash-stderr>no\n</bash-stderr>\n<bash-exit-code>4</bash-exit-code>"),
+        "{content}"
+    );
+    let turns = events
+        .iter()
+        .filter(|event| event["type"] == "turnStarted")
+        .count();
+    assert_eq!(turns, 1, "{events:?}");
+}
+
+#[test]
+fn an_offered_command_that_ends_during_a_turn_starts_its_turn_after_it() {
+    // The record comes while the message's turn runs; the agent ends that
+    // turn and only then takes the record.
+    let scenario = [
+        READY,
+        r#"expect "type":"user""#,
+        TAKE,
+        INIT,
+        r#"expect "priority":"later""#,
+        r#"say {"type":"result","subtype":"success","is_error":false,"result":"ok","num_turns":1,"total_cost_usd":0.01,"duration_ms":5,"usage":{"input_tokens":3,"output_tokens":4}}"#,
+        TAKE,
+        INIT,
+        r#"say {"type":"result","subtype":"success","is_error":false,"result":"ok","num_turns":1,"total_cost_usd":0.02,"duration_ms":5,"usage":{"input_tokens":3,"output_tokens":4}}"#,
+        r#"reply {"type":"command_lifecycle","command_uuid":"@UUID@","state":"completed"}"#,
+        "drain",
+    ]
+    .join("\n");
+    let h = start("offered-during", &scenario);
+    h.until_type("ready");
+    let message = h.send("push the tag away");
+    h.until_type("turnStarted");
+    run(&h.sessions, &h.id, C1, "echo pushed", true).unwrap();
+    h.until_type("turnEnded");
+    let events = h.until_type("turnEnded");
+    let turns: Vec<(&str, &Value)> = events
+        .iter()
+        .filter(|e| e["type"] == "turnStarted" || e["type"] == "turnEnded")
+        .map(|e| (e["type"].as_str().unwrap(), e))
+        .collect();
+    let kinds: Vec<&str> = turns.iter().map(|(kind, _)| *kind).collect();
+    assert_eq!(
+        kinds,
+        ["turnStarted", "turnEnded", "turnStarted", "turnEnded"],
+        "{events:?}"
+    );
+    assert_eq!(turns[0].1["messages"], json!([message]));
+    assert_eq!(
+        turns[1].1["outcome"], "done",
+        "the first turn was not cut short"
+    );
+    assert!(
+        !h.stdin()
+            .iter()
+            .any(|line| line["request"]["subtype"] == "interrupt"),
+        "the record interrupted nothing"
+    );
+    assert_eq!(h.stop()["clean"], true);
+}
+
 #[test]
 fn a_command_the_user_stops_ends_with_everything_it_started_and_says_so_to_the_agent() {
     let scenario = [READY, RECORDED, "drain"].join("\n");
@@ -2147,6 +2271,7 @@ fn a_command_the_user_stops_ends_with_everything_it_started_and_says_so_to_the_a
             "echo before; sleep 300 & echo $! > '{}'; wait",
             child.display()
         ),
+        false,
     )
     .unwrap();
     h.until(|event| event["type"] == "commandOutput");
