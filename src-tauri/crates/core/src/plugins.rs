@@ -1356,8 +1356,9 @@ impl Plugins {
         }
     }
 
-    /// The same core with picks that wait `wait` for their result.
-    #[cfg(test)]
+    /// The same core with picks that wait `wait` for their result. Only
+    /// the tests that run a plugin, which are Unix's, use it.
+    #[cfg(all(test, unix))]
     fn waiting_for_picks(mut self, wait: Duration) -> Self {
         Arc::get_mut(&mut self.inner)
             .expect("a core nothing holds yet")
