@@ -935,8 +935,8 @@ export async function installFakeCore(
         integratedInterrupt: async (id: string) => integrated().interrupt(id),
         integratedSendNow: async (id: string) => integrated().sendNow(id),
         integratedWithdraw: async (id: string, message: string) => integrated().withdraw(id, message),
-        integratedRun: async (id: string, command: string, text: string) =>
-          integrated().run(id, command, text),
+        integratedRun: async (id: string, command: string, text: string, offered?: boolean) =>
+          integrated().run(id, command, text, offered),
         integratedStopCommand: async (id: string, command: string) =>
           integrated().stopCommand(id, command),
         integratedCompact: async (id: string, instructions?: string) => integrated().compact(id, instructions),
