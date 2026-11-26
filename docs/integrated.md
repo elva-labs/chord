@@ -272,8 +272,10 @@ mode's to answer, as with reading only off, and approving it lets the
 command run outside the sandbox, where it can change files. An ask to
 widen the sandbox, and a server's tool other than the workbench's own that
 change no file and reach nothing outside it, reach the user saying the
-session reads only. Reading only can be turned on and off while the session
-runs, and the window hears which.
+session reads only. A [team's lead](teams.md#what-a-run-holds) is not
+asked at all before the start, send and stop its run leaves to it.
+Reading only can be turned on and off while the session runs, and the
+window hears which.
 
 ## What a new session starts on
 
