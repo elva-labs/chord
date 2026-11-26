@@ -1737,9 +1737,14 @@ export interface RunPlace {
   folder: string;
   /** The commit the change there counts from. */
   base: string | null;
+  /** The commit the base moves on from after a rebase on main. */
+  start: string | null;
   /** The tree of the commit the folder's branch is on. */
   head: string | null;
   tree: Reading<string>;
+  /** The hash of the lines the change adds and removes, which an approval
+      names. */
+  change: Reading<string>;
   /** The paths changed there since the base. */
   changed: Reading<string[]>;
 }
