@@ -1583,11 +1583,17 @@ item opened before that point and closed after it is given again among
 the open ones, marked as closed on such a turn, since its work may be
 undone; it does not count toward the twelve. The briefing goes ahead of the first message the fresh
 conversation is sent, the user's, a line from the session's starter, or
-the workbench's own. A message Claude Code would read as a slash command
+the workbench's own. A message Claude Code would run as a slash command
 goes alone, as typed, and the briefing waits for the next message that
-is not one: until then the fresh conversation counts as not yet spoken
-to, and resume whole still goes back to the old one. Codex takes no
-slash commands here, so its briefing goes with whatever is sent first. A
+is not one. Such a message starts with a slash as its very first
+character, followed by the name of a command the agent lists, or, before
+it has listed any, a name shaped as one, and carries no images. A
+command the agent answered or used a tool for counts as speaking to the
+fresh conversation; one that did neither, such as a rename, leaves resume
+whole going back to the old one. A briefing still waiting is kept with
+the fresh conversation, so a row stopped and resumed, or the workbench
+started again, still briefs it. Codex takes no slash commands here, so
+its briefing goes with whatever is sent first. A
 terminal session is given it as its first prompt,
 told to wait for the user when nothing else goes with it. Where the
 harness's command runs through the Windows command interpreter, a first
@@ -1663,7 +1669,8 @@ asking the user. The way back to the old conversation is the row's
 menu: Resume whole, in a terminal row as in a conversation row, says how
 many tokens it reads where the transcript said, and starts the row again
 on the whole old conversation, at once when the row is on screen. It is
-offered only until anything is said to the fresh run: the old
+offered only until the fresh run is spoken to, by a message or by a
+command the agent answered or used a tool for: the old
 conversation would not hold what was said after it, while the row still
 drew it.
 

@@ -1088,8 +1088,12 @@ be half done. Each message stands once in the thread, where it was
 written, and one that carried others says so under it.
 
 A slash command Claude Code would run goes alone, as typed, and carries
-none of them. Its turn neither ends them nor adds it to them: they wait
-for the next message that is not a command. The same holds for what
+none of them: a message whose very first character is a slash, followed
+by the name of a command the agent lists, or, before it has listed any, a
+name shaped as one, with no images. Its turn, sent or running, neither
+ends them nor adds it to them: they wait for the next message that is not
+a command. A command the limit refused joins them, and goes again as
+words in the note. The same holds for what
 else waits to go ahead of the user's next message, the agent picked on
 the composer, files put back and a note of the sessions it started.
 
