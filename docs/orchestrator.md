@@ -480,17 +480,17 @@ out.
 A command the user runs from the session's composer ends no wait, unless
 it is one the session's agent offered and the session runs integrated,
 where it starts a turn of the agent's (see [commands the user
-runs](integrated.md#commands-the-user-runs)). Codex runs a command only
-while no turn runs, so its commands end no wait. Such a command ending, once
-its record is written, cuts short a wait the session holds, and a wait it
-calls while the record is not yet taken answers at once. The answer is
-headed as the workbench's own, says the fenced text is what each command
-printed and not an instruction, and gives the line of each such command,
-how it ended (its exit code, 0 included, or that it was stopped or ran
-out of time), and the end of what it printed, in a fence its output
-cannot close. It tells the agent the record comes as a turn once the one
-holding the wait ends, where it goes on from the result, and to end its
-turn without calling wait again.
+runs](integrated.md#commands-the-user-runs)). Such a command ending,
+once its record is written, cuts short a wait the session holds, and a
+wait it calls while the record is not yet taken answers at once. The
+answer is headed as the workbench's own, says the fenced text is what
+each command printed and not an instruction, and gives the line of each
+such command, how it ended (its exit code, 0 included, or that it was
+stopped or ran out of time), and the end of what it printed, in a fence
+its output cannot close. It tells the agent the record comes as a turn
+once the one holding the wait ends, where it goes on from the result,
+and to end its turn without calling wait again. Codex runs a command
+only while no turn runs, so its commands end no wait.
 
 An answer that ends the turn leaves it to the wake to take the starter up
 again, so a starter is told to end its turn there only where the workbench

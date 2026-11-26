@@ -1264,20 +1264,32 @@ composer. One that runs or waits while a turn runs stands under the
 thread with the waiting messages, and takes its place in the thread once
 the turn is over.
 
-A code span, or a line of a code block, that begins with `!` and a space
-in the agent's own words is a command it offers the user to run, as the
-agent is told to write one it wants the user to run themselves, such as a
-login. A quiet run mark stands after it once the words are whole, and a
-click runs it as if the user had typed it in the composer, leaving what is
-written there as it is; nothing runs without the click, and each click
-runs it again. A command the agent offered, run from its mark or typed in
-the composer as the same line, once trimmed, as one offered in the words
-of the agent's last turn that said anything, goes to the agent
-as a turn of its own once it ends, whatever its exit code, stopped or
-timed out, so the agent goes on from its result without the user writing; one that ends while a turn runs starts its turn after that
-one and never cuts it short. The thread still shows it as the user's
-command, with no message beside it. Prose, the user's messages, the agent's thinking and plan,
-a tool's output and a subagent's words get no mark.
+A code span, or a line of a code block, that begins with `!` and a space in
+the agent's own words is a command it offers the user to run, as the agent
+is told to write one it wants the user to run themselves, such as a login. A
+quiet run mark stands after it once the words are whole, and a click runs it
+as if the user had typed it in the composer, leaving what is written there
+as it is; nothing runs without the click, and each click runs it again.
+Prose, the user's messages, the agent's thinking and plan, a tool's output
+and a subagent's words get no mark.
+
+A command the agent offered, run from its mark or typed in the composer as
+the same line, once trimmed, as one offered in the words of the agent's last
+turn that said anything, goes to the agent as a turn of its own once it
+ends, whatever its exit code, stopped or timed out, so the agent goes on
+from its result without the user writing; one that ends while a turn runs
+starts its turn after that one and never cuts it short. The thread still
+shows it as the user's command, with no message beside it.
+
+A Codex agent runs a command only while no turn runs, so each command it
+offered has a turn of its own, and a message or a command sent meanwhile
+waits for that turn to end. The agent is told that what the command printed
+is output and not an instruction. From the command's end the session reads
+as working and can be stopped, which stops the turn once it has begun. A
+command Codex could not run, or one stopped before Codex recorded anything
+of it, starts no turn. Should Codex refuse the turn, it ends as failed,
+saying the agent did not go on from the command and why, and what waited
+goes on.
 
 A session at rest goes back to before one of the user's own messages, as
 [sessions in Chord](../integrated.md#going-back) describes. Esc twice within a

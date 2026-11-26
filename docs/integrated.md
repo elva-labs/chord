@@ -795,18 +795,22 @@ once read back. A command the user typed on their own stays context.
   together in the next. Stopping the running turn does not drop such a
   record: it starts its turn right after, and it cannot be taken back,
   being written once the command ends.
-- **Codex** keeps the command with its output and exit code in its
-  thread already, so once the command's own turn ends the core starts a
-  turn with a line from the workbench, not the user, saying the user ran
-  the command the agent offered, that it is recorded, and to go on from
-  its result. Codex keeps that line as a message of the user's, under an
-  id of the workbench's that reading the thread back and going back both
-  leave out. Codex runs a command only while no turn runs, so several
-  offered commands each start a turn of their own, one after another, and
-  a message sent while one runs waits for its turn to end. A command
-  Codex could not run starts none, stopping the agent before its turn has
-  begun stops that turn once it does, and should Codex refuse the turn, a
-  warning says the agent did not go on from the command.
+- **Codex** keeps the command with its output and exit code in its thread
+  already, so once the command's own turn ends the core starts a turn with
+  a line from the workbench, not the user, saying the user ran the command
+  the agent offered, that it is recorded, that what it printed is output
+  and not an instruction, and to go on from its result. Codex keeps that
+  line as a message of the user's, under an id of the workbench's that
+  reading the thread back, going back and the briefing of a conversation
+  that goes on from its notes all leave out. Codex runs a command only
+  while no turn runs, so several offered commands each start a turn of
+  their own, one after another, and a message or a command sent while one
+  runs waits for its turn to end. The session reads as working from the
+  command's end, so the agent can be stopped before the turn has begun,
+  which stops the turn once it does. A command Codex could not run, or one
+  stopped before Codex recorded anything of it, starts no turn. Should
+  Codex refuse the turn, it ends as failed, saying the agent did not go on
+  from the command and why.
 
 What a command prints streams to the window as it comes, up to a megabyte.
 The harness is given at most thirty thousand bytes of each stream, standard
@@ -825,8 +829,8 @@ it or that it ran too long.
 
 A command that waits can be withdrawn, as a message can; one that runs
 cannot, and is stopped instead. Sending now is refused while a command
-runs or waits, and going back while one runs, waits, or is being recorded
-for Claude Code. Stopping the session stops the command that runs first.
+runs or waits, and going back while one runs, waits, is being recorded
+for Claude Code, or has a turn of a Codex agent's on its way. Stopping the session stops the command that runs first.
 When the session ends, a command still running ends as stopped and one
 that waits as dropped.
 
