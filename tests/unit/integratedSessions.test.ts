@@ -484,7 +484,7 @@ describe("a row at rest whose conversation went cold and large", () => {
     fake.turn(handle, "", { output: 0 });
     await settled();
     expect(JSON.parse(localStorage.getItem("chord.briefings") ?? "{}")).toEqual({
-      [fresh]: { from, context: 400_000, briefing: "BRIEFING", spoken: false },
+      [fresh]: { from, context: 400_000, briefing: "BRIEFING", spoken: false, at: expect.any(Number) },
     });
     stopListening();
     resetSessions();

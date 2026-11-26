@@ -340,7 +340,9 @@ describe("taking a conversation up again", () => {
     answer = COLD;
     await takeUp(row());
     identified("row-1", "new-id");
-    expect(heldNow()).toEqual({ "new-id": { from: "old-id", context: 967_000, briefing: "BRIEFING", spoken: false } });
+    expect(heldNow()).toEqual({
+      "new-id": { from: "old-id", context: 967_000, briefing: "BRIEFING", spoken: false, at: expect.any(Number) },
+    });
     // After a restart the fresh run is resumed, still to be briefed, and
     // the old conversation is still on offer whole.
     resetGoingOn();
@@ -387,6 +389,31 @@ describe("taking a conversation up again", () => {
     answers["old-id"] = WARM;
     expect(await takeUp(row({ resumedFrom: "new-id" }))).toBe("old-id");
     expect(heldNow()).toEqual({});
+  });
+
+  it("drops a kept briefing written more than 30 days ago as it loads, and keeps one with no time", async () => {
+    const kept = { from: "old-id", context: 967_000, briefing: "BRIEFING", spoken: false };
+    const day = 86_400_000;
+    localStorage.setItem(
+      "chord.briefings",
+      JSON.stringify({
+        stale: { ...kept, at: Date.now() - 31 * day },
+        recent: { ...kept, at: Date.now() - 29 * day },
+        timeless: kept,
+      }),
+    );
+    resetGoingOn();
+    answer = COLD;
+    await takeUp(row());
+    identified("row-1", "new-id");
+    expect(Object.keys(heldNow()).sort()).toEqual(["new-id", "recent", "timeless"]);
+    expect(heldNow().recent.at).toBeLessThan(Date.now() - 28 * day);
+    expect(heldNow().timeless).toEqual(kept);
+    for (const id of ["stale", "recent", "timeless"]) answers[id] = WARM;
+    expect(await takeUp(row({ key: "row-2", resumedFrom: "stale" }))).toBe("stale");
+    expect(wentOn("row-2")).toBeNull();
+    expect(await takeUp(row({ key: "row-3", resumedFrom: "timeless" }))).toBe("timeless");
+    expect(wentOn("row-3")).toMatchObject({ briefing: "BRIEFING" });
   });
 
   it.each([["{not json"], ["[]"], [JSON.stringify({ "new-id": { from: 3, briefing: "B", spoken: false } })]])(
