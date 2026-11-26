@@ -35,7 +35,7 @@ fn commit(dir: &Path) {
     }
 }
 
-fn team(name: &str) -> Team {
+pub(crate) fn team(name: &str) -> Team {
     shipped()
         .into_iter()
         .find(|team| team.name == name)
@@ -1357,7 +1357,7 @@ fn a_lead_reads_no_run_once_it_ended() {
     assert_eq!(lead_of(Path::new("/nowhere-at-all"), "lead").unwrap(), None);
 }
 
-fn agents_switched(home: &Path, on: bool) {
+pub(crate) fn agents_switched(home: &Path, on: bool) {
     let path = crate::settings::settings_path(home);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, format!(r#"{{ "agentsOn": {on} }}"#)).unwrap();

@@ -253,10 +253,17 @@ that watch, read or stop a command running in the background, its tools
 that only read, a subagent, whose own calls are held to the same, and the
 workbench's own tools that change no file of the project and reach nothing
 outside the workbench, such as notes, note, sessions, read, wait and
-selection. Any other tool, a server's tool or the workbench's own start,
-send and browser tools that read a page among them, is put to the user
-whatever the mode or the allow rules say, and the ask says the session
-reads only and that allowing it lets the session change files. Codex runs
+selection, and the tools of a [team's run](teams.md#the-runs-tools), plan,
+gate_add, verdict and gates. A session that leads a team's run while agents
+are switched on also has start left to the mode, since the run starts only
+its team's agents, and send and stop where the session they name is a
+member of its run. Any other tool is put to the user whatever the mode or
+the allow rules say, and the ask says the session reads only and that
+allowing it lets the session change files. That covers a server's tool,
+the workbench's browser tools that read a page, start, send and stop in a
+session that leads no run, and a lead's send or stop to a session outside
+its run, or one whose id it names too little of to tell from another
+member's. Codex runs
 each turn in its read-only sandbox, in which a command that only reads
 runs as it would, and its asks to change files are turned down without
 asking the user. A command it asks to run outside the sandbox is the

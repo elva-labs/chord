@@ -190,6 +190,19 @@ for the session it goes to. Both are refused by the workbench's tools, so
 they hold whatever runs the lead. A start is refused as well when the
 settings cannot be read, since what the agent may do is not known.
 
+A lead in Claude Code in Chord that only reads has start left to its mode,
+since the run starts only the team's agents and holds a start as above, and
+send and stop where the session they name is a member of its run. A send or
+a stop to any other session it started, which no run holds, is asked about
+as for any session that only reads (see [reading
+only](integrated.md#the-mode-a-session-starts-in)). Left to the mode, a
+call is asked about where the mode asks for it. The window's own questions
+stand as well: before a start in another project, on another harness or
+under another account, before every start while the settings say so, and
+before a round of review past its limit (see
+[orchestrator](orchestrator.md#what-the-user-is-asked)). A Codex lead is
+asked as its [approval policy](hooks.md#the-agents-tools) says.
+
 A shell command hands the work over when git or gh is a command the shell
 runs and it pushes, with `git push`, `git send-pack` or `git subtree
 push`, or opens or merges a pull request, with `gh pr create`, `gh pr
