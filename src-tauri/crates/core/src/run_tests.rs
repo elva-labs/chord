@@ -1705,16 +1705,34 @@ fn a_local_branch_moved_onto_the_work_leaves_the_change_where_it_was() {
 #[test]
 fn work_that_reached_the_remotes_default_branch_stays_approved() {
     let (home, dir) = on_a_branch("rebase-landed", &[("list.txt", LETTERS)]);
+    let start = git(&dir, &["rev-parse", "HEAD"]);
     write(&dir, "list.txt", &LETTERS.replace("c\n", "C\n"));
     commit(&dir);
     approved_now(home.path());
     git(&dir, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
     let now = state(home.path(), "lead").unwrap().unwrap();
-    assert_eq!(now.places[0].changed, Ok(Vec::new()));
+    assert_eq!(
+        now.places[0].base.as_deref(),
+        Some(start.as_str()),
+        "a base that leaves nothing changed is no base"
+    );
+    assert_eq!(now.paths, vec!["list.txt"]);
     assert_eq!(now.gates[0].standing, Standing::Approved);
+}
 
+#[test]
+fn a_remotes_branch_moved_onto_the_work_does_not_empty_the_change() {
+    let (home, dir) = on_a_branch("rebase-forged", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("c\n", "C\n"));
+    commit(&dir);
+    approved_now(home.path());
     write(&dir, "list.txt", &LETTERS.replace("c\n", "CC\n"));
+    commit(&dir);
     assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+    git(&dir, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.paths, vec!["list.txt"]);
 }
 
 #[test]

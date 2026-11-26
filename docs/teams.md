@@ -85,7 +85,10 @@ checkout's own branches never move the base, so a commit, a merge, or a
 branch moved by hand leaves the change counting from where it did. When
 the remotes' branches disagree, or the commit the change counted from was
 rewritten, the change counts from that commit, and a rebase puts its
-approval out of date.
+approval out of date. A base that would leave nothing changed is not taken
+either, so work that has reached the remote's default branch counts from
+where it did: it keeps its approval when it got there unrebased, and goes
+out of date when it was rebased first.
 
 Measuring the change by its lines has two weaknesses:
 
@@ -120,9 +123,7 @@ after it, so an edit in a member's folder puts the approvals of the change
 there out of date. A rebase on main that leaves the work's lines as they
 were keeps the approval: a clean one, and one whose conflicts were
 resolved without touching them. A conflict resolved by altering them, or
-main changing a line the work replaces, puts it out of date. Work that has
-reached the remote's default branch, with nothing left changed from it,
-keeps the approval it had.
+main changing a line the work replaces, puts it out of date.
 
 A verdict recorded on a folder's tree, a hash of all its files, by a
 Chord that measured the change that way, stands while the folder has that
@@ -324,6 +325,6 @@ What the holds do not see:
   run, as it can write the store.
 - a remote's default branch moved by other means than a fetch of what
   the remote holds, such as `git update-ref`, or a commit made in a
-  remote that is a folder on the same machine. Moved onto the work, it
-  moves the change's base there and so leaves out of the change the work
-  it passes.
+  remote that is a folder on the same machine. Moved onto part of the
+  work, it moves the change's base there and leaves that part out of the
+  change.

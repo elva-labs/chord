@@ -12,8 +12,8 @@
 //! counts from its base: the commit the run began at, or for a folder
 //! other than the lead's, the newest commit it shares with the run's, or
 //! where a rebase on a remote's default branch moved it, the newest commit
-//! the branch shares with that branch as last fetched; see
-//! [`git::moved_base`]. The change is the paths changed since the base and
+//! the branch shares with that branch as last fetched, unless that leaves
+//! nothing changed; see [`git::moved_base`]. The change is the paths changed since the base and
 //! a hash of the lines taken out and put in there, with no lines around
 //! them and no line numbers; see [`git::change_hash`]. Paths, in the change
 //! and in a gate, are measured from the run's folder. A verdict names the
@@ -349,9 +349,21 @@ fn outcome<T: Serialize, S: serde::Serializer>(
 impl Place {
     /// The place a folder is, its change counted from where `start` moved
     /// to, with the paths changed there measured from `from`, where the
-    /// run's folder is in the repository.
+    /// run's folder is in the repository. A base that moved onto all of
+    /// the work, leaving nothing changed, is no base: the change counts
+    /// from `start`, so a remote's branch moved onto the work never empties
+    /// it.
     fn read(folder: &Path, from: &str, start: Option<&str>) -> Place {
-        let base = git::moved_base(folder, start);
+        let moved = Place::from_base(folder, from, start, git::moved_base(folder, start));
+        if moved.base.as_deref() == start
+            || !moved.changed.as_ref().is_ok_and(|paths| paths.is_empty())
+        {
+            return moved;
+        }
+        Place::from_base(folder, from, start, start.map(str::to_string))
+    }
+
+    fn from_base(folder: &Path, from: &str, start: Option<&str>, base: Option<String>) -> Place {
         let tree = git::tree_hash(folder);
         let change = tree
             .clone()
@@ -379,13 +391,9 @@ impl Place {
 
     /// Whether an approval given on `on` stands for the place: `on` is its
     /// change, or its tree, as a verdict recorded before changes were
-    /// hashed names it; or the base moved on to a remote's default branch
-    /// that holds all of the change, so nothing is left in it.
+    /// hashed names it.
     fn approves(&self, on: &str) -> bool {
-        self.change.as_deref() == Ok(on)
-            || self.tree.as_deref() == Ok(on)
-            || (self.base != self.start
-                && self.changed.as_ref().is_ok_and(|paths| paths.is_empty()))
+        self.change.as_deref() == Ok(on) || self.tree.as_deref() == Ok(on)
     }
 
     /// Whether anything changed there since its base, or that cannot be
@@ -471,10 +479,8 @@ impl State {
                 .places
                 .iter()
                 .filter(|place| {
-                    place.change.as_ref().is_ok_and(|change| {
-                        let base = git::moved_base(own, place.start.as_deref());
-                        git::change_hash(own, base.as_deref(), &tree).as_ref() == Ok(change)
-                    })
+                    place.change.is_ok()
+                        && Place::read(own, "", place.start.as_deref()).change == place.change
                 })
                 .collect();
         }
