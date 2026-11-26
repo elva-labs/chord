@@ -267,11 +267,11 @@ pub const SETTINGS_TOOLS: &[&str] = &["settings", "settings_change", "theme_save
 
 /// The workbench's own tools that change no file of the project and reach
 /// nothing outside the workbench: they read the project or the workbench,
-/// wait, keep the conversation's notes in the workbench's store, or put
-/// something in front of the user. A session that reads only leaves these
-/// to the mode; the workbench's other tools are put to the user, the
-/// browser's readers among them, as they read pages in sites the user is
-/// signed into.
+/// wait, keep the conversation's notes or the records of the team's run it
+/// is in in the workbench's store, or put something in front of the user.
+/// A session that reads only leaves these to the mode; the workbench's
+/// other tools are put to the user, the browser's readers among them, as
+/// they read pages in sites the user is signed into.
 pub const CONTAINED_TOOLS: &[&str] = &[
     "show",
     "diff",
@@ -287,20 +287,43 @@ pub const CONTAINED_TOOLS: &[&str] = &[
     "read",
     "browser_tabs",
     "settings",
+    "plan",
+    "gate_add",
+    "verdict",
+    "gates",
 ];
 
-/// Whether a tool, as the harness names it (`mcp__chord__notes`), is one of
-/// the workbench's [`CONTAINED_TOOLS`]. A built-in's name always means the
-/// built-in, never a plugin's tool of the same name. The name alone says
-/// whose server it is only where the workbench attached its own: a server
-/// the project's configuration names the same is then not loaded, as the
-/// one the session is started with wins, and where none is attached the
-/// name may be the project's.
-pub fn contained_tool(name: &str) -> bool {
+/// The workbench's tools a team's lead delegates with: it starts its
+/// members, writes to them and stops them. A lead that reads only leaves
+/// these to the mode, as the run holds what they start: the team's agents
+/// only, and none that changes files while a gate on the plan waits. Any
+/// other session that reads only is asked before each.
+pub const LEAD_TOOLS: &[&str] = &["start", "send", "stop"];
+
+/// The tool of the workbench's own server a tool name names, as the
+/// harness gives it (`mcp__chord__notes`). A built-in's name always means
+/// the built-in, never a plugin's tool of the same name. The name alone
+/// says whose server it is only where the workbench attached its own: a
+/// server the project's configuration names the same is then not loaded,
+/// as the one the session is started with wins, and where none is
+/// attached the name may be the project's.
+fn own_tool(name: &str) -> Option<&str> {
     name.strip_prefix("mcp__")
         .and_then(|rest| rest.strip_prefix(crate::adapter::SERVER_NAME))
         .and_then(|rest| rest.strip_prefix("__"))
-        .is_some_and(|tool| CONTAINED_TOOLS.contains(&tool))
+}
+
+/// Whether a tool, as the harness names it, is one of the workbench's
+/// [`CONTAINED_TOOLS`]. See [`own_tool`] for when the name is the
+/// workbench's.
+pub fn contained_tool(name: &str) -> bool {
+    own_tool(name).is_some_and(|tool| CONTAINED_TOOLS.contains(&tool))
+}
+
+/// Whether a tool, as the harness names it, is one of the workbench's
+/// [`LEAD_TOOLS`]. See [`own_tool`] for when the name is the workbench's.
+pub fn lead_tool(name: &str) -> bool {
+    own_tool(name).is_some_and(|tool| LEAD_TOOLS.contains(&tool))
 }
 
 /// A call the agent made on one of the settings tools. The window answers

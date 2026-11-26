@@ -3048,6 +3048,7 @@ mod tests {
         let mut offered = tools();
         offered.push(name_tool());
         offered.extend(conductor_tools());
+        offered.extend(run_tools());
         let names: Vec<&str> = offered
             .iter()
             .filter_map(|tool| tool["name"].as_str())
@@ -3063,6 +3064,16 @@ mod tests {
         assert!(!show::contained_tool("mcp__chord__start"));
         assert!(!show::contained_tool("mcp__chord__browser_snapshot"));
         assert!(!show::contained_tool("mcp__other__notes"));
+        for tool in show::LEAD_TOOLS {
+            assert!(names.contains(tool), "{tool}");
+            assert!(show::lead_tool(&format!("mcp__chord__{tool}")), "{tool}");
+            assert!(
+                !show::contained_tool(&format!("mcp__chord__{tool}")),
+                "{tool}"
+            );
+        }
+        assert!(!show::lead_tool("mcp__other__start"));
+        assert!(!show::lead_tool("start"));
     }
 
     #[test]

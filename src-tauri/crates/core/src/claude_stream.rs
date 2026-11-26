@@ -2126,8 +2126,10 @@ impl Stream {
     /// only, a tool that edits files is refused; one that only reads, a
     /// command, and the workbench's own tools that change no file and reach
     /// nothing outside it, where its server is attached, are left to the
-    /// mode; and any other is put to the user whatever the mode or the allow
-    /// rules say. Off, every tool is left to the mode.
+    /// mode, as are the workbench's tools a lead delegates with in a
+    /// session that leads a team's run; and any other is put to the user
+    /// whatever the mode or the allow rules say. Off, every tool is left to
+    /// the mode.
     fn hooked(&self, id: &str, input: &Value) -> Value {
         let tool = input["tool_name"].as_str().unwrap_or_default();
         let handing_over = (tool == "Bash")
@@ -2150,6 +2152,7 @@ impl Stream {
             || crate::agents::READING_TOOLS.contains(&tool)
             || LEFT_TO_MODE.contains(&tool)
             || (self.attached && crate::show::contained_tool(tool))
+            || (self.attached && crate::show::lead_tool(tool) && self.leads())
         {
             json!({})
         } else if crate::agents::CHANGING_TOOLS.contains(&tool) {
@@ -2161,6 +2164,14 @@ impl Stream {
             "type": "control_response",
             "response": { "subtype": "success", "request_id": id, "response": decision },
         })
+    }
+
+    /// Whether the session leads a team's run that holds, read from the
+    /// run's store at each call.
+    fn leads(&self) -> bool {
+        self.run
+            .as_ref()
+            .is_some_and(|(home, token)| crate::run::leads(home, token))
     }
 
     /// The answer to the team hold for a turn about to end: a lead whose
@@ -4276,6 +4287,7 @@ mod tests {
         for tool in [
             "mcp__chord__start",
             "mcp__chord__send",
+            "mcp__chord__stop",
             "mcp__chord__terminal",
             "mcp__chord__browser_snapshot",
             "mcp__chord__browser_console",
@@ -4303,6 +4315,89 @@ mod tests {
             );
         }
         assert_eq!(hook(&mut stream, "Bash"), json!({}));
+    }
+
+    /// What the reads-only hook decides for `tool`: "" where it leaves the
+    /// tool to the mode, otherwise "deny" or "ask".
+    fn decided(stream: &mut Stream, tool: &str) -> String {
+        hook(stream, tool)["hookSpecificOutput"]["permissionDecision"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    #[test]
+    fn reading_only_leaves_the_tools_of_a_team_s_run_to_the_mode() {
+        for token in ["lead", "rev"] {
+            let (mut stream, _home, _folder) =
+                in_a_run(&format!("stream-run-tools-{token}"), token);
+            stream.attached = true;
+            stream.control(&Control::SetReadsOnly(true)).unwrap();
+            for tool in ["plan", "gate_add", "verdict", "gates"] {
+                assert_eq!(
+                    decided(&mut stream, &format!("mcp__chord__{tool}")),
+                    "",
+                    "{token} {tool}"
+                );
+                assert_eq!(
+                    decided(&mut stream, &format!("mcp__other__{tool}")),
+                    "ask",
+                    "{token} {tool}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_lead_reading_only_starts_writes_to_and_stops_its_members_unasked() {
+        let delegating = ["mcp__chord__start", "mcp__chord__send", "mcp__chord__stop"];
+        let (mut lead, home, _folder) = in_a_run("stream-lead-delegates", "lead");
+        lead.attached = true;
+        lead.control(&Control::SetReadsOnly(true)).unwrap();
+        for tool in delegating {
+            assert_eq!(decided(&mut lead, tool), "", "{tool}");
+        }
+        assert_eq!(decided(&mut lead, "mcp__other__start"), "ask");
+        assert_eq!(decided(&mut lead, "mcp__chord__terminal"), "ask");
+        assert_eq!(decided(&mut lead, "mcp__chord__browser_snapshot"), "ask");
+        assert_eq!(decided(&mut lead, "Edit"), "deny");
+        assert_eq!(decided(&mut lead, "Write"), "deny");
+
+        // A member that reads only, and a session in no run, are asked.
+        let (mut member, _member_home, _member_folder) = in_a_run("stream-member-delegates", "rev");
+        member.attached = true;
+        member.control(&Control::SetReadsOnly(true)).unwrap();
+        let mut outside = stream();
+        outside.attached = true;
+        outside.control(&Control::SetReadsOnly(true)).unwrap();
+        for tool in delegating {
+            assert_eq!(decided(&mut member, tool), "ask", "member {tool}");
+            assert_eq!(decided(&mut outside, tool), "ask", "outside {tool}");
+        }
+
+        // Where the workbench attached no server, the names may be the
+        // project's.
+        lead.attached = false;
+        for tool in delegating
+            .into_iter()
+            .chain(["mcp__chord__plan", "mcp__chord__gates"])
+        {
+            assert_eq!(decided(&mut lead, tool), "ask", "unattached {tool}");
+        }
+        lead.attached = true;
+
+        // While agents are switched off the run holds nothing, and once it
+        // ends the session leads none.
+        crate::run::tests::agents_switched(&home, false);
+        for tool in delegating {
+            assert_eq!(decided(&mut lead, tool), "ask", "agents off {tool}");
+        }
+        crate::run::tests::agents_switched(&home, true);
+        assert_eq!(decided(&mut lead, "mcp__chord__start"), "");
+        assert!(crate::run::end(&home, "lead").unwrap());
+        for tool in delegating {
+            assert_eq!(decided(&mut lead, tool), "ask", "ended {tool}");
+        }
     }
 
     #[test]

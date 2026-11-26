@@ -1800,6 +1800,18 @@ pub fn start_held(home: &Path, caller: &str, reads_only: bool) -> Result<Option<
     Ok(held.filter(|_| !paused(home)))
 }
 
+/// Whether the session a token names leads a run that holds: one that has
+/// not ended, while agents are switched on. A store that cannot be read
+/// says it leads none.
+pub fn leads(home: &Path, token: &str) -> bool {
+    !paused(home)
+        && Runs::existing(home)
+            .ok()
+            .flatten()
+            .and_then(|runs| runs.run(token).ok().flatten())
+            .is_some()
+}
+
 /// Whether every run holds nothing: agents are switched off in the
 /// settings. The runs are kept as they are and hold again once agents are
 /// on.

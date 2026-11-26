@@ -184,6 +184,12 @@ and the hand-over is free. Uncommitted work does not hold the lead's stop.
 | A push or a pull request | refused before it runs | turned down when Codex asks to run it | not held |
 | The lead's stop | sent back to work | sent back to work | not held |
 
+A lead in Claude Code in Chord that only reads is not asked before it
+starts, writes to or stops its members, since the run starts only the
+team's agents and holds a start or a send as below (see
+[reading only](integrated.md#the-mode-a-session-starts-in)). A Codex lead
+is asked as its [approval policy](hooks.md#the-agents-tools) says.
+
 A start is held unless the session's agent only reads, or, for a session
 resumed, the member it resumes only read. A send is held to the same rule
 for the session it goes to. Both are refused by the workbench's tools, so
