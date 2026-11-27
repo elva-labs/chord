@@ -1714,6 +1714,8 @@ export interface RunVerdict {
   on: string;
   plan: number | null;
   folder: string | null;
+  /** The commit the change it was given on counted from. */
+  base: string | null;
   brief: string;
   approved: boolean;
   findings: string;
@@ -1737,9 +1739,14 @@ export interface RunPlace {
   folder: string;
   /** The commit the change there counts from. */
   base: string | null;
+  /** The commit the base moves on from after a rebase on main. */
+  start: string | null;
   /** The tree of the commit the folder's branch is on. */
   head: string | null;
   tree: Reading<string>;
+  /** The hash of the lines the change adds and removes, which an approval
+      names. */
+  change: Reading<string>;
   /** The paths changed there since the base. */
   changed: Reading<string[]>;
 }
@@ -2302,7 +2309,7 @@ export interface Core {
   runWaive(project: string, token: string, gate: number, reason: string): Promise<RunWaiver>;
   /** Something was written to a team's run that can change how its gates
       stand, named by its lead's token: read it again with `runState`. A
-      change of the tree is not told; it shows on the next read. */
+      change to the files is not told; it shows on the next read. */
   onRunChanged(handler: (changed: { lead: string }) => void): Promise<() => void>;
   /** Adds an entry to a session's usage log, where its project is. With
       `transcript`, for a turn of a Claude Code session in a terminal, the

@@ -27,6 +27,7 @@
 
 import { noteSent } from "$lib/persist";
 import { HOLD } from "$lib/hold";
+import { switches } from "$lib/switches.svelte";
 import {
   checkBackground,
   describeBackground,
@@ -355,6 +356,12 @@ function withBackground(
 /** The workflows as the agent reads them, with the shape it writes one in. */
 function describeWorkflows(): string[] {
   const held = workflowsSettings();
+  const picked = switches.agents
+    ? ""
+    : ", or the user picks one when starting a session";
+  const howPicked = switches.agents
+    ? "while agents and teams are on, the user picks no workflow for a session, and a new one follows the default or the project's choice."
+    : "the user picks a workflow for a session from the palette when starting it.";
   return [
     "",
     "workflows: a workflow says which model a session starts on, the orchestrator, and the steps it hands out in order. The user's:",
@@ -365,7 +372,7 @@ function describeWorkflows(): string[] {
       ? "New sessions start with no workflow."
       : `New sessions start with the workflow ${held.default}.`,
     ...setAside(held.unread ?? []),
-    `Change one with settings_change's workflow argument, a whole workflow that replaces the one of its name or adds one: {"name", "orchestrator": {"agent", "model"}, "steps": [...]}. startOnly, true when left out, takes away the orchestrator's own ways of handing work to agents the user cannot see, so it hands out work only through start; false leaves it its subagents. New sessions follow a workflow only once one is the default or a project's choice, or the user picks one when starting a session. A step is {"kind": "work", "name", "models", "parallel"} or {"kind": "review", "name", "models", "reviewerApproves", "orchestratorAgrees", "backTo", "limit"}. models is a list of {"agent", "model"}, each model one word and listed once, and empty means any model; the first is used unless there is a reason to pick another. parallel is how many sessions run at once, 1 to ${MOST_PARALLEL}. A review passes when the reviewer approves, the orchestrator agrees, or both, so one is true; backTo names an earlier work step and limit, 1 to ${MOST_ROUNDS}, is how many times it goes back before the user is asked. Names are unique, a workflow has 1 to ${MOST_STEPS} steps and the first does work. The harnesses, named by agent, are ${HARNESS_ORDER.join(" and ")}: claude-code takes the models ${modelsOf("claude-code").map((option) => option.model).join(", ")}, and codex takes ${CODEX_DEFAULT}, its own default${codexListed()}. deleteWorkflow takes a workflow's name away and defaultWorkflow names the one new sessions start with, or null for none. Which workflow a project follows is kept in the settings file as it is and is not changed here; the user picks a workflow for a session from the palette when starting it.`,
+    `Change one with settings_change's workflow argument, a whole workflow that replaces the one of its name or adds one: {"name", "orchestrator": {"agent", "model"}, "steps": [...]}. startOnly, true when left out, takes away the orchestrator's own ways of handing work to agents the user cannot see, so it hands out work only through start; false leaves it its subagents. New sessions follow a workflow only once one is the default or a project's choice${picked}. A step is {"kind": "work", "name", "models", "parallel"} or {"kind": "review", "name", "models", "reviewerApproves", "orchestratorAgrees", "backTo", "limit"}. models is a list of {"agent", "model"}, each model one word and listed once, and empty means any model; the first is used unless there is a reason to pick another. parallel is how many sessions run at once, 1 to ${MOST_PARALLEL}. A review passes when the reviewer approves, the orchestrator agrees, or both, so one is true; backTo names an earlier work step and limit, 1 to ${MOST_ROUNDS}, is how many times it goes back before the user is asked. Names are unique, a workflow has 1 to ${MOST_STEPS} steps and the first does work. The harnesses, named by agent, are ${HARNESS_ORDER.join(" and ")}: claude-code takes the models ${modelsOf("claude-code").map((option) => option.model).join(", ")}, and codex takes ${CODEX_DEFAULT}, its own default${codexListed()}. deleteWorkflow takes a workflow's name away and defaultWorkflow names the one new sessions start with, or null for none. Which workflow a project follows is kept in the settings file as it is and is not changed here; ${howPicked}`,
   ];
 }
 

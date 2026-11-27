@@ -789,6 +789,8 @@ The page is told what is around it once it has loaded, and again whenever that c
 
 `window.workbench.show(session)` asks to bring a session on screen, by the agent's id for it or the id of a conversation that went on to it. The app brings it only when the call is the first message of a click or a key in the page, as for a start or a send, only while the page's project is on screen, and only for a session of that project. Anything else is dropped, and the page is told nothing either way.
 
+While the user has a background set, the app makes the page's `html` and `body` clear and gives the page the app's colour scheme, so the page is painted as the card it lies on, with the card's tint. The tokens are those of that card, where `surface-2` and `accent-soft` may be translucent. What the page paints on elements of its own stays, so a page lets the background through by leaving its ground to `body`, and writes its text in the `ink` tokens so it reads on either ground.
+
 The view declares how much room it wants. Wide is the viewer as a file
 opens it, beside the tree; full is the whole changes pane, the tree folded
 away while the view shows, which is what a graph of the branch needs. The

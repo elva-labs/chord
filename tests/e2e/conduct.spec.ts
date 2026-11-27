@@ -1067,10 +1067,12 @@ test.describe("a round of review past the workflow's limit", () => {
     const once = structuredClone(WITH_WORKFLOW);
     const review = once.workflows.list[0].steps[1] as { limit: number };
     review.limit = 1;
+    // Change offers the workflow to pick only while agents and teams are off.
     await installFakeCore(page, {
       open: [PROJECT, OTHER],
       settings: {
         ...once,
+        agentsOn: false,
         accounts: {
           list: { Work: { claude: "~/.claude-work", codex: null } },
           everywhere: null,

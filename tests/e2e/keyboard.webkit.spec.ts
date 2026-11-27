@@ -13,8 +13,9 @@ function agent(page: Page, script: string) {
   return page.evaluate(`(() => { const f = window.__integrated; ${script} })()`);
 }
 
-async function open(page: Page, options: { untrusted?: boolean } = {}) {
-  await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
+async function open(page: Page, options: { untrusted?: boolean; agentsOff?: boolean } = {}) {
+  const settings = { integrated: ["claude-code"], ...(options.agentsOff ? { agentsOn: false } : {}) };
+  await installFakeCore(page, { open: [PROJECT], settings });
   if (options.untrusted)
     await page.addInitScript(
       (project) => (window as unknown as { __integrated: { untrusted: Set<string> } }).__integrated.untrusted.add(project),
@@ -34,7 +35,8 @@ const focused = (page: Page) =>
 const visiblyFocused = (page: Page) => page.evaluate(() => document.activeElement?.matches(":focus-visible") ?? false);
 
 test("reaches and uses every control of the composer by Tab", async ({ page }) => {
-  await open(page);
+  // With agents and teams off, so the plus offers a workflow.
+  await open(page, { agentsOff: true });
   const input = page.getByTestId("composer-input");
   await expect(input).toBeFocused();
   await input.fill("Fix the scan");

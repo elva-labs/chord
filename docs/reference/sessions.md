@@ -542,7 +542,8 @@ A Codex profile is a configuration of its own for Codex, a file named
 takes over those of its `config.toml`. Where the account a new Codex
 session starts under has profiles on the project's machine, the session's
 line in the palette names the profile it starts under, and Change asks
-which, under `With which Codex profile`, after the account and the agent.
+which, under `With which Codex profile`, after the account and the
+harness, and before the agent the session works as.
 No profile comes first, with the model and the effort the session would
 start on without one, where those are known. Each profile follows by name,
 with its file's name and the model, the effort and the provider the file
@@ -1157,12 +1158,28 @@ works as none, and reads only no more, once the app starts again. An agent and a
 chosen: either one takes the other off the plus. The chip waits while the
 session is not ready.
 
+A new session in Chord can be given its agent before it starts, in the
+palette's New session, as [the palettes](../focus-model.md#the-palettes)
+describe. It starts as if the agent had been picked on the composer before
+the first message: the chip names it, its model and effort are set as
+picking it there sets them, and its description goes ahead of the first
+message. The agent picked there, No agent included, is kept for the
+project, and between runs, and the next new session in the project starts
+as it while the agent is still listed. A team picked there starts the
+session as the team's [lead](../teams.md#in-the-window) and leaves the
+agent kept as it was. With agents off the palette asks nothing about
+agents and the pick stays kept for when they are on again.
+
 A new session, until its first message, also shows the
 [workflow](../orchestrator.md#following-a-workflow) it follows in a chip
-after the mode: the project's workflow to begin with, or none. The chip
-opens a menu of no workflow, the agent working alone on the model the user
-picks, then each workflow with a line saying which model directs, works and
-reviews. A workflow directed by a harness that is not installed, or that
+after the mode: the project's workflow to begin with, or none. With agents
+and teams off, the plus offers Workflow to bring the chip up while the
+session follows none, and the chip opens a menu of no workflow, the agent
+working alone on the model the user picks, then each workflow with a line
+saying which model directs, works and reviews. With them on, the plus
+offers no workflow: the chip shows only for a session that follows one, and
+its menu holds no workflow and that one, so the session can leave it but
+not pick another. A workflow directed by a harness that is not installed, or that
 runs only in a terminal, is listed with why and cannot be picked. Picking a
 workflow makes the session its orchestrator, as starting a session under it
 does: the session starts again on the orchestrator's harness and model, told

@@ -10,8 +10,10 @@ screen, and stop them. So any session becomes an orchestrator by being
 asked to start others.
 
 To have a session direct the work rather than do it, start it under a
-workflow, from the workflow chip in a new conversation's composer, from
-the palette, which a project's new-session button opens as well, as
+workflow: a new session in a project that follows one starts under it, and
+with agents and teams off one can also be picked from the workflow chip in a
+new conversation's composer or from the palette, which a project's
+new-session button opens as well, as
 [following a workflow](#following-a-workflow) describes. The session that
 follows a workflow is its orchestrator, and is told to direct work rather
 than do it, to start a session per piece in the project it belongs to, on a
@@ -611,12 +613,14 @@ it.
 A session runs one of two ways: under a workflow, as its orchestrator, or
 as one harness with no workflow. What the user picks is what starts. Picking
 a harness in the palette's new session, whichever button opened it,
-starts that harness alone. Picking a workflow there starts its orchestrator, on the workflow's harness and model, and a plain new
+starts that harness alone. Picking a workflow there, which is offered only
+while agents and teams are off, starts its orchestrator, on the workflow's harness and model, and a plain new
 session where there was nothing to pick follows the project's workflow, as
 [settings](reference/settings.md#workflows) describes. A new in-Chord session can
 also be given a workflow, or none, in its composer until its first message,
 which starts it again as that workflow's orchestrator or as the harness alone;
-[sessions](reference/sessions.md#sessions-in-chord) says how. A workflow whose
+with agents and teams on it can only leave the workflow it follows.
+[Sessions](reference/sessions.md#sessions-in-chord) says how. A workflow whose
 orchestrator runs on a harness that is not installed is refused on the row,
 and so is a session under a workflow on a machine with no tool server to
 give it the `start` tool.
@@ -967,7 +971,8 @@ in order, grey once the run has passed it, in the accent where the run
 stands and empty for a step to come, and the words for where it stands.
 The chip says what the workbench knows and no more. An in-Chord session
 shows it from its first message on; before that its composer names the
-workflow, which can still be changed there.
+workflow, which can still be left there, or changed while agents and teams
+are off.
 
 Before anything is started the words are the workflow's name, marked
 deleted where it follows the copy it kept. Then they name the step where

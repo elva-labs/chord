@@ -103,6 +103,9 @@ mod mac {
             ) {
                 centre.removeDeliveredNotification(notification);
                 let app = self.ivars();
+                if crate::ending::under_way(app) {
+                    return;
+                }
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.unminimize();
                     let _ = window.show();

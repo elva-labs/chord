@@ -56,6 +56,7 @@ import { leftOutOf, resetSenders, typedOf } from "$lib/senders.svelte";
 import type { IntegratedImage } from "$lib/core";
 import { stateWord } from "$lib/orchestrator.svelte";
 import { setAgentsOn, switches } from "$lib/switches.svelte";
+import { keepLastAgent, lastAgent } from "$lib/sessionAgents.svelte";
 import {
   agentNamed,
   byKey,
@@ -3309,6 +3310,92 @@ describe("the agent a session works as", () => {
     } finally {
       setAgentsOn(true);
     }
+  });
+
+  it("starts a row not yet begun on the agent's model and effort, and takes them back once agents are switched off", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    expect(session.model).toBeNull();
+    keepLastAgent("composer", null);
+    workAs(session.key, { ...reviewer, effort: "low" }, null);
+    expect(lastAgent("composer")).toBeNull();
+    expect(session.model).toBe("sonnet");
+    await launch(session.key);
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "start").at(-1)).toMatchObject({
+      options: { model: "sonnet", effort: "low", readsOnly: true },
+    });
+    try {
+      setAgentsOn(false);
+      await settled();
+      const back = fake.calls.filter((call) => call.method === "configure").at(-1) as { settings: Record<string, unknown> };
+      expect(back.settings.readsOnly).toBe(false);
+      expect(back.settings.model).toBe("default");
+      expect(conversationOf(session.key).readsOnly).toBe(false);
+      setAgentsOn(true);
+      await settled();
+      expect(fake.calls.filter((call) => call.method === "configure").at(-1)).toMatchObject({
+        settings: { model: "sonnet", effort: "low", readsOnly: true },
+      });
+    } finally {
+      setAgentsOn(true);
+    }
+  });
+
+  it("starts a row as no agent where agents are switched off before its first run is asked for", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    workAs(session.key, { ...reviewer, effort: "low" }, null);
+    try {
+      setAgentsOn(false);
+      expect(session.model).toBeNull();
+      await launch(session.key);
+      await settled();
+      const begun = fake.calls.filter((call) => call.method === "start").at(-1) as unknown as {
+        options: Record<string, unknown>;
+      };
+      expect(begun.options.model).toBeUndefined();
+      expect(begun.options.effort).not.toBe("low");
+      expect(begun.options.readsOnly).toBeUndefined();
+    } finally {
+      setAgentsOn(true);
+    }
+  });
+
+  it("starts as an agent on the model and mode last chosen, at the agent's effort and not the one last chosen", async () => {
+    type Begun = { options: { model?: string; mode?: string; effort?: string; readsOnly?: boolean } };
+    const begun = () => (fake.calls.filter((call) => call.method === "start").at(-1) as unknown as Begun).options;
+    const modelless = { ...reviewer, model: null, effort: "low" };
+    try {
+      adoptLastChosen({ "claude-code": { model: "haiku", effort: "high", mode: "acceptEdits" } });
+      const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+      workAs(session.key, modelless, null);
+      expect(session.model).toBe("haiku");
+      expect(conversationOf(session.key).settings).toEqual({ model: "haiku", mode: "acceptEdits", effort: "low" });
+      await launch(session.key);
+      await settled();
+      expect(begun()).toMatchObject({ model: "haiku", mode: "acceptEdits", effort: "low", readsOnly: true });
+    } finally {
+      resetLastChosen();
+    }
+  });
+
+  it("gives a Codex session under a profile neither the agent's model nor its effort, and still has it read only", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    session.profile = "fast";
+    session.model = null;
+    workAs(session.key, { ...reviewer, model: { harness: "codex", model: "gpt-5-codex" }, effort: "low" }, null);
+    expect(session.model).toBeNull();
+    expect(conversationOf(session.key).settings).toMatchObject({ model: null, effort: null });
+    await launch(session.key);
+    await settled();
+    const begun = fake.calls.filter((call) => call.method === "start").at(-1) as unknown as {
+      options: Record<string, unknown>;
+    };
+    expect(begun.options).toMatchObject({ agent: "codex", profile: "fast", readsOnly: true });
+    expect(begun.options.model).toBeUndefined();
+    expect(begun.options.effort).toBeUndefined();
   });
 
   it("lets a pick go with a message sent while agents are switched off", async () => {

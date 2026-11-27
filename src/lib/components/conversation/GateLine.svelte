@@ -28,7 +28,7 @@
   $effect(() => followRun(sessionKey));
 
   // Read again when the view comes into sight and when a turn ends: a
-  // change of the tree is not told.
+  // change to the files is not told.
   $effect(() => {
     if (active && conversation.current === null) void readRun(sessionKey);
   });
@@ -392,7 +392,7 @@
             {#if shown.waiver !== null}For this run only
             {:else if shown.asks > 0}Asked for changes {times(shown.asks)}
             {:else if shown.standing === "approved"}
-              Out of date if {shown.gate.when === "plan" ? "the plan" : "the tree"} changes
+              Out of date if {shown.gate.when === "plan" ? "the plan" : "the work"} changes
             {/if}
           </span>
           {#if giver !== null}
@@ -412,7 +412,7 @@
     max-width: 740px;
     margin: 0 auto 6px;
     border-radius: calc(var(--radius) + 5px);
-    background: var(--surface);
+    background: var(--clear-surface);
     box-shadow: inset 0 0 0 1px var(--divider, var(--rule));
     font-family: var(--chrome);
   }
@@ -653,7 +653,7 @@
     margin: 0;
     padding: 11px 12px 12px;
     border-radius: calc(var(--radius) + 2px);
-    background: var(--surface);
+    background: var(--paint-surface);
     box-shadow:
       0 0 0 1px var(--divider, var(--rule)),
       0 12px 32px color-mix(in srgb, black 24%, transparent);
