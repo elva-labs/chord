@@ -43,6 +43,9 @@ test("asks which profile a Codex session runs under, and says what each sets", a
     below = box!.y + box!.height;
   }
   await fast.click();
+  // The agent comes last, and Enter on it starts the session.
+  await expect(page.getByTestId("palette-field")).toHaveAttribute("placeholder", "As which agent");
+  await page.keyboard.press("Enter");
   await expect(page.getByTestId("palette")).toHaveCount(0);
   await expect(page.getByTestId("composer-input")).toBeFocused();
 });
@@ -51,6 +54,7 @@ test("names the profile in the status bar, with what was left out", async ({ pag
   await open(page);
   await page.locator("[data-testid='palette-row'][data-kind='change']").click();
   await paletteChoice(page, "fast").click();
+  await paletteChoice(page, "No agent").click();
   const readout = page.getByTestId("profile-readout");
   await expect(readout).toBeVisible();
   await expect(readout).toHaveText("profile: fast");
@@ -64,6 +68,7 @@ test("leads the model menu with the profile's model, above a rule and the provid
   await open(page);
   await page.locator("[data-testid='palette-row'][data-kind='change']").click();
   await paletteChoice(page, "fast").click();
+  await paletteChoice(page, "No agent").click();
   await page.getByTestId("model-chip").click();
   const menu = page.getByTestId("model-menu");
   await expect(page.getByTestId("model-menu-heading")).toHaveText("Models of the fast profile's provider");

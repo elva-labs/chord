@@ -12,6 +12,7 @@ import {
 import { SvelteSet } from "svelte/reactivity";
 import { accountToStart, dirFor, loadPicked, names } from "$lib/accounts.svelte";
 import { loadPickedProfiles } from "$lib/codexProfiles.svelte";
+import { loadPickedAgents } from "$lib/sessionAgents.svelte";
 import { CODEX_DEFAULT } from "$lib/models";
 import { catalogName, resolvedModel } from "$lib/modelCatalog.svelte";
 import { orchestratorPrompt } from "$lib/workflowInstructions";
@@ -708,6 +709,7 @@ export function adopt(project: string, id: string) {
 export function loadRemembered() {
   loadPicked();
   loadPickedProfiles();
+  loadPickedAgents();
   try {
     const raw = localStorage.getItem(MINE_KEY);
     if (raw !== null) {

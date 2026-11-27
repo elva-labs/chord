@@ -78,7 +78,12 @@ import { canGoBack, openBack } from "$lib/rewind.svelte";
 import { compact } from "$lib/compact.svelte";
 import { browser } from "$lib/browser.svelte";
 import { paletteCommands, pickPluginCommand, type PluginCommand } from "$lib/pluginPalette.svelte";
+import { agentByKey, allAgents, loadInstalled, agents } from "$lib/agents.svelte";
+import { loadProjectTeams, teams, teamsFor, teamSummary } from "$lib/teams.svelte";
+import { agentPickedIn, pickAgentIn } from "$lib/sessionAgents.svelte";
+import { kindFor } from "$lib/sessionKind.svelte";
 import { switches } from "$lib/switches.svelte";
+import { lead, workAs } from "$lib/integrated.svelte";
 
 /**
  * The palette: one field over the workbench in two lists. Go to narrows the
@@ -108,9 +113,14 @@ import { switches } from "$lib/switches.svelte";
  * project that follows a workflow starts under it from the line of
  * defaults, and Change offers the agents to run alone. Codex alone then
  * asks which of the account's Codex profiles it runs under, where the
- * account has any. Each answer becomes a chip, and a
- * step with nothing to choose is not asked. The session starts on the last
- * answer.
+ * account has any. Last, while agents are switched on, a session that runs
+ * in Chord asks which agent it works as, or which team it leads, and
+ * starts as the agent last picked for a new session in the project. Each
+ * answer becomes a chip, and a step with nothing to choose is not asked.
+ * The session starts on the last answer.
+ *
+ * As, under the defaults' line, asks only that last question, and Enter on
+ * one of its answers starts the session on the rest of the defaults.
  *
  * A new chat is a new session in the chats folder: the defaults' line
  * reads as the chat it starts, with no project to ask or show, and Change
@@ -139,7 +149,9 @@ export type Step =
   | { kind: "account"; account: string | null }
   | { kind: "agent"; agent: HarnessId }
   | { kind: "workflow"; workflow: string }
-  | { kind: "profile"; profile: string | null };
+  | { kind: "profile"; profile: string | null }
+  /** The agent the session works as, or the team it leads, or neither. */
+  | { kind: "as"; agent: string | null; team: string | null };
 
 export type StepKind = Step["kind"];
 
@@ -199,6 +211,10 @@ export type PaletteItem =
       /** A line beside the label: what a workflow does. */
       detail: string;
       end: string;
+      /** What is drawn before the label: an agent or a team. */
+      icon?: "agent" | "team";
+      /** The agent reads only. */
+      lock?: boolean;
     }
   | {
       kind: "action";
@@ -235,6 +251,17 @@ export type PaletteItem =
       id: "change";
       label: string;
       group: null;
+    }
+  | {
+      /** The way to the agent the defaults start as, which it names. */
+      kind: "as";
+      id: "as";
+      label: string;
+      group: null;
+      detail: string;
+      end: string;
+      /** The session the defaults start asks no agent. */
+      off: boolean;
     };
 
 /** What picking an item leads to. The palette stays up on a step; it goes
@@ -263,6 +290,8 @@ export const palette = $state({
   /** A new session in a known project offers its defaults as one line,
       until Change or typing asks the questions instead. */
   ready: false,
+  /** On the defaults' line, As asks which agent alone. */
+  as: false,
   /** The list a new session was asked for from, go to or the commands,
       and what was typed in it, which stepping back out of the new session
       opens again with the same text. */
@@ -291,6 +320,7 @@ export function openGoTo() {
   palette.query = "";
   palette.steps = [];
   palette.ready = false;
+  palette.as = false;
   palette.from = "commands";
   palette.came = "";
   palette.opened += 1;
@@ -303,6 +333,7 @@ export function openCommands() {
   palette.query = "";
   palette.steps = [];
   palette.ready = false;
+  palette.as = false;
   palette.from = "commands";
   palette.came = "";
   palette.opened += 1;
@@ -333,6 +364,7 @@ export function resetPalette() {
   palette.query = "";
   palette.steps = [];
   palette.ready = false;
+  palette.as = false;
   palette.from = "commands";
   palette.came = "";
 }
@@ -653,7 +685,8 @@ function shadows(label: string, taken: Set<string>): boolean {
     when it has all it needs. How it runs is asked as "agent", and answered
     by an agent or a workflow; it is asked when there is more than one
     agent, or a workflow the project follows, to pick between. The
-    profile is asked of Codex alone, where the account has profiles. */
+    profile is asked of Codex alone, where the account has profiles. Which
+    agent it works as is asked last, of a session that asks one. */
 export function nextStep(steps: Step[]): StepKind | null {
   const has = (kind: StepKind) => steps.some((step) => step.kind === kind);
   if (!has("project")) return "project";
@@ -661,9 +694,34 @@ export function nextStep(steps: Step[]): StepKind | null {
   const project = projectOfSteps(steps);
   const how = installed().length > 1 || (project !== null && workflowOf(project) !== null);
   if (how && !has("agent") && !has("workflow")) return "agent";
-  if (project !== null && !has("profile") && !has("workflow") && harnessOfSteps(steps, project) === "codex")
-    if (profilesOf(project, accountOfSteps(steps, project)).length > 0) return "profile";
+  if (
+    project !== null &&
+    !has("profile") &&
+    !has("workflow") &&
+    harnessOfSteps(steps, project) === "codex" &&
+    profilesOf(project, accountOfSteps(steps, project)).length > 0
+  )
+    return "profile";
+  if (project !== null && !has("as") && asksAs(steps, project)) return "as";
   return null;
+}
+
+/** Whether a new session on the answers so far is asked which agent it
+    works as: agents are switched on, it follows no workflow, and it runs
+    in Chord, which a terminal does not. */
+function asksAs(steps: Step[], project: string): boolean {
+  return (
+    switches.agents &&
+    !steps.some((step) => step.kind === "workflow") &&
+    kindFor(harnessOfSteps(steps, project)) === "integrated"
+  );
+}
+
+/** The agent a new session in a project starts as: the one last picked
+    there, while it is still one of the project's, else none. */
+function rememberedAgent(project: string): string | null {
+  const key = agentPickedIn(project);
+  return key !== null && agentByKey(key, project) !== undefined ? key : null;
 }
 
 /** The harness the answers so far run alone: the one picked, else the one
@@ -693,7 +751,9 @@ export function stepsLeft(steps: Step[]): StepKind[] {
           ? { kind, account: null }
           : kind === "profile"
             ? { kind, profile: null }
-            : { kind: "agent", agent: "claude-code" },
+            : kind === "as"
+              ? { kind, agent: null, team: null }
+              : { kind: "agent", agent: "claude-code" },
     );
   }
   return left;
@@ -705,8 +765,9 @@ export function projectOfSteps(steps: Step[]): string | null {
   return step === undefined ? null : step.path;
 }
 
-/** An answer as its chip spells it. */
-export function chipOf(step: Step): string {
+/** An answer as its chip spells it. An agent is named by its title in the
+    project. */
+export function chipOf(step: Step, project: string | null = projectOfSteps(palette.steps)): string {
   switch (step.kind) {
     case "project":
       return projectLabel(step.path);
@@ -718,6 +779,10 @@ export function chipOf(step: Step): string {
       return step.workflow;
     case "profile":
       return step.profile ?? NO_PROFILE;
+    case "as":
+      if (step.team !== null) return step.team;
+      if (step.agent === null) return NO_AGENT;
+      return agentByKey(step.agent, project)?.title ?? step.agent;
   }
 }
 
@@ -726,6 +791,12 @@ const NO_PROFILE = "No profile";
 
 export const WORKFLOWS = "Workflows";
 export const ALONE = "No workflow";
+
+export const AS_WHICH = "As which agent";
+export const AGENTS = "Agents";
+export const TEAMS = "Teams";
+export const LEADING = "Leading which team";
+const NO_AGENT = "No agent";
 
 /** The workflows a new session in a project is offered: none unless the
     project follows one, by its own choice or by the default, and none
@@ -862,15 +933,67 @@ function profileChoices(project: string, account: string | null): PaletteItem[] 
   ];
 }
 
+/** The agents a new session in a project can work as, none first, then
+    the teams it can lead, each under its heading. The agent it starts as
+    unless another is picked says so. */
+function asChoices(project: string, agentsGroup: string, teamsGroup: string): PaletteItem[] {
+  const remembered = rememberedAgent(project);
+  return [
+    {
+      kind: "choice",
+      id: "as:",
+      label: NO_AGENT,
+      group: agentsGroup,
+      step: { kind: "as", agent: null, team: null },
+      detail: "",
+      end: "",
+    },
+    ...allAgents(project).map(
+      (agent): PaletteItem => ({
+        kind: "choice",
+        id: `as:agent:${agent.key}`,
+        label: agent.title,
+        group: agentsGroup,
+        step: { kind: "as", agent: agent.key, team: null },
+        detail: agent.firstLine,
+        end: agent.key === remembered ? "last picked" : "",
+        icon: "agent",
+        lock: agent.readsOnly,
+      }),
+    ),
+    ...teamsFor(project).map(
+      (team): PaletteItem => ({
+        kind: "choice",
+        id: `as:team:${team.name}`,
+        label: team.name,
+        group: teamsGroup,
+        step: { kind: "as", agent: null, team: team.name },
+        detail: teamSummary(team),
+        end: "",
+        icon: "team",
+      }),
+    ),
+  ];
+}
+
+/** The entry the agent question starts on: the agent last picked in the
+    project, else none. */
+function asStart(project: string): string {
+  const remembered = rememberedAgent(project);
+  return remembered === null ? "as:" : `as:agent:${remembered}`;
+}
+
 /** The answers a new session in a project starts on when none is changed:
     the project, then for each question it would ask, the account a new
     session there starts under, the workflow it follows, else the harness it
-    used last, and for Codex the profile it starts under. */
+    used last, for Codex the profile it starts under, and the agent last
+    picked for a new session there. */
 export function defaultsFor(path: string): Step[] {
   const steps: Step[] = [{ kind: "project", path }];
   for (let kind = nextStep(steps); kind !== null && kind !== "project"; kind = nextStep(steps)) {
     if (kind === "account") steps.push({ kind, account: accountToStart(path) });
     else if (kind === "profile") steps.push({ kind, profile: profileToStart(path, accountOfSteps(steps, path)) });
+    else if (kind === "as") steps.push({ kind, agent: rememberedAgent(path), team: null });
     else {
       const own = workflowOf(path);
       steps.push(own === null ? { kind: "agent", agent: defaultAgent(path) } : { kind: "workflow", workflow: own.name });
@@ -880,15 +1003,18 @@ export function defaultsFor(path: string): Step[] {
 }
 
 /** The line a new session's defaults read as: how it runs, the agent even
-    where it is not a question, the profile where it runs under one, then
-    the account where accounts are named. */
+    where it is not a question, the profile where it runs under one, the
+    agent it works as or the team it leads where it has one, then the
+    account where accounts are named. */
 function readyLine(path: string, steps: Step[]): string {
   const how = steps.find((step) => step.kind === "agent" || step.kind === "workflow");
   const account = steps.find((step) => step.kind === "account");
   const profile = steps.find((step) => step.kind === "profile" && step.profile !== null);
+  const as = steps.find((step) => step.kind === "as" && (step.agent !== null || step.team !== null));
   return [
     how === undefined ? harnessLabel(defaultAgent(path)) : chipOf(how),
     ...(profile === undefined ? [] : [chipOf(profile)]),
+    ...(as === undefined ? [] : [chipOf(as, path)]),
     ...(account === undefined ? [] : [chipOf(account)]),
   ].join(" · ");
 }
@@ -903,8 +1029,11 @@ function chatDetail(path: string, steps: Step[]): string {
   return named === null ? "no project" : `${named}, no project`;
 }
 
-/** The defaults' line, and Change under it where there is a choice. A
-    chat's line is what it runs on, with the model beside it. */
+/** The defaults' line, Change under it where there is a choice besides
+    the agent, and As, which names the agent, while agents are switched on.
+    As is off for a session that asks no agent: one in a terminal, or one
+    under a workflow. A chat's line is what it runs on, with the model
+    beside it. */
 function readyItems(path: string): PaletteItem[] {
   const steps = defaultsFor(path);
   const chat = isChatsFolder(path);
@@ -917,14 +1046,42 @@ function readyItems(path: string): PaletteItem[] {
     detail: chat ? chatDetail(path, steps) : readyLine(path, steps),
   };
   const change: PaletteItem = { kind: "change", id: "change", label: "Change", group: null };
-  return steps.length > 1 ? [ready, change] : [ready];
+  const items = steps.filter((step) => step.kind !== "as").length > 1 ? [ready, change] : [ready];
+  if (!switches.agents) return items;
+  const as = steps.find((step) => step.kind === "as");
+  const remembered = as !== undefined && as.agent !== null;
+  const why = steps.some((step) => step.kind === "workflow")
+    ? "under a workflow"
+    : kindFor(harnessOfSteps(steps, path)) === "terminal"
+      ? "in a terminal"
+      : "";
+  return [
+    ...items,
+    {
+      kind: "as",
+      id: "as",
+      label: "As",
+      group: null,
+      detail: as === undefined ? NO_AGENT : chipOf(as, path),
+      end: as === undefined ? why : remembered ? "last picked" : "",
+      off: as === undefined,
+    },
+  ];
 }
 
 export const WHICH_HARNESS = "Which harness";
 
+/** Whether the defaults' line of the project the palette asks about
+    starts a session that is asked which agent it works as. */
+export function defaultsAskAs(): boolean {
+  const project = projectOfSteps(palette.steps);
+  return project !== null && defaultsFor(project).some((step) => step.kind === "as");
+}
+
 /** Everything Change would ask about a project's new session, narrowed by
     what is typed: how it runs, then the account, then the Codex profile,
-    each under its heading, and in each the names the text begins first. */
+    then the agent it works as and the team it leads, each under its
+    heading, and in each the names the text begins first. */
 function readySearch(project: string, query: string): PaletteItem[] {
   const left = stepsLeft([{ kind: "project", path: project }]);
   const defaults = defaultsFor(project);
@@ -938,6 +1095,12 @@ function readySearch(project: string, query: string): PaletteItem[] {
     defaults.some((step) => step.kind === "profile")
       ? profileChoices(project, accountOfSteps(defaults, project))
       : [],
+    ...(defaults.some((step) => step.kind === "as")
+      ? (() => {
+          const found = asChoices(project, AS_WHICH, LEADING);
+          return [found.filter((item) => item.group === AS_WHICH), found.filter((item) => item.group === LEADING)];
+        })()
+      : []),
   ];
   const typed = query.trim().toLowerCase();
   const begins = (item: PaletteItem) => item.label.toLowerCase().startsWith(typed);
@@ -957,6 +1120,8 @@ export function stepItems(
   const project = projectOfSteps(steps);
   if (asking !== "project" && (project === null || !startable(project)))
     return [];
+  if (palette.ready && project !== null && palette.as)
+    return asChoices(project, AGENTS, TEAMS).filter((item) => matches(item.label, query));
   if (palette.ready && project !== null)
     return query.trim() === "" ? readyItems(project) : readySearch(project, query);
   const all =
@@ -968,7 +1133,9 @@ export function stepItems(
           ? runSections(project).flatMap((section) => section.items)
           : asking === "profile" && project !== null
             ? profileChoices(project, accountOfSteps(steps, project))
-            : [];
+            : asking === "as" && project !== null
+              ? asChoices(project, AGENTS, TEAMS)
+              : [];
   return all.filter((item) => matches(item.label, query));
 }
 
@@ -981,10 +1148,12 @@ export function paletteItems(): PaletteItem[] {
 }
 
 /** Whether picking an item does anything: the jump with nothing waiting
-    does not, and neither does a new session while no agent is ready. */
+    does not, nor a new session while no agent is ready, nor As where the
+    session asks no agent. */
 export function pickable(item: PaletteItem): boolean {
   if (item.kind === "attention") return item.waiting > 0;
   if (item.kind === "past") return isReady();
+  if (item.kind === "as") return !item.off;
   if (item.kind === "command")
     return (
       isReady() ||
@@ -995,8 +1164,9 @@ export function pickable(item: PaletteItem): boolean {
 
 /** The entry the cursor starts on when the list is not narrowed: in go to,
     the first session that is not the one on screen; in a new session, the
-    account the project runs under or the agent it used last. Null leaves it
-    to the first entry that does something. */
+    account the project runs under, the harness it used last, or the agent
+    last picked there. Null leaves it to the first entry that does
+    something. */
 export function startingId(): string | null {
   if (palette.query.trim() !== "") return null;
   if (palette.mode === "goto")
@@ -1005,8 +1175,9 @@ export function startingId(): string | null {
         (item) => item.kind === "session" && item.session.key !== sessions.active,
       )?.id ?? null
     );
-  if (palette.mode !== "new" || palette.ready) return null;
+  if (palette.mode !== "new") return null;
   const project = projectOfSteps(palette.steps);
+  if (palette.ready) return palette.as && project !== null ? asStart(project) : null;
   if (project === null) return null;
   const asking = nextStep(palette.steps);
   if (asking === "account") return `account:${accountToStart(project) ?? ""}`;
@@ -1016,6 +1187,7 @@ export function startingId(): string | null {
   }
   if (asking === "profile")
     return `profile:${profileToStart(project, accountOfSteps(palette.steps, project)) ?? ""}`;
+  if (asking === "as") return asStart(project);
   return null;
 }
 
@@ -1029,19 +1201,23 @@ function startable(path: string): boolean {
     the agent picked alone. The project's default account stands in for a
     question that was not asked, and a session not asked how to run runs as
     a plain new one does. A Codex session not asked its profile runs under
-    the one it would start under. An account or a profile the user picked
-    is the project's default from then on, the account where the project
-    names none of its own. A project that has closed meanwhile gets none. */
-function startOn(steps: Step[], picked: boolean) {
+    the one it would start under. A session in Chord works as the agent
+    picked, or leads the team, while agents are switched on. An account, a
+    profile or an agent the user picked is the project's default from then
+    on, the account where the project names none of its own; a team leaves
+    the agent as it was. A project that has closed meanwhile gets none. */
+function startOn(steps: Step[], picked: (step: Step) => boolean) {
   const path = projectOfSteps(steps);
   if (path === null || !startable(path)) return;
   const account = steps.find((step) => step.kind === "account");
-  if (picked && account !== undefined) pickAccount(path, account.account);
+  if (account !== undefined && picked(account)) pickAccount(path, account.account);
   const profile = steps.find((step) => step.kind === "profile");
-  if (picked && profile !== undefined) pickProfile(path, profile.profile);
+  if (profile !== undefined && picked(profile)) pickProfile(path, profile.profile);
+  const as = steps.find((step) => step.kind === "as");
+  if (as !== undefined && as.team === null && picked(as)) pickAgentIn(path, as.agent);
   const agent = steps.find((step) => step.kind === "agent");
   const workflow = steps.find((step) => step.kind === "workflow");
-  startSession(
+  const live = startSession(
     path,
     agent?.agent,
     account === undefined ? undefined : account.account,
@@ -1049,6 +1225,21 @@ function startOn(steps: Step[], picked: boolean) {
     undefined,
     profile === undefined ? profileToStart(path, accountOfSteps(steps, path)) : profile.profile,
   );
+  if (live === null || as === undefined || live.kind !== "integrated" || !asksAs(steps, path)) return;
+  if (as.team !== null) {
+    lead(live.key, as.team);
+    return;
+  }
+  const role = as.agent === null ? undefined : agentByKey(as.agent, path);
+  if (role !== undefined) workAs(live.key, role, null);
+}
+
+/** Reads the agents and the teams a project's new session can be, the
+    first time it is asked for there. */
+function readAgents(project: string) {
+  if (!switches.agents) return;
+  if (agents.installed[project] === undefined) void loadInstalled(project);
+  if (teams.byProject[project] === undefined) void loadProjectTeams(project);
 }
 
 /** The picks held until their account's Codex profiles are heard, by
@@ -1093,6 +1284,7 @@ function answer(steps: Step[]): Outcome {
   const project = projectOfSteps(steps);
   if (project !== null && startable(project) && installed().includes("codex"))
     void readProfiles(project, accountOfSteps(steps, project));
+  if (project !== null && startable(project)) readAgents(project);
   return goOn(steps);
 }
 
@@ -1100,10 +1292,11 @@ function answer(steps: Step[]): Outcome {
 function goOn(steps: Step[]): Outcome {
   const ready = steps.length === 1 && steps[0].kind === "project";
   if (!ready && nextStep(steps) === null)
-    return onceProfilesHeard(steps, () => goOn(steps)) ?? { type: "close", then: () => startOn(steps, true) };
+    return onceProfilesHeard(steps, () => goOn(steps)) ?? { type: "close", then: () => startOn(steps, () => true) };
   palette.mode = "new";
   palette.steps = steps;
   palette.ready = ready;
+  palette.as = false;
   palette.query = "";
   return { type: "stay" };
 }
@@ -1153,14 +1346,19 @@ export function askingChat(): boolean {
   return palette.mode === "new" && isChatsFolder(projectOfSteps(palette.steps));
 }
 
-/** Goes back a step: from the questions Change asked, the last answer is
-    taken back, and with none given the defaults' line is offered again.
+/** Goes back a step: from the question As asked, to the defaults' line;
+    from the questions Change asked, the last answer is taken back, and
+    with none given the defaults' line is offered again.
     From that line, go to is where the question came from when it was asked
     there, a project already picked in it; else the project is taken back
     where it was asked, and otherwise the commands list is where the
     question came from. */
 export function stepBack() {
   palette.query = "";
+  if (palette.mode === "new" && palette.ready && palette.as) {
+    palette.as = false;
+    return;
+  }
   if (palette.mode === "new" && !palette.ready && palette.steps.length > 1) {
     palette.steps = palette.steps.slice(0, -1);
     return;
@@ -1241,16 +1439,22 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       // Another account drops the default account's profile, so the
       // session starts under the profile it would under that account.
       const kin = (step: Step) =>
-        item.step.kind === "account" || item.step.kind === "profile"
+        item.step.kind === "account" || item.step.kind === "profile" || item.step.kind === "as"
           ? step.kind === item.step.kind
           : step.kind === "agent" || step.kind === "workflow";
-      const steps = defaultsFor(path)
+      // Another harness asks the agent afresh: a terminal works as none,
+      // and one in Chord as the agent last picked.
+      let steps = defaultsFor(path)
         .filter((step) => !(item.step.kind === "account" && step.kind === "profile"))
         .map((step) => (kin(step) ? item.step : step));
+      if (item.step.kind === "agent" || item.step.kind === "workflow") {
+        steps = steps.filter((step) => step.kind !== "as");
+        if (asksAs(steps, path)) steps.push({ kind: "as", agent: rememberedAgent(path), team: null });
+      }
       return (
         onceProfilesHeard(steps, () => pickItem(item, alone)) ?? {
           type: "close",
-          then: () => startOn(steps, item.step.kind === "account" || item.step.kind === "profile"),
+          then: () => startOn(steps, (step) => step === item.step),
         }
       );
     }
@@ -1258,11 +1462,15 @@ export function pickItem(item: PaletteItem, alone = false): Outcome {
       const steps = item.steps;
       const path = projectOfSteps(steps);
       const again = (): Outcome =>
-        path === null ? { type: "stay" } : { type: "close", then: () => startOn(defaultsFor(path), false) };
-      return onceProfilesHeard(steps, again) ?? { type: "close", then: () => startOn(steps, false) };
+        path === null ? { type: "stay" } : { type: "close", then: () => startOn(defaultsFor(path), () => false) };
+      return onceProfilesHeard(steps, again) ?? { type: "close", then: () => startOn(steps, () => false) };
     }
     case "change":
       palette.ready = false;
+      palette.query = "";
+      return { type: "stay" };
+    case "as":
+      palette.as = true;
       palette.query = "";
       return { type: "stay" };
     case "attention":

@@ -13,6 +13,8 @@ import {
   forgetAgentRow,
   keepLastAgent,
   pickAgent,
+  startAtEffort,
+  type AgentPurpose,
 } from "$lib/sessionAgents.svelte";
 import type { Agent } from "$lib/agents.svelte";
 import { unsent, type Sent } from "$lib/mention";
@@ -753,8 +755,9 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
   // A session started as an agent starts at the agent's effort, which is
   // lowered as a carried one is where its model does not take it.
   const startsAt = switches.agents ? agentStartsAt(key) : null;
+  const kept = carriedFor(starting);
   const carried =
-    carriedFor(starting) ?? (startsAt === null ? null : { model: null, effort: startsAt, mode: null });
+    startsAt === null ? kept : { model: kept?.model ?? null, effort: startsAt, mode: kept?.mode ?? null };
   const effort = startEffort(starting, link, carried);
   starting.carried =
     carried === null
@@ -2401,44 +2404,89 @@ export function agentEffort(conversation: Conversation, agent: Agent, harness: H
     : lowerEffort(agent.effort, efforts, effortScale(conversation.ready?.models ?? []));
 }
 
+/** Whether the row's first run is still to be asked for: what it starts
+    on is the row's own to say until then. */
+function unbegun(link: Link, session: Session): boolean {
+  return link.handle === null && !link.busy && !link.restarting && session.status === "starting";
+}
+
+/** Sets a row whose first run is still to be asked for on `change`, so
+    the run starts on it: the model and the effort, which a Codex profile's
+    file says and no agent does. */
+function setBeforeStart(key: string, link: Link, session: Session, change: Change, effort: string | null) {
+  if (session.profile !== null) {
+    startAtEffort(key, null);
+    return;
+  }
+  if (change.model !== undefined) session.model = change.model;
+  startAtEffort(key, effort);
+  link.conversation.settings = {
+    ...link.conversation.settings,
+    model: session.model,
+    ...(change.effort === undefined ? {} : { effort: change.effort }),
+  };
+}
+
 /** The row's session works as `agent` from its next message, or as none:
     on the agent's model where that is on the session's harness, at its
     effort where the session offers it, and reading only or not as the
-    agent does. Leaving an agent for none leaves the model and the effort
-    as they are. The pick is the composer's last. What a pick set is taken
-    back while agents are switched off, and set again once they are on. */
-export function workAs(key: string, agent: Agent | null) {
-  const link = links.get(key);
+    agent does. A session whose first run is still to be asked for starts
+    on them. Leaving an agent for none leaves the model and the effort as
+    they are. The pick is the last for `purpose`, the composer's unless
+    another is named, and no purpose's where that is null. What a pick set
+    is taken back while agents are switched off, and set again once they
+    are on. */
+export function workAs(key: string, agent: Agent | null, purpose: AgentPurpose | null = "composer") {
   const session = byKey(key);
-  if (link === undefined || session === null) return;
+  if (session === null || session.kind !== "integrated") return;
+  const link = linkFor(key);
   pickAgent(key, session.id, agent);
-  keepLastAgent("composer", agent?.key ?? null);
+  if (purpose !== null) keepLastAgent(purpose, agent?.key ?? null);
   const change: Change = { readsOnly: agent?.readsOnly ?? false };
   // An agent's model is for its own harness: on another, the session keeps
   // its own.
   if (agent?.model != null && agent.model.harness === session.agent) change.model = agent.model.model;
   const effort = agent === null ? null : agentEffort(link.conversation, agent, session.agent);
   if (effort !== null) change.effort = effort;
-  const { model: modelBefore, effort: effortBefore } = link.conversation.settings;
-  link.picked =
-    agent === null ? null : { change, before: link.picked?.before ?? { model: modelBefore, effort: effortBefore } };
-  void configure(key, change, false);
+  const waiting = unbegun(link, session);
+  const before = link.picked?.before ?? {
+    model: waiting ? session.model : link.conversation.settings.model,
+    effort: link.conversation.settings.effort,
+  };
+  link.picked = agent === null ? null : { change, before };
+  if (waiting) setBeforeStart(key, link, session, change, effort);
+  else void configure(key, change, false);
 }
 
 /** Agents are switched off or on: a pick still to be told sets nothing
     while they are off, the run back on the model and effort it had before
     and reading only no longer, and sets the run again once they are on. A
-    session already told of its agent is left as it is. */
+    run that started on the agent's model with none chosen before goes back
+    to the one its harness runs by default. A session whose first run is
+    still to be asked for starts as the switch then stands. A session
+    already told of its agent is left as it is. */
 onAgentsSwitched((on) => {
   for (const [key, link] of links) {
     const picked = link.picked;
-    if (picked === null || !agentWaits(key)) continue;
+    const session = byKey(key);
+    if (picked === null || session === null || !agentWaits(key)) continue;
+    if (unbegun(link, session)) {
+      if (on) setBeforeStart(key, link, session, picked.change, picked.change.effort ?? null);
+      else if (session.profile === null) {
+        if (picked.change.model !== undefined) session.model = picked.before.model;
+        link.conversation.settings = { ...link.conversation.settings, ...picked.before };
+      }
+      continue;
+    }
     if (on) {
       void configure(key, picked.change, false);
       continue;
     }
     const back: Change = { readsOnly: false };
-    if (picked.change.model !== undefined && picked.before.model !== null) back.model = picked.before.model;
+    const ready = link.conversation.ready;
+    const model =
+      picked.before.model ?? (ready === null || ready.models.length === 0 ? null : defaultOffered(ready).value);
+    if (picked.change.model !== undefined && model !== null) back.model = model;
     if (picked.change.effort !== undefined && picked.before.effort !== null) back.effort = picked.before.effort;
     void configure(key, back, false);
   }

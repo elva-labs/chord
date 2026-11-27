@@ -149,3 +149,60 @@ test("opens Settings on a new agent from the list", async ({ page }) => {
   await page.getByTestId("agent-menu").getByRole("menuitem", { name: "New agent…" }).click();
   await expect(page.getByTestId("agent-title")).toBeFocused();
 });
+
+test("the palette's new session asks which agent it works as, starts as the one picked, and offers it next time", async ({
+  page,
+}) => {
+  await installFakeCore(page, { open: [PROJECT], settings: { integrated: ["claude-code"] } });
+  await page.goto("/");
+  await page.getByTestId("start-agent").click();
+  const as = page.locator("[data-testid='palette-row'][data-kind='as']");
+  await expect(as.getByTestId("palette-detail")).toHaveText("No agent");
+  await expect(page.getByTestId("palette-field")).toHaveAttribute(
+    "placeholder",
+    "Enter starts it, or type an agent, team, harness or account",
+  );
+
+  await as.click();
+  await expect(page.getByTestId("palette-field")).toHaveAttribute("placeholder", "As which agent");
+  await expect(page.getByTestId("palette-group")).toHaveText(["Agents"]);
+  const chosen = page.locator("[data-testid='palette-row'][aria-selected='true']");
+  await expect(chosen).toContainText("No agent");
+  // Home and End are the list's while the field is empty.
+  await page.keyboard.press("End");
+  await expect(chosen).toHaveAttribute("id", (await page.getByTestId("palette-row").last().getAttribute("id"))!);
+  await page.keyboard.press("Home");
+  await expect(chosen).toContainText("No agent");
+  await page.keyboard.type("reviewer");
+  const reviewer = page
+    .getByTestId("palette-row")
+    .filter({ has: page.locator("[data-testid='palette-label']", { hasText: /^Reviewer$/ }) });
+  await expect(reviewer.getByTestId("palette-lock")).toBeVisible();
+  await expect(reviewer).toHaveAccessibleName(/^Reviewer .*Reads only$/);
+  await expect(page.getByRole("group", { name: "Agents" })).toBeVisible();
+  await expect(reviewer.getByTestId("palette-icon")).toHaveAttribute("data-icon", "agent");
+  await reviewer.click();
+  await expect(page.getByTestId("palette")).toHaveCount(0);
+  await expect(chip(page, "agent")).toHaveText("Reviewer");
+
+  await page.getByTestId("composer-input").fill("Look at the cache change");
+  await page.keyboard.press("Enter");
+  const sent = (await calls(page)).find((call) => call.method === "send");
+  expect(sent?.text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
+
+  await page.keyboard.press("ControlOrMeta+Shift+P");
+  await page.keyboard.type("new session");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-testid='palette-row'][data-kind='ready'] [data-testid='palette-detail']")).toHaveText(
+    "Claude Code · Reviewer",
+  );
+  await expect(as.getByTestId("palette-detail")).toHaveText("Reviewer");
+  await expect(as.getByTestId("palette-end")).toHaveText("last picked");
+  // The row reads at the size and colour of the line above it.
+  const line = page.locator("[data-testid='palette-row'][data-kind='ready'] [data-testid='palette-detail']");
+  for (const property of ["font-size", "color"])
+    await expect(as.getByTestId("palette-detail")).toHaveCSS(
+      property,
+      await line.evaluate((node, name) => getComputedStyle(node).getPropertyValue(name), property),
+    );
+});
