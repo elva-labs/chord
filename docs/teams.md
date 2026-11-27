@@ -79,12 +79,12 @@ of members that only read, and a member's folder that no longer exists,
 which `gates` names. While nothing changed anywhere the change is the
 lead's folder.
 
-An approval of the change records the commit the change counted from, and
-stands while the change, its lines placed in that commit's files, is the
-one approved. Lines main brings in above or below afterwards leave those
-places as they were, so a rebase keeps the approval. Lines main brought in
-before the approval are in the files its reader saw, so moving the work's
-lines across them puts it out of date.
+An approval of the change records the commit the change counted from in
+the folder it was read in, and stands while the change, its lines placed in
+that commit's files, is the one approved. Lines main brings in above or
+below afterwards leave those places as they were, so a rebase keeps the
+approval. Lines main brought in before the approval are in the files its
+reader saw, so moving the work's lines across them puts it out of date.
 
 A rebase on the project's main branch moves the base with the work. The
 base is then the newest commit the checkout shares with the default branch
@@ -127,11 +127,16 @@ puts the approval out of date though the work is as it was.
 
 A member that only reads may read the change in its own folder or worktree,
 with the change checked out there. A verdict naming that folder is on the
-change in the run's folder whose tree it has, or failing that whose change
-it has, placed in the files of that folder's base, so a member that read the
-work before a rebase approves it after one. It is refused when its folder
-has the change in none of them, or in more than one, which then names the
-folder it is on. `gates` tells such a member which change its folder has.
+change in the run's folder whose tree it has, or failing that the one whose
+change, placed in the files the member's folder counts from, is the change
+that folder has. The approval then records the commit the member's folder
+counts from, since those are the files it read the lines in. So a member
+that read the work before a rebase approves it after one, however a
+conflict there was resolved, and a member whose folder is on a newer main
+than the run's goes out of date when the work's lines are moved across
+main's lines it read. It is refused when its folder has the change in none
+of them, or in more than one, which then names the folder it is on. `gates`
+tells such a member which change its folder has.
 
 Paths are measured from the run's folder, the one the lead started in, the
 paths the plan names, the paths a gate names and its globs alike. In a run
