@@ -2502,7 +2502,7 @@ fn own_folder_line(
     }
     let own = member.folder.display();
     Ok(Some(match state.read_in(&member.folder) {
-        Ok(place) => format!(
+        Ok((place, _)) => format!(
             "You read in {own}, which has the change in {}: a verdict naming {own} is on that change, {}.",
             place.folder.display(),
             place.change.as_deref().unwrap_or("which cannot be read")

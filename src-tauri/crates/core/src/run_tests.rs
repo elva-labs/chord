@@ -2075,3 +2075,97 @@ fn a_reader_in_its_own_folder_finds_its_place_among_two_by_the_change() {
     let _ = std::fs::remove_dir_all(&own);
     let _ = std::fs::remove_dir_all(&dev);
 }
+
+/// A run whose work put the guard in at the start, with a member that only
+/// reads in a worktree of its own, and main then adding the cache at the
+/// same place.
+fn read_in_a_folder_of_its_own(name: &str) -> (Scratch, Scratch, PathBuf) {
+    let (home, dir) = on_a_branch(name, &[("src/lib.rs", &served(&[]))]);
+    write(&dir, "src/lib.rs", &served(&[GUARD]));
+    commit(&dir);
+    let own = worktree(&dir, "review");
+    join(home.path(), "lead", "rev2", REVIEWER, &own, None, true, "").unwrap();
+    main_moves(&dir, &[("src/lib.rs", &served(&[CACHE]))]);
+    (home, dir, own)
+}
+
+/// The member reading in `own` approves the change the lead's folder has.
+fn approved_from(home: &Path, own: &Path) -> Result<Vec<GateState>, String> {
+    let place = state(home, "lead").unwrap().unwrap().places[0].clone();
+    let change = place.change.unwrap();
+    let read = Read::Change {
+        folder: Some(own),
+        change: &change,
+    };
+    verdict(home, "rev2", read, true, "", None)
+}
+
+#[test]
+fn a_reader_ahead_of_the_lead_is_anchored_at_the_base_it_read_on() {
+    let (home, dir, own) = read_in_a_folder_of_its_own("reader-ahead");
+    rebased(&own, &[("src/lib.rs", &served(&[GUARD, CACHE]))]);
+    let before = state(home.path(), "lead").unwrap().unwrap().places[0].clone();
+    assert_eq!(before.base, before.start, "the lead has not rebased");
+
+    let gates = approved_from(home.path(), &own).unwrap();
+    assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert_eq!(
+        given.last().unwrap().base.as_deref(),
+        Some(git(&own, &["rev-parse", "origin/main"]).as_str()),
+        "the reader's base, not the lead's"
+    );
+
+    rebased(&dir, &[("src/lib.rs", &served(&[GUARD, CACHE]))]);
+    assert_eq!(
+        change_standing(home.path()),
+        Standing::Approved,
+        "rebased as read"
+    );
+    write(&dir, "src/lib.rs", &served(&[CACHE, GUARD]));
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+    assert!(command_held(home.path(), "lead", "git push origin work").is_some());
+    let _ = std::fs::remove_dir_all(&own);
+}
+
+#[test]
+fn a_reader_ahead_of_a_lead_that_resolves_the_other_way_goes_out_of_date() {
+    let (home, dir, own) = read_in_a_folder_of_its_own("reader-ahead-other");
+    rebased(&own, &[("src/lib.rs", &served(&[GUARD, CACHE]))]);
+    approved_from(home.path(), &own).unwrap();
+    rebased(&dir, &[("src/lib.rs", &served(&[CACHE, GUARD]))]);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+    assert!(command_held(home.path(), "lead", "git push origin work").is_some());
+    let _ = std::fs::remove_dir_all(&own);
+}
+
+#[test]
+fn a_reader_behind_the_lead_approves_a_conflict_resolved_either_way() {
+    for (name, order) in [
+        ("reader-behind-above", [GUARD, CACHE]),
+        ("reader-behind-below", [CACHE, GUARD]),
+    ] {
+        let (home, dir, own) = read_in_a_folder_of_its_own(name);
+        rebased(&dir, &[("src/lib.rs", &served(&order))]);
+        let gates = approved_from(home.path(), &own).unwrap();
+        assert_eq!(gates[0].standing, Standing::Approved, "{name}");
+        assert_eq!(
+            Runs::open(home.path())
+                .unwrap()
+                .verdicts("lead")
+                .unwrap()
+                .last()
+                .unwrap()
+                .base,
+            state(home.path(), "lead").unwrap().unwrap().places[0].start,
+            "{name}: the reader's base is the start"
+        );
+        assert_eq!(
+            command_held(home.path(), "lead", "git push origin work"),
+            None,
+            "{name}"
+        );
+        let _ = std::fs::remove_dir_all(&own);
+    }
+}

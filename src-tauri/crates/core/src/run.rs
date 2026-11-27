@@ -510,32 +510,35 @@ impl State {
     /// The place whose change a member that reads in a folder of its own,
     /// which is no place of the run's work, reads there: the one place
     /// whose tree is the tree that folder has now, or failing that, the one
-    /// whose change is the change that folder has with its lines placed in
-    /// the files of the place's base. None has it, or more than
-    /// one does, and the member reads the change where it is and names
-    /// that folder.
-    pub fn read_in(&self, own: &Path) -> Result<&Place, String> {
+    /// whose change, with its lines placed in the files of that folder's
+    /// base, is the change that folder has. With the place comes the
+    /// commit a verdict given there is anchored at: the place's base when
+    /// the trees are the same, and that folder's base when the lines are,
+    /// since those are the files the member read the lines in. None has
+    /// it, or more than one does, and the member reads the change where it
+    /// is and names that folder.
+    pub fn read_in(&self, own: &Path) -> Result<(&Place, Option<String>), String> {
         let tree =
             git::tree_hash(own).map_err(|e| format!("{} cannot be read: {e}", own.display()))?;
-        let mut with: Vec<&Place> = self
+        let mut with: Vec<(&Place, Option<String>)> = self
             .places
             .iter()
             .filter(|place| place.tree.as_ref() == Ok(&tree))
+            .map(|place| (place, place.base.clone()))
             .collect();
         if with.is_empty() {
             with = self
                 .places
                 .iter()
-                .filter(|place| {
-                    place.change.is_ok()
-                        && Place::of_tree(own, "", place.start.as_deref(), Ok(tree.clone()))
-                            .change_from(place.base.as_deref())
-                            == place.change
+                .filter_map(|place| {
+                    let mine = Place::of_tree(own, "", place.start.as_deref(), Ok(tree.clone()));
+                    (mine.change.is_ok() && place.change_from(mine.base.as_deref()) == mine.change)
+                        .then_some((place, mine.base))
                 })
                 .collect();
         }
         match with.as_slice() {
-            [one] => Ok(one),
+            [(one, anchor)] => Ok((one, anchor.clone())),
             [] => Err(format!(
                 "{} has tree {tree}, which is the change in none of the run's folders, by its tree or its lines: {}. Check the change out there, or read it in the folder it is in and name that folder.",
                 own.display(),
@@ -553,7 +556,7 @@ impl State {
                 own.display(),
                 several
                     .iter()
-                    .map(|place| place.folder.display().to_string())
+                    .map(|(place, _)| place.folder.display().to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
             )),
@@ -1784,7 +1787,8 @@ pub enum Read<'a> {
 /// plan's version or the change in one place, on each gate of the run its
 /// agent approves then, recording the change's hash. A member that reads
 /// in a folder of its own, which is no place of the run's work, and names
-/// it, gives its verdict on the change in the place that folder has; see
+/// it, gives its verdict on the change in the place that folder has, with
+/// its lines placed in the files that folder read them in; see
 /// [`State::read_in`]. A verdict on something that no longer
 /// stands is refused, saying what changed. A gate the user waived, or one
 /// that waits for the user, takes none. Asking for changes says what must
@@ -1850,9 +1854,12 @@ pub fn verdict(
                         .iter()
                         .any(|place| same(&place.folder, folder))
             });
-            let place = match own {
+            let (place, anchor) = match own {
                 Some(own) => now_state.read_in(own)?,
-                None => now_state.place_for(folder)?,
+                None => {
+                    let place = now_state.place_for(folder)?;
+                    (place, place.base.clone())
+                }
             };
             let now = place.change.clone().map_err(|e| {
                 format!(
@@ -1868,10 +1875,10 @@ pub fn verdict(
                 ));
             }
             (
-                now,
+                place.change_from(anchor.as_deref())?,
                 None,
                 Some(place.folder.to_string_lossy().into_owned()),
-                place.base.clone(),
+                anchor,
             )
         }
     };
