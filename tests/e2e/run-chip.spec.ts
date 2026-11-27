@@ -31,6 +31,8 @@ const PLAN_WORK_REVIEW = {
 };
 
 const settingsWith = (workflow: typeof PLAN_WORK_REVIEW) => ({
+  // Agents and teams are offered in place of workflows while they are on.
+  agentsOn: false,
   workflows: { list: [workflow], default: workflow.name, overrides: {} },
 });
 

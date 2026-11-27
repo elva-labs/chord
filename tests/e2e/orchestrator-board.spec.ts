@@ -198,7 +198,10 @@ async function begin(page: Page, workflow = false) {
   calls = 0;
   await installFakeCore(page, {
     open: [PROJECT, OTHER],
-    settings: { workflows: { list: [PLAN_WORK_REVIEW], default: workflow ? PLAN_WORK_REVIEW.name : null, overrides: {} } },
+    settings: {
+      agentsOn: false,
+      workflows: { list: [PLAN_WORK_REVIEW], default: workflow ? PLAN_WORK_REVIEW.name : null, overrides: {} },
+    },
   });
   await page.goto("/");
   await page.getByTestId("start-agent").click();

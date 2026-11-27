@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetSwitches, switches } from "$lib/switches.svelte";
 import type { SpawnOptions, Transcript, Workflow } from "$lib/core";
 import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { stash } from "$lib/exits";
@@ -3211,6 +3212,14 @@ describe("telling two names apart", () => {
 
 describe("following a workflow", () => {
   const P = "/home/ada/dev/one";
+
+  beforeEach(() => {
+    // Agents and teams are offered in place of workflows while they are on.
+    switches.agents = false;
+  });
+
+  afterEach(resetSwitches);
+
   const codexRun = (): Workflow => ({
     ...defaultWorkflow(),
     name: "Codex run",
@@ -3240,6 +3249,13 @@ describe("following a workflow", () => {
   it("starts the one agent installed on the project's workflow, there being nothing to pick", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
     expect(create(P, null, "claude-code").workflow?.name).toBe("Build and review");
+  });
+
+  it("starts alone, ignoring the project's workflow, while agents and teams are on", () => {
+    switches.agents = true;
+    adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: { [P]: "Build and review" } });
+    const session = create(P);
+    expect(session.workflow).toBeNull();
   });
 
   it("starts an agent picked from several alone, whatever the project follows", async () => {

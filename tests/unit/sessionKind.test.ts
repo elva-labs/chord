@@ -34,6 +34,7 @@ import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { reset as resetWorkspace, workspace } from "$lib/workspace.svelte";
 import { resetConductor } from "$lib/conductor.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
+import { resetSwitches, switches } from "$lib/switches.svelte";
 
 const sets = vi.hoisted(() => [] as Partial<Settings>[]);
 
@@ -204,8 +205,15 @@ describe("a session's kind", () => {
 });
 
 describe("a session under a workflow", () => {
-  beforeEach(() => resetWorkflows());
-  afterEach(() => resetWorkflows());
+  beforeEach(() => {
+    resetWorkflows();
+    // Agents and teams are offered in place of workflows while they are on.
+    switches.agents = false;
+  });
+  afterEach(() => {
+    resetWorkflows();
+    resetSwitches();
+  });
 
   const followed = () => adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
 

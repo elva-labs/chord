@@ -28,6 +28,7 @@ import {
   workspace,
 } from "$lib/workspace.svelte";
 import { adoptWorkflows, defaultWorkflow, reset as resetWorkflows } from "$lib/workflows.svelte";
+import { resetSwitches, switches } from "$lib/switches.svelte";
 
 /** The answer a host gives for a project on it, held until released. */
 const host = vi.hoisted(() => ({
@@ -83,7 +84,10 @@ beforeEach(() => {
   workspace.active = A;
 });
 
-afterEach(() => stop());
+afterEach(() => {
+  stop();
+  resetSwitches();
+});
 
 /** What is on record for the next start. */
 function record(): { open: { project: string; id: string }[]; active: string | null } {
@@ -220,6 +224,8 @@ describe("keeping the record", () => {
   });
 
   it("brings a session that follows a workflow back on that workflow after a quit", async () => {
+    // Agents and teams are offered in place of workflows while they are on.
+    switches.agents = false;
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
     stop = reopen();
     const session = create(A);
@@ -241,6 +247,31 @@ describe("keeping the record", () => {
     expect(back.workflow).toEqual(defaultWorkflow());
     expect(back.workflowGone).toBe(true);
     expect(spawned.at(-1)).toMatchObject({ session: "one", model: "fable" });
+  });
+
+  it("brings it back on that workflow with agents and teams switched on meanwhile", async () => {
+    switches.agents = false;
+    adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
+    stop = reopen();
+    const session = create(A);
+    started(session.key, "pty-1", "one");
+    flushSync();
+    stop();
+
+    resetSessions();
+    loadRemembered();
+    switches.agents = true;
+    adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
+    stop = reopen();
+    flushSync();
+    const back = sessions.all.find((row) => row.id === "one")!;
+    wake(back.key);
+    await launch(back.key, 80, 24, () => {});
+    expect(back.workflow).toEqual(defaultWorkflow());
+    expect(back.workflowGone).toBe(false);
+    expect(spawned.at(-1)).toMatchObject({ session: "one", model: "fable" });
+    // A new session beside it starts alone.
+    expect(create(A).workflow).toBeNull();
   });
 });
 

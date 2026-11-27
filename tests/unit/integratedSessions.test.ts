@@ -56,7 +56,7 @@ import { leftOutOf, resetSenders, typedOf } from "$lib/senders.svelte";
 import type { IntegratedImage } from "$lib/core";
 import { stateWord } from "$lib/orchestrator.svelte";
 import { setAgentsOn, switches } from "$lib/switches.svelte";
-import { keepLastAgent, lastAgent } from "$lib/sessionAgents.svelte";
+import { forgetAgentRow, keepLastAgent, lastAgent } from "$lib/sessionAgents.svelte";
 import {
   agentNamed,
   byKey,
@@ -3644,6 +3644,62 @@ describe("the agent a session works as", () => {
     } finally {
       setAgentsOn(true);
     }
+  });
+
+  it("starts a row on the effort and model chosen before its first run is asked for", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    linkFor(session.key);
+    await configure(session.key, { effort: "high" });
+    await configure(session.key, { model: "haiku" });
+    expect(session.model).toBe("haiku");
+    expect(conversationOf(session.key).settings).toMatchObject({ model: "haiku", effort: "high" });
+    await launch(session.key);
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "start").at(-1)).toMatchObject({
+      options: { model: "haiku", effort: "high" },
+    });
+  });
+
+  it("starts a row on the effort chosen over the one the agent it works as sets", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    workAs(session.key, { ...reviewer, effort: "low" }, null);
+    await configure(session.key, { effort: "high" });
+    await launch(session.key);
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "start").at(-1)).toMatchObject({
+      options: { model: "sonnet", effort: "high", readsOnly: true },
+    });
+  });
+
+  it("lets a Codex profile row keep its profile's model and effort whatever is chosen before its run", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    session.profile = "fast";
+    forgetAgentRow(session.key);
+    linkFor(session.key);
+    await configure(session.key, { effort: "high" });
+    await configure(session.key, { model: "gpt-5.1-codex" });
+    await launch(session.key);
+    await settled();
+    const begun = fake.calls.filter((call) => call.method === "start").at(-1) as unknown as {
+      options: Record<string, unknown>;
+    };
+    expect(begun.options.model).toBeUndefined();
+    expect(begun.options.effort).toBeUndefined();
+  });
+
+  it("applies an effort chosen while the first run is starting once it is up", async () => {
+    resetLastChosen();
+    const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    const starting = launch(session.key);
+    await configure(session.key, { effort: "high" });
+    await starting;
+    await settled();
+    expect(fake.calls.filter((call) => call.method === "configure").at(-1)).toMatchObject({
+      settings: { effort: "high" },
+    });
   });
 
   it("starts a row as no agent where agents are switched off before its first run is asked for", async () => {

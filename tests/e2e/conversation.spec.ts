@@ -1306,6 +1306,7 @@ test.describe("a Codex orchestrator, integrated", () => {
       agents: ["codex"],
       integrable: ["claude-code", "codex"],
       settings: {
+        agentsOn: false,
         workflows: { list: [CODEX_FLOW], default: "Build and review", overrides: {} },
         integrated: ["codex"],
       },

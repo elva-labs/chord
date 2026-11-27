@@ -10,8 +10,8 @@ screen, and stop them. So any session becomes an orchestrator by being
 asked to start others.
 
 To have a session direct the work rather than do it, start it under a
-workflow: a new session in a project that follows one starts under it, and
-with agents and teams off one can also be picked from the workflow chip in a
+workflow: with agents and teams off, a new session in a project that follows
+one starts under it, and one can also be picked from the workflow chip in a
 new conversation's composer or from the palette, which a project's
 new-session button opens as well, as
 [following a workflow](#following-a-workflow) describes. The session that
@@ -615,7 +615,7 @@ as one harness with no workflow. What the user picks is what starts. Picking
 a harness in the palette's new session, whichever button opened it,
 starts that harness alone. Picking a workflow there, which is offered only
 while agents and teams are off, starts its orchestrator, on the workflow's harness and model, and a plain new
-session where there was nothing to pick follows the project's workflow, as
+session where there was nothing to pick follows the project's workflow while agents and teams are off, as
 [settings](reference/settings.md#workflows) describes. A new in-Chord session can
 also be given a workflow, or none, in its composer until its first message,
 which starts it again as that workflow's orchestrator or as the harness alone;

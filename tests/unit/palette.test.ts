@@ -12,6 +12,7 @@ import {
   lastUsed,
   beginNew,
   defaultsAskAs,
+  defaultsFor,
   nextStep,
   openCommands,
   openGoTo,
@@ -1006,27 +1007,24 @@ describe("how a new session runs, with agents and teams off", () => {
 });
 
 describe("how a new session runs, with agents and teams on", () => {
-  it("offers no workflow, and starts under the one the project follows from its line", () => {
+  it("offers no workflow, and starts alone though the project follows one", () => {
     adoptWorkflows({ list: [quick(), defaultWorkflow()], default: null, overrides: { [A]: "Build and review" } });
     beginNew(A);
     const [line] = stepItems("");
-    expect(line.kind === "ready" && line.detail).toBe("Build and review");
+    expect(line.kind === "ready" && line.detail).toBe("Claude Code");
     // Typed on the line, a workflow's name finds nothing to change to.
     expect(stepItems("quick").filter((item) => item.kind === "choice")).toEqual([]);
     start();
-    expect(sessions.all[0].workflow?.name).toBe("Build and review");
+    expect(sessions.all[0].workflow).toBeNull();
   });
 
-  it("offers the agents alone under Change, with the cursor on the last used, and starts the one picked alone", () => {
+  it("asks nothing more of a project that follows a workflow, there being one agent to start", () => {
     adoptWorkflows({ list: [quick(), defaultWorkflow()], default: "Build and review", overrides: {} });
-    expect(stepsLeft([{ kind: "project", path: A }])).toEqual(["agent"]);
+    expect(stepsLeft([{ kind: "project", path: A }])).toEqual([]);
     beginNew(A);
-    choose("Change");
-    expect(stepItems("").map((item) => [item.group, item.label])).toEqual([["No workflow", "Claude Code"]]);
-    expect(startingId()).toBe("agent:claude-code");
-    const outcome = choose("Claude Code");
-    if (outcome.type === "close") outcome.then();
-    expect(sessions.all[0]).toMatchObject({ project: A, agent: "claude-code", workflow: null, model: null });
+    expect(stepItems("").map((item) => item.kind)).not.toContain("change");
+    start();
+    expect(sessions.all[0]).toMatchObject({ project: A, agent: "claude-code", workflow: null });
   });
 });
 
@@ -1711,43 +1709,30 @@ describe("the agent a new session works as", () => {
     expect(startingId()).toBe("as:agent:chord:Reviewer");
   });
 
-  it("is off under the workflow a project follows, and asked once Change or a harness typed leaves it", () => {
+  it("ignores the workflow a project follows, leaving As live and the line on the agent last picked", () => {
     adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
     pickAgentIn(A, "chord:Reviewer");
     beginNew(A);
     expect(stepItems("")).toMatchObject([
-      { kind: "ready", detail: "Build and review" },
-      { kind: "change" },
-      { kind: "as", detail: "No agent", end: "under a workflow", off: true },
+      { kind: "ready", detail: "Claude Code · Reviewer" },
+      { kind: "as", detail: "Reviewer", off: false },
     ]);
-    expect(pickable(row("as")!)).toBe(false);
-    expect(defaultsAskAs()).toBe(false);
-    expect(stepItems("reviewer")).toEqual([]);
-    expect(stepItems("ship")).toEqual([]);
+    expect(stepItems("")[1]).not.toMatchObject({ end: "under a workflow" });
+    expect(pickable(row("as")!)).toBe(true);
+    expect(defaultsAskAs()).toBe(true);
     start();
-    expect(sessions.all[0].workflow?.name).toBe("Build and review");
-    expect(agentOfRow(sessions.all[0].key, null)).toBeNull();
+    expect(sessions.all[0]).toMatchObject({ agent: "claude-code", workflow: null });
+    expect(agentOfRow(sessions.all[0].key, null)?.title).toBe("Reviewer");
     expect(agentPickedIn(A)).toBe("chord:Reviewer");
+  });
 
-    // Change offers the harness alone, which leaves the workflow and asks
-    // the agent.
+  it("ignores a project's own workflow too, and starts the line alone", () => {
+    adoptWorkflows({ list: [quick(), defaultWorkflow()], default: null, overrides: { [A]: "Build and review" } });
+    expect(defaultsFor(A).map((step) => step.kind)).not.toContain("workflow");
     beginNew(A);
-    choose("Change");
-    choose("Claude Code");
-    expect(nextStep(palette.steps)).toBe("as");
-    expect(startingId()).toBe("as:agent:chord:Reviewer");
-    let outcome = choose("Developer");
-    if (outcome.type === "close") outcome.then();
-    expect(sessions.all[1]).toMatchObject({ agent: "claude-code", workflow: null });
-    expect(agentOfRow(sessions.all[1].key, null)?.title).toBe("Developer");
-
-    // A harness typed on the line leaves it too, as the agent last picked.
-    beginNew(A);
-    setQuery("claude");
-    outcome = pickItem(stepItems("claude")[0]);
-    if (outcome.type === "close") outcome.then();
-    expect(sessions.all[2]).toMatchObject({ agent: "claude-code", workflow: null });
-    expect(agentOfRow(sessions.all[2].key, null)?.title).toBe("Developer");
+    expect(row("as")).toMatchObject({ off: false });
+    start();
+    expect(sessions.all[0]).toMatchObject({ project: A, workflow: null });
   });
 
   it("is as before with agents off, keeping the agent last picked", () => {

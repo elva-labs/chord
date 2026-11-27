@@ -802,6 +802,12 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     if (!movingBySetting(key)) row.changedAt = Date.now();
   }
   runUp(key);
+  // Chosen while this run started: made on it now, the choice already kept.
+  if (!link.restarting && link.after !== null) {
+    const later = link.after;
+    link.after = null;
+    void configure(key, later, false);
+  }
   row.error = null;
   row.exitCode = null;
   for (const body of claim(started.id)) deliver(key, link, body);
@@ -1017,7 +1023,7 @@ export function startMode(session: Session, link: Link): string | undefined {
 function startEffort(session: Session, link: Link, carried: Carried | null): string | undefined {
   if (carried === null) return undefined;
   const effort = link.conversation.settings.effort;
-  if (link.effortChosen && effort !== null) return effort;
+  if (link.effortChosen && effort !== null && session.profile === null) return effort;
   return carried.effort ?? undefined;
 }
 
@@ -2372,8 +2378,12 @@ export async function configure(key: string, change: Change, chosen = true) {
   }
   const handle = link.handle;
   if (handle === null) {
-    // Made on the new run once it is up.
-    if (link.restarting) link.after = { ...link.after, ...change };
+    const session = byKey(key);
+    // Made on the new run once it is up, as one asked while the first run
+    // starts is.
+    if (link.restarting || (link.busy && session?.status === "starting"))
+      link.after = { ...link.after, ...change };
+    else if (session !== null && unbegun(link, session)) setChosenBeforeStart(link, session, change);
     return;
   }
   link.configureError = null;
@@ -2424,6 +2434,20 @@ function setBeforeStart(key: string, link: Link, session: Session, change: Chang
     ...link.conversation.settings,
     model: session.model,
     ...(change.effort === undefined ? {} : { effort: change.effort }),
+  };
+}
+
+/** Sets a row whose first run is still to be asked for on what the user
+    chose, so the run starts on it: the model and the effort, which a Codex
+    profile's file says instead. A mode is left to the run: a row offers
+    none until its agent has said which it has. */
+function setChosenBeforeStart(link: Link, session: Session, change: Change) {
+  const own = session.profile === null;
+  if (own && change.model !== undefined) session.model = change.model;
+  link.conversation.settings = {
+    ...link.conversation.settings,
+    ...(own && change.model !== undefined ? { model: change.model } : {}),
+    ...(own && change.effort !== undefined ? { effort: change.effort } : {}),
   };
 }
 

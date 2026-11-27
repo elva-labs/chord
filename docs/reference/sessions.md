@@ -671,7 +671,7 @@ project used last: from the project's ⋯ menu, under its New session; and from
 the palette, beside New session in the project on screen.
 Started the other way, a session is a pick, as a harness picked is, and
 runs alone whatever the project follows. The + and
-New session start the harness's own way, or the project's workflow, so
+New session start the harness's own way, or with agents and teams off the project's workflow, so
 nothing is asked of someone who never changes it. An in-Chord session is
 driven through the core in messages, as [sessions in Chord](../integrated.md)
 describes, and is a row like any other: it is listed, stopped with its ×,
