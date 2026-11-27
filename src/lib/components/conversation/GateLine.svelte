@@ -28,7 +28,7 @@
   $effect(() => followRun(sessionKey));
 
   // Read again when the view comes into sight and when a turn ends: a
-  // change of the tree is not told.
+  // change to the files is not told.
   $effect(() => {
     if (active && conversation.current === null) void readRun(sessionKey);
   });
@@ -392,7 +392,7 @@
             {#if shown.waiver !== null}For this run only
             {:else if shown.asks > 0}Asked for changes {times(shown.asks)}
             {:else if shown.standing === "approved"}
-              Out of date if {shown.gate.when === "plan" ? "the plan" : "the tree"} changes
+              Out of date if {shown.gate.when === "plan" ? "the plan" : "the work"} changes
             {/if}
           </span>
           {#if giver !== null}
