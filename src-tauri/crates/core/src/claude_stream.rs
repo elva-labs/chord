@@ -5189,6 +5189,29 @@ mod tests {
     }
 
     #[test]
+    fn a_lead_reading_only_writes_unasked_to_a_member_that_went_on_under_a_new_id() {
+        let (mut lead, home, _folder) = a_lead_reading_only("stream-lead-went-on");
+        let fresh = "9e990c1d-0000-4000-8000-000000000002";
+        crate::run::went_on(&home, "rev", fresh).unwrap();
+        for tool in ["mcp__chord__send", "mcp__chord__stop"] {
+            for session in [fresh, MEMBER, &fresh[..8], &MEMBER[..8]] {
+                assert_eq!(
+                    delegated(&mut lead, tool, Some(session), false),
+                    "",
+                    "{tool} {session}"
+                );
+            }
+            for session in ["9e990c1", "0badc0de-0000-4000-8000-000000000003"] {
+                assert_eq!(
+                    delegated(&mut lead, tool, Some(session), false),
+                    "ask",
+                    "{tool} {session}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_subagent_of_a_lead_reading_only_delegates_as_the_lead_does() {
         let (mut lead, _home, _folder) = a_lead_reading_only("stream-lead-subagent");
         assert_eq!(delegated(&mut lead, "mcp__chord__start", None, true), "");

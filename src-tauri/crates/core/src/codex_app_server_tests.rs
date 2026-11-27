@@ -3581,6 +3581,31 @@ fn a_codex_lead_starts_writes_to_and_stops_its_members_unasked() {
 }
 
 #[test]
+fn a_codex_lead_writes_unasked_to_a_member_that_went_on_under_a_new_id() {
+    let (home, _folder) = a_run("codex-lead-went-on");
+    let fresh = "9e990c1d-0000-4000-8000-000000000002";
+    crate::run::went_on(&home, "rev", fresh).unwrap();
+    let mut lead = in_a_run(&home, "lead", json!({"result": config()}));
+    lead.control(&Control::SetReadsOnly(true)).unwrap();
+    for tool in ["send", "stop"] {
+        for session in [fresh, MEMBER, &fresh[..8], &MEMBER[..8]] {
+            assert_eq!(
+                lead_called(&mut lead, 1, "chord", tool, Some(session)),
+                "",
+                "{tool} {session}"
+            );
+        }
+        for session in ["9e990c1", "0badc0de-0000-4000-8000-000000000003"] {
+            assert_eq!(
+                lead_called(&mut lead, 2, "chord", tool, Some(session)),
+                "ask reading only",
+                "{tool} {session}"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_codex_lead_s_subagent_is_turned_down_before_it_delegates() {
     let (home, _folder) = a_run("codex-lead-subagent");
     let mut lead = in_a_run(&home, "lead", json!({"result": config()}));
