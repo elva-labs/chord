@@ -12,6 +12,7 @@ import { core } from "$lib/core";
 import { persist, recovering } from "$lib/persist";
 import { startsOnly } from "$lib/workflowInstructions";
 import { isChatsFolder } from "$lib/chats.svelte";
+import { switches } from "$lib/switches.svelte";
 
 /**
  * The workflows a session can follow.
@@ -286,10 +287,12 @@ export function stepsGist(workflow: Workflow): string {
   return said.length < 2 ? (said[0] ?? "") : `${said.slice(0, -1).join(", ")} and ${said.at(-1)}`;
 }
 
-/** The workflow a project follows: its own word, else the default. Null
-    is none, and a chat follows none: it is a conversation alone. */
+/** The workflow a new session in a project follows: its own word, else the
+    default. Null is none, and a chat follows none: it is a conversation
+    alone. Null too while agents and teams are on, which are offered in
+    place of workflows; a session already running on a workflow keeps it. */
 export function workflowOf(project: string): Workflow | null {
-  if (isChatsFolder(project)) return null;
+  if (switches.agents || isChatsFolder(project)) return null;
   const own = workflows.overrides[project];
   const chosen = own === undefined ? workflows.default : own;
   return workflowNamed(chosen) ?? null;

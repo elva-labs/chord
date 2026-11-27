@@ -432,10 +432,11 @@ on to begin with, kept as `agentsOn`. Off:
   plain one, which its conversation says, and so does a lead resumed.
 
 [Workflows](../orchestrator.md) are offered to pick for a new session only
-while agents and teams are off. While they are on, a project that follows a
-workflow still starts new sessions under it, and the
+while agents and teams are off. While they are on, a project's workflow is
+ignored for a new session: it does not start under it, the
 [palette](#workflows) and the [composer](sessions.md#sessions-in-chord)
-offer no workflow to pick.
+offer no workflow to pick, and As stays available. A session already
+running under a workflow keeps it.
 
 A session that already works as an agent keeps working as one. A team's
 run already going on is kept as it is, its plan, gates and verdicts, but
@@ -522,8 +523,8 @@ order. The roles are fixed: the orchestrator is the session the user talks
 to, a worker does a piece of work, and a reviewer checks it.
 
 Workflows are kept in the settings file, and no tab shows them: the window
-offers [teams](#teams) instead. A workflow the file holds still starts
-sessions as this section says, and an agent may still change one with the
+offers [teams](#teams) instead. While agents and teams are off, a workflow
+the file holds starts sessions as this section says, and an agent may still change one with the
 user's leave, as [an agent changing them](#an-agent-changing-them)
 describes. The default and the projects' choices are changed in the file.
 
@@ -594,13 +595,14 @@ subagents, and their work does not show as sessions. The settings file
 writes the setting only when it is off.
 
 A project's workflow is its own choice, else the one for new sessions, else
-none. A plain new session, where there is nothing to pick, follows it. In a
-project that follows a workflow, by its own choice or by the default, the
-palette's line of defaults starts the project's workflow. With agents and
-teams off, its new session offers every workflow, the project's first,
-marked as the project's workflow or as the default, beside the harnesses to
-run alone, and Change picks another. With them on, Change offers only the
-harnesses to run alone. In a project that follows none the palette offers no workflows,
+none. With agents and teams off, a plain new session, where there is
+nothing to pick, follows it, and in a project that follows a workflow, by
+its own choice or by the default, the palette's line of defaults starts the
+project's workflow. Its new session then offers every workflow, the
+project's first, marked as the project's workflow or as the default, beside
+the harnesses to run alone, and Change picks another. With agents and teams
+on, the project's workflow is ignored: the line starts the harness alone and
+offers no workflow. In a project that follows none the palette offers no workflows,
 whatever other projects chose, and with one harness installed and no
 account to pick its line has nothing to change. A harness picked anywhere
 starts alone. A

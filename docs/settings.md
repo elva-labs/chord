@@ -57,7 +57,7 @@ An agent is a role: a title, a description whose first line is what lists show, 
 
 ## Workflows
 
-A workflow names the model a session starts on, and the models it may hand work and review to. The roles are fixed: the orchestrator you talk to, workers that do a piece of work, and reviewers that check it. Each project can follow a workflow of its own. Workflows are kept in the settings file, with no tab of their own: the window offers teams in their place. A project that follows a workflow in the file still starts new sessions under it, and a session under one keeps it. While agents and teams are on, nothing offers a workflow to pick. See [workflows](reference/settings.md#workflows) and [orchestrator](orchestrator.md).
+A workflow names the model a session starts on, and the models it may hand work and review to. The roles are fixed: the orchestrator you talk to, workers that do a piece of work, and reviewers that check it. Each project can follow a workflow of its own. Workflows are kept in the settings file, with no tab of their own: the window offers teams in their place. While agents and teams are off, a project that follows a workflow in the file starts new sessions under it. While they are on, a project's workflow is ignored for a new session and nothing offers one to pick; a session already under one keeps it. See [workflows](reference/settings.md#workflows) and [orchestrator](orchestrator.md).
 
 ## Teams
 

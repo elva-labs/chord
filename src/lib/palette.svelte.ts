@@ -800,9 +800,9 @@ const NO_AGENT = "No agent";
 
 /** The workflows a new session in a project is offered: none unless the
     project follows one, by its own choice or by the default, and none
-    while agents and teams are on. */
+    while agents and teams are on (`workflowOf` is then none). */
 function offered(project: string) {
-  return switches.agents || workflowOf(project) === null ? [] : workflows.list;
+  return workflowOf(project) === null ? [] : workflows.list;
 }
 
 /** What the last question offers, as titled lists drawn in order: the
@@ -1182,7 +1182,7 @@ export function startingId(): string | null {
   const asking = nextStep(palette.steps);
   if (asking === "account") return `account:${accountToStart(project) ?? ""}`;
   if (asking === "agent") {
-    const own = switches.agents ? null : workflowOf(project);
+    const own = workflowOf(project);
     return own === null ? `agent:${defaultAgent(project)}` : `workflow:${own.name}`;
   }
   if (asking === "profile")
