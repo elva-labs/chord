@@ -2,6 +2,7 @@ use super::*;
 use crate::scratch::Scratch;
 use crate::team::{shipped, QUICK_FIX, REVIEWER, SHIP_WITH_CHECKS};
 use std::process::Command;
+use std::time::Instant;
 
 fn repo(name: &str) -> Scratch {
     let dir = Scratch::new(&format!("run-{name}"));
@@ -317,6 +318,32 @@ fn a_member_that_went_on_under_a_new_id_is_named_by_it_and_by_the_ones_before() 
         .unwrap();
     assert_eq!(named(home.path(), STRANGER), None);
     assert_eq!(runs.earlier_sessions("lead").unwrap().len(), 2);
+}
+
+#[test]
+fn going_on_waits_on_another_writer_only_for_a_member_on_a_new_id() {
+    let (home, dir) = started("went-on-held", QUICK_FIX, &[]);
+    join(
+        home.path(),
+        "lead",
+        "rev",
+        REVIEWER,
+        &dir,
+        Some(JOINED),
+        true,
+        "",
+    )
+    .unwrap();
+    let holder = Connection::open(folder(home.path()).join(FILE)).unwrap();
+    holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let at = Instant::now();
+    went_on(home.path(), "stranger", FRESH).unwrap();
+    went_on(home.path(), "rev", JOINED).unwrap();
+    assert!(at.elapsed() < BUSY / 2, "{:?}", at.elapsed());
+    holder.execute_batch("COMMIT").unwrap();
+    went_on(home.path(), "rev", FRESH).unwrap();
+    assert_eq!(named(home.path(), JOINED).as_deref(), Some("rev"));
+    assert_eq!(named(home.path(), FRESH).as_deref(), Some("rev"));
 }
 
 #[test]

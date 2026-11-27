@@ -2153,6 +2153,8 @@ pub fn member_by_session(
 /// `session`, a fresh one or one resumed, so where it is a member of a
 /// team's run the id names it, and so do the ids it went by before.
 /// Nothing for a token that is no member, or where no run was ever kept.
+/// Only a member on a new id writes: the rest only read, which waits on
+/// no other writer of the store.
 pub fn went_on(home: &Path, token: &str, session: &str) -> Result<(), String> {
     let session = session.trim();
     if session.is_empty() {
@@ -2161,7 +2163,12 @@ pub fn went_on(home: &Path, token: &str, session: &str) -> Result<(), String> {
     let Some(runs) = Runs::existing(home)? else {
         return Ok(());
     };
-    runs.at_once(|runs| runs.went_on(token, session))
+    match runs.member(token)? {
+        Some(member) if member.session.as_deref() != Some(session) => {
+            runs.at_once(|runs| runs.went_on(token, session))
+        }
+        _ => Ok(()),
+    }
 }
 
 /// How much of a session's id names it, at least, as the start tool takes
