@@ -777,12 +777,18 @@ fn an_agents_version_is_its_hash_when_it_is_the_users() {
     assert_ne!(Some(linter), agent_version(&own, "Reviewer"));
 }
 
-/// A worktree of `dir` on a branch of its own, beside it.
+/// A worktree of `dir` on a branch of its own, named `name`, in a folder
+/// beside `dir`. Git keeps the worktree's git directory at
+/// `.git/worktrees/<name>` in `dir`, and libgit2 on Windows will not open a
+/// worktree whose git directory's path is longer than 192 characters, so the
+/// worktree's own folder carries no more than `name`.
 fn worktree(dir: &Path, name: &str) -> PathBuf {
-    let path = dir.with_file_name(format!(
-        "{}-{name}",
-        dir.file_name().unwrap().to_string_lossy()
-    ));
+    let path = dir
+        .with_file_name(format!(
+            "{}-worktrees",
+            dir.file_name().unwrap().to_string_lossy()
+        ))
+        .join(name);
     let made = Command::new("git")
         .args(["worktree", "add", "-q", "-b", name])
         .arg(&path)
