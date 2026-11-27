@@ -903,8 +903,8 @@ impl Runs {
             .conn
             .prepare(
                 "SELECT earlier.token, earlier.session FROM earlier_sessions AS earlier
-                 JOIN members ON members.token = earlier.token
-                 WHERE members.lead = ?1",
+                 JOIN members ON members.token = earlier.token AND members.lead = earlier.lead
+                 WHERE earlier.lead = ?1",
             )
             .map_err(failed)?;
         let rows = statement

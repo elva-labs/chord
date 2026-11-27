@@ -305,6 +305,18 @@ fn a_member_that_went_on_under_a_new_id_is_named_by_it_and_by_the_ones_before() 
     // Going on as the id it is on keeps nothing twice.
     went_on(home.path(), "rev", later).unwrap();
     assert_eq!(runs.earlier_sessions("lead").unwrap().len(), 2);
+
+    // An id the same token went by in a run another lead began names
+    // nothing in this one.
+    Connection::open(folder(home.path()).join(FILE))
+        .unwrap()
+        .execute(
+            "INSERT INTO earlier_sessions (lead, token, session) VALUES ('gone', 'rev', ?1)",
+            params![STRANGER],
+        )
+        .unwrap();
+    assert_eq!(named(home.path(), STRANGER), None);
+    assert_eq!(runs.earlier_sessions("lead").unwrap().len(), 2);
 }
 
 #[test]
