@@ -96,6 +96,12 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
 /// would be lost. The question is put up in the main window, which shows
 /// for it when the welcome stands in its place.
 pub fn quit<R: Runtime>(app: &AppHandle<R>) {
+    if app
+        .try_state::<crate::ending::Ending>()
+        .is_some_and(|ending| ending.under_way())
+    {
+        return;
+    }
     let leaving = Arc::clone(&app.state::<Arc<Leaving>>());
     if leaving.holds() {
         if let Some(main) = app.get_webview_window("main") {

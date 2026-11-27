@@ -3129,7 +3129,7 @@ impl Sessions {
         self.inner.lock().expect("sessions lock").contains_key(id)
     }
 
-    fn ids(&self) -> Vec<String> {
+    pub(crate) fn ids(&self) -> Vec<String> {
         self.inner
             .lock()
             .expect("sessions lock")

@@ -2044,6 +2044,11 @@ impl Core {
         }
     }
 
+    /// Whether an integrated session is running.
+    pub fn integrated_running(&self) -> bool {
+        !self.integrated.ids().is_empty()
+    }
+
     /// Stops every integrated session, and waits a few seconds for them to
     /// be gone: for the end of the app or the daemon.
     pub fn integrated_stop_all(&self) {

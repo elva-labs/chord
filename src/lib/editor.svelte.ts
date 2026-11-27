@@ -554,6 +554,8 @@ export function closeTab(key: string, fromRow = false) {
   const at = editor.tabs.findIndex((tab) => tabKey(tab) === key);
   if (at === -1) return;
   if (editor.buffers[key]?.dirty && !stillOpenElsewhere(key)) {
+    // The question about leaving stays up until it is answered.
+    if (editor.asking?.kind === "leave") return;
     if (editor.savingAs !== null) putNamingAway();
     editor.active = key;
     editor.asking = fromRow ? { kind: "close", key, fromRow } : { kind: "close", key };
@@ -1147,6 +1149,27 @@ export function watchedFiles(): string[] {
     is up. */
 export function leaveRequested(ask: { kind: "window" | "quit"; generation: number }) {
   editor.asking = { kind: "leave", leave: ask.kind, generation: ask.generation };
+  pendingLeave = ask.kind;
+}
+
+/** What the last question about leaving was for, until it is answered. An
+    answer is acted on whatever the editor's question has become since. */
+let pendingLeave: "window" | "quit" | null = null;
+
+/** The answer to the question about leaving: what it was for, or null when
+    none is up. */
+function answeredLeave(): "window" | "quit" | null {
+  const asked = editor.asking?.kind === "leave" ? editor.asking.leave : pendingLeave;
+  pendingLeave = null;
+  if (editor.asking?.kind === "leave") editor.asking = null;
+  return asked;
+}
+
+/** Tells the core the leave is confirmed, and logs when it could not be. */
+export function confirmLeave(kind: "window" | "quit") {
+  void core()
+    .leaveConfirmed(kind)
+    .catch((error) => console.warn("leave was confirmed but the core did not act on it", error));
 }
 
 /** The files with unsaved edits, by name, for the question. */
@@ -1162,10 +1185,9 @@ function unsavedKeys(): string[] {
 
 /** The window closes, or the app quits, unsaved edits and all. */
 export function leaveWithoutSaving() {
-  const asked = editor.asking;
-  if (asked?.kind !== "leave") return;
-  editor.asking = null;
-  void core().leaveConfirmed(asked.leave).catch(() => {});
+  const kind = answeredLeave();
+  if (kind === null) return;
+  confirmLeave(kind);
 }
 
 /** Every unsaved file written, each untitled one once its path is given,
@@ -1173,11 +1195,10 @@ export function leaveWithoutSaving() {
     could not be, nothing goes: that file comes forward with its bar or
     why, and the status bar says what stopped. */
 export async function saveAllAndLeave() {
-  const asked = editor.asking;
-  if (asked?.kind !== "leave") return;
-  editor.asking = null;
-  await saveEvery(unsavedKeys(), asked.leave === "quit" ? "Quit stopped" : "The window stays open", () => {
-    void core().leaveConfirmed(asked.leave).catch(() => {});
+  const kind = answeredLeave();
+  if (kind === null) return;
+  await saveEvery(unsavedKeys(), kind === "quit" ? "Quit stopped" : "The window stays open", () => {
+    confirmLeave(kind);
   });
 }
 
@@ -1223,8 +1244,7 @@ function nameInTurn(keys: string[], what: string, done: () => void) {
 
 /** The user's answer to the window or the app going: stay. */
 export function leaveCancelled() {
-  if (editor.asking?.kind !== "leave") return;
-  editor.asking = null;
+  if (answeredLeave() === null) return;
   returnFocus();
 }
 
@@ -1689,6 +1709,7 @@ export function resetEditor() {
   editor.reveal = null;
   editor.size = DEFAULT_SIZE;
   editor.asking = null;
+  pendingLeave = null;
   editor.comparing = false;
   editor.closing = null;
   editor.savingAs = null;

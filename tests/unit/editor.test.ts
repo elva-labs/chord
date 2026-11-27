@@ -744,6 +744,21 @@ describe("leaving with unsaved edits", () => {
     view.destroy();
   });
 
+  it("keeps the question up when a tab is closed behind it, and acts on the answer", async () => {
+    await openFile("docs/a.md", { keep: true });
+    const view = mount();
+    view.dispatch({ changes: { from: 0, insert: "x" } });
+    leaveRequested({ kind: "window", generation: 5 });
+    closeTab(keyOf("/one", "docs/a.md"));
+    expect(editor.asking).toEqual({ kind: "leave", leave: "window", generation: 5 });
+    // Whatever became of the editor's question, the answer is acted on.
+    editor.asking = null;
+    leaveWithoutSaving();
+    await settle();
+    expect(controls).toContain("leave window");
+    view.destroy();
+  });
+
   it("saves every file before leaving, and stays when one cannot be written", async () => {
     await openFile("docs/a.md", { keep: true });
     const view = mount();
