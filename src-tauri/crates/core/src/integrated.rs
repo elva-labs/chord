@@ -5731,6 +5731,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_member_of_a_teams_run_is_named_by_each_conversation_it_goes_on_as() {
         const JOINED: &str = "57b488af-0000-4000-8000-000000000001";
@@ -5747,9 +5748,26 @@ mod tests {
             "brief",
         )
         .unwrap();
-        let bench = Bench::new(fake());
-        bench.live.machine.lock().unwrap().run = Some((home.to_path_buf(), "rev".into()));
-        bench.live.take(&format!("ready {FRESH}"));
+        let vars = HashMap::new();
+        let sessions = Arc::new(Sessions::default());
+        let started = start(
+            Arc::new(crate::events::testing::Recorder::default()),
+            Arc::clone(&sessions),
+            &Minting,
+            &Launch {
+                token: Some("rev"),
+                home: Some(&home),
+                ..bare(&vars)
+            },
+            Box::new(|_| {}),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        sessions
+            .get(&started.id)
+            .unwrap()
+            .take(&format!("ready {FRESH}"));
+        stop(&sessions, &started.id).unwrap();
         let member = crate::run::member_by_session(&home, "lead", FRESH)
             .unwrap()
             .unwrap();
@@ -6139,16 +6157,15 @@ mod tests {
         }
     }
 
+    /// A launch in the root folder with nothing else set.
     #[cfg(unix)]
-    #[test]
-    fn a_start_says_no_conversation_id_it_does_not_know() {
-        let vars = HashMap::new();
-        let launch = |session| Launch {
+    fn bare(vars: &HashMap<String, String>) -> Launch<'_> {
+        Launch {
             project: Path::new("/"),
-            env: &vars,
-            session,
+            env: vars,
+            session: None,
             token: None,
-            resume: session.is_some(),
+            resume: false,
             model: None,
             mode: None,
             effort: None,
@@ -6164,6 +6181,17 @@ mod tests {
             reads_only: false,
             profile: &[],
             home: None,
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_start_says_no_conversation_id_it_does_not_know() {
+        let vars = HashMap::new();
+        let launch = |session| Launch {
+            session,
+            resume: session.is_some(),
+            ..bare(&vars)
         };
         let sessions = Arc::new(Sessions::default());
         for (session, said) in [(None, None), (Some("resumed"), Some("resumed".to_string()))] {
