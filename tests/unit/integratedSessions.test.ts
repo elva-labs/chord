@@ -3741,6 +3741,20 @@ describe("the agent a session works as", () => {
     });
   });
 
+  it("starts a row saying whether its agent reads only, and leaving it to the core for a row with none", async () => {
+    resetLastChosen();
+    const begun = () =>
+      (fake.calls.filter((call) => call.method === "start").at(-1) as unknown as { options: { readsOnly?: boolean } })
+        .options;
+    const writer = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");
+    workAs(writer.key, { ...reviewer, readsOnly: false }, null);
+    await launch(writer.key);
+    await settled();
+    expect(begun().readsOnly).toBe(false);
+    await started();
+    expect(begun()).not.toHaveProperty("readsOnly", expect.anything());
+  });
+
   it("starts a row as no agent where agents are switched off before its first run is asked for", async () => {
     resetLastChosen();
     const session = create(PROJECT, null, "claude-code", null, null, null, null, undefined, "integrated");

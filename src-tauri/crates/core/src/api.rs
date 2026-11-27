@@ -940,7 +940,9 @@ impl Core {
     /// instructions, and with `start_only` loses its agent's own subagent
     /// tools, the same way a terminal session is. With `reads_only` the
     /// harness's own tools that change files are refused from the first
-    /// turn. `profile` is the Codex profile, as for [`Core::spawn`].
+    /// turn; given none, a session reads only where it is a member that
+    /// reads only of a run that holds. `profile` is the Codex profile, as
+    /// for [`Core::spawn`].
     ///
     /// With `team`, one of the teams in use by name, the session is the
     /// lead of a team's run that begins before its first turn, so the
@@ -969,13 +971,14 @@ impl Core {
         afresh: bool,
         compact_at: Option<u64>,
         cache_ttl: Option<&str>,
-        reads_only: bool,
+        reads_only: Option<bool>,
         starter: Option<&str>,
         made_worktree: bool,
         plugin_start: Option<&str>,
         team: Option<&str>,
         joining: Option<crate::run::Joining>,
     ) -> Result<crate::integrated::Started, String> {
+        let reads_only = self.starts_reading_only(reads_only, token);
         let run = Run {
             agent: agent.to_string(),
             project: project.to_path_buf(),
@@ -1012,6 +1015,19 @@ impl Core {
             _ => None,
         };
         self.start_run(run, at)
+    }
+
+    /// Whether a session starts reading only: as `said`, else as the member
+    /// of a run that holds the session a token names joined it, so a
+    /// window that lost what the session works as never widens a member.
+    fn starts_reading_only(&self, said: Option<bool>, token: Option<&str>) -> bool {
+        said.unwrap_or_else(|| {
+            let token = token.map(str::trim).filter(|token| !token.is_empty());
+            match (self.home.as_deref(), token) {
+                (Some(home), Some(token)) => crate::run::member_reads_only(home, token),
+                _ => false,
+            }
+        })
     }
 
     /// Starts an integrated session as `run` says, from the entry `at` of a
@@ -3726,7 +3742,7 @@ mod tests {
                     false,
                     None,
                     None,
-                    false,
+                    None,
                     None,
                     false,
                     None,
@@ -3993,7 +4009,7 @@ mod tests {
                 false,
                 None,
                 None,
-                false,
+                None,
                 None,
                 false,
                 None,
@@ -4133,6 +4149,26 @@ mod tests {
             Some(briefing.clone())
         );
         assert!(none.paths.is_empty());
+    }
+
+    #[test]
+    fn a_member_the_window_says_nothing_of_starts_reading_only_as_it_joined() {
+        let (home, _dir) = crate::run::tests::started(
+            "api-member-reads",
+            crate::team::SHIP_WITH_CHECKS,
+            &[
+                ("rev", crate::team::REVIEWER, true),
+                ("dev", "Developer", false),
+            ],
+        );
+        let core = core_at(&home);
+        assert!(core.starts_reading_only(None, Some("rev")));
+        // What the window says stands, for a member it widened too.
+        assert!(!core.starts_reading_only(Some(false), Some("rev")));
+        assert!(core.starts_reading_only(Some(true), Some("dev")));
+        for token in [Some("dev"), Some("stranger"), Some(" "), None] {
+            assert!(!core.starts_reading_only(None, token), "{token:?}");
+        }
     }
 
     #[test]

@@ -778,7 +778,9 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     mode,
     effort,
     configDir: dirFor(starting.account, starting.agent),
-    readsOnly: switches.agents && agentOfRow(key, starting.id)?.readsOnly === true ? true : undefined,
+    // A row with no agent known leaves it to the core, which keeps a member
+    // that reads only reading only.
+    readsOnly: switches.agents ? agentOfRow(key, starting.id)?.readsOnly : undefined,
     profile: starting.profile ?? undefined,
     ...told,
     ...originOf(starting),

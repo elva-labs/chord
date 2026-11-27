@@ -1666,6 +1666,27 @@ fn a_run_holds_nothing_while_agents_are_off_and_holds_again_once_on() {
     assert_eq!(holds(home.path()), before);
 }
 
+#[test]
+fn a_member_reads_only_as_it_joined_a_run_that_holds() {
+    let (home, _dir) = started(
+        "member-reads",
+        SHIP_WITH_CHECKS,
+        &[("rev", REVIEWER, true), ("dev", "Developer", false)],
+    );
+    let home = home.path();
+    assert!(member_reads_only(home, "rev"));
+    for token in ["dev", "lead", "stranger"] {
+        assert!(!member_reads_only(home, token), "{token}");
+    }
+    agents_switched(home, false);
+    assert!(!member_reads_only(home, "rev"));
+    agents_switched(home, true);
+    assert!(member_reads_only(home, "rev"));
+    assert!(end(home, "lead").unwrap());
+    assert!(!member_reads_only(home, "rev"));
+    assert!(!member_reads_only(Path::new("/nowhere-at-all"), "rev"));
+}
+
 /// Runs git in `dir` and says what it printed, failing the test when git
 /// fails.
 fn git(dir: &Path, args: &[&str]) -> String {

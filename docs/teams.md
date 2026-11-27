@@ -63,6 +63,10 @@ A name that fits more than one member names none of them, and so does
 every name while the run cannot be read. A session in the run resumes only
 a session named as a member this way.
 
+A member that only reads as it joins the run starts again and goes on
+reading only while the run has not ended and agents are switched on, unless
+reading only was switched off for its session.
+
 A run ends when its lead's session is closed for good. An ended run is kept
 for 30 days and then removed.
 

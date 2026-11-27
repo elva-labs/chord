@@ -2041,6 +2041,23 @@ pub fn leads_member(home: &Path, token: &str, session: &str) -> bool {
             .is_some_and(|member| member.lead == token)
 }
 
+/// Whether the session a token names is a member that reads only of a run
+/// that holds, as [`leads`] takes one to: as it joined the run. A store
+/// that cannot be read says it is not.
+pub fn member_reads_only(home: &Path, token: &str) -> bool {
+    if paused(home) {
+        return false;
+    }
+    let Some(runs) = Runs::existing(home).ok().flatten() else {
+        return false;
+    };
+    runs.member(token)
+        .ok()
+        .flatten()
+        .filter(|member| member.reads_only)
+        .is_some_and(|member| runs.run(&member.lead).ok().flatten().is_some())
+}
+
 /// Whether every run holds nothing: agents are switched off in the
 /// settings. The runs are kept as they are and hold again once agents are
 /// on.
