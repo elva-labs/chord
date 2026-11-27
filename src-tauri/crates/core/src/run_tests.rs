@@ -1553,6 +1553,29 @@ fn a_conflict_resolved_with_the_works_lines_above_mains_keeps_the_approval() {
     assert_eq!(change_standing(home.path()), Standing::Approved);
 }
 
+#[test]
+fn a_branch_made_from_another_remotes_branch_keeps_that_remotes_work_in_the_change() {
+    let (home, dir) = on_a_branch("upstream", &[("list.txt", "one\ntwo\n")]);
+    let start = git(&dir, &["rev-parse", "HEAD"]);
+    git(
+        &dir,
+        &["remote", "add", "bob", "https://example.invalid/bob.git"],
+    );
+    git(&dir, &["checkout", "-q", "--detach"]);
+    write(&dir, "payload.rs", "fn theirs() {}\n");
+    commit(&dir);
+    git(&dir, &["update-ref", "refs/remotes/bob/main", "HEAD"]);
+    git(&dir, &["checkout", "-q", "-b", "fix", "bob/main"]);
+    assert_eq!(git(&dir, &["config", "branch.fix.remote"]), "bob");
+    write(&dir, "list.txt", "one\ntwo\nwork\n");
+    commit(&dir);
+
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(now.places[0].base.as_deref(), Some(start.as_str()));
+    assert_eq!(now.paths, vec!["list.txt", "payload.rs"]);
+    assert!(command_held(home.path(), "lead", "git push origin fix").is_some());
+}
+
 /// A function body with `parts` between its first line and its last two.
 fn served(parts: &[&str]) -> String {
     format!(

@@ -1102,9 +1102,8 @@ fn change_hashed(
         .map_err(failed)
 }
 
-/// Whether a remote's address is a folder on this machine: a `file://`
-/// address, or one that names neither a scheme nor a host, as
-/// `host:path` does.
+/// Whether a remote's address is a path: a `file://` address, or one
+/// that names neither a scheme nor a host, as `host:path` does.
 fn is_local_address(url: &str) -> bool {
     if url.starts_with("file://") {
         return true;
@@ -1118,27 +1117,20 @@ fn is_local_address(url: &str) -> bool {
     }
 }
 
-/// The remote a folder's base follows: the one its branch tracks, else
-/// the one `remote.pushDefault` names, else `origin`, the first of them
-/// that is a remote whose address is not a folder on this machine.
+/// The remote a folder's base follows: the one `remote.pushDefault`
+/// names, else `origin`, when its address is not a path. The remote a
+/// branch tracks is never followed: a branch made from another remote's
+/// branch tracks that remote with nothing said, and its default branch is
+/// not where the work is pushed.
 fn followed_remote(repo: &Repository) -> Option<String> {
-    let config = repo.config().ok()?;
-    let tracked = repo
-        .head()
-        .ok()
-        .filter(|head| head.is_branch())
-        .and_then(|head| head.shorthand().ok().map(str::to_string))
-        .and_then(|branch| config.get_string(&format!("branch.{branch}.remote")).ok());
-    let pushed = config.get_string("remote.pushDefault").ok();
-    [tracked, pushed, Some("origin".to_string())]
-        .into_iter()
-        .flatten()
-        .find(|name| {
-            repo.find_remote(name)
-                .ok()
-                .and_then(|remote| remote.url().ok().map(|url| !is_local_address(url)))
-                .unwrap_or(false)
-        })
+    let name = repo
+        .config()
+        .ok()?
+        .get_string("remote.pushDefault")
+        .unwrap_or_else(|_| "origin".to_string());
+    let remote = repo.find_remote(&name).ok()?;
+    let followed = !is_local_address(remote.url().ok()?);
+    followed.then_some(name)
 }
 
 /// The commit the change in the folder counts from, given the one it
@@ -1146,10 +1138,10 @@ fn followed_remote(repo: &Repository) -> Option<String> {
 /// branch of the remote it follows, as the folder last fetched it, when
 /// that commit is the one it began at or comes after it, so a rebase on
 /// that branch moves it there; otherwise the one it began at. One remote
-/// is followed and no other: the one the folder's branch tracks, else the
-/// one `remote.pushDefault` names, else `origin`, and of those only one
-/// whose address is not a folder on this machine, where a fetch takes
-/// whatever branch is checked out there for the default one. The remote's
+/// is followed and no other: the one `remote.pushDefault` names, else
+/// `origin`, and only when its address is not a path, since a fetch from
+/// a repository at a path takes whatever branch is checked out there for
+/// the default one. The remote's
 /// default branch is the one its `HEAD` names, or else its `main` or
 /// `master`. The folder's own branches, local `main` among them, never move
 /// it, so committing work or merging it into a local branch does not take
@@ -2493,17 +2485,42 @@ mod tests {
         );
 
         git(&dir, &["config", "branch.work.remote", "bob"]);
-        assert_eq!(
-            moved_base(&dir, Some(&start)).as_deref(),
-            Some(start.as_str()),
-            "the branch tracks bob, whose main the work is not on"
-        );
-        git(&dir, &["config", "branch.work.remote", "."]);
-        git(&dir, &["config", "remote.pushDefault", "origin"]);
+        git(&dir, &["config", "branch.work.merge", "refs/heads/main"]);
         assert_eq!(
             moved_base(&dir, Some(&start)).as_deref(),
             Some(ours.as_str()),
-            "a branch that tracks a local one follows the remote pushed to"
+            "the remote the branch tracks is not followed"
+        );
+        git(&dir, &["config", "remote.pushDefault", "bob"]);
+        assert_eq!(
+            moved_base(&dir, Some(&start)).as_deref(),
+            Some(start.as_str()),
+            "the work is pushed to bob, whose main it is not on"
+        );
+        git(&dir, &["config", "remote.pushDefault", "gone"]);
+        assert_eq!(
+            moved_base(&dir, Some(&start)).as_deref(),
+            Some(start.as_str()),
+            "a remote that is not there is not passed over for origin"
+        );
+    }
+
+    #[test]
+    fn a_branch_made_from_another_remotes_branch_leaves_the_base() {
+        let (dir, start) = followed("base-upstream");
+        git(
+            &dir,
+            &["remote", "add", "bob", "https://example.invalid/bob.git"],
+        );
+        let theirs = more(&dir, "theirs.txt");
+        git(&dir, &["update-ref", "refs/remotes/bob/main", &theirs]);
+        git(&dir, &["checkout", "-q", "-b", "fix", "bob/main"]);
+        assert_eq!(git(&dir, &["config", "branch.fix.remote"]), "bob");
+        more(&dir, "work.txt");
+        assert_eq!(
+            moved_base(&dir, Some(&start)).as_deref(),
+            Some(start.as_str()),
+            "bob's commit stays in the change"
         );
     }
 
