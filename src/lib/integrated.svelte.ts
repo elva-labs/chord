@@ -569,11 +569,12 @@ const KEEPS_MODE = /permission mode for the rest of this session$/;
     agent's own tools name the session by. */
 function identify(session: Session, id: string) {
   if (session.id === id) return;
+  const before = session.id;
   session.id = id;
   keepToken(session);
   adopt(session.project, id);
   identified(session.key, id);
-  agentIdentified(session.key, id);
+  agentIdentified(session.key, id, before);
   // A conversation that went on from another goes by the row's name.
   keepName(session);
 }

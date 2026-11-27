@@ -350,6 +350,45 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(said.map((one) => spokenWords(one, true).text)).toEqual(["/context", "Where are we?"]);
   });
 
+  it("goes on and on reading only as its agent, once the window forgot the row", async () => {
+    const judged = judging();
+    const { key } = await large();
+    workAs(key, {
+      key: "own:reviewer",
+      kind: "own",
+      title: "Reviewer",
+      firstLine: "Reads the diff",
+      text: "Read the diff.",
+      model: null,
+      effort: null,
+      readsOnly: true,
+    });
+    await settled();
+    // A reload leaves the agent kept by the conversation's id only.
+    forgetAgentRow(key);
+    const at = Date.now();
+    for (const hours of [0, 1, 2]) {
+      const now = vi.spyOn(Date, "now").mockReturnValue(at + hours * 3_600_000);
+      try {
+        fake.emit(handleOf(key)!, { type: "context", used: 400_000, size: 1_000_000 });
+        await settled();
+        const going = goOnIfCold(key, Date.now(), true);
+        judged(COLD);
+        expect(await going).toBe(true);
+        await settled();
+        const begun = fake.calls.filter((call) => call.method === "start").at(-1) as unknown as {
+          options: { session?: string; readsOnly?: boolean };
+        };
+        expect(begun.options).toMatchObject({ session: undefined, readsOnly: true });
+        send(key, "Where are we?");
+        fake.turn(handleOf(key)!, "Here.");
+        await settled();
+      } finally {
+        now.mockRestore();
+      }
+    }
+  });
+
   /** A row whose run went on from its notes, its briefing not yet gone. */
   async function wentCold() {
     const judged = judging();
