@@ -2349,6 +2349,109 @@ mod tests {
         assert_ne!(change(&dir, &start, &main, &apart), reviewed);
     }
 
+    const CACHE: &str = "    if let Some(hit) = cache(req) {\n        return hit;\n    }\n";
+    const GUARD: &str = "    require_auth(req);\n";
+
+    /// A function body with `parts` between its first line and its last
+    /// two.
+    fn served(parts: &[&str]) -> String {
+        format!(
+            "fn get(req: &Req) -> Resp {{\n{}    let data = load(req);\n    render(data)\n}}\n",
+            parts.concat()
+        )
+    }
+
+    #[test]
+    fn a_line_among_lines_the_base_brought_has_its_place_only_in_the_bases_files() {
+        let (dir, start) = begun("change-anchor-gap", &served(&[]));
+        let main = commit_on(&dir, &start, &[("src/lib.rs", &served(&[CACHE]))]);
+        let (first, rest) = CACHE.split_once('\n').unwrap();
+        let places = [
+            served(&[GUARD, CACHE]),
+            served(&[CACHE, GUARD]),
+            served(&[first, "\n", GUARD, rest]),
+        ]
+        .map(|body| commit_on(&dir, &main, &[("src/lib.rs", &body)]));
+        let [above, below, inside] = places.each_ref().map(|to| change(&dir, &start, &main, to));
+        assert_eq!(above, below, "the start has one gap for all of them");
+        assert_eq!(above, inside);
+        let [above, below, inside] = places.each_ref().map(|to| change(&dir, &main, &main, to));
+        assert_ne!(above, below);
+        assert_ne!(above, inside);
+        assert_ne!(below, inside);
+    }
+
+    #[test]
+    fn a_line_among_lines_the_base_put_for_others_reads_as_one_after_them() {
+        let (dir, start) = begun("change-among", "a\nb\nc\n");
+        let main = commit_on(&dir, &start, &[("src/lib.rs", "a\nb1\nb2\nc\n")]);
+        let places = [
+            "a\nX\nb1\nb2\nc\n",
+            "a\nb1\nX\nb2\nc\n",
+            "a\nb1\nb2\nX\nc\n",
+        ]
+        .map(|body| commit_on(&dir, &main, &[("src/lib.rs", body)]));
+        let [before, among, after] = places.each_ref().map(|to| change(&dir, &start, &main, to));
+        assert_ne!(before, after);
+        assert_eq!(among, after, "the start has no place between the two");
+        let [before, among, after] = places.each_ref().map(|to| change(&dir, &main, &main, to));
+        assert_ne!(before, among);
+        assert_ne!(among, after);
+        assert_ne!(before, after);
+    }
+
+    #[test]
+    fn line_endings_are_in_the_change() {
+        let (dir, start) = begun("change-crlf", "one\r\ntwo\r\n");
+        let unix = commit_on(&dir, &start, &[("src/lib.rs", "one\ntwo\n")]);
+        assert_ne!(
+            change(&dir, &start, &start, &unix),
+            change(&dir, &start, &start, &start),
+            "every line differs by its ending"
+        );
+        let crlf = commit_on(&dir, &start, &[("src/lib.rs", "one\r\ntwo\r\nwork\r\n")]);
+        let lf = commit_on(&dir, &start, &[("src/lib.rs", "one\r\ntwo\r\nwork\n")]);
+        assert_ne!(
+            change(&dir, &start, &start, &crlf),
+            change(&dir, &start, &start, &lf)
+        );
+        let main = commit_on(&dir, &start, &[("src/lib.rs", "top\r\none\r\ntwo\r\n")]);
+        let rebased = commit_on(
+            &dir,
+            &main,
+            &[("src/lib.rs", "top\r\none\r\ntwo\r\nwork\r\n")],
+        );
+        assert_eq!(
+            change(&dir, &start, &main, &rebased),
+            change(&dir, &start, &start, &crlf),
+            "the same line on a newer base"
+        );
+    }
+
+    #[test]
+    fn an_empty_file_is_in_the_change() {
+        let (dir, start) = begun("change-empty", "one\n");
+        let none = change(&dir, &start, &start, &start);
+        let empty = commit_on(&dir, &start, &[("src/empty.rs", "")]);
+        let added = change(&dir, &start, &start, &empty);
+        assert_ne!(added, none, "a file with nothing in it is a file more");
+        let elsewhere = commit_on(&dir, &start, &[("src/other.rs", "")]);
+        assert_ne!(change(&dir, &start, &start, &elsewhere), added);
+        let line = commit_on(&dir, &start, &[("src/empty.rs", "\n")]);
+        assert_ne!(change(&dir, &start, &start, &line), added);
+        let emptied = commit_on(&dir, &start, &[("src/lib.rs", "")]);
+        assert_ne!(change(&dir, &start, &start, &emptied), none);
+        assert_ne!(
+            change(&dir, &empty, &empty, &line),
+            change(&dir, &empty, &empty, &empty),
+            "a line put in a file that had none"
+        );
+
+        let main = commit_on(&dir, &start, &[("README.md", "main's own\n")]);
+        let rebased = commit_on(&dir, &main, &[("src/empty.rs", "")]);
+        assert_eq!(change(&dir, &start, &main, &rebased), added);
+    }
+
     #[test]
     fn a_change_of_mode_a_deletion_and_the_end_of_a_file_are_in_the_change() {
         let dir = repo("change-kinds");
