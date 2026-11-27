@@ -1,9 +1,11 @@
 /**
  * A conversation taken up again goes on from its notes when it is cold and
  * large: its row starts a fresh conversation of the agent's, the same row
- * with the same name and token, and the first message it is sent carries
- * the briefing the core wrote, the brief and list of notes, how it began,
- * its last exchanges and where its transcript is. Warm or small, it is
+ * with the same name and token, and the first message it is sent that is
+ * not a command carries the briefing the core wrote, the brief and list of
+ * notes, how it began, its last exchanges and where its transcript is.
+ * Until then the briefing is kept by the fresh conversation's id, so a
+ * stop, a restart or a reload in between still briefs it. Warm or small, it is
  * resumed whole, and so is one the user asks to have whole from the row's
  * menu. The core judges which from the transcript, or a Codex
  * conversation's rollout; the window acts on it.
@@ -21,22 +23,33 @@ import type { Session } from "$lib/sessions.svelte";
 
 /** A row's run that went on from notes: the conversation it went on from,
     that conversation's context in tokens when its transcript said, the
-    briefing until the first message takes it, and whether anything has
-    been said to the fresh run beyond the briefing. `lost` marks a run
-    whose `from` holds nothing stored: there is nothing to resume whole,
-    and the fresh run is not kept as going on from it. `alone` marks one
-    whose row went on from nothing before it, so nothing kept by `from`
-    moves to the fresh run. */
+    briefing until a message that is not a command takes it, and whether
+    anything has been said to the fresh run beyond the briefing. `heard`
+    marks a run that did something for a command, which stays spoken to
+    whatever becomes of the briefing. `lost` marks a run whose `from` holds
+    nothing stored: there is nothing to resume whole, and the fresh run is
+    not kept as going on from it. `alone` marks one whose row went on from
+    nothing before it, so nothing kept by `from` moves to the fresh run.
+    `id` is the fresh run's own, once known. */
 export interface Went {
   from: string;
   context: number | null;
   briefing: string | null;
   spoken: boolean;
+  heard?: boolean;
   lost?: boolean;
   alone?: boolean;
+  id?: string;
 }
 
 const LINEAGE_KEY = "chord.wentOn";
+/** The fresh conversations whose briefing has not gone yet, by id. */
+const HELD_KEY = "chord.briefings";
+/** The most briefings kept. */
+const HELD_MOST = 100;
+/** How long a briefing is kept from when it was last written, in
+    milliseconds. One kept without a time is kept until it goes. */
+const HELD_FOR = 30 * 86_400_000;
 /** The most ids kept as going on from another. */
 const LINEAGE_MOST = 500;
 /** The most conversations one row's earlier messages are read from. */
@@ -53,6 +66,12 @@ export const going = $state({
 /** The rows whose next start resumes whole, as the user asked. */
 const whole = new Set<string>();
 
+/** Each fresh conversation whose briefing has not gone yet, by its id,
+    with what its row's run held: what its next start goes on with. */
+let held: Record<string, Went> | null = null;
+/** When each briefing kept was last written, where that is known. */
+const heldAt: Record<string, number> = {};
+
 let loaded = false;
 
 function load() {
@@ -67,6 +86,81 @@ function load() {
     // An unreadable record only means the earlier messages are read from
     // the newest conversation alone.
   }
+}
+
+/** A briefing as it was kept, or null where it is not one. */
+function heldFrom(kept: unknown): Went | null {
+  if (kept === null || typeof kept !== "object") return null;
+  const { from, context, briefing, spoken, heard, lost, alone } = kept as Record<string, unknown>;
+  if (typeof from !== "string" || typeof briefing !== "string" || typeof spoken !== "boolean") return null;
+  return {
+    from,
+    context: typeof context === "number" ? context : null,
+    briefing,
+    spoken,
+    ...(heard === true ? { heard: true } : {}),
+    ...(lost === true ? { lost: true } : {}),
+    ...(alone === true ? { alone: true } : {}),
+  };
+}
+
+function heldBriefings(): Record<string, Went> {
+  if (held !== null) return held;
+  held = {};
+  try {
+    const kept: unknown = JSON.parse(localStorage.getItem(HELD_KEY) ?? "{}");
+    const now = Date.now();
+    if (kept !== null && typeof kept === "object" && !Array.isArray(kept))
+      for (const [id, entry] of Object.entries(kept)) {
+        const went = heldFrom(entry);
+        if (went === null) continue;
+        const at = (entry as { at?: unknown }).at;
+        if (typeof at === "number" && Number.isFinite(at)) {
+          if (now - at > HELD_FOR) continue;
+          heldAt[id] = at;
+        }
+        held[id] = went;
+      }
+  } catch {
+    // An unreadable record only means a run stopped before its briefing
+    // went is judged again as it starts.
+  }
+  return held;
+}
+
+/** Keeps the run's briefing by its fresh conversation's id while it has
+    not gone, and lets it go once it has. */
+function hold(went: Went) {
+  if (went.id === undefined) return;
+  const briefings = heldBriefings();
+  if (went.briefing === null) {
+    if (!(went.id in briefings)) return;
+    delete briefings[went.id];
+    delete heldAt[went.id];
+  } else {
+    delete briefings[went.id];
+    const { id: _, ...kept } = went;
+    briefings[went.id] = kept;
+    heldAt[went.id] = Date.now();
+  }
+  const ids = Object.keys(briefings);
+  for (const id of ids.slice(0, Math.max(0, ids.length - HELD_MOST))) {
+    delete briefings[id];
+    delete heldAt[id];
+  }
+  const stored = Object.fromEntries(
+    Object.entries(briefings).map(([id, kept]) => [id, id in heldAt ? { ...kept, at: heldAt[id] } : kept]),
+  );
+  try {
+    localStorage.setItem(HELD_KEY, JSON.stringify(stored));
+  } catch {
+    // Kept for this run of the window only.
+  }
+}
+
+/** Lets the briefing kept by the run's fresh conversation go. */
+function letGo(went: Went | undefined) {
+  if (went !== undefined) hold({ ...went, briefing: null });
 }
 
 function save() {
@@ -120,6 +214,11 @@ export interface TakingUp {
  * went on from nothing before the id, which lost nothing and starts
  * fresh. The id of a running row is resumed whole, and so is that of a
  * row under an account the window does not know.
+ *
+ * A fresh conversation whose briefing has not gone yet is resumed as it
+ * is, and its run holds the briefing and what it went on from again. The
+ * core is asked only whether it is stored: one sent nothing, not even a
+ * command, holds nothing, and its briefing is let go.
  */
 export async function takeUp(session: Session, how: TakingUp = {}): Promise<string | null> {
   const from = session.resumedFrom;
@@ -131,16 +230,25 @@ export async function takeUp(session: Session, how: TakingUp = {}): Promise<stri
     logUsage(session, "resume", { from, whole: true, asked: true });
     return from;
   }
+  const kept = heldBriefings()[from];
+  const holding = (went: Went) => {
+    going.runs[session.key] = { ...went, id: from };
+    logUsage(session, "resume", { from, whole: true, briefingHeld: true });
+    return from;
+  };
   try {
     const judged = await judge(session, from, always);
-    if (judged.missing !== true) return took(session, from, judged, always);
     // Under an account the window does not know, the core looked in the
     // agent's own folder, which says nothing of the account's.
-    if (how.running !== true && known(session.account)) return await takeUpStored(session, from, judged, always);
+    const missing = judged.missing === true && how.running !== true && known(session.account);
+    if (kept !== undefined && !missing) return holding(kept);
+    if (kept !== undefined) letGo({ ...kept, id: from });
+    if (judged.missing !== true) return took(session, from, judged, always);
+    if (missing) return await takeUpStored(session, from, judged, always);
     logUsage(session, "resume", { from, whole: true, missing: true, ...(always ? { afterLimit: true } : {}) });
     return from;
   } catch {
-    return from;
+    return kept === undefined ? from : holding(kept);
   }
 }
 
@@ -233,43 +341,50 @@ export function wentOn(key: string): Went | null {
   return going.runs[key] ?? null;
 }
 
-/** What a row can resume whole: the conversation its run went on from in
-    this window, with the context it had, until anything is said to the
-    fresh run. Resumed whole after that, the old conversation would not
-    hold what was said since, while the row still drew it. None for a row
-    whose run went on from none, or from one that holds nothing. */
+/** What a row can resume whole: the conversation its run went on from,
+    with the context it had, until the fresh run is spoken to: sent the
+    briefing with a message, or made to do something by a command. A
+    command that only changes the session, as a rename does, leaves it on
+    offer. Resumed whole after that, the old conversation would not hold
+    what was said since, while the row still drew it. None for a row whose
+    run went on from none, or from one that holds nothing. */
 export function wholeOf(session: { key: string }): Went | null {
   const went = going.runs[session.key];
   return went === undefined || went.spoken || went.lost === true ? null : went;
 }
 
-/** The briefing to send ahead of the run's first message, given once.
-    `said` is whether a message goes with it, which the fresh run is then
-    spoken to with. */
+/** The briefing to send ahead of the run's first message that is not a
+    command, given once. `said` is whether a message goes with it, which
+    the fresh run is then spoken to with. */
 export function briefingFor(key: string, said = true): string | null {
   const went = going.runs[key];
   if (went === undefined || went.briefing === null) return null;
   const briefing = went.briefing;
   went.briefing = null;
   if (said) went.spoken = true;
+  hold(went);
   return briefing;
 }
 
-/** Puts the briefing back for a first message that never reached the
-    agent. */
+/** Puts the briefing back for a message that carried it and never reached
+    the agent. A run a command made do something stays spoken to. */
 export function briefingBack(key: string, briefing: string) {
   const went = going.runs[key];
   if (went !== undefined && went.briefing === null) {
     went.briefing = briefing;
-    went.spoken = false;
+    went.spoken = went.heard === true;
+    hold(went);
   }
 }
 
-/** Something was said to the row's run, which can no longer be resumed
-    whole without losing it. */
+/** Something was said to the row's run or done by it, which can no longer
+    be resumed whole without losing it. */
 export function spoke(key: string) {
   const went = going.runs[key];
-  if (went !== undefined) went.spoken = true;
+  if (went === undefined || (went.spoken && went.heard === true)) return;
+  went.spoken = true;
+  went.heard = true;
+  hold(went);
 }
 
 /** The conversations the rows with these keys went on from, while their
@@ -296,16 +411,19 @@ export function onWentOn(handler: ((from: string, to: string, key: string) => vo
 
 /** The fresh run's own id is known: it is kept as going on from the old
     conversation, unless that one holds nothing, and what is kept by the
-    old id follows it, unless the row went on from nothing before it. */
+    old id follows it, unless the row went on from nothing before it. The
+    briefing, while it has not gone, is kept by the id. */
 export function identified(key: string, id: string) {
   const went = going.runs[key];
-  if (went === undefined || id === went.from) return;
+  if (went === undefined || id === went.from || id === went.id) return;
+  went.id = id;
   if (went.lost !== true) {
     load();
     going.lineage[id] = went.from;
     save();
   }
   if (went.alone !== true) movedOn(went.from, id, key);
+  hold(went);
 }
 
 /** Whether another conversation went on from this one. */
@@ -367,6 +485,7 @@ export function wholeLineageOf(id: string): string[] {
 
 /** The row's run no longer counts as one that went on. */
 export function forgetWent(key: string) {
+  letGo(going.runs[key]);
   delete going.runs[key];
 }
 
@@ -374,6 +493,7 @@ export function forgetWent(key: string) {
     one that went on. */
 export function askWhole(key: string) {
   whole.add(key);
+  letGo(going.runs[key]);
   delete going.runs[key];
 }
 
@@ -393,5 +513,7 @@ export function resetGoingOn() {
   for (const id of Object.keys(going.lineage)) delete going.lineage[id];
   whole.clear();
   for (const key of Object.keys(lost)) delete lost[key];
+  held = null;
+  for (const id of Object.keys(heldAt)) delete heldAt[id];
   loaded = false;
 }

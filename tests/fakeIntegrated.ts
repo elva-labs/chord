@@ -260,15 +260,17 @@ export interface FakeIntegrated {
   /** Starts a turn for `messages`: by default all those waiting, or for a
       holding agent the one handed over. */
   startTurn(id: string, messages?: string[]): void;
-  /** Ends the running turn. */
-  endTurn(id: string, outcome?: "done" | "interrupted" | "failed", error?: string): void;
+  /** Ends the running turn, by default with one output token. */
+  endTurn(id: string, outcome?: "done" | "interrupted" | "failed", error?: string, output?: number): void;
   /** A whole turn: started for the messages waiting (or by the agent),
       the text streamed in pieces and then whole, and ended. With a
-      `parent`, only the subagent's text, with no turn of its own. */
+      `parent`, only the subagent's text, with no turn of its own. A
+      turn with no `output` tokens is one the model had no part in, as a
+      command the agent runs itself. */
   turn(
     id: string,
     text: string,
-    options?: { pieces?: number; parent?: string | null; messages?: string[] },
+    options?: { pieces?: number; parent?: string | null; messages?: string[]; output?: number },
   ): void;
   /** A block of thinking, streamed then whole. */
   think(id: string, text: string, options?: { parent?: string | null }): void;
@@ -1203,14 +1205,14 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
       fake.emit(id, { type: "turnStarted", messages: messages ?? waiting });
     },
 
-    endTurn(id, outcome = "done", error) {
+    endTurn(id, outcome = "done", error, output = 1) {
       fake.emit(id, {
         type: "turnEnded",
         outcome,
         error: outcome === "failed" ? (error ?? "the turn failed") : null,
         totalCostUsd: 0.001,
         durationMs: 10,
-        usage: { inputTokens: 3, cachedTokens: 2, outputTokens: 1, reasoningTokens: 0 },
+        usage: { inputTokens: 3, cachedTokens: 2, outputTokens: output, reasoningTokens: 0 },
       });
     },
 
@@ -1218,7 +1220,7 @@ export function fakeIntegrated(options: FakeIntegratedOptions = {}): FakeIntegra
       const parent = turnOptions.parent ?? null;
       if (parent === null) fake.startTurn(id, turnOptions.messages);
       streamed(id, "text", text, parent, turnOptions.pieces ?? 3);
-      if (parent === null) fake.endTurn(id);
+      if (parent === null) fake.endTurn(id, "done", undefined, turnOptions.output);
     },
 
     think(id, text, thinkOptions = {}) {

@@ -162,6 +162,12 @@ async function install(options: FakeIntegratedOptions = {}) {
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+/** The texts of the row's messages, in the order sent. */
+const userTextsOf = (key: string) =>
+  conversationOf(key)
+    .order.map((id) => conversationOf(key).messages[id]?.text)
+    .filter((text) => text !== undefined);
+
 /** An integrated row, started, with its conversation's id known. */
 async function started(options: { prompt?: string; resumedFrom?: string } = {}) {
   const session = create(
@@ -314,6 +320,204 @@ describe("a row at rest whose conversation went cold and large", () => {
     expect(handleOf(key)).not.toBe(handle);
     expect(await goOnIfCold(key, Date.now(), true)).toBe(false);
     expect(asked).toBe(1);
+  });
+
+  it("sends a slash command alone to a run that went on, and briefs the next message that is not one", async () => {
+    const judged = judging();
+    const { key, session } = await large();
+    const before = session.id!;
+    const briefing = `${GOING_ON_HEAD}\n\nNo notes.\n${GOING_ON_END}`;
+    const going = goOnIfCold(key, Date.now(), true);
+    judged({ ...COLD, briefing });
+    expect(await going).toBe(true);
+    const texts = () => (fake.calls.filter((call) => call.method === "send") as { text: string }[]).map((call) => call.text);
+    send(key, "/context");
+    expect(texts().at(-1)).toBe("/context");
+    fake.turn(handleOf(key)!, "", { output: 0 });
+    // The run is still unbriefed and unspoken: the briefing waits, the old
+    // conversation can still be resumed whole, and the run is not judged
+    // again.
+    expect(wentOn(key)).toMatchObject({ from: before, briefing, spoken: false });
+    expect(wholeOf(byKey(key)!)).toMatchObject({ from: before });
+    expect(await goOnIfCold(key, Date.now() + 3_600_000, true)).toBe(false);
+    send(key, "Where are we?");
+    expect(texts().at(-1)).toBe(`${briefing}\n\nWhere are we?`);
+    expect(wentOn(key)).toMatchObject({ briefing: null, spoken: true });
+    expect(wholeOf(byKey(key)!)).toBeNull();
+    // The thread draws the briefing under the message that carried it.
+    const said = userTextsOf(key);
+    expect(said.map((one) => spokenWords(one, true).briefing !== undefined)).toEqual([false, true]);
+    expect(said.map((one) => spokenWords(one, true).text)).toEqual(["/context", "Where are we?"]);
+  });
+
+  /** A row whose run went on from its notes, its briefing not yet gone. */
+  async function wentCold() {
+    const judged = judging();
+    const row = await large();
+    const from = row.session.id!;
+    const going = goOnIfCold(row.key, Date.now(), true);
+    judged(COLD);
+    expect(await going).toBe(true);
+    await settled();
+    return { ...row, from, handle: handleOf(row.key)! };
+  }
+  const sentTexts = () => (fake.calls.filter((call) => call.method === "send") as { text: string }[]).map((call) => call.text);
+
+  it("counts a run a command made answer as spoken to, and still briefs the next message", async () => {
+    const { key, handle } = await wentCold();
+    send(key, "/review");
+    fake.turn(handle, "The diff looks fine.");
+    await settled();
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: true });
+    expect(wholeOf(byKey(key)!)).toBeNull();
+    // A message that carried the briefing and never reached the agent puts
+    // it back, and the run stays spoken to.
+    const own = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    const through = own.integratedSend;
+    own.integratedSend = async () => {
+      throw new Error("the pipe broke");
+    };
+    send(key, "Where are we?");
+    await settled();
+    own.integratedSend = through;
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: true });
+    expect(wholeOf(byKey(key)!)).toBeNull();
+    send(key, "Where are we now?");
+    expect(sentTexts().at(-1)).toMatch(/^BRIEFING\n\n/);
+  });
+
+  it("counts a run a command made use a tool as spoken to", async () => {
+    const { key, handle } = await wentCold();
+    send(key, "/init");
+    fake.startTurn(handle);
+    fake.emit(handle, { type: "toolStarted", call: "t-1", parent: null, name: "Write", kind: "edit" });
+    fake.endTurn(handle, "done", undefined, 0);
+    await settled();
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: true });
+  });
+
+  it("sends several commands in a row alone, and keeps the briefing where a command never reached the agent", async () => {
+    const { key, handle } = await wentCold();
+    send(key, "/context");
+    fake.turn(handle, "", { output: 0 });
+    const own = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    const through = own.integratedSend;
+    own.integratedSend = async () => {
+      throw new Error("the pipe broke");
+    };
+    send(key, "/compact");
+    await settled();
+    own.integratedSend = through;
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: false });
+    send(key, "/compact Keep the notes");
+    fake.turn(handle, "", { output: 0 });
+    send(key, "Where are we?");
+    expect(sentTexts()).toEqual(["/context", "/compact Keep the notes", "BRIEFING\n\nWhere are we?"]);
+  });
+
+  it.each([
+    ["led by a space", "  /context", true],
+    ["a path", "/Users/x/file.ts is broken", true],
+    ["a name the agent does not list", "/etc is odd", true],
+    ["a listed command on many lines", "/review the diff\nand the tests", false],
+    ["a listed command naming a file", "/review src/app.ts", false],
+  ])("judges a message %s by what the agent runs as a command", async (_, words, carried) => {
+    const { key } = await wentCold();
+    send(key, words);
+    expect(sentTexts().at(-1)).toBe(carried ? `BRIEFING\n\n${words}` : words);
+  });
+
+  it("sends a command that mentions a file alone, and goes on no further before the briefing went", async () => {
+    const { key, handle } = await wentCold();
+    asked = 0;
+    send(key, "/review src/app.ts", [], null, [{ start: 8, end: 18, path: "src/app.ts" }]);
+    expect(sentTexts().at(-1)).toBe("/review src/app.ts");
+    fake.turn(handle, "", { output: 0 });
+    await settled();
+    // Neither a later message nor the limit going on starts another run.
+    expect(await goOnIfCold(key, Date.now() + 86_400_000, true)).toBe(false);
+    expect(await goOnAfterLimit(key, Date.now())).toBe(true);
+    expect(asked).toBe(0);
+    expect(handleOf(key)).toBe(handle);
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: false });
+  });
+
+  it("sends a command by another name the agent takes for it alone, ahead of the briefing", async () => {
+    const { key, handle } = await wentCold();
+    fake.commands(handle, [
+      { name: "rename", aliases: ["name"], description: null, hint: null, skill: false, builtin: true, source: null },
+    ]);
+    await settled();
+    send(key, "/name The plan");
+    expect(sentTexts().at(-1)).toBe("/name The plan");
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING", spoken: false });
+  });
+
+  it("puts the briefing ahead of a command sent with an image, which the agent reads as words", async () => {
+    const { key } = await wentCold();
+    send(key, "/context", [{ mediaType: "image/png", data: "one" }]);
+    expect(sentTexts().at(-1)).toBe("BRIEFING\n\n/context");
+    expect(wentOn(key)).toMatchObject({ briefing: null, spoken: true });
+  });
+
+  it("keeps the briefing past a stop and a resume, which takes up the fresh run as it is", async () => {
+    const { key, handle } = await wentCold();
+    const fresh = byKey(key)!.id!;
+    send(key, "/context");
+    fake.turn(handle, "", { output: 0 });
+    fake.end(handle, false);
+    await settled();
+    // The core is asked only whether the fresh run is stored.
+    const { judged, kept } = storedOnly(() => COLD);
+    kept.add(fresh);
+    await resume(key);
+    expect(judged).toEqual([fresh]);
+    expect(fake.calls.filter((call) => call.method === "start").at(-1)).toMatchObject({ options: { session: fresh } });
+    expect(wentOn(key)).toMatchObject({ briefing: "BRIEFING" });
+    send(key, "Where are we?");
+    expect(sentTexts().at(-1)).toBe("BRIEFING\n\nWhere are we?");
+  });
+
+  it("keeps the briefing past a reload, by the fresh run's id", async () => {
+    const { key, handle, from } = await wentCold();
+    const fresh = byKey(key)!.id!;
+    send(key, "/context");
+    fake.turn(handle, "", { output: 0 });
+    await settled();
+    expect(JSON.parse(localStorage.getItem("chord.briefings") ?? "{}")).toEqual({
+      [fresh]: { from, context: 400_000, briefing: "BRIEFING", spoken: false, at: expect.any(Number) },
+    });
+    stopListening();
+    resetSessions();
+    resetIntegrated();
+    resetGoingOn();
+    stopListening = await listenIntegrated();
+    const { kept } = storedOnly(() => COLD);
+    kept.add(fresh);
+    const row = reopened(PROJECT, fresh, "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    expect(fake.calls.filter((call) => call.method === "start").at(-1)).toMatchObject({ options: { session: fresh } });
+    expect(wentOn(row.key)).toMatchObject({ from, briefing: "BRIEFING" });
+    expect(wholeOf(byKey(row.key)!)).toMatchObject({ from });
+    send(row.key, "Where are we?");
+    expect(sentTexts().at(-1)).toBe("BRIEFING\n\nWhere are we?");
+    expect(JSON.parse(localStorage.getItem("chord.briefings") ?? "{}")).toEqual({});
+  });
+
+  it("puts the briefing ahead of a slash-led message to a Codex run, which takes no commands", async () => {
+    const judged = judging();
+    const row = create(PROJECT, null, "codex", null, null, null, null, undefined, "integrated");
+    await launch(row.key);
+    fake.emit(handleOf(row.key)!, { type: "context", used: 400_000, size: 1_000_000 });
+    await settled();
+    const going = goOnIfCold(row.key, Date.now(), true);
+    judged(COLD);
+    expect(await going).toBe(true);
+    send(row.key, "/rename ARM64 Containers");
+    const sent = fake.calls.filter((call) => call.method === "send").at(-1) as { text: string };
+    expect(sent.text).toBe("BRIEFING\n\n/rename ARM64 Containers");
+    expect(wentOn(row.key)).toMatchObject({ briefing: null, spoken: true });
   });
 
   it("goes on with a Codex row as with a Claude Code one", async () => {
@@ -684,6 +888,93 @@ describe("a session the usage limit cut short", () => {
     fake.turn(handleOf(key)!, "Done all three.");
     send(key, "Thanks.");
     expect(sends().at(-1)!.text).toBe("Thanks.");
+  });
+
+  it("sends a slash command alone, and its turn neither carries nor ends what the limit left unanswered", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    await settled();
+    send(key, "/compact Keep the build notes");
+    expect(sends().at(-1)!.text).toBe("/compact Keep the build notes");
+    // The command's turn ends after the reset, as an answered one would.
+    fake.turn(handle, "");
+    await settled();
+    send(key, "Go on.");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
+  });
+
+  it("carries them with a message sent while a command is on its way, or running", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    await settled();
+    send(key, "/compact");
+    send(key, "Go on.");
+    expect(sends().map((one) => one.text).slice(-2)).toEqual([
+      "/compact",
+      `${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`,
+    ]);
+    const other = await started();
+    refused(other.key, other.handle);
+    await settled();
+    send(other.key, "/compact");
+    fake.startTurn(other.handle);
+    send(other.key, "Go on.");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
+  });
+
+  it("carries a command the limit refused as the words it was", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    refusedToo(key, handle, "/review the diff");
+    expect(sends().at(-1)!.text).toBe("/review the diff");
+    send(key, "Go on.");
+    expect(sends().at(-1)!.text).toBe(
+      `${unansweredNote([
+        { text: "Build it.", images: 0 },
+        { text: "/review the diff", images: 0 },
+      ])}\n\nGo on.`,
+    );
+  });
+
+  it("carries them with a command sent with an image, which goes as words", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    await settled();
+    send(key, "/context", [image("one")]);
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\n/context`);
+  });
+
+  it("keeps them for the next message after a command that never reached the agent", async () => {
+    const { key, handle } = await started();
+    refused(key, handle);
+    await settled();
+    const own = (window as unknown as { __CHORD_CORE__: Record<string, unknown> }).__CHORD_CORE__;
+    const send_ = own.integratedSend;
+    own.integratedSend = async () => {
+      throw new Error("the pipe broke");
+    };
+    send(key, "/compact");
+    await settled();
+    own.integratedSend = send_;
+    send(key, "Go on.");
+    expect(sends().at(-1)!.text).toBe(`${unansweredNote([{ text: "Build it.", images: 0 }])}\n\nGo on.`);
+  });
+
+  it("goes on as it is, briefed, where its run went on and only a command was refused", async () => {
+    core();
+    const { key, handle } = await chosen();
+    going.runs[key] = { from: "earlier", context: null, briefing: "BRIEFING", spoken: false };
+    refusedToo(key, handle, "/review");
+    expect(sends().at(-1)!.text).toBe("/review");
+    await settled();
+    await look();
+    await settled();
+    expect(handleOf(key)).toBe(handle);
+    expect(fake.calls.filter((call) => call.method === "stop")).toHaveLength(0);
+    expect(sends().at(-1)!.text).toBe(
+      `BRIEFING\n\n${unansweredNote([{ text: "/review", images: 0 }])}\n\n${GO_ON}`,
+    );
+    expect(wentOn(key)?.briefing).toBeNull();
   });
 
   it("shows each message once, in the order written, with its own images", async () => {
@@ -3282,6 +3573,19 @@ describe("the agent a session works as", () => {
     expect(sent[0].text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
     expect(sent[0].text.endsWith("Look at the cache change")).toBe(true);
     expect(sent.slice(1).every((call) => !call.text.includes("work as the agent"))).toBe(true);
+  });
+
+  it("sends a slash command alone and keeps the agent's note for the next message", async () => {
+    const { session } = await started();
+    workAs(session.key, reviewer);
+    await settled();
+    send(session.key, "/context");
+    send(session.key, "Look at the cache change");
+    await settled();
+    const sent = fake.calls.filter((call) => call.method === "send") as { text: string }[];
+    expect(sent[0].text).toBe("/context");
+    expect(sent[1].text).toMatch(/^From the workbench, not the user: from this message on, work as the agent "Reviewer"/);
+    expect(sent[1].text.endsWith("Look at the cache change")).toBe(true);
   });
 
   it("takes back what a pick set while agents are switched off, and sets it again once they are on", async () => {

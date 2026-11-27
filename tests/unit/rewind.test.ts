@@ -273,6 +273,28 @@ describe("telling the agent of files put back", () => {
     expect(lastSent()).toBe(`${FILES_BACK_HEAD}\nAs before the message that begins "One.":\n/w/upload.ts\n\nGo on, again.`);
   });
 
+  it("holds the files put back and a starter's note past a command, for the next message that is not one", async () => {
+    const key = await started();
+    const first = await said(key, "One.");
+    fake.files.set(first, { files: ["/w/upload.ts"], insertions: 0, deletions: 2 });
+    expect(await goBack(key, first, "files", ["/w/upload.ts"])).toBeNull();
+    notesFrom(() => ({ text: "Reports: B finished.", deliver: () => {}, untold: () => {} }));
+    try {
+      send(key, "/context");
+      await settled();
+      expect(lastSent()).toBe("/context");
+      expect(linkFor(key).filesBack.map((one) => one.path)).toEqual(["/w/upload.ts"]);
+      fake.turn(handleOf(key)!, "", { output: 0 });
+      send(key, "Go on.");
+      await settled();
+      expect(lastSent()).toBe(
+        `${FILES_BACK_HEAD}\nAs before the message that begins "One.":\n/w/upload.ts\n\nReports: B finished.\n\nGo on.`,
+      );
+    } finally {
+      notesFrom(() => null);
+    }
+  });
+
   it("lets go of files to tell once the conversation goes back past their message", async () => {
     const key = await started();
     await said(key, "One.");
