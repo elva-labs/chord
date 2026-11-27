@@ -54,8 +54,8 @@ team's agents in its run, and a session it starts outside the team is
 refused.
 
 A member is named by the id of the conversation it is on, or by any id it
-went by in the run, such as the one it had before it went on from its
-notes in a fresh conversation or was started again. A name is the id whole
+went by in the run, such as the one it had before it went on as a fresh
+conversation or from the conversation before it. A name is the id whole
 or its first eight characters or more. The ids the members are on now are
 matched first, and the ids they went by only where none of those fits. A
 name that fits more than one member names none of them, and so does a

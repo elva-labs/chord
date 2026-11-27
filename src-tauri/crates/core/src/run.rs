@@ -2100,7 +2100,7 @@ pub fn command_held(home: &Path, token: &str, command: &str) -> Option<String> {
 /// a prefix of it eight characters long at least that names one member
 /// alone. The id a member is on now names it first; only where none fits
 /// does one it went by before in the run, so a member that went on as a
-/// fresh conversation, or was started again under a new id, is still named
+/// fresh conversation or from the conversation before it is still named
 /// by the id it joined with.
 pub fn member_by_session(
     home: &Path,
