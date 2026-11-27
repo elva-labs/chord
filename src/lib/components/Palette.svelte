@@ -6,9 +6,11 @@
   import Icon from "$lib/components/conversation/Icon.svelte";
   import {
     ALONE,
+    AS_WHICH,
     askingChat,
     chipOf,
     closePalette,
+    defaultsAskAs,
     palette,
     paletteItems,
     pickable,
@@ -23,6 +25,7 @@
   } from "$lib/palette.svelte";
   import { isLive } from "$lib/sessions.svelte";
   import { conducting } from "$lib/orchestrator.svelte";
+  import { switches } from "$lib/switches.svelte";
 
   /**
    * The palette, over the workbench like the sessions to resume: a field
@@ -71,6 +74,7 @@
     palette.mode;
     palette.steps;
     palette.ready;
+    palette.as;
     chosen = untrack(() => {
       const starting = startingId();
       return items.find((item) => item.id === starting)?.id ?? items.find(pickable)?.id ?? null;
@@ -85,6 +89,12 @@
         return;
       }
     }
+  }
+
+  /** The cursor moves to the first item that does something, or the last. */
+  function edge(direction: 1 | -1) {
+    const found = direction === 1 ? items.find(pickable) : items.findLast(pickable);
+    if (found !== undefined) chosen = found.id;
   }
 
   /** The id an item's option carries, which follows the item and not its
@@ -154,6 +164,13 @@
       case "ArrowUp":
         step(-1);
         break;
+      case "Home":
+      case "End":
+        // The caret's keys while the field holds text, the list's while it
+        // holds none.
+        if (palette.query !== "") return;
+        edge(e.key === "Home" ? 1 : -1);
+        break;
       case "Enter":
         void run(items[cursor], isMac() ? e.metaKey : e.ctrlKey);
         break;
@@ -180,17 +197,27 @@
       ? "Go to a session or project"
       : palette.mode === "commands"
         ? "Run a command"
-        : palette.ready
-          ? palette.query === ""
-            ? "Enter starts it"
-            : ""
-          : asking === "project"
-          ? "Which project"
-          : asking === "account"
-            ? "Under which account"
-            : asking === "profile"
-              ? PROFILES
-              : "How should it run",
+        : palette.ready && palette.as
+          ? AS_WHICH
+          : palette.ready
+            ? palette.query !== ""
+              ? ""
+              : stepsLeft(palette.steps).length === 0
+                ? "Enter starts it"
+                : defaultsAskAs()
+                  ? "Enter starts it, or type an agent, team, harness or account"
+                  : switches.agents
+                    ? "Enter starts it, or type a harness or account"
+                    : "Enter starts it"
+            : asking === "project"
+              ? "Which project"
+              : asking === "account"
+                ? "Under which account"
+                : asking === "profile"
+                  ? PROFILES
+                  : asking === "as"
+                    ? AS_WHICH
+                    : "How should it run",
   );
   /** The palette asks for a new chat, which is in no project. */
   const chat = $derived(askingChat());
@@ -322,6 +349,8 @@
                 </svg>
               {:else if item.kind === "ready" && chat}
                 <span class="bubble"><Icon name="chat" size={14} /></span>
+              {:else if item.kind === "choice" && item.icon !== undefined}
+                <span class="glyph" data-testid="palette-icon" data-icon={item.icon}><Icon name={item.icon} size={14} /></span>
               {/if}
               <span
                 class="label"
@@ -333,6 +362,9 @@
                 <kbd>↵</kbd>
               {:else if item.kind === "change"}
                 <span class="detail"></span>
+              {:else if item.kind === "as"}
+                <span class="detail" data-testid="palette-detail">{item.detail}</span>
+                <span class="end" data-testid="palette-end">{item.end}</span>
               {:else if item.kind === "session"}
                 <span class="detail" data-testid="palette-detail">{item.project}</span>
                 <span class="end" data-testid="palette-end">{item.when}</span>
@@ -341,7 +373,11 @@
                 <span class="end" data-testid="palette-end">{item.when}</span>
               {:else if item.kind === "choice"}
                 <span class="detail" data-testid="palette-detail">{item.detail}</span>
-                <span class="end" data-testid="palette-end">{item.end}</span>
+                <span class="end" data-testid="palette-end"
+                  >{item.end}{#if item.lock}<span class="lock" role="img" aria-label="Reads only" data-testid="palette-lock" title="Reads only"
+                      ><Icon name="lock" size={12} /></span
+                    >{/if}</span
+                >
               {:else if item.kind === "project"}
                 <span class="detail"></span>
                 <span class="end" data-testid="palette-end">{item.end}</span>
@@ -373,7 +409,7 @@
         <span><kbd>&gt;</kbd> commands</span>
         <span><kbd>esc</kbd> close</span>
       {:else if palette.mode === "new" && palette.ready}
-        {#if palette.query.trim() === ""}
+        {#if palette.query.trim() === "" || (palette.as && items.length > 0)}
           <span><kbd>↵</kbd> start</span>
         {:else if items.length > 0}
           <span><kbd>↵</kbd> choose</span>
@@ -544,9 +580,14 @@
     font-weight: 500;
   }
 
-  .row[data-kind="ready"] .detail {
+  .row[data-kind="ready"] .detail,
+  .row[data-kind="as"] .detail {
     font-size: 12px;
     color: var(--ink-2);
+  }
+
+  .row[data-kind="as"].off .detail {
+    color: var(--ink-3);
   }
 
   .row[data-kind="change"] {
@@ -592,6 +633,21 @@
   .bubble {
     display: flex;
     flex: none;
+    color: var(--ink-3);
+  }
+
+  /* An agent or a team to start as leads with its figure. */
+  .glyph {
+    display: flex;
+    flex: none;
+    color: var(--ink-3);
+  }
+
+  /* An agent that reads only ends on a lock. */
+  .lock {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-left: 4px;
     color: var(--ink-3);
   }
 

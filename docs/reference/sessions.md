@@ -542,7 +542,8 @@ A Codex profile is a configuration of its own for Codex, a file named
 takes over those of its `config.toml`. Where the account a new Codex
 session starts under has profiles on the project's machine, the session's
 line in the palette names the profile it starts under, and Change asks
-which, under `With which Codex profile`, after the account and the agent.
+which, under `With which Codex profile`, after the account and the
+harness, and before the agent the session works as.
 No profile comes first, with the model and the effort the session would
 start on without one, where those are known. Each profile follows by name,
 with its file's name and the model, the effort and the provider the file
@@ -1156,6 +1157,18 @@ works as is kept for the 500 sessions last given one; a session past that
 works as none, and reads only no more, once the app starts again. An agent and a workflow are not both
 chosen: either one takes the other off the plus. The chip waits while the
 session is not ready.
+
+A new session in Chord can be given its agent before it starts, in the
+palette's New session, as [the palettes](../focus-model.md#the-palettes)
+describe. It starts as if the agent had been picked on the composer before
+the first message: the chip names it, its model and effort are set as
+picking it there sets them, and its description goes ahead of the first
+message. The agent picked there, No agent included, is kept for the
+project, and between runs, and the next new session in the project starts
+as it while the agent is still listed. A team picked there starts the
+session as the team's [lead](../teams.md#in-the-window) and leaves the
+agent kept as it was. With agents off the palette asks nothing about
+agents and the pick stays kept for when they are on again.
 
 A new session, until its first message, also shows the
 [workflow](../orchestrator.md#following-a-workflow) it follows in a chip

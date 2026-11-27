@@ -13,6 +13,8 @@
  * Apart from that, the last agent picked is kept for each purpose a pick
  * is made for: the composer's own, and a plugin's ask card for a review,
  * which starts on its own last pick and leaves the composer's as it was.
+ * The palette's new session keeps its own last pick for each project,
+ * which the next new session there starts as.
  */
 
 import { agentNote, agentNoteReadsOnly } from "$lib/instructions";
@@ -27,6 +29,7 @@ export interface SessionAgent {
 
 const KEY = "chord.sessionAgents";
 const LAST_KEY = "chord.lastAgents";
+const PICKED_KEY = "chord.pickedAgents";
 const MOST = 500;
 
 /** What each purpose a pick is made for last picked. */
@@ -38,6 +41,10 @@ const ahead = new Map<string, string>();
 /** The effort a started row's first run starts at, its agent's. */
 const startsAt = new Map<string, string>();
 let byId: Map<string, SessionAgent> | null = null;
+/** The agent last picked for a new session in each project, by its key,
+    or null where none was: the window's own memory, kept between runs on
+    this machine. */
+const picked = $state<{ byProject: Record<string, string | null> }>({ byProject: {} });
 
 function isAgent(value: unknown): value is SessionAgent {
   if (typeof value !== "object" || value === null) return false;
@@ -104,6 +111,13 @@ export function pickAgent(
 export function startAs(key: string, agent: { key: string; title: string; readsOnly: boolean }, effort: string | null) {
   byRow[key] = { key: agent.key, title: agent.title, readsOnly: agent.readsOnly };
   ahead.delete(key);
+  if (effort !== null) startsAt.set(key, effort);
+  else startsAt.delete(key);
+}
+
+/** The row's first run starts at `effort`, its agent's, or at the
+    session's own where that is null. */
+export function startAtEffort(key: string, effort: string | null) {
   if (effort !== null) startsAt.set(key, effort);
   else startsAt.delete(key);
 }
@@ -193,4 +207,43 @@ export function keepLastAgent(purpose: AgentPurpose, key: string | null) {
   } catch {
     // Non-fatal: the pick does not outlast the window.
   }
+}
+
+/** The agent last picked for a new session in a project, by its key; null
+    where none was, or where none was picked there yet. */
+export function agentPickedIn(project: string): string | null {
+  return picked.byProject[project] ?? null;
+}
+
+/** `key` is the agent last picked for a new session in a project, or null
+    for none. */
+export function pickAgentIn(project: string, key: string | null) {
+  if ((picked.byProject[project] ?? null) === key) return;
+  picked.byProject[project] = key;
+  try {
+    localStorage.setItem(PICKED_KEY, JSON.stringify(picked.byProject));
+  } catch {
+    // Non-fatal: the pick does not survive a restart.
+  }
+}
+
+/** The picks kept from the last run. One that does not read is dropped. */
+export function loadPickedAgents() {
+  try {
+    const raw = localStorage.getItem(PICKED_KEY);
+    if (raw === null) return;
+    const stored: unknown = JSON.parse(raw);
+    if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return;
+    const kept: Record<string, string | null> = {};
+    for (const [project, key] of Object.entries(stored))
+      if (key === null || typeof key === "string") kept[project] = key;
+    picked.byProject = kept;
+  } catch {
+    // Nothing picked, then.
+  }
+}
+
+/** Test seam. */
+export function resetPickedAgents() {
+  picked.byProject = {};
 }

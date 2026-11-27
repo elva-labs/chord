@@ -245,7 +245,7 @@ test.describe("a new session from the palette with accounts", () => {
     await expect(page.getByTestId("palette-chip")).toHaveText(["New session", "demo"]);
     await expect(chosen(page)).toContainText("New session");
     await expect(chosen(page).getByTestId("palette-detail")).toHaveText("Claude Code · Work");
-    await expect(page.getByTestId("palette-row")).toHaveText([/New session/, /Change/]);
+    await expect(page.getByTestId("palette-row")).toHaveText([/New session/, /Change/, /As/]);
 
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
@@ -331,7 +331,7 @@ test.describe("typing on a new session's line with accounts named", () => {
     await page.keyboard.press("Enter");
     const field = page.getByTestId("palette-field");
     const hints = page.getByTestId("palette-hints");
-    await expect(field).toHaveAttribute("placeholder", "Enter starts it");
+    await expect(field).toHaveAttribute("placeholder", "Enter starts it, or type a harness or account");
     await expect(hints).toContainText("start");
     await page.keyboard.type("cod");
     await expect(field).toHaveAttribute("placeholder", "");

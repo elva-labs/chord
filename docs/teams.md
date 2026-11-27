@@ -113,7 +113,9 @@ one: the user waives a gate in the window, with a reason, as
 ## In the window
 
 A session is started as a team's lead by picking the team in the
-composer's agent list, under Teams, before the first message. Its chip
+composer's agent list, under Teams, before the first message, or in the
+palette's New session, under Teams in its As step or under `Leading which
+team` as the line is typed on. Its chip
 names the team, and the session keeps it for the run once something is
 said, after the window opens again too. A session picked that way leads
 the team's run and never joins another as a member. With no teams in use,

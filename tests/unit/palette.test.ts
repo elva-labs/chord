@@ -1,5 +1,5 @@
 import { tick } from "svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { attention } from "$lib/attention.svelte";
 import { chordFor, describe as spell, resetKeys } from "$lib/keys.svelte";
 import {
@@ -11,6 +11,7 @@ import {
   goToItems,
   lastUsed,
   beginNew,
+  defaultsAskAs,
   nextStep,
   openCommands,
   openGoTo,
@@ -45,6 +46,18 @@ import { pickProfile, profileToStart, readProfiles, resetProfiles } from "$lib/c
 import { paletteChanged, resetPluginPalette } from "$lib/pluginPalette.svelte";
 import { flash } from "$lib/flash.svelte";
 import { resetChats } from "$lib/chats.svelte";
+import { resetSessionKinds, sessionKinds } from "$lib/sessionKind.svelte";
+import { agents } from "$lib/agents.svelte";
+import { reset as resetTeams, teams } from "$lib/teams.svelte";
+import {
+  agentOfRow,
+  agentPickedIn,
+  agentStartsAt,
+  agentWaits,
+  forgetAgentRow,
+  pickAgentIn,
+  resetPickedAgents,
+} from "$lib/sessionAgents.svelte";
 
 /** The Codex profiles the core lists, for any account. */
 const listed = vi.hoisted(() => ({ profiles: [] as unknown[] }));
@@ -850,7 +863,8 @@ describe("a new chat", () => {
     expect(askingChat()).toBe(true);
     expect(palette.ready).toBe(true);
     const items = stepItems("");
-    expect(items.map((item) => item.kind)).toEqual(["ready"]);
+    // As is there while agents are on, dimmed for a chat in a terminal.
+    expect(items.map((item) => item.kind)).toEqual(["ready", "as"]);
     expect(items[0].kind === "ready" && items[0].detail).toBe("no project");
     const outcome = pickItem(items[0]);
     expect(outcome.type).toBe("close");
@@ -1238,7 +1252,7 @@ describe("a new session", () => {
     expect(stepsLeft(palette.steps)).toEqual([]);
     setQuery("hello");
     expect(palette.query).toBe("");
-    expect(stepItems(palette.query).map((item) => item.kind)).toEqual(["ready"]);
+    expect(stepItems(palette.query).map((item) => item.kind)).toEqual(["ready", "as"]);
   });
 
   it("marks the account the project runs under as the project's", () => {
@@ -1549,5 +1563,201 @@ describe("a Codex session's profile", () => {
     choose("Change");
     expect(startingId()).toBe("profile:");
     expect(ends()[0]).toEqual(["No profile", "config.toml", "last used here"]);
+  });
+});
+
+describe("the agent a new session works as", () => {
+  const SHIP = { name: "Ship", members: ["Developer", "Reviewer"], gates: [] } as unknown as (typeof teams.inUse)[number];
+  const labels = () => stepItems("").map((item) => item.label);
+  const row = (id: string) => stepItems("").find((item) => item.id === id);
+
+  beforeEach(() => {
+    switches.agents = true;
+    harnesses.integrable = ["claude-code", "codex"];
+    sessionKinds.integrated = ["claude-code", "codex"];
+    resetPickedAgents();
+    resetTeams();
+    agents.installed = { [A]: [] };
+    teams.byProject = { [A]: [SHIP] };
+  });
+
+  afterEach(() => {
+    for (const session of sessions.all) forgetAgentRow(session.key);
+    resetSessionKinds();
+    resetTeams();
+    agents.installed = {};
+  });
+
+  it("puts As under the line, naming no agent, and starts as none on Enter", () => {
+    beginNew(A);
+    expect(stepItems("")).toMatchObject([
+      { kind: "ready", detail: "Claude Code" },
+      { kind: "as", label: "As", detail: "No agent", end: "", off: false },
+    ]);
+    start();
+    expect(sessions.all[0]).toMatchObject({ project: A, kind: "integrated" });
+    expect(agentOfRow(sessions.all[0].key, null)).toBeNull();
+  });
+
+  it("opens one step of no agent, the agents and the teams, and starts on the one picked", () => {
+    beginNew(A);
+    expect(choose("As")).toEqual({ type: "stay" });
+    expect(palette.as).toBe(true);
+    expect(startingId()).toBe("as:");
+    const items = stepItems("");
+    expect(items[0]).toMatchObject({ id: "as:", label: "No agent", group: "Agents" });
+    expect(items.find((item) => item.label === "Reviewer")).toMatchObject({
+      group: "Agents",
+      detail: "Checks a change for bugs, design and fit.",
+      icon: "agent",
+      lock: true,
+    });
+    expect(items.find((item) => item.label === "Developer")).toMatchObject({ lock: false });
+    expect(items.at(-1)).toMatchObject({ label: "Ship", group: "Teams", detail: "0 gates · 2 agents", icon: "team" });
+    const outcome = choose("Reviewer");
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") outcome.then();
+    const key = sessions.all[0].key;
+    expect(agentOfRow(key, null)).toEqual({ key: "chord:Reviewer", title: "Reviewer", readsOnly: true });
+    expect(agentWaits(key)).toBe(true);
+    expect(agentStartsAt(key)).toBe("high");
+    expect(sessions.all[0].model).toBe("opus");
+    expect(agentPickedIn(A)).toBe("chord:Reviewer");
+  });
+
+  it("starts the next new session in the project as the agent last picked, named on the line", () => {
+    pickAgentIn(A, "chord:Reviewer");
+    accounts.list = { Work: { claude: "~/.claude-work", codex: null } };
+    accounts.overrides = { [A]: "Work" };
+    beginNew(A);
+    expect(stepItems("")).toMatchObject([
+      { kind: "ready", detail: "Claude Code · Reviewer · Work" },
+      { kind: "change" },
+      { kind: "as", detail: "Reviewer", end: "last picked" },
+    ]);
+    choose("As");
+    expect(startingId()).toBe("as:agent:chord:Reviewer");
+    expect(row("as:agent:chord:Reviewer")).toMatchObject({ end: "last picked", lock: true });
+    expect(beginNew(B).type).toBe("stay");
+    expect(stepItems("").find((item) => item.kind === "as")).toMatchObject({ detail: "No agent" });
+  });
+
+  it("goes back to the line from the step on an empty field", () => {
+    beginNew(A);
+    choose("As");
+    stepBack();
+    expect(palette).toMatchObject({ mode: "new", ready: true, as: false });
+    expect(stepItems("").map((item) => item.kind)).toEqual(["ready", "as"]);
+  });
+
+  it("forgets the agent on No agent, and leaves it as it was for a team", () => {
+    pickAgentIn(A, "chord:Reviewer");
+    beginNew(A);
+    choose("As");
+    let outcome = choose("Ship");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0].team).toBe("Ship");
+    expect(agentOfRow(sessions.all[0].key, null)).toBeNull();
+    expect(agentPickedIn(A)).toBe("chord:Reviewer");
+    beginNew(A);
+    choose("As");
+    outcome = choose("No agent");
+    if (outcome.type === "close") outcome.then();
+    expect(agentPickedIn(A)).toBeNull();
+  });
+
+  it("finds agents and teams typed on the line, beside the harnesses, and starts on one at once", () => {
+    harnesses.installed = ["claude-code", "codex"];
+    beginNew(A);
+    setQuery("re");
+    const found = stepItems("re");
+    expect(found.find((item) => item.label === "Reviewer")?.group).toBe("As which agent");
+    expect(stepItems("ship")).toMatchObject([{ label: "Ship", group: "Leading which team" }]);
+    expect(stepItems("no agent")).toMatchObject([{ id: "as:", label: "No agent" }]);
+    const item = found.find((candidate) => candidate.label === "Researcher")!;
+    const outcome = pickItem(item);
+    expect(outcome.type).toBe("close");
+    if (outcome.type === "close") outcome.then();
+    expect(agentOfRow(sessions.all[0].key, null)?.title).toBe("Researcher");
+    expect(agentPickedIn(A)).toBe("chord:Researcher");
+  });
+
+  it("asks it last through Change, after the harness, and starts on it", () => {
+    harnesses.installed = ["claude-code", "codex"];
+    beginNew(A);
+    choose("Change");
+    choose("Claude Code");
+    expect(nextStep(palette.steps)).toBe("as");
+    expect(stepsLeft(palette.steps)).toEqual(["as"]);
+    expect(labels()[0]).toBe("No agent");
+    const outcome = choose("Developer");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[0]).toMatchObject({ agent: "claude-code" });
+    expect(agentOfRow(sessions.all[0].key, null)?.title).toBe("Developer");
+  });
+
+  it("is off for a terminal, which finds no agent, and back for a harness in Chord", () => {
+    harnesses.installed = ["claude-code", "codex"];
+    sessionKinds.integrated = ["codex"];
+    pickAgentIn(A, "chord:Reviewer");
+    beginNew(A);
+    expect(row("as")).toMatchObject({ detail: "No agent", end: "in a terminal", off: true });
+    expect(pickable(row("as")!)).toBe(false);
+    expect(startingId()).toBeNull();
+    expect(stepItems("reviewer")).toEqual([]);
+    choose("Change");
+    choose("Codex");
+    expect(nextStep(palette.steps)).toBe("as");
+    expect(startingId()).toBe("as:agent:chord:Reviewer");
+  });
+
+  it("is off under the workflow a project follows, and asked once Change or a harness typed leaves it", () => {
+    adoptWorkflows({ list: [defaultWorkflow()], default: "Build and review", overrides: {} });
+    pickAgentIn(A, "chord:Reviewer");
+    beginNew(A);
+    expect(stepItems("")).toMatchObject([
+      { kind: "ready", detail: "Build and review" },
+      { kind: "change" },
+      { kind: "as", detail: "No agent", end: "under a workflow", off: true },
+    ]);
+    expect(pickable(row("as")!)).toBe(false);
+    expect(defaultsAskAs()).toBe(false);
+    expect(stepItems("reviewer")).toEqual([]);
+    expect(stepItems("ship")).toEqual([]);
+    start();
+    expect(sessions.all[0].workflow?.name).toBe("Build and review");
+    expect(agentOfRow(sessions.all[0].key, null)).toBeNull();
+    expect(agentPickedIn(A)).toBe("chord:Reviewer");
+
+    // Change offers the harness alone, which leaves the workflow and asks
+    // the agent.
+    beginNew(A);
+    choose("Change");
+    choose("Claude Code");
+    expect(nextStep(palette.steps)).toBe("as");
+    expect(startingId()).toBe("as:agent:chord:Reviewer");
+    let outcome = choose("Developer");
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[1]).toMatchObject({ agent: "claude-code", workflow: null });
+    expect(agentOfRow(sessions.all[1].key, null)?.title).toBe("Developer");
+
+    // A harness typed on the line leaves it too, as the agent last picked.
+    beginNew(A);
+    setQuery("claude");
+    outcome = pickItem(stepItems("claude")[0]);
+    if (outcome.type === "close") outcome.then();
+    expect(sessions.all[2]).toMatchObject({ agent: "claude-code", workflow: null });
+    expect(agentOfRow(sessions.all[2].key, null)?.title).toBe("Developer");
+  });
+
+  it("is as before with agents off, keeping the agent last picked", () => {
+    switches.agents = false;
+    pickAgentIn(A, "chord:Reviewer");
+    beginNew(A);
+    expect(stepItems("").map((item) => item.kind)).toEqual(["ready"]);
+    expect(stepItems("reviewer")).toEqual([]);
+    start();
+    expect(agentOfRow(sessions.all[0].key, null)).toBeNull();
+    expect(agentPickedIn(A)).toBe("chord:Reviewer");
   });
 });
