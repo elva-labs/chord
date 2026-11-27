@@ -27,6 +27,7 @@ vi.mock("$lib/accounts.svelte", () => ({
 
 const {
   askWhole,
+  forgetWent,
   briefingBack,
   going,
   briefingFor,
@@ -135,7 +136,8 @@ describe("taking a conversation up again", () => {
     expect(moved).toEqual([["old-id", "new-id"]]);
     expect(lineageOf("new-id")).toEqual(["old-id", "new-id"]);
     expect(JSON.parse(localStorage.getItem("chord.wentOn") ?? "{}")).toEqual({ "new-id": "old-id" });
-    // Again, from the fresh one.
+    // Again, from the fresh one, once it was briefed.
+    briefingFor("row-1");
     await takeUp(row({ resumedFrom: "new-id" }));
     identified("row-1", "newer-id");
     expect(lineageOf("newer-id")).toEqual(["old-id", "new-id", "newer-id"]);
@@ -166,6 +168,7 @@ describe("taking a conversation up again", () => {
     answer = COLD;
     await takeUp(row());
     identified("row-1", "new-id");
+    briefingFor("row-1");
     expect(await takeUp(row({ resumedFrom: "new-id" }))).toBeNull();
     expect(wentOn("row-1")).toMatchObject({ from: "old-id", briefing: "BRIEFING" });
     identified("row-1", "newer-id");
@@ -329,6 +332,99 @@ describe("taking a conversation up again", () => {
     expect(lostAt("row-1")).toMatchObject({ id: "new-id", to: null });
     expect(leftBy(["row-1"]).size).toBe(0);
   });
+
+  const heldNow = () => JSON.parse(localStorage.getItem("chord.briefings") ?? "{}");
+  const WARM: GoingOn = { context: 1_000, idle: 60, goesOn: false, briefing: null };
+
+  it("keeps a briefing that has not gone by the fresh run's id, and takes it up again from there", async () => {
+    answer = COLD;
+    await takeUp(row());
+    identified("row-1", "new-id");
+    expect(heldNow()).toEqual({
+      "new-id": { from: "old-id", context: 967_000, briefing: "BRIEFING", spoken: false, at: expect.any(Number) },
+    });
+    // After a restart the fresh run is resumed, still to be briefed, and
+    // the old conversation is still on offer whole.
+    resetGoingOn();
+    answers["new-id"] = WARM;
+    expect(await takeUp(row({ resumedFrom: "new-id" }))).toBe("new-id");
+    expect(wentOn("row-1")).toMatchObject({ from: "old-id", briefing: "BRIEFING", spoken: false, id: "new-id" });
+    expect(wholeOf({ key: "row-1" })).toMatchObject({ from: "old-id", context: 967_000 });
+    expect(briefingFor("row-1")).toBe("BRIEFING");
+    expect(heldNow()).toEqual({});
+  });
+
+  it("keeps a run a command made answer as spoken to, through a briefing given back", async () => {
+    answer = COLD;
+    await takeUp(row());
+    identified("row-1", "new-id");
+    spoke("row-1");
+    expect(heldNow()["new-id"]).toMatchObject({ briefing: "BRIEFING", spoken: true, heard: true });
+    expect(briefingFor("row-1")).toBe("BRIEFING");
+    briefingBack("row-1", "BRIEFING");
+    expect(wentOn("row-1")).toMatchObject({ briefing: "BRIEFING", spoken: true });
+    expect(wholeOf({ key: "row-1" })).toBeNull();
+    // A briefing given back where nothing was heard leaves the choice.
+    resetGoingOn();
+    await takeUp(row());
+    briefingFor("row-1");
+    briefingBack("row-1", "BRIEFING");
+    expect(wentOn("row-1")?.spoken).toBe(false);
+  });
+
+  it("lets a kept briefing go where the run is forgotten, resumed whole, or its id holds nothing", async () => {
+    const kept = { from: "old-id", context: 967_000, briefing: "BRIEFING", spoken: false };
+    answers["new-id"] = WARM;
+    for (const leave of [forgetWent, askWhole]) {
+      localStorage.setItem("chord.briefings", JSON.stringify({ "new-id": kept }));
+      resetGoingOn();
+      await takeUp(row({ resumedFrom: "new-id" }));
+      leave("row-1");
+      expect(heldNow()).toEqual({});
+    }
+    localStorage.setItem("chord.briefings", JSON.stringify({ "new-id": kept }));
+    resetGoingOn();
+    going.lineage["new-id"] = "old-id";
+    answers["new-id"] = { context: null, idle: null, goesOn: false, briefing: null, missing: true };
+    answers["old-id"] = WARM;
+    expect(await takeUp(row({ resumedFrom: "new-id" }))).toBe("old-id");
+    expect(heldNow()).toEqual({});
+  });
+
+  it("drops a kept briefing written more than 30 days ago as it loads, and keeps one with no time", async () => {
+    const kept = { from: "old-id", context: 967_000, briefing: "BRIEFING", spoken: false };
+    const day = 86_400_000;
+    localStorage.setItem(
+      "chord.briefings",
+      JSON.stringify({
+        stale: { ...kept, at: Date.now() - 31 * day },
+        recent: { ...kept, at: Date.now() - 29 * day },
+        timeless: kept,
+      }),
+    );
+    resetGoingOn();
+    answer = COLD;
+    await takeUp(row());
+    identified("row-1", "new-id");
+    expect(Object.keys(heldNow()).sort()).toEqual(["new-id", "recent", "timeless"]);
+    expect(heldNow().recent.at).toBeLessThan(Date.now() - 28 * day);
+    expect(heldNow().timeless).toEqual(kept);
+    for (const id of ["stale", "recent", "timeless"]) answers[id] = WARM;
+    expect(await takeUp(row({ key: "row-2", resumedFrom: "stale" }))).toBe("stale");
+    expect(wentOn("row-2")).toBeNull();
+    expect(await takeUp(row({ key: "row-3", resumedFrom: "timeless" }))).toBe("timeless");
+    expect(wentOn("row-3")).toMatchObject({ briefing: "BRIEFING" });
+  });
+
+  it.each([["{not json"], ["[]"], [JSON.stringify({ "new-id": { from: 3, briefing: "B", spoken: false } })]])(
+    "ignores a kept record that is not one: %s",
+    async (kept) => {
+      localStorage.setItem("chord.briefings", kept);
+      answers["new-id"] = WARM;
+      expect(await takeUp(row({ resumedFrom: "new-id" }))).toBe("new-id");
+      expect(wentOn("row-1")).toBeNull();
+    },
+  );
 
   it("says a context in tokens as the menu does", () => {
     expect(tokensText(412_345)).toBe("412k tokens");

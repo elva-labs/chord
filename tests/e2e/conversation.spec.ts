@@ -2072,6 +2072,34 @@ test.describe("a resumed conversation", () => {
     await expect(page.getByTestId("session-menu-whole")).toHaveCount(0);
   });
 
+  test("sends a command alone after going on from notes, and briefs the message after it", async ({ page }) => {
+    const briefing = `From the workbench, not the user: this conversation goes on from an earlier one of yours, which was not read again, since reading all of it with its cache lapsed would cost far more. What you need to go on is below.\n\nNo notes were kept of the earlier conversation.\nEnd of the workbench's briefing.`;
+    await page.addInitScript(
+      (briefing) => ((window as unknown as { __goingOn: unknown }).__goingOn = { context: 412_000, idle: 7200, goesOn: true, briefing }),
+      briefing,
+    );
+    await withPast(page, { keep: true });
+    await page.getByTestId("past-session").click();
+    await expect(page.getByTestId("run-began")).toHaveText(/^Went on from its notes here/);
+    const input = page.getByTestId("composer-input");
+    await input.fill("/context");
+    // Enter completes the command from the menu, and again sends it.
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("slash-menu")).toHaveCount(0);
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await calls(page)).filter((call) => call.method === "send").length).toBe(1);
+    await agent(page, `f.turn("${H}", "", { output: 0 });`);
+    await input.fill("And the tests?");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await calls(page)).filter((call) => call.method === "send").length).toBe(2);
+    const sent = (await calls(page)).filter((call) => call.method === "send") as unknown as { text: string }[];
+    expect(sent.map((one) => one.text.trimEnd())).toEqual(["/context", `${briefing}\n\nAnd the tests?`]);
+    const said = page.getByTestId("user-message");
+    await expect(said.last().locator(".bubble")).toHaveText("And the tests?");
+    await expect(said.last().getByTestId("workbench-briefing")).toHaveText("Briefing");
+    await expect(said.filter({ hasText: "/context" }).getByTestId("workbench-briefing")).toHaveCount(0);
+  });
+
   test("resumes whole from the menu before anything is said in the conversation that went on", async ({ page }) => {
     const briefing = `From the workbench, not the user: this conversation goes on from an earlier one of yours, which was not read again, since reading all of it with its cache lapsed would cost far more. What you need to go on is below.\n\nNo notes were kept of the earlier conversation.\nEnd of the workbench's briefing.`;
     await page.addInitScript(

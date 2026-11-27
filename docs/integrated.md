@@ -1087,6 +1087,16 @@ the user's own and not yet answered, and that what the cut turn did may
 be half done. Each message stands once in the thread, where it was
 written, and one that carried others says so under it.
 
+A slash command Claude Code would run goes alone, as typed, and carries
+none of them: a message whose very first character is a slash, followed
+by the name of a command the agent lists, or, before it has listed any, a
+name shaped as one, with no images. Its turn, sent or running, neither
+ends them nor adds it to them: they wait for the next message that is not
+a command. A command the limit refused joins them, and goes again as
+words in the note. The same holds for what
+else waits to go ahead of the user's next message, the agent picked on
+the composer, files put back and a note of the sessions it started.
+
 A message that carried them stands for them all from then on. They end
 when a turn that answered a message carrying them finishes. Until a
 message has carried them, a turn answered after the limit reset ends them

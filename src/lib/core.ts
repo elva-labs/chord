@@ -470,6 +470,8 @@ export interface IntegratedLimitWindow {
     is not comes from, in the agent's words. */
 export interface IntegratedCommand {
   name: string;
+  /** Other names the agent takes as this command, left out when none. */
+  aliases?: string[];
   description: string | null;
   hint: string | null;
   skill: boolean;

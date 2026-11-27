@@ -3,7 +3,7 @@ import { resetSwitches, switches } from "$lib/switches.svelte";
 import type { SpawnOptions, Transcript, Workflow } from "$lib/core";
 import { applyDetect, resetHarnesses } from "$lib/harness.svelte";
 import { stash } from "$lib/exits";
-import { OUTCOME_ASK, OUTCOME_ASK_TERMINAL } from "$lib/instructions";
+import { GOING_ON_WAIT, OUTCOME_ASK, OUTCOME_ASK_TERMINAL } from "$lib/instructions";
 import { resetZoom, zoom, zoomed } from "$lib/zoom.svelte";
 import { attention, resetAttention } from "$lib/attention.svelte";
 import { adoptAccounts, reset as resetAccounts } from "$lib/accounts.svelte";
@@ -138,6 +138,8 @@ let givenNames: Record<string, string> = {};
 /** The agent whose history directory cannot be read, if any. */
 let unreadable: string | null = null;
 const spawned: SpawnOptions[] = [];
+/** How many spawns to come fail. */
+let spawnsFailing = 0;
 /** How the core judges taking each conversation up again; one it is not
     given fails, which resumes whole. */
 const takenUp: Record<string, unknown> = {};
@@ -150,6 +152,7 @@ vi.mock("$lib/core", () => ({
     },
     spawn: async (options: SpawnOptions) => {
       spawned.push(options);
+      if (spawnsFailing > 0 && spawnsFailing--) throw new Error("the agent would not start");
       if (options.profile === "gone") throw new Error('there is no Codex profile "gone" in /home/.codex');
       return { ptyId: `pty-${spawned.length}`, sessionId: options.session ?? `sid-${spawned.length}` };
     },
@@ -205,6 +208,7 @@ beforeEach(() => {
   // A session follows no workflow here unless a test gives it one.
   resetWorkflows();
   spawned.length = 0;
+  spawnsFailing = 0;
   for (const id of Object.keys(takenUp)) delete takenUp[id];
   reset();
   resetShells();
@@ -1120,6 +1124,38 @@ describe("a terminal row whose conversation holds nothing", () => {
     expect(spawned.at(-1)?.session).toBeUndefined();
     expect(spawned.at(-1)?.prompt).toMatch(/^NOTES ALONE\n\n/);
     expect(lineageOf("dead-1")).toEqual(["dead-1"]);
+  });
+
+  it("resumes a fresh run stopped before its briefing went, briefed in its first prompt", async () => {
+    const kept = { from: "old-1", context: 400_000, briefing: "BRIEFING", spoken: false };
+    localStorage.setItem("chord.briefings", JSON.stringify({ "fresh-1": kept }));
+    resetGoingOn();
+    takenUp["fresh-1"] = { context: 1_000, idle: 60, goesOn: false, briefing: null };
+    const session = create(A, "fresh-1");
+    await launch(session.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ session: "fresh-1", prompt: `BRIEFING\n\n${GOING_ON_WAIT}` });
+    expect(byKey(session.key)!.resumedFrom).toBe("fresh-1");
+    expect(JSON.parse(localStorage.getItem("chord.briefings")!)).toEqual({});
+  });
+
+  it("puts the briefing back where the start that carried it fails, for the next start", async () => {
+    const kept = { from: "old-1", context: 400_000, briefing: "BRIEFING", spoken: false };
+    localStorage.setItem("chord.briefings", JSON.stringify({ "fresh-1": kept }));
+    resetGoingOn();
+    takenUp["fresh-1"] = { context: 1_000, idle: 60, goesOn: false, briefing: null };
+    const session = create(A, "fresh-1");
+    spawnsFailing = 1;
+    await launch(session.key, 80, 24, () => {});
+    expect(spawned.at(-1)).toMatchObject({ prompt: `BRIEFING\n\n${GOING_ON_WAIT}` });
+    expect(going.runs[session.key]).toMatchObject({ briefing: "BRIEFING", spoken: false });
+    expect(JSON.parse(localStorage.getItem("chord.briefings")!)).toMatchObject({ "fresh-1": { briefing: "BRIEFING" } });
+    // The conversation opened again starts briefed.
+    close(session.key);
+    const again = create(A, "fresh-1");
+    await launch(again.key, 80, 24, () => {});
+    expect(spawned).toHaveLength(2);
+    expect(spawned.at(-1)).toMatchObject({ session: "fresh-1", prompt: `BRIEFING\n\n${GOING_ON_WAIT}` });
+    expect(JSON.parse(localStorage.getItem("chord.briefings")!)).toEqual({});
   });
 
   it("starts fresh with no prompt where its only id holds nothing and there are no notes", async () => {

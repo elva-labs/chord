@@ -123,6 +123,12 @@
     background: var(--pane-bg);
   }
 
+  /* With a background the pinned foot carries the pane's tint, as the
+     projects' headers do. */
+  :global(:root[data-background][data-look="modern"]) .foot {
+    background: linear-gradient(var(--tint-side), var(--tint-side)), var(--tint-backdrop);
+  }
+
   .foot.open {
     box-shadow: 0 -10px 18px -14px rgb(0 0 0 / 0.18);
     max-height: 60%;

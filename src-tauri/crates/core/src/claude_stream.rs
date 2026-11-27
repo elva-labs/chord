@@ -845,7 +845,8 @@ fn mcp_part(name: &str) -> String {
 /// the name a message gives it, with the server as its source. One whose
 /// name begins with an underscore is the agent's own business, and one
 /// whose name holds a space cannot be typed, so both are left out. Of two
-/// by one name, the agent's own is kept, or else the first.
+/// by one name, the agent's own is kept, or else the first. The other names
+/// the agent takes as a command are kept with it, by the same rules.
 fn listed_commands(value: &Value) -> Vec<CommandInfo> {
     let mut kept: Vec<CommandInfo> = Vec::new();
     for command in value.as_array().into_iter().flatten() {
@@ -899,8 +900,24 @@ fn listed_command(command: &Value) -> Option<CommandInfo> {
             break;
         }
     }
+    let mut aliases: Vec<String> = Vec::new();
+    for alias in command["aliases"].as_array().into_iter().flatten() {
+        let Some(alias) = alias.as_str().map(str::trim) else {
+            continue;
+        };
+        if alias.is_empty()
+            || alias.starts_with('_')
+            || alias.contains(char::is_whitespace)
+            || alias == name
+            || aliases.iter().any(|known| known == alias)
+        {
+            continue;
+        }
+        aliases.push(alias.to_string());
+    }
     Some(CommandInfo {
         name,
+        aliases,
         description: Some(description).filter(|d| !d.is_empty()),
         hint: text(&command["argumentHint"]).filter(|h| !h.trim().is_empty()),
         skill: false,
@@ -6154,6 +6171,31 @@ mod tests {
             commands.iter().map(|c| c.skill).collect::<Vec<_>>(),
             [false, true, true, true, true, true],
             "until a turn says, those that are not the agent's own are skills"
+        );
+    }
+
+    #[test]
+    fn commands_keep_the_other_names_the_agent_takes() {
+        let mut stream = stream();
+        let commands = ready_with(
+            &mut stream,
+            json!([
+                {"name":"rename","description":"Rename the conversation","builtin":true,
+                    "aliases":["name"," title ","rename","","_hidden","two words","name",7]},
+                {"name":"deploy","description":"(kit) Ship it","aliases":["kit:deploy"]},
+                {"name":"compact","description":"Compact","builtin":true},
+            ]),
+        );
+        assert_eq!(
+            commands
+                .iter()
+                .map(|c| (c.name.as_str(), c.aliases.clone()))
+                .collect::<Vec<_>>(),
+            [
+                ("rename", vec!["name".to_string(), "title".to_string()]),
+                ("deploy", vec!["kit:deploy".to_string()]),
+                ("compact", vec![]),
+            ]
         );
     }
 

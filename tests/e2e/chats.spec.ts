@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { CHATS_FOLDER, NO_WORKFLOW, PROJECT, installFakeCore, startNew } from "./fake";
+import { CHATS_FOLDER, NO_WORKFLOW, PROJECT, backgroundAtRest, installFakeCore, startNew } from "./fake";
 
 /**
  * Chats: conversations with an agent that belong to no project.
@@ -410,4 +410,35 @@ test.describe("sessions a chat starts", () => {
     await page.getByTestId("session-menu-chat").click();
     await chatOnScreen(page);
   });
+});
+
+test.describe("with a background", () => {
+  const TEAL = { dots: [{ hue: 192, chroma: 0.9 }], harmony: "single", strength: 0.6, grain: 0.25 };
+
+  const paint = (page: Page, selector: string) =>
+    page.locator(selector).evaluate((element) => {
+      const style = getComputedStyle(element);
+      return `${style.backgroundColor} ${style.backgroundImage} ${style.backgroundAttachment}`;
+    });
+
+  for (const look of ["modern", "terminal"] as const) {
+    for (const cards of [0, 0.2]) {
+      test(`paints the foot as the pane, ${look}${cards > 0 ? " with cards" : ""}`, async ({ page }) => {
+        await begin(page, PAST, {
+          ...NO_WORKFLOW,
+          look,
+          backgrounds: { teal: TEAL },
+          cards: cards > 0 ? { teal: cards } : {},
+        });
+        await backgroundAtRest(page);
+        const same = async () => {
+          await expect.poll(async () => (await paint(page, "[data-testid='chats-foot']")) === (await paint(page, SESSIONS))).toBe(true);
+        };
+        await same();
+        await line(page).click();
+        await expect(page.getByTestId("older-chats")).toBeVisible();
+        await same();
+      });
+    }
+  }
 });

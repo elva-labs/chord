@@ -1093,6 +1093,33 @@ describe("the messages a usage limit left unanswered", () => {
     expect(play.conversation.unanswered(carrier)).toEqual([]);
   });
 
+  it("are known while a message aside from them is on its way or running, and stay after its turn", () => {
+    const play = played();
+    refused(play, M1, "Build it.");
+    const aside = (said: { id: string }) => said.id === M2;
+    const none = () => false;
+    play.tick(5_000_000);
+    play.conversation.sending(M2, "/compact");
+    expect(play.conversation.unanswered(none, aside).map((said) => said.id)).toEqual([M1]);
+    play.fake.send(play.id, M2, "/compact");
+    expect(play.conversation.unanswered(none, aside).map((said) => said.id)).toEqual([M1]);
+    play.fake.startTurn(play.id);
+    expect(play.conversation.unanswered(none, aside).map((said) => said.id)).toEqual([M1]);
+    play.fake.endTurn(play.id, "done");
+    expect(play.conversation.unanswered(none, aside).map((said) => said.id)).toEqual([M1]);
+  });
+
+  it("take in a message aside from them that the limit refused", () => {
+    const play = played();
+    const aside = (said: { id: string }) => said.id === M2;
+    refused(play, M1, "Build it.");
+    refused(play, M2, "/review the diff");
+    expect(play.conversation.unanswered(() => false, aside).map((said) => said.id)).toEqual([M1, M2]);
+    const alone = played();
+    refused(alone, M2, "/review the diff");
+    expect(alone.conversation.unanswered(() => false, aside).map((said) => said.id)).toEqual([M2]);
+  });
+
   it("stay after a turn answered before the reset that did not carry them", () => {
     const play = played();
     refused(play, M1, "Build it.");
