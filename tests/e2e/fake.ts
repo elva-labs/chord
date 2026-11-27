@@ -97,8 +97,10 @@ export const NO_WORKFLOW = {
 };
 
 /** A settings file whose new sessions follow the workflow a fresh install
-    has, turned on. */
+    has, turned on, with agents and teams off: they are offered in place of
+    workflows while they are on. */
 export const WITH_WORKFLOW = {
+  agentsOn: false,
   workflows: { list: [BUILD_AND_REVIEW], default: "Build and review", overrides: {} },
 };
 

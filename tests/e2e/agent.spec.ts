@@ -2920,15 +2920,16 @@ test.describe("a new session from the palette", () => {
     await expect(entries(page).filter({ hasText: "project's workflow" })).toHaveCount(1);
   });
 
-  test("with agents and teams on, starts the project's workflow from the defaults and offers only the agents on Change", async ({
+  test("with agents and teams on, starts the agent alone whatever the project follows and offers only the agents on Change", async ({
     page,
   }) => {
     await open(page, { open: [ONE], codex: "/usr/local/bin/codex", withWorkflow: true });
     await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
-    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Build and review");
+    await expect(ready(page).getByTestId("palette-detail")).toHaveText("Claude Code");
     await page.keyboard.press("Enter");
     await expect.poll(() => spawnCount(page)).toBe(1);
-    expect((await spawns(page))[0].instructions).toContain('workflow "Build and review"');
+    expect((await spawns(page))[0].agent).toBe("claude-code");
+    expect((await spawns(page))[0].instructions).toBeUndefined();
 
     await page.locator("[data-testid='project-head'].on [data-testid='project-new-session']").click();
     await change(page).click();

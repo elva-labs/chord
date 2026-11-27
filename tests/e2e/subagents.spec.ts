@@ -395,7 +395,11 @@ test.describe("subagents on the rail", () => {
     });
     await installFakeCore(page, {
       open: [PROJECT],
-      settings: { integrated: ["claude-code"], workflows: { list: [BUILD_AND_REVIEW, DIRECT], default: "Direct", overrides: {} } },
+      settings: {
+        integrated: ["claude-code"],
+        agentsOn: false,
+        workflows: { list: [BUILD_AND_REVIEW, DIRECT], default: "Direct", overrides: {} },
+      },
     });
     await page.goto("/");
     await page.getByTestId("start-agent").click();

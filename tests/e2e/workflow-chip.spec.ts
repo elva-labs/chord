@@ -392,7 +392,7 @@ test("with agents and teams on, the plus offers no workflow to a session that fo
   await expect(chip(page)).toHaveCount(0);
 });
 
-test("with agents and teams on, a session under the project's workflow shows it and may leave it for the agent alone", async ({ page }) => {
+test("with agents and teams on, a new session starts alone whatever the project follows, with no workflow to show", async ({ page }) => {
   await installFakeCore(page, {
     open: [PROJECT],
     settings: {
@@ -403,16 +403,7 @@ test("with agents and teams on, a session under the project's workflow shows it 
   await page.goto("/");
   await page.getByTestId("start-agent").click();
   await startNew(page);
-  await expect(chip(page)).toHaveText("Build and review");
-  await chip(page).click();
-  await expect(options(page).locator(".name")).toHaveText(["No workflow", "Build and review"]);
-  await expect(options(page).nth(1)).toHaveAttribute("aria-checked", "true");
-  const before = (await starts(page)).length;
-  await options(page).filter({ hasText: "No workflow" }).click();
-  await expect.poll(async () => (await starts(page)).length).toBe(before + 1);
-  expect((await starts(page)).at(-1)!.options!.instructions).toBeUndefined();
   await expect(page.getByTestId("model-chip")).toBeEnabled();
-  // Left, there is no workflow to pick, so the chip goes with the pointer
-  // still in the row.
+  expect((await starts(page)).at(-1)!.options!.instructions).toBeUndefined();
   await expect(chip(page)).toHaveCount(0);
 });
