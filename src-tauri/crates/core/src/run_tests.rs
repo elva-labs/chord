@@ -362,6 +362,53 @@ fn a_name_that_fits_no_member_alone_or_a_store_that_cannot_be_read_names_none() 
         .unwrap()
         .is_some());
 
+    // Another lead's member is named in that lead's run alone, by the id it
+    // went by as well.
+    let theirs = "7e1a0000-0000-4000-8000-000000000009";
+    begin(home.path(), "other", &team(QUICK_FIX), &dir).unwrap();
+    join(
+        home.path(),
+        "other",
+        "their-rev",
+        REVIEWER,
+        &dir,
+        Some(theirs),
+        true,
+        "",
+    )
+    .unwrap();
+    went_on(
+        home.path(),
+        "their-rev",
+        "7e1a1111-0000-4000-8000-00000000000a",
+    )
+    .unwrap();
+    for session in [theirs, &theirs[..8]] {
+        assert_eq!(
+            member_by_session(home.path(), "other", session)
+                .unwrap()
+                .map(|member| member.token)
+                .as_deref(),
+            Some("their-rev"),
+            "{session}"
+        );
+        asked(session);
+        assert!(
+            start_outside(home.path(), "lead", None, Some(session))
+                .unwrap()
+                .is_some(),
+            "a resume by {session} is not the lead's member"
+        );
+    }
+    let ours = Runs::open(home.path())
+        .unwrap()
+        .earlier_sessions("lead")
+        .unwrap();
+    assert!(
+        ours.iter().all(|(token, _)| token != "their-rev"),
+        "the lead's run holds none of another run's earlier ids: {ours:?}"
+    );
+
     // A store a later Chord kept is not read.
     Connection::open(folder(home.path()).join(FILE))
         .unwrap()
