@@ -55,12 +55,13 @@ refused.
 
 A member is named by the id of the conversation it is on, or by any id it
 went by in the run, such as the one it had before it went on as a fresh
-conversation or from the conversation before it. A name is the id whole
-or its first eight characters or more. The ids the members are on now are
-matched first, and the ids they went by only where none of those fits. A
-name that fits more than one member names none of them, and so does a
-shorter one, and so does every name while the run cannot be read. A
-session in the run resumes only a session named as a member this way.
+conversation or from the conversation before it. Each is given whole or by
+its start, as a tool names any session (see
+[orchestrator](orchestrator.md#the-tools)). The ids the members are on now
+are matched first, and the ids they went by only where none of those fits.
+A name that fits more than one member names none of them, and so does
+every name while the run cannot be read. A session in the run resumes only
+a session named as a member this way.
 
 A run ends when its lead's session is closed for good. An ended run is kept
 for 30 days and then removed.
