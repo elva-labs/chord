@@ -1714,6 +1714,8 @@ export interface RunVerdict {
   on: string;
   plan: number | null;
   folder: string | null;
+  /** The commit the change it was given on counted from. */
+  base: string | null;
   brief: string;
   approved: boolean;
   findings: string;

@@ -1502,7 +1502,10 @@ fn a_clean_rebase_keeps_the_approval_and_an_edit_after_it_does_not() {
     let now = state(home.path(), "lead").unwrap().unwrap();
     let place = &now.places[0];
     assert_ne!(place.tree, before.tree, "the tree has main's work in it");
-    assert_eq!(place.change, before.change, "the same lines, a line lower");
+    assert_ne!(
+        place.change, before.change,
+        "counted in the base's files, where the lines are a line lower"
+    );
     assert_eq!(place.start.as_deref(), Some(start.as_str()));
     assert_eq!(
         place.base.as_deref(),
@@ -1537,6 +1540,117 @@ fn a_conflict_resolved_without_touching_the_works_lines_keeps_the_approval() {
     main_moves(&dir, &[("list.txt", "one\ntwo\nmain\n")]);
     rebased(&dir, &[("list.txt", "one\ntwo\nmain\nwork\n")]);
     assert_eq!(change_standing(home.path()), Standing::Approved);
+}
+
+#[test]
+fn a_conflict_resolved_with_the_works_lines_above_mains_keeps_the_approval() {
+    let (home, dir) = on_a_branch("rebase-kept-above", &[("list.txt", "one\ntwo\n")]);
+    write(&dir, "list.txt", "one\ntwo\nwork\n");
+    commit(&dir);
+    approved_now(home.path());
+    main_moves(&dir, &[("list.txt", "one\ntwo\nmain\n")]);
+    rebased(&dir, &[("list.txt", "one\ntwo\nwork\nmain\n")]);
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+}
+
+/// A function body with `parts` between its first line and its last two.
+fn served(parts: &[&str]) -> String {
+    format!(
+        "fn get(req: &Req) -> Resp {{\n{}    let data = load(req);\n    render(data)\n}}\n",
+        parts.concat()
+    )
+}
+
+const CACHE: &str = "    if let Some(hit) = cache(req) {\n        return hit;\n    }\n";
+const GUARD: &str = "    require_auth(req);\n";
+
+#[test]
+fn a_line_moved_past_lines_main_brought_before_the_approval_is_out_of_date() {
+    let (home, dir) = on_a_branch("anchor-moved", &[("src/lib.rs", &served(&[]))]);
+    main_moves(&dir, &[("src/lib.rs", &served(&[CACHE]))]);
+    rebased(&dir, &[]);
+    write(&dir, "src/lib.rs", &served(&[GUARD, CACHE]));
+    commit(&dir);
+    approved_now(home.path());
+    let place = state(home.path(), "lead").unwrap().unwrap().places[0].clone();
+    assert_ne!(
+        place.base, place.start,
+        "the base moved before the approval"
+    );
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert_eq!(given.last().unwrap().base, place.base);
+
+    write(&dir, "src/lib.rs", &served(&[CACHE, GUARD]));
+    commit(&dir);
+    assert_eq!(
+        change_standing(home.path()),
+        Standing::OutOfDate,
+        "the guard is below the cache the reader saw it above"
+    );
+    assert!(command_held(home.path(), "lead", "git push origin work").is_some());
+}
+
+#[test]
+fn a_line_moved_into_lines_main_brought_before_the_approval_is_out_of_date() {
+    let (home, dir) = on_a_branch("anchor-inside", &[("src/lib.rs", &served(&[]))]);
+    main_moves(&dir, &[("src/lib.rs", &served(&[CACHE]))]);
+    rebased(&dir, &[]);
+    write(&dir, "src/lib.rs", &served(&[GUARD, CACHE]));
+    commit(&dir);
+    approved_now(home.path());
+
+    let (first, rest) = CACHE.split_once('\n').unwrap();
+    write(&dir, "src/lib.rs", &served(&[first, "\n", GUARD, rest]));
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn an_approval_given_after_one_rebase_stands_through_the_next() {
+    let (home, dir) = on_a_branch(
+        "anchor-twice",
+        &[("src/lib.rs", &served(&[])), ("notes.txt", "a\n")],
+    );
+    main_moves(&dir, &[("src/lib.rs", &served(&[CACHE]))]);
+    rebased(&dir, &[]);
+    write(&dir, "src/lib.rs", &served(&[GUARD, CACHE]));
+    commit(&dir);
+    approved_now(home.path());
+
+    main_moves(&dir, &[("notes.txt", "a\nb\n")]);
+    rebased(&dir, &[]);
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+}
+
+#[test]
+fn a_verdict_recorded_without_a_base_is_placed_in_the_files_the_work_began_with() {
+    let (home, dir) = on_a_branch("anchor-none", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("g\n", "G\n"));
+    commit(&dir);
+    approved_now(home.path());
+    let file = folder(home.path()).join(FILE);
+    Connection::open(&file)
+        .unwrap()
+        .execute_batch("ALTER TABLE verdicts DROP COLUMN base")
+        .unwrap();
+
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert_eq!(
+        given.last().unwrap().base,
+        None,
+        "the column is back, empty"
+    );
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+    main_moves(&dir, &[("list.txt", &format!("top\n{LETTERS}"))]);
+    rebased(&dir, &[]);
+    assert_eq!(change_standing(home.path()), Standing::Approved);
+    write(
+        &dir,
+        "list.txt",
+        &format!("top\n{}", LETTERS.replace("g\n", "GG\n")),
+    );
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
 }
 
 #[test]
