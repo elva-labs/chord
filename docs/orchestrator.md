@@ -182,8 +182,10 @@ A tool that names a session takes its id whole, or its first eight
 characters or more, as many as a row with no title of its own shows of
 it. Those are matched against the sessions the caller started and no
 others: a start of an id that fits more than one of them is refused with
-the ids it fits, and one that fits none is refused as an id the workbench
-does not know, so it never reaches a session the caller did not start.
+the ids it fits, and so is one that fits one of them and an id another
+of them went on from, and one that fits none is refused as an id the
+workbench does not know, so it never reaches a session the caller did not
+start.
 A session `start` starts runs in a terminal or in Chord as the
 harness's own setting says, and every tool acts on it either way; what an
 in-Chord session cannot do when it is not running, such as take a

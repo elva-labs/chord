@@ -435,10 +435,27 @@ export function superseded(id: string): boolean {
 /** The newest conversation that went on from the one `given` names, by
     its whole id or the start of it; null where none went on from it. */
 export function wentOnFrom(given: string): string | null {
+  const found = wentOnFromThose(given);
+  return found.length === 1 ? newestFrom(found[0]) : null;
+}
+
+/** The newest conversation of each chain where one went on from a
+    conversation `given` names, by its whole id or the start of it. */
+export function wentOnTo(given: string): string[] {
+  return [...new Set(wentOnFromThose(given).map(newestFrom))];
+}
+
+/** The conversations that went on from one `given` names. */
+function wentOnFromThose(given: string): string[] {
   load();
-  const found = Object.entries(going.lineage).filter(([, from]) => from === given || from.startsWith(given));
-  if (found.length !== 1) return null;
-  let at = found[0][0];
+  return Object.entries(going.lineage)
+    .filter(([, from]) => from.startsWith(given))
+    .map(([id]) => id);
+}
+
+/** The newest conversation that went on from `id`, or `id` itself. */
+function newestFrom(id: string): string {
+  let at = id;
   for (let step = 0; step < CHAIN_MOST; step += 1) {
     const next = Object.entries(going.lineage).find(([, from]) => from === at)?.[0];
     if (next === undefined) break;
