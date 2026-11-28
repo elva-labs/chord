@@ -745,16 +745,22 @@ fn gate_line(gate: &Gate) -> String {
     }
 }
 
+/// What a lead does itself rather than start a session for: the steps
+/// that change no file, GitHub's among them.
+const OWN_STEPS: &str = "Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running member a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue.";
+
 /// What the lead of a team's run is told when it starts: which team it
-/// leads, how it hands out work, its members and its gates, numbered.
+/// leads, how it hands out work and what it does itself, its members and
+/// its gates, numbered.
 pub fn lead_instructions(team: &Team) -> String {
     let delegate = if team.start_only {
-        "You direct this work and do not do it yourself: do not edit files. Hand every piece to a session you start with the workbench's start tool, never to your own subagents."
+        "You direct this work: do not edit files. Hand every piece of work on the code, a change to files, a conflict to resolve or anything else that edits a checkout, to a session you start with the workbench's start tool, never to your own subagents."
     } else {
-        "Hand each piece of work to a session you start with the workbench's start tool, so the user can see it; your own subagents are for help along the way."
+        "Hand each piece of work on the code, a change to files, a conflict to resolve or anything else that edits a checkout, to a session you start with the workbench's start tool, so the user can see it; your own subagents are for help along the way."
     };
     let mut lines = vec![
         format!("{delegate} Name one of the team's agents in each start with agent, and its harness and model as listed below. A session that is not one of the team's agents is refused."),
+        OWN_STEPS.to_string(),
         format!("Run at most {AT_ONCE} sessions of one agent at once."),
     ];
     lines.extend(team.members.iter().map(member_line));
@@ -831,11 +837,17 @@ mod tests {
         assert!(told.contains("\"Cloud architect\" approves the plan, before anything is built, when it touches `infra/**`."));
         assert!(told.contains("start a session of the gate's agent to read"));
         assert!(told.contains("Run at most 3 sessions"));
+        assert!(told.contains("\n2. Do the small steps that change no file yourself"));
+        assert!(told.contains("marking a pull request ready or draft"));
 
         let mut quick = shipped().remove(1);
         quick.start_only = false;
         let told = lead_instructions(&quick);
         assert!(!told.contains("do not edit files"));
+        assert!(
+            told.contains(OWN_STEPS),
+            "a lead that may edit does these itself too"
+        );
         assert!(!told.contains("plan tool"), "no gate is on the plan");
         quick.gates.clear();
         assert!(lead_instructions(&quick).contains("The team has no gates."));

@@ -79,6 +79,11 @@ function stepLine(workflow: Workflow, index: number): string {
   return `${lead}, ${placeText(step)}. ${passes} ${otherwise}`;
 }
 
+/** What an orchestrator does itself rather than start a session for: the
+    steps that change no file, GitHub's among them. */
+const OWN_STEPS =
+  "Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running session a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue.";
+
 /** The instructions as sentences, one per line of the list. */
 export function instructionLines(workflow: Workflow): string[] {
   const delegate = startsOnly(workflow)
@@ -95,7 +100,7 @@ export function instructionLines(workflow: Workflow): string[] {
   const review = reviewed
     ? " A review also names the session whose work it checks, so its rounds are counted for that piece."
     : "";
-  const lines = [`You direct this work and do not do it yourself: do not edit files. ${delegate} ${start}${review}`];
+  const lines = [`You direct this work: do not edit files. ${delegate} ${start}${review} ${OWN_STEPS}`];
   workflow.steps.forEach((_, index) => {
     lines.push(stepLine(workflow, index));
   });

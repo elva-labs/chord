@@ -25,8 +25,10 @@ workflow's own steps. A fresh install has a workflow for exactly that,
 Direct: one step of work, on any model, with as many sessions at once as a
 session may run (see [settings](reference/settings.md#workflows)). Its steps add what
 any workflow's do: edit no files, hand out work only through `start` and
-never through its own subagents, and name the step in each start. A session
-that follows no workflow is told none of this.
+never through its own subagents, name the step in each start, and do the
+small steps that change no file itself rather than start a session for
+them, such as git fetch, checking CI, or editing and commenting on a pull
+request. A session that follows no workflow is told none of this.
 
 The rest is said where it is needed, in the descriptions of the tools,
 which a session reads when it takes the tool up: `wait` says to wait on
