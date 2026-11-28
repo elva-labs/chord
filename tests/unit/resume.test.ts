@@ -24,6 +24,7 @@ const fake = {
     modified: number;
     size: number;
     cwd?: string | null;
+    active?: number | null;
   }[],
 };
 
@@ -92,6 +93,17 @@ describe("the sessions to resume", () => {
     });
     expect(screen.queryByTestId("resume-row")).toBeNull();
     expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
+  });
+
+  it("shows when a session was last used, as the pane does, not when its file was written", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    fake.transcripts = [
+      { id: "old-1", title: "old", modified: now, size: 10, active: now - 5 * 86_400 },
+    ];
+    await loadHistory("/repo");
+    openResume("/repo", "claude-code");
+    render(Resume);
+    expect(screen.getByTestId("resume-row")).toHaveTextContent("5d ago");
   });
 
   it("resumes the picked one where it ran, from a click or the keyboard", async () => {

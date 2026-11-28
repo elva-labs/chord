@@ -6,7 +6,7 @@
   import { returnFocus } from "$lib/layout.svelte";
   import { chatCount, isChatsFolder } from "$lib/chats.svelte";
   import { closeResume, offered, offeredChats, pickChat, pickResume, resume } from "$lib/resume.svelte";
-  import { ago, hasName, historyLabel, rowName, shownName } from "$lib/sessions.svelte";
+  import { ago, hasName, historyLabel, rowName, shownName, turnAt } from "$lib/sessions.svelte";
   import { workspace } from "$lib/workspace.svelte";
 
   /**
@@ -152,7 +152,7 @@
               {#if entry.cwd}<span class="where" title={entry.cwd} data-testid="session-where">{lastSegment(entry.cwd)}</span>{/if}
               {#if entry.account !== null}<span class="where" title="account: {entry.account}" data-testid="resume-account">{entry.account}</span>{/if}
               {#if mixed}<span class="where" data-testid="resume-agent">{harnessTag(entry.agent)}</span>{/if}
-              <span class="state">{ago(entry.modified)}</span>
+              <span class="state">{ago(turnAt(entry) / 1000)}</span>
             </button>
           {:else}
             <p class="note">Nothing matches.</p>
