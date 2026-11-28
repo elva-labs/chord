@@ -292,6 +292,9 @@ test("shows an approval the lead kept apart from one given on the change, with w
   const approved = page.getByTestId("gate-row").nth(0).getByTestId("gate-standing");
   const colour = (locator: Locator) => locator.evaluate((node) => getComputedStyle(node).color);
   expect(await colour(row.getByTestId("gate-standing"))).not.toBe(await colour(approved));
+  // Its icon differs in shape, not in colour alone.
+  const icon = (at: Locator) => at.locator(".gs path").getAttribute("d");
+  expect(await icon(row)).not.toBe(await icon(page.getByTestId("gate-row").nth(0)));
 
   await row.getByTestId("gate-open").click();
   const record = page.getByTestId("gate-record");

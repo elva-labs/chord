@@ -70,7 +70,9 @@
   const ICONS: Record<GateStanding, string> = {
     waiting: "circle",
     approved: "check",
-    kept: "check",
+    // The approval's check inside the shield the lead's own acts carry, so
+    // the shape tells it from an approval given on the change.
+    kept: "shield",
     outOfDate: "circle",
     waived: "dash",
     notNeeded: "skip",

@@ -259,15 +259,15 @@ composer: how many of the gates needed stand, and why the next one holds,
 or, when none holds and the lead kept an approval, that it did and why.
 The line opens to each gate with its standing. A gate that holds offers
 Waive, which asks only why, in 500 characters at most. A kept gate reads
-Approved, kept, not in the colour of an approval, with the lead's reason
-under it. A gate with a verdict opens its record: which agent approved or
-asked for changes on what, the findings, the follow-ups, the lead's keep
-and when it was made, and the rest behind Details, with Copy summary. A
-member whose lead has no row in the window offers End run, which asks
-first and then ends the run by its lead, and says so when the run cannot
-be ended. The line is read again when the run moves, once for a burst of
-moves, after a waiver or End run, when the session comes into sight and
-when a turn ends.
+Approved, kept, beside a check in a shield rather than an approval's bare
+check and not in its colour, with the lead's reason under it. A gate with a
+verdict opens its record: which agent approved or asked for changes on what,
+the findings, the follow-ups, the lead's keep and when it was made, and the
+rest behind Details, with Copy summary. A member whose lead has no row in
+the window offers End run, which asks first and then ends the run by its
+lead, and says so when the run cannot be ended. The line is read again when
+the run moves, once for a burst of moves, after a waiver or End run, when
+the session comes into sight and when a turn ends.
 
 The line gives the same reason a lead's stop is held for, so a Codex lead
 sent back to work is going on for the reason the line shows.
