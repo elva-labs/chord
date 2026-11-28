@@ -1055,7 +1055,7 @@ a start goes through or the line is put away.
 
 The sessions a session started hang directly under it, one line each,
 joined to its dot by a thin rail: the state dot, the name, the model it was
-started on and when it last changed. A session started for a step of its
+started on and when it was last active. A session started for a step of its
 starter's workflow shows its step there instead of the model, since the
 step chose the model, with its round of the most in short, "Review, 2 of
 4", kept whole while the name is cut. One
