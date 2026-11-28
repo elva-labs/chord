@@ -84,6 +84,8 @@
   const at = (seconds: number) => clock(seconds * 1000);
   const times = (count: number) => (count === 1 ? "once" : count === 2 ? "twice" : `${count} times`);
   const base = (folder: string) => folder.split("/").at(-1);
+  /** A reason as written, made to start a sentence where it follows a full stop. */
+  const sentence = (text: string) => text.charAt(0).toLocaleUpperCase() + text.slice(1);
   /** Who kept a gate's approval, and in which folder where it is judged in several. */
   const keptBy = (gate: RunGateState) =>
     gate.kept !== null && gate.folders.length > 1 ? `Kept in ${base(gate.kept.folder)} by the lead` : "Kept by the lead";
@@ -369,10 +371,10 @@
         >
       </div>
       {#if shown.waiver !== null}
-        <p class="note" data-testid="gate-record-waiver"><b>Waived by you, {at(shown.waiver.at)}.</b> {shown.waiver.reason}</p>
+        <p class="note" data-testid="gate-record-waiver"><b>Waived by you, {at(shown.waiver.at)}.</b> {sentence(shown.waiver.reason)}</p>
       {/if}
       {#if shown.kept !== null}
-        <p class="note" data-testid="gate-record-keep"><b>Kept by the lead, {at(shown.kept.at)}.</b> {shown.kept.reason}</p>
+        <p class="note" data-testid="gate-record-keep"><b>Kept by the lead, {at(shown.kept.at)}.</b> {sentence(shown.kept.reason)}</p>
       {/if}
       {#if shown.verdict !== null}
         {@const verdict = shown.verdict}

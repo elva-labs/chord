@@ -301,7 +301,8 @@ test("shows an approval the lead kept apart from one given on the change, with w
   const record = page.getByTestId("gate-record");
   await expect(record.locator("h2")).toHaveText("Reviewer approved an earlier change, kept by the lead");
   await expect(page.getByTestId("gate-record-keep")).toContainText("Kept by the lead,");
-  await expect(page.getByTestId("gate-record-keep")).toContainText("renamed a local, as the review asked");
+  // The reason follows a full stop there, so it starts a sentence.
+  await expect(page.getByTestId("gate-record-keep")).toContainText(". Renamed a local, as the review asked");
   await expect(page.getByTestId("gate-record-verdict")).toContainText("Approved on an earlier change.");
   await expect(page.getByTestId("gate-record-follow-ups")).toHaveText("Rename tmp in src/auth.ts:12 to token.");
   // A gate that once asked for changes still warns of what ends the keep.
