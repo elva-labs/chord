@@ -50,11 +50,11 @@ A run begins when its lead starts, with the team as it was then and the
 commit the lead's folder was at. It records the sessions the lead starts as
 the team's members, each with its agent, its brief and the folder it works
 in, the plan the lead writes, the verdicts on its gates, the lead's keeps of
-approvals and the user's waivers. It is kept in a small database in the workbench's directory in the
-user's home, and nothing of it is written into the project. A lead started
-again with the team goes on with the run it has. The lead starts only the
-team's agents in its run, and a session it starts outside the team is
-refused.
+approvals and the user's waivers. It is kept in a small database in the
+workbench's directory in the user's home, and nothing of it is written into
+the project. A lead started again with the team goes on with the run it has.
+The lead starts only the team's agents in its run, and a session it starts
+outside the team is refused.
 
 A member is named by the id of the conversation it is on, or by any id it
 went by in the run, such as the one it had before it went on as a fresh
@@ -430,8 +430,8 @@ What the holds do not see:
   stop;
 - the run's database itself. Every session runs as the user, so one with
   a shell can write the database directly: add a verdict, a keep or a
-  waiver, or act as another session of the run. Only the run's tools are held to the
-  rules above.
+  waiver, or act as another session of the run. Only the run's tools are
+  held to the rules above.
 - the window's own routes. A session with a shell can reach
   `chord-remote serve` as the window does, and so waive a gate or end a
   run, as it can write the store.
