@@ -438,12 +438,12 @@ export function setPastSessions(value: PastSessions) {
 
 /** Whether a transcript has gone unchanged for longer than past sessions
     stay listed. */
-export function aged(transcript: { modified: number }): boolean {
+export function aged(transcript: { modified: number; active?: number | null }): boolean {
   const limit = PAST_SESSIONS.find(
     (span) => span.choice === sessions.pastSessions,
   )?.seconds;
   if (limit === null || limit === undefined) return false;
-  return Date.now() / 1000 - transcript.modified > limit;
+  return Date.now() - turnAt(transcript) > limit * 1000;
 }
 
 /** A row left from the last quit, with nothing running behind it, is a
@@ -1349,20 +1349,27 @@ export function forProject(project: string): Session[] {
   return sessions.all.filter((session) => session.project === project);
 }
 
-/** When each project's transcripts were last written, in milliseconds,
-    by session id: the newest where one is listed twice. */
+/** When a listed transcript's session was last used, in milliseconds: the
+    time of its last user or assistant entry where the core says, else when
+    the file was last written. */
+export function turnAt(transcript: { modified: number; active?: number | null }): number {
+  return (transcript.active ?? transcript.modified) * 1000;
+}
+
+/** When each project's sessions were last used, in milliseconds, by
+    session id: the newest where one is listed twice. */
 const written = $derived.by(() => {
   const index = new Map<string, Map<string, number>>();
   for (const [project, entries] of Object.entries(sessions.history)) {
     const byId = new Map<string, number>();
     for (const entry of entries)
-      if (!byId.has(entry.id)) byId.set(entry.id, entry.modified * 1000);
+      if (!byId.has(entry.id)) byId.set(entry.id, turnAt(entry));
     index.set(project, byId);
   }
   return index;
 });
 
-/** When a session's transcript in a project was last written, in
+/** When a session's conversation in a project was last used, in
     milliseconds, or null when the project's history does not list it. */
 export function transcriptAt(project: string, id: string): number | null {
   return written.get(project)?.get(id) ?? null;
@@ -1385,12 +1392,22 @@ export function lastActive(session: Session): number {
 /** When a session was last active as far as the window knows, or null when
     nothing says. */
 export function knownActive(session: Session): number | null {
-  const stored =
-    session.id === null || (session.activeAt !== null && session.status !== "dormant")
-      ? null
-      : transcriptAt(session.project, session.id);
-  const at = Math.max(session.activeAt ?? 0, stored ?? 0);
-  return at === 0 ? null : at;
+  if (session.activeAt !== null) return session.activeAt;
+  return session.id === null ? null : transcriptAt(session.project, session.id);
+}
+
+/** When a row last changed what it says, in milliseconds, which orders the
+    sessions a chord goes to: a session that rang rises. A row left from the
+    last quit changed when it was last active. */
+export function lastChanged(session: Session): number {
+  if (session.status === "dormant") return knownActive(session) ?? session.changedAt;
+  return session.changedAt;
+}
+
+/** The time a row shows: now while its agent works a turn, else when it was
+    last active. */
+export function activeShown(session: Session, now: number): number {
+  return session.working ? now : lastActive(session);
 }
 
 /** The session was active now. */
@@ -1411,7 +1428,7 @@ export function recency(at: number, now = Date.now()): "recent" | "stale" | "old
     ended, crashed or failed, which has the quiet grey. */
 export function dotAge(session: Session, now = Date.now()): "recent" | "stale" | null {
   if (session.status !== "dormant" && !isLive(session)) return null;
-  const age = recency(lastActive(session), now);
+  const age = recency(activeShown(session, now), now);
   return age === "recent" ? "recent" : "stale";
 }
 
@@ -1469,7 +1486,7 @@ export function shownName(session: Session): string {
     "New session, 3m", so the words point at one row on screen. */
 export function toldName(session: Session, now = Date.now()): string {
   const name = shownName(session);
-  return readsLikeAnother(session) ? `${name}, ${since(lastActive(session), now)}` : name;
+  return readsLikeAnother(session) ? `${name}, ${since(activeShown(session, now), now)}` : name;
 }
 
 /** Whether another live session in the same project reads as this one. */
@@ -2188,6 +2205,7 @@ export function resumeWithout(key: string): Session | null {
   close(key, true);
   const next = create(project, id, agent, startIn, null, model, account, null, kind);
   next.ownWay = ownWay;
+  next.activeAt = knownActive(session);
   if (plugin !== null) pluginStarted(next.key, plugin);
   next.madeTree = session.madeTree;
   next.profile = profile;
@@ -2230,6 +2248,7 @@ export function resumeWithoutProfile(key: string): Session | null {
   const next = create(project, id, agent, startIn, null, model, account, null, kind);
   next.ownWay = ownWay;
   next.madeTree = madeTree;
+  next.activeAt = knownActive(session);
   handOver(key, { project, session: next.key });
   return next;
 }
@@ -2284,7 +2303,7 @@ export function wake(key: string) {
   const session = byKey(key);
   if (session?.status !== "dormant") return;
   waking(session);
-  session.activeAt = lastActive(session);
+  session.activeAt = knownActive(session);
   renewToken(session);
   session.status = "starting";
   changed(session);

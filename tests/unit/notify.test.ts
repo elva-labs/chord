@@ -157,7 +157,9 @@ describe("the words", () => {
     const older = live(A, "pty-1");
     const newer = live(A, "pty-2");
     older.changedAt = Date.now() - 3 * 60_000;
+    older.activeAt = older.changedAt;
     newer.changedAt = Date.now();
+    newer.activeAt = newer.changedAt;
     expect(titleFor(older)).toBe("one · New session, 3m");
     expect(titleFor(newer)).toBe("one · New session, now");
     // One left alone in its project reads as it is.

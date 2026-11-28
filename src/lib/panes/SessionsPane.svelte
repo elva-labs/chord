@@ -41,6 +41,8 @@
     markUnread,
     shownName,
     lastActive,
+    activeShown,
+    turnAt,
     readsLikeAnother,
     loadHistory,
     loadMissingHistories,
@@ -833,7 +835,7 @@
       (session): Entry => ({ kind: "session", id: `session:${session.key}`, session, at: lastActive(session) }),
     );
     const past = (screenProject === path ? historyFor(path) : [])
-      .map((transcript): Entry => ({ kind: "past", id: `past:${transcript.id}`, transcript, at: transcript.modified * 1000 }))
+      .map((transcript): Entry => ({ kind: "past", id: `past:${transcript.id}`, transcript, at: turnAt(transcript) }))
       .sort((a, b) => b.at - a.at);
     const quiet = [...own.filter((entry) => !running(entry)), ...past];
     const wanted = [...own.filter(running), ...quiet];
@@ -1220,7 +1222,7 @@
       (other) => other.key !== session.key && other.project !== session.project && shownName(other) === name,
     );
     const named = elsewhere ? `${name} in ${projectLabel(session.project)}` : name;
-    return readsLikeAnother(session) ? `${named}, ${since(lastActive(session), now)}` : named;
+    return readsLikeAnother(session) ? `${named}, ${since(activeShown(session, now), now)}` : named;
   }
 
   /** The sessions and projects whose shells are being read before the
@@ -1842,7 +1844,7 @@
             ><Icon name="chat" size={11} /></span
           >
         {/if}
-        <span class="when" data-testid="session-when">{since(lastActive(session), now)}</span>
+        <span class="when" data-testid="session-when">{since(activeShown(session, now), now)}</span>
       </span>
       {#if line !== null || marks.length > 0}
         <span class="second">
@@ -2175,7 +2177,7 @@
             {:else if role !== null}
               <span class="model role" data-testid="started-role">{role}</span>
             {/if}
-            <span class="when">{since(lastActive(kid), now)}</span>
+            <span class="when">{since(activeShown(kid, now), now)}</span>
             <span class="state told"
               >{stateWord(kid)}{#if news.includes(kid)}, not heard by {shownName(parent)} yet{/if}{#if kidStays !== null}, {kidStays.line}{/if}</span
             >
@@ -2217,7 +2219,7 @@
         >{/if}
       {#if transcript.account !== null}<span class="tag account" data-testid="past-account">{transcript.account}</span
         >{/if}
-      <span class="when">{since(transcript.modified * 1000, now)}</span>
+      <span class="when">{since(turnAt(transcript), now)}</span>
     </button>
     {#if !isChatsFolder(path)}<span class="actions">
       <button

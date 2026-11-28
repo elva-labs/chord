@@ -53,6 +53,9 @@ import {
   hasName,
   historyLabel,
   lastActive,
+  lastChanged,
+  activeShown,
+  turnAt,
   otherWay,
   rowName,
   sessions,
@@ -391,7 +394,7 @@ export function lastUsed(path: string): number | null {
       .filter((session) => session.project === path)
       .map((session) => lastActive(session)),
     ...(sessions.history[path] ?? []).map(
-      (transcript) => transcript.modified * 1000,
+      (transcript) => turnAt(transcript),
     ),
   ];
   return times.length === 0 ? null : Math.max(...times);
@@ -496,11 +499,11 @@ function chatItems(query: string, now: number): PaletteItem[] {
       group: CHATS,
       session,
       project: "chat",
-      when: since(lastActive(session), now),
+      when: since(activeShown(session, now), now),
     } satisfies PaletteItem,
   }));
   const past = pastChats().map((transcript) => ({
-    at: transcript.modified * 1000,
+    at: turnAt(transcript),
     item: {
       kind: "past",
       id: `past:${transcript.id}`,
@@ -508,7 +511,7 @@ function chatItems(query: string, now: number): PaletteItem[] {
       unnamed: !hasName(transcript),
       group: CHATS,
       transcript,
-      when: since(transcript.modified * 1000, now),
+      when: since(turnAt(transcript), now),
     } satisfies PaletteItem,
   }));
   return [...rows, ...past]
@@ -525,7 +528,7 @@ export function goToItems(query: string): PaletteItem[] {
   const now = Date.now();
   const rows = sessions.all
     .filter((session) => !isChat(session))
-    .sort((a, b) => lastActive(b) - lastActive(a))
+    .sort((a, b) => lastChanged(b) - lastChanged(a))
     .map((session): PaletteItem => ({
       kind: "session",
       id: `session:${session.key}`,
@@ -534,7 +537,7 @@ export function goToItems(query: string): PaletteItem[] {
       group: SESSIONS,
       session,
       project: projectLabel(session.project),
-      when: since(lastActive(session), now),
+      when: since(activeShown(session, now), now),
     }))
     .filter(
       (item) =>

@@ -66,7 +66,7 @@ import {
   adopt,
   beganTurn,
   byKey,
-  lastActive,
+  knownActive,
   touched,
   carriedFor,
   failed,
@@ -1210,7 +1210,7 @@ export async function resume(key: string): Promise<void> {
 }
 
 function again(session: Session) {
-  session.activeAt = lastActive(session);
+  session.activeAt = knownActive(session);
   renewToken(session);
   session.status = "starting";
   session.error = null;

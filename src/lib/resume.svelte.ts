@@ -21,6 +21,7 @@ import {
   create,
   historyLabel,
   lastActive,
+  turnAt,
   outsideFor,
   shownName,
   type HistoryEntry,
@@ -82,7 +83,7 @@ export function offered(): HistoryEntry[] {
 export function offeredChats(): ChatEntry[] {
   const all: ChatEntry[] = [
     ...chatRows().map((session): ChatEntry => ({ kind: "row", session, at: lastActive(session) })),
-    ...pastChats().map((transcript): ChatEntry => ({ kind: "past", transcript, at: transcript.modified * 1000 })),
+    ...pastChats().map((transcript): ChatEntry => ({ kind: "past", transcript, at: turnAt(transcript) })),
   ].sort((a, b) => b.at - a.at);
   const words = queryWords();
   if (words.length === 0) return all;

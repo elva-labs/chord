@@ -507,12 +507,14 @@ describe("the board for any session", () => {
     const work = startedIn(A, starter, "pty-2", "sid-2");
     work.startIn = `${A}/.claude/worktrees/fix-cache`;
     work.changedAt = now - 12 * 60_000;
+    work.activeAt = work.changedAt;
     conductor.places[work.key] = { step: "Work", kind: "work", piece: "sid-2", round: null, work: null };
     expect(startedDetail(starter, work, now)).toBe("Work · worktree fix-cache · running, 12m");
 
     const review = startedIn(A, starter, "pty-3", "sid-3");
     review.needs = "permission";
     review.changedAt = now - 60_000;
+    review.activeAt = review.changedAt;
     conductor.places[review.key] = { step: "Review", kind: "review", piece: "sid-2", round: 2, work: "sid-2" };
     expect(startedDetail(starter, review, now)).toBe("Review, round 2 of 4 · asking, 1m");
     expect(startedDot(review)).toBe("waiting");
@@ -521,6 +523,7 @@ describe("the board for any session", () => {
     const other = startedIn(B, starter, "pty-4", "sid-4");
     other.working = true;
     other.changedAt = now;
+    other.activeAt = other.changedAt;
     expect(startedDetail(starter, other, now)).toBe("two · working, now");
     expect(startedDot(other)).toBe("busy");
 

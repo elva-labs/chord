@@ -16,6 +16,7 @@ import {
   forProject,
   isLive,
   lastActive,
+  turnAt,
   sessions,
   type HistoryEntry,
   type Session,
@@ -103,7 +104,7 @@ export function recentChats(most = RECENT): ChatEntry[] {
   const room = Math.max(0, most - rows.length);
   const past: ChatEntry[] = pastChats()
     .slice(0, room)
-    .map((transcript) => ({ kind: "past", transcript, at: transcript.modified * 1000 }));
+    .map((transcript) => ({ kind: "past", transcript, at: turnAt(transcript) }));
   return [...rows, ...past].sort((a, b) => b.at - a.at);
 }
 

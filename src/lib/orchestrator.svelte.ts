@@ -30,7 +30,7 @@ import {
 import { handleOf, linkFor, send as sendIntegrated } from "$lib/integrated.svelte";
 import { lastSegment } from "$lib/paths";
 import { isChatsFolder } from "$lib/chats.svelte";
-import { isLive, lastActive, shownName, sessions, since, statusLabel, type Session } from "$lib/sessions.svelte";
+import { activeShown, isLive, shownName, sessions, since, statusLabel, type Session } from "$lib/sessions.svelte";
 import { shown } from "$lib/unseen";
 import { projectLabel, workspace } from "$lib/workspace.svelte";
 import { drawnWith } from "$lib/projects.svelte";
@@ -343,7 +343,7 @@ export function startedDetail(starter: Session, session: Session, now = Date.now
   if (session.project !== starter.project) parts.push(projectLabel(session.project));
   const folder = session.worktree ?? session.startIn;
   if (folder !== null && folder !== session.project) parts.push(`worktree ${lastSegment(folder)}`);
-  parts.push(`${startedState(session)}, ${since(lastActive(session), now)}`);
+  parts.push(`${startedState(session)}, ${since(activeShown(session, now), now)}`);
   return parts.join(" · ");
 }
 

@@ -90,6 +90,7 @@ describe("last used", () => {
 
     const live = create("/repo");
     live.changedAt = NOW - DAY;
+    live.activeAt = live.changedAt;
     expect(lastUsed("/repo")).toBe(NOW - 5 * DAY);
   });
 
@@ -99,6 +100,7 @@ describe("last used", () => {
     expect(lastActive("/repo")).toBe(NOW - 2 * DAY);
     const live = create("/repo");
     live.changedAt = NOW - DAY;
+    live.activeAt = live.changedAt;
     expect(lastActive("/repo")).toBe(NOW - DAY);
   });
 
@@ -191,6 +193,7 @@ describe("active and inactive", () => {
     const live = create("/repo");
     started(live.key, "pty-1", "s-1");
     live.changedAt = NOW - 60 * DAY;
+    live.activeAt = live.changedAt;
     expect(isActive("/repo", null, NOW)).toBe(true);
 
     live.status = "exited";
@@ -255,8 +258,10 @@ describe("a project filed by hand", () => {
     const row = create("/rows");
     row.status = "exited";
     row.changedAt = NOW - 1;
+    row.activeAt = row.changedAt;
     expect(isActive("/rows", null, NOW)).toBe(false);
     row.changedAt = NOW + 1;
+    row.activeAt = row.changedAt;
     expect(isActive("/rows", null, NOW + 1)).toBe(true);
 
     sessions.history["/written"] = [entry("a", NOW - DAY)];
@@ -271,6 +276,7 @@ describe("a project filed by hand", () => {
     const row = create("/repo");
     started(row.key, "pty-1", "s-1");
     row.changedAt = NOW - DAY;
+    row.activeAt = row.changedAt;
     expect(holdsActive("/repo")).toBe(true);
     expect(isActive("/repo", null, NOW)).toBe(true);
     row.status = "exited";
@@ -394,6 +400,7 @@ describe("a session hanging under its starter", () => {
     touch("/there", NOW - 60 * DAY);
     const { starter, kid } = hang("/there");
     kid.changedAt = NOW;
+    kid.activeAt = kid.changedAt;
     sessions.history["/there"] = [entry("kid-1", NOW)];
 
     expect(isActive("/there", null, NOW)).toBe(false);
@@ -415,6 +422,8 @@ describe("a session hanging under its starter", () => {
     const { starter, kid } = hang("/there");
     starter.status = "dormant";
     kid.status = "dormant";
+    kid.activeAt = null;
+    starter.activeAt = null;
     sessions.history["/there"] = [entry("kid-1", NOW - DAY)];
     expect(lastActive("/here")).toBe(NOW - DAY);
     expect(isActive("/here", null, NOW)).toBe(true);
@@ -589,6 +598,7 @@ describe("the next session that needs you", () => {
     started(own.key, "pty-2", "s-2");
     asking.needs = "permission";
     asking.changedAt = Date.now() - 40 * DAY;
+    asking.activeAt = asking.changedAt;
 
     expect(isActive("/old", workspace.active)).toBe(true);
     expect(nextNeedingYou()?.key).toBe(asking.key);

@@ -2,7 +2,7 @@ import type { InactiveAfter, Settings } from "$lib/core";
 import type { ProjectSort } from "$lib/layout.svelte";
 import { lastSegment } from "$lib/paths";
 import { persist } from "$lib/persist";
-import { isLive, sessions, transcriptAt, type Session } from "$lib/sessions.svelte";
+import { isLive, knownActive, sessions, transcriptAt, turnAt, type Session } from "$lib/sessions.svelte";
 import { isChatsFolder } from "$lib/chats.svelte";
 
 /**
@@ -199,7 +199,7 @@ function written(path: string): number | null {
   const newest = (sessions.history[path] ?? []).find(
     (entry) => !elsewhere.has(entry.id),
   );
-  let latest = newest === undefined ? null : newest.modified * 1000;
+  let latest = newest === undefined ? null : turnAt(newest);
   for (const row of drawing.ownFor(path)) {
     for (const kid of drawing.childrenOf(row)) {
       if (kid.project === path || kid.id === null) continue;
@@ -220,15 +220,15 @@ export function lastUsed(path: string): number | null {
 /** When anything last happened in the project, in milliseconds, or null
     when nothing says: the user using it, a row drawn under it changing,
     or a transcript of its own being written. A row left from the last quit
-    says it through its transcript, since the row itself was only drawn
-    again at the start. */
+    says it through when it was last active, since the row itself was only
+    drawn again at the start. */
 export function lastActive(path: string): number | null {
   let latest = projects.used[path] ?? null;
   const later = (at: number | null) => {
     if (at !== null && (latest === null || at > latest)) latest = at;
   };
   for (const session of drawnUnder(path)) {
-    if (session.status !== "dormant") later(session.changedAt);
+    later(session.status === "dormant" ? knownActive(session) : session.changedAt);
   }
   later(written(path));
   return latest;
