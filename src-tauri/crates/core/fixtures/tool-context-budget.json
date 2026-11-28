@@ -9,7 +9,7 @@
   },
   "conversation, run lead": {
     "instructions": 3616,
-    "tools": 37378
+    "tools": 36892
   },
   "conversation, run member": {
     "instructions": 2811,
