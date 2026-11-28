@@ -210,6 +210,9 @@ The lead keeps an approval only where:
 - the gate's last verdict in the folder named is an approval, and the
   change has moved on from it, so nothing is kept that was never approved,
   that asked for changes after, or that stands approved already;
+- the keep names the change the lead read, by the hash the `gates` tool
+  shows, and the change in the folder is still that one, so a change that
+  moved on after the lead read it is not kept;
 - the user has not waived the gate, and it has not asked for changes as
   many times as its rounds, so a gate waiting for the user stays the
   user's;
@@ -277,8 +280,8 @@ A session in a run has tools of the run beside the
 - `gate_add`, for the lead: adds a gate for one of the team's agents, on
   the plan or the change, on some paths or always;
 - `keep`, for the lead: keeps an approval of the change that went out of
-  date, with a reason, as [keeping an approval](#keeping-an-approval)
-  says;
+  date, for the change's hash it read, with a reason, as
+  [keeping an approval](#keeping-an-approval) says;
 - `verdict`, for a member whose agent approves a gate: approves the plan or
   the change it read, with any follow-ups that need no second look, or
   asks for changes with findings that say what must change, on each gate

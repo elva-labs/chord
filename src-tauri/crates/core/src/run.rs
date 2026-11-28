@@ -1647,9 +1647,10 @@ pub fn waive(home: &Path, lead: &str, gate: i64, reason: &str) -> Result<Waiver,
 
 /// The lead's keep of an approval on gate `gate` that went out of date,
 /// with why the change since needs no second look. It is kept for the
-/// change as it is now in the folder named, or in the one place the
-/// approval is out of date in when none is named, and passes the gate
-/// there while that is the change. Refused for a gate on the plan, one
+/// change `read` the lead read, by its hash or its tree, in the folder
+/// named, or in the one place the approval is out of date in when none is
+/// named, and passes the gate there while that is the change. Refused
+/// when the change there is no longer `read`, for a gate on the plan, one
 /// the user waived, one that waits for the user, a place whose last
 /// verdict asked for changes or that was never approved, and while agents
 /// are switched off.
@@ -1658,6 +1659,7 @@ pub fn keep(
     lead: &str,
     gate: i64,
     folder: Option<&Path>,
+    read: &str,
     reason: &str,
 ) -> Result<Keep, String> {
     let reason = reason.trim();
@@ -1750,6 +1752,13 @@ pub fn keep(
         .change
         .clone()
         .map_err(|e| format!("The change in {} cannot be read: {e}", at.folder.display()))?;
+    let read = read.trim();
+    if on != read && at.tree.as_deref() != Ok(read) {
+        return Err(format!(
+            "The change in {} is not the one read: it is {on} now, not {read}. Read it again with the gates tool and keep the approval for it.",
+            at.folder.display()
+        ));
+    }
     let runs = Runs::existing(home)?.ok_or(ONLY_THE_LEAD)?;
     let approval = runs
         .verdicts(lead)?

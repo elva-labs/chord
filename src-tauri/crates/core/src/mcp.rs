@@ -2281,15 +2281,16 @@ pub fn gate_add_tool() -> Value {
 pub fn keep_tool() -> Value {
     json!({
         "name": "keep",
-        "description": format!("Keeps a reviewer's approval that went out of date in the team's run you lead, for the change as it is now, so its gate passes without another review. Keep one when the change since is a follow-up the reviewer named, or changes no behaviour, such as a rename, a comment, formatting or a test's wording. Ask the reviewer again instead for a change in behaviour, for anything that touches what the reviewer flagged as a risk, and whenever you are unsure. Only a gate on the change whose last verdict there approved is kept: never one on the plan, one that asked for changes or was never approved, one that waits for the user, or one the user waived. It holds for this change alone: a later change puts it out of date again. Say why in one sentence, which the user sees beside the gate, at most {} characters.", crate::run::REASON_MOST),
+        "description": format!("Keeps a reviewer's approval that went out of date in the team's run you lead, for the change as it is now, so its gate passes without another review. Keep one when the change since is a follow-up the reviewer named, or changes no behaviour, such as a rename, a comment, formatting or a test's wording. Ask the reviewer again instead for a change in behaviour, for anything that touches what the reviewer flagged as a risk, and whenever you are unsure. Only a gate on the change whose last verdict there approved is kept: never one on the plan, one that asked for changes or was never approved, one that waits for the user, or one the user waived. Name the hash of the change you read, as the gates tool shows it; a keep of a change that moved on since is refused. It holds for this change alone: a later change puts it out of date again. Say why in one sentence, which the user sees beside the gate, at most {} characters.", crate::run::REASON_MOST),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "gate": { "type": "integer", "description": "The gate's number, as the gates tool shows it after #." },
+                "change": { "type": "string", "description": "The hash of the change you read, as the gates tool shows it." },
                 "reason": { "type": "string", "description": "Why the change since the approval needs no second look." },
                 "folder": { "type": "string", "description": "The folder whose change it is kept for, when the approval is out of date in more than one." }
             },
-            "required": ["gate", "reason"]
+            "required": ["gate", "change", "reason"]
         }
     })
 }
@@ -2455,11 +2456,15 @@ fn keep_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Va
         .get("folder")
         .and_then(Value::as_str)
         .map(Path::new);
+    let change = ["change", "tree"]
+        .iter()
+        .find_map(|key| arguments.get(*key).and_then(Value::as_str))
+        .ok_or("change is the hash of the change you read, as the gates tool shows it.")?;
     let reason = arguments
         .get("reason")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let kept = crate::run::keep(home, lead, gate, folder, reason)?;
+    let kept = crate::run::keep(home, lead, gate, folder, change, reason)?;
     run_changed(home, lead);
     Ok(said(format!(
         "Kept the approval on gate #{} for the change in {}.\n\n{}",
@@ -5248,24 +5253,43 @@ mod tests {
         let gate: i64 = line[1..].split(' ').next().unwrap().parse().unwrap();
 
         std::fs::write(folder.join("more.txt"), "named\n").unwrap();
+        let gates = called(&home, "lead", "gates", json!({}));
+        let change = text_of(&gates)
+            .lines()
+            .find_map(|line| line.strip_prefix("The change in "))
+            .and_then(|line| line.split(" is ").nth(1))
+            .and_then(|rest| rest.split(',').next())
+            .unwrap()
+            .to_string();
         let unnamed = called(&home, "lead", "keep", json!({ "reason": "Named." }));
         assert_eq!(unnamed["isError"], true);
         assert_eq!(
             text_of(&unnamed),
             "gate is the gate's number, as the gates tool shows it after #."
         );
+        let unread = called(
+            &home,
+            "lead",
+            "keep",
+            json!({ "gate": gate, "reason": "Named." }),
+        );
+        assert_eq!(
+            text_of(&unread),
+            "change is the hash of the change you read, as the gates tool shows it."
+        );
         let member = called(
             &home,
             "sec",
             "keep",
-            json!({ "gate": gate, "reason": "Mine." }),
+            json!({ "gate": gate, "change": change, "reason": "Mine." }),
         );
+        assert_eq!(member["isError"], true);
         assert_eq!(text_of(&member), crate::run::ONLY_THE_LEAD);
         let kept = called(
             &home,
             "lead",
             "keep",
-            json!({ "gate": gate, "reason": "Did the follow-up the review named." }),
+            json!({ "gate": gate, "change": change, "reason": "Did the follow-up the review named." }),
         );
         assert_ne!(kept["isError"], true, "{kept}");
         let text = text_of(&kept);

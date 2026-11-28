@@ -2474,8 +2474,46 @@ fn change_gate(home: &Path) -> GateState {
     standing(home, REVIEWER, When::Change)
 }
 
+/// The change as the lead reads it now in `folder`, or in the first place
+/// gate 1 is out of date in when none is named; empty when there is no
+/// run to read.
+fn read_now(home: &Path, folder: Option<&Path>) -> String {
+    let Ok(Some(now)) = state(home, "lead") else {
+        return String::new();
+    };
+    let out_of_date = now
+        .gates
+        .iter()
+        .find(|gate| gate.gate.id == 1)
+        .and_then(|gate| {
+            gate.folders
+                .iter()
+                .find(|place| place.standing == Standing::OutOfDate)
+        })
+        .map(|place| place.folder.clone());
+    let Some(at) = folder.map(Path::to_path_buf).or(out_of_date) else {
+        return String::new();
+    };
+    now.places
+        .iter()
+        .find(|place| same(&place.folder, &at))
+        .and_then(|place| place.change.clone().ok())
+        .unwrap_or_default()
+}
+
 fn kept(home: &Path, reason: &str) -> Result<Keep, String> {
-    keep(home, "lead", 1, None, reason)
+    keep(home, "lead", 1, None, &read_now(home, None), reason)
+}
+
+fn kept_in(home: &Path, folder: &Path, reason: &str) -> Result<Keep, String> {
+    keep(
+        home,
+        "lead",
+        1,
+        Some(folder),
+        &read_now(home, Some(folder)),
+        reason,
+    )
 }
 
 #[test]
@@ -2569,6 +2607,42 @@ fn the_lead_keeps_an_out_of_date_approval_for_the_change_as_it_is_now() {
 }
 
 #[test]
+fn a_keep_of_a_change_that_moved_on_since_the_lead_read_it_is_refused() {
+    let (home, dir) = started("keep-race", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    let read = read_now(home.path(), None);
+    write(&dir, "src/main.rs", "fn main() { stop() }\n");
+    let now = read_now(home.path(), None);
+    assert_ne!(read, now);
+    let moved = keep(home.path(), "lead", 1, None, &read, "A rename.").unwrap_err();
+    assert!(
+        moved.ends_with(&format!(
+            " is not the one read: it is {now} now, not {read}. Read it again with the gates tool and keep the approval for it."
+        )),
+        "{moved}"
+    );
+    assert_eq!(change_gate(home.path()).standing, Standing::OutOfDate);
+    assert!(
+        Runs::open(home.path())
+            .unwrap()
+            .keeps("lead")
+            .unwrap()
+            .is_empty(),
+        "a refused keep keeps nothing"
+    );
+
+    let tree = git::tree_hash(&dir).unwrap();
+    let by_tree = keep(home.path(), "lead", 1, None, &tree, "A rename.").unwrap();
+    assert_eq!(
+        by_tree.on, now,
+        "a keep named by its tree is kept for the change"
+    );
+    assert_eq!(change_gate(home.path()).standing, Standing::Kept);
+}
+
+#[test]
 fn a_kept_approval_holds_uncommitted_work_from_going_out_as_an_approval_does() {
     let (home, dir) = started("keep-sent", QUICK_FIX, &[("rev", "Reviewer", true)]);
     write(&dir, "src/main.rs", "fn main() { run() }\n");
@@ -2594,12 +2668,12 @@ fn no_approval_is_kept_that_was_never_given_asked_for_changes_or_waits_for_the_u
         "Only an approval that is out of date is kept, and Reviewer has not approved the change yet."
     );
     assert_eq!(
-        keep(home.path(), "lead", 9, None, "Small.").unwrap_err(),
+        keep(home.path(), "lead", 9, None, "", "Small.").unwrap_err(),
         "The run has no gate 9."
     );
     let plan_gate = gate_add(home.path(), "lead", REVIEWER, When::Plan, None).unwrap();
     assert_eq!(
-        keep(home.path(), "lead", plan_gate.id, None, "Small.").unwrap_err(),
+        keep(home.path(), "lead", plan_gate.id, None, "", "Small.").unwrap_err(),
         "Reviewer's gate is on the plan, and only an approval of the change is kept: a plan is read again whenever it changes."
     );
 
@@ -2650,7 +2724,15 @@ fn only_the_lead_keeps_and_only_while_its_run_holds() {
     given(home.path(), "rev", When::Change, true, "", None).unwrap();
     write(&dir, "src/main.rs", "fn main() { start() }\n");
     assert_eq!(
-        keep(home.path(), "rev", 1, None, "Mine.").unwrap_err(),
+        keep(
+            home.path(),
+            "rev",
+            1,
+            None,
+            &read_now(home.path(), None),
+            "Mine."
+        )
+        .unwrap_err(),
         ONLY_THE_LEAD
     );
     agents_switched(home.path(), false);
@@ -2699,13 +2781,13 @@ fn a_keep_in_two_folders_names_the_folder_and_the_gate_stands_kept_once_none_is_
         "{several}"
     );
     let elsewhere = Scratch::new("run-keep-elsewhere");
-    let stranger = keep(home.path(), "lead", 1, Some(elsewhere.path()), "Small.").unwrap_err();
+    let stranger = kept_in(home.path(), elsewhere.path(), "Small.").unwrap_err();
     assert!(
         stranger.contains("is not a folder Reviewer's gate is judged in"),
         "{stranger}"
     );
 
-    let keep_lead = keep(home.path(), "lead", 1, Some(&dir), "A comment.").unwrap();
+    let keep_lead = kept_in(home.path(), &dir, "A comment.").unwrap();
     assert!(same(&keep_lead.folder, &dir));
     let gate = change_gate(home.path());
     assert_eq!(
@@ -2715,7 +2797,7 @@ fn a_keep_in_two_folders_names_the_folder_and_the_gate_stands_kept_once_none_is_
     );
     let standings: Vec<Standing> = gate.folders.iter().map(|f| f.standing).collect();
     assert_eq!(standings, [Standing::Kept, Standing::OutOfDate]);
-    let again = keep(home.path(), "lead", 1, Some(&dir), "Again.").unwrap_err();
+    let again = kept_in(home.path(), &dir, "Again.").unwrap_err();
     assert!(again.starts_with("The approval is kept already"), "{again}");
 
     kept(home.path(), "A rename.").unwrap();
