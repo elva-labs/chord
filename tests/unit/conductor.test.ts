@@ -2031,6 +2031,38 @@ describe("a session named by the start of its id", () => {
     localStorage.removeItem("chord.foldedStarters");
   });
 
+  it("refuses a start that fits one of the caller's own and an old id another of them went on from", async () => {
+    const { going, identified, resetGoingOn } = await import("$lib/goingOn.svelte");
+    resetGoingOn();
+    const OLD = "5f3c9a12-1111-4000-8000-000000000002";
+    const FRESH = "9e990c1d-0000-4000-8000-000000000003";
+    // ONE is a session of the caller's that no run holds; the member went
+    // on from OLD, which starts as ONE does, and is FRESH now.
+    own(A, "pty-1", ONE);
+    const member = own(A, "pty-2", FRESH);
+    going.runs[member.key] = { from: OLD, context: 400_000, briefing: null, spoken: false };
+    identified(member.key, FRESH);
+    await handle(call("send", { session: "5f3c9a12", text: "go on" }));
+    expect(last().error).toBe(
+      `More than one of your sessions is named by 5f3c9a12: ${ONE} by its id, and ${FRESH} by the id of a conversation it went on from. Give enough of the id to tell them apart.`,
+    );
+    expect(written).toEqual([]);
+    // Enough of either id still names it, and so does enough of the old one.
+    for (const [given, to] of [
+      [OLD, FRESH],
+      ["5f3c9a12-1111", FRESH],
+      ["9e990c1d", FRESH],
+      ["5f3c9a12-0000", ONE],
+    ]) {
+      const sending = handle(call("send", { session: given, text: "go on" }));
+      await vi.advanceTimersByTimeAsync(ENTER_AFTER);
+      await sending;
+      expect(last().content).toBe(`Sent to session ${to}. Call wait to hear what it does next.`);
+    }
+    resetGoingOn();
+    localStorage.removeItem("chord.wentOn");
+  });
+
   it("resumes one of the caller's own by the start of its id", async () => {
     await startAllowed(call("start", { project: B, prompt: "Fix it" }), "pty-1", ONE);
     ended({ id: "pty-1", code: 0, clean: true });

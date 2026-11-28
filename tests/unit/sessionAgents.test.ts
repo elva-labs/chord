@@ -24,9 +24,23 @@ describe("the agent a session works as", () => {
   it("is kept by the conversation's id once known, after a restart too", async () => {
     let store = await fresh();
     store.pickAgent("row-1", null, reviewer);
-    store.agentIdentified("row-1", "conv-1");
+    store.agentIdentified("row-1", "conv-1", null);
     store = await fresh();
     expect(store.agentOfRow("another-row", "conv-1")).toMatchObject({ title: "Reviewer" });
+  });
+
+  it("is kept by each id its conversation goes on as, after a restart too", async () => {
+    let store = await fresh();
+    store.startAs("row-1", reviewer, null);
+    store.agentIdentified("row-1", "conv-1", null);
+    // A restart leaves the agent kept by the conversation's id only.
+    store = await fresh();
+    store.agentIdentified("row-1", "conv-2", "conv-1");
+    store.agentIdentified("row-1", "conv-3", "conv-2");
+    expect(store.agentOfRow("row-1", "conv-3")).toEqual({ key: "own:reviewer", title: "Reviewer", readsOnly: true });
+    // A conversation kept with no agent goes on with none.
+    store.agentIdentified("row-2", "conv-5", "conv-4");
+    expect(store.agentOfRow("row-2", "conv-5")).toBeNull();
   });
 
   it("goes on being kept by its conversation once the row is closed", async () => {

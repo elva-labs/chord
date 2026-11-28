@@ -99,7 +99,7 @@ import { CODEX_DEFAULT } from "$lib/models";
 import { hostOf } from "$lib/remote.svelte";
 import { forgetNotes } from "$lib/notes";
 import { moveStartedFold } from "$lib/startedFolds.svelte";
-import { onWentOn, wentOn, wentOnFrom } from "$lib/goingOn.svelte";
+import { onWentOn, wentOn, wentOnFrom, wentOnTo } from "$lib/goingOn.svelte";
 import { instructionLines, modelText } from "$lib/workflowInstructions";
 import { stepFacts } from "$lib/workflows.svelte";
 import {
@@ -1722,6 +1722,13 @@ export const ID_START = 8;
  * never reaches a session the caller did not start; one that fits none of
  * them is left as it is, and is refused as an id the workbench does not
  * know. A whole id is always taken as it is.
+ *
+ * One that went on from its notes is still named by its old id, or the
+ * start of it, where that fits none of the caller's sessions as they are.
+ * A start that fits one of them and also an old id that went on to
+ * another fits more than one: the core may take the old id as naming a
+ * member of the caller's run, and the call must not then reach a session
+ * that is none.
  */
 function wholeIds(call: Placed): Placed | { refusal: string } {
   let args = call.arguments;
@@ -1731,17 +1738,23 @@ function wholeIds(call: Placed): Placed | { refusal: string } {
     const own = ownIds(call.caller, name === "work");
     if (own.has(given)) continue;
     const fits = [...own].filter((id) => id.startsWith(given)).sort();
-    // One that went on from its notes is still named by its old id.
-    const now = fits.length === 0 ? wentOnFrom(given) : null;
-    if (now !== null && own.has(now)) {
-      args = { ...args, [name]: now };
+    if (fits.length === 0) {
+      const now = wentOnFrom(given);
+      if (now !== null && own.has(now)) args = { ...args, [name]: now };
       continue;
     }
     if (fits.length > 1)
       return {
         refusal: `More than one of your sessions has an id that starts with ${idText(given)}: ${either(fits.map(idText), "and")}. Give enough of the id to tell them apart.`,
       };
-    if (fits.length === 1) args = { ...args, [name]: fits[0] };
+    const before = wentOnTo(given)
+      .filter((id) => own.has(id) && id !== fits[0])
+      .sort();
+    if (before.length > 0)
+      return {
+        refusal: `More than one of your sessions is named by ${idText(given)}: ${idText(fits[0])} by its id, and ${either(before.map(idText), "and")} by the id of a conversation ${before.length === 1 ? "it" : "they"} went on from. Give enough of the id to tell them apart.`,
+      };
+    args = { ...args, [name]: fits[0] };
   }
   return args === call.arguments ? call : { ...call, arguments: args };
 }

@@ -21,7 +21,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -1087,7 +1087,7 @@ pub enum Control {
 /// the session ends.
 pub struct Prepared {
     pub command: std::process::Command,
-    pub files: Vec<std::path::PathBuf>,
+    pub files: Vec<PathBuf>,
 }
 
 /// How a driver carries out a control request.
@@ -2232,6 +2232,9 @@ struct Machine {
     shell: Option<Shell>,
     /// The agent's process.
     agent: Option<u32>,
+    /// The core's home and the session's token, by which a team's run
+    /// that has the session as a member follows the conversation it is on.
+    run: Option<(PathBuf, String)>,
 }
 
 impl Machine {
@@ -2262,6 +2265,7 @@ impl Machine {
             running: None,
             shell: None,
             agent: None,
+            run: None,
         }
     }
 
@@ -2418,9 +2422,14 @@ impl Live {
         }
         let mut out = Vec::new();
         for event in reading.events {
-            if matches!(event, Event::Ready { .. }) {
+            if let Event::Ready { session_id, .. } = &event {
                 if let Some(ready) = machine.ready.take() {
                     let _ = ready.send(());
+                }
+                // Where the store cannot be written the member keeps the
+                // id it had, and a lead's call by the new one is asked.
+                if let Some((home, token)) = &machine.run {
+                    let _ = crate::run::went_on(home, token, session_id);
                 }
             }
             match &event {
@@ -3210,6 +3219,10 @@ pub fn start(
     let mut machine = Machine::new(driver, Some(ready), sessions.deadlines);
     machine.tracker.resumed_at = launch.resume.then(now_millis);
     machine.tracker.settings.reads_only = launch.reads_only;
+    machine.run = launch
+        .home
+        .zip(launch.token)
+        .map(|(home, token)| (home.to_path_buf(), token.to_string()));
     machine.agent = Some(child.id());
     machine.shell = (!machine.driver.runs_commands()).then_some(shell);
     let live = Live::new(id.clone(), machine, Arc::clone(&outbox), lines, kill);
@@ -5040,7 +5053,8 @@ mod tests {
     /// `end` ends it, `ack` is a reply that means nothing, `drop <id>`
     /// says a message will not be answered, `took <id>` that a message
     /// steered into the turn was taken, `unsteer <id>` that it was not,
-    /// `answer <key>` answers a
+    /// `ready` that it is ready, as the conversation the id after it names
+    /// where one does, `answer <key>` answers a
     /// request, `fatal` ends the turn and says the session cannot go on.
     /// The line it sends a message with names the model it runs on when it
     /// is sent. A model is settled without asking it; a mode or an effort
@@ -5083,8 +5097,8 @@ mod tests {
                         .collect(),
                 }],
                 (Some("end"), _) => vec![ended()],
-                (Some("ready"), _) => vec![Event::Ready {
-                    session_id: "minted".into(),
+                (Some("ready"), id) => vec![Event::Ready {
+                    session_id: id.unwrap_or("minted").into(),
                     model: Some(self.model.clone()),
                     mode: None,
                     effort: None,
@@ -5717,6 +5731,58 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_member_of_a_teams_run_is_named_by_each_conversation_it_goes_on_as() {
+        const JOINED: &str = "57b488af-0000-4000-8000-000000000001";
+        const FRESH: &str = "9e990c1d-0000-4000-8000-000000000002";
+        let (home, folder) = crate::run::tests::started("int-went-on", crate::team::QUICK_FIX, &[]);
+        crate::run::join(
+            &home,
+            "lead",
+            "rev",
+            "Reviewer",
+            &folder,
+            Some(JOINED),
+            true,
+            "brief",
+        )
+        .unwrap();
+        let vars = HashMap::new();
+        let sessions = Arc::new(Sessions::default());
+        let started = start(
+            Arc::new(crate::events::testing::Recorder::default()),
+            Arc::clone(&sessions),
+            &Minting,
+            &Launch {
+                token: Some("rev"),
+                home: Some(&home),
+                ..bare(&vars)
+            },
+            Box::new(|_| {}),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        sessions
+            .get(&started.id)
+            .unwrap()
+            .take(&format!("ready {FRESH}"));
+        stop(&sessions, &started.id).unwrap();
+        let member = crate::run::member_by_session(&home, "lead", FRESH)
+            .unwrap()
+            .unwrap();
+        assert_eq!(member.token, "rev");
+        assert_eq!(member.session.as_deref(), Some(FRESH));
+        for named in [FRESH, JOINED, &FRESH[..8], &JOINED[..8]] {
+            assert!(crate::run::leads_member(&home, "lead", named), "{named}");
+        }
+        assert!(!crate::run::leads_member(
+            &home,
+            "lead",
+            "0badc0de-0000-4000-8000-000000000003"
+        ));
+    }
+
     #[test]
     fn a_change_of_settings_answers_in_time_however_many_requests_it_takes() {
         let Bench {
@@ -6091,16 +6157,15 @@ mod tests {
         }
     }
 
+    /// A launch in the root folder with nothing else set.
     #[cfg(unix)]
-    #[test]
-    fn a_start_says_no_conversation_id_it_does_not_know() {
-        let vars = HashMap::new();
-        let launch = |session| Launch {
+    fn bare(vars: &HashMap<String, String>) -> Launch<'_> {
+        Launch {
             project: Path::new("/"),
-            env: &vars,
-            session,
+            env: vars,
+            session: None,
             token: None,
-            resume: session.is_some(),
+            resume: false,
             model: None,
             mode: None,
             effort: None,
@@ -6116,6 +6181,17 @@ mod tests {
             reads_only: false,
             profile: &[],
             home: None,
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_start_says_no_conversation_id_it_does_not_know() {
+        let vars = HashMap::new();
+        let launch = |session| Launch {
+            session,
+            resume: session.is_some(),
+            ..bare(&vars)
         };
         let sessions = Arc::new(Sessions::default());
         for (session, said) in [(None, None), (Some("resumed"), Some("resumed".to_string()))] {

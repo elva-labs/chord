@@ -2,6 +2,7 @@ use super::*;
 use crate::scratch::Scratch;
 use crate::team::{shipped, QUICK_FIX, REVIEWER, SHIP_WITH_CHECKS};
 use std::process::Command;
+use std::time::Instant;
 
 fn repo(name: &str) -> Scratch {
     let dir = Scratch::new(&format!("run-{name}"));
@@ -129,6 +130,8 @@ fn a_run_begins_with_its_teams_gates_and_its_folders_commit() {
 #[test]
 fn a_lead_begun_again_with_its_runs_team_keeps_the_run_and_with_another_begins_anew() {
     let (home, dir) = started("again", QUICK_FIX, &[("dev", "Developer", false)]);
+    went_on(home.path(), "dev", JOINED).unwrap();
+    went_on(home.path(), "dev", FRESH).unwrap();
     plan(home.path(), "lead", "Fix it.", &[]).unwrap();
     waive(home.path(), "lead", 1, "Checked it myself.").unwrap();
     let again = begin(home.path(), "lead", &team(QUICK_FIX), &dir).unwrap();
@@ -151,6 +154,13 @@ fn a_lead_begun_again_with_its_runs_team_keeps_the_run_and_with_another_begins_a
     assert_eq!(fresh.plan, None);
     assert!(runs.waivers("lead").unwrap().is_empty());
     assert!(runs.members("lead").unwrap().is_empty());
+    let earlier: i64 = runs
+        .conn
+        .query_row("SELECT COUNT(*) FROM earlier_sessions", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(earlier, 0, "nor are the ids its members went by");
     assert_eq!(
         runs.lead_of("dev").unwrap(),
         None,
@@ -234,6 +244,232 @@ fn only_a_teams_agents_join_its_run_and_a_member_takes_its_id_later() {
             .as_deref(),
         Some("lead")
     );
+}
+
+const JOINED: &str = "57b488af-0000-4000-8000-000000000001";
+const FRESH: &str = "9e990c1d-0000-4000-8000-000000000002";
+const STRANGER: &str = "0badc0de-0000-4000-8000-000000000003";
+
+/// The token of the member of the lead's run that `session` names.
+fn named(home: &Path, session: &str) -> Option<String> {
+    member_by_session(home, "lead", session)
+        .unwrap()
+        .map(|member| member.token)
+}
+
+#[test]
+fn a_member_that_went_on_under_a_new_id_is_named_by_it_and_by_the_ones_before() {
+    let (home, dir) = started("went-on", QUICK_FIX, &[]);
+    join(
+        home.path(),
+        "lead",
+        "rev",
+        REVIEWER,
+        &dir,
+        Some(JOINED),
+        true,
+        "",
+    )
+    .unwrap();
+    went_on(home.path(), "rev", FRESH).unwrap();
+    let runs = Runs::open(home.path()).unwrap();
+    assert_eq!(
+        runs.member("rev").unwrap().unwrap().session.as_deref(),
+        Some(FRESH)
+    );
+    for session in [FRESH, JOINED, &FRESH[..8], &JOINED[..8]] {
+        assert_eq!(named(home.path(), session).as_deref(), Some("rev"));
+        assert!(leads_member(home.path(), "lead", session), "{session}");
+        assert_eq!(
+            start_outside(home.path(), "lead", None, Some(session)).unwrap(),
+            None,
+            "a resume by {session} is the member's"
+        );
+    }
+
+    // Joined again under another id, as a start in the run records it.
+    let later = "1a7e0000-0000-4000-8000-000000000004";
+    join(
+        home.path(),
+        "lead",
+        "rev",
+        REVIEWER,
+        &dir,
+        Some(later),
+        true,
+        "",
+    )
+    .unwrap();
+    for session in [later, FRESH, JOINED] {
+        assert_eq!(named(home.path(), session).as_deref(), Some("rev"));
+    }
+    // Going on as the id it is on keeps nothing twice.
+    went_on(home.path(), "rev", later).unwrap();
+    assert_eq!(runs.earlier_sessions("lead").unwrap().len(), 2);
+
+    // An id the same token went by in a run another lead began names
+    // nothing in this one.
+    Connection::open(folder(home.path()).join(FILE))
+        .unwrap()
+        .execute(
+            "INSERT INTO earlier_sessions (lead, token, session) VALUES ('gone', 'rev', ?1)",
+            params![STRANGER],
+        )
+        .unwrap();
+    assert_eq!(named(home.path(), STRANGER), None);
+    assert_eq!(runs.earlier_sessions("lead").unwrap().len(), 2);
+}
+
+#[test]
+fn going_on_waits_on_another_writer_only_for_a_member_on_a_new_id() {
+    let (home, dir) = started("went-on-held", QUICK_FIX, &[]);
+    join(
+        home.path(),
+        "lead",
+        "rev",
+        REVIEWER,
+        &dir,
+        Some(JOINED),
+        true,
+        "",
+    )
+    .unwrap();
+    let holder = Connection::open(folder(home.path()).join(FILE)).unwrap();
+    holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let at = Instant::now();
+    went_on(home.path(), "stranger", FRESH).unwrap();
+    went_on(home.path(), "rev", JOINED).unwrap();
+    assert!(at.elapsed() < BUSY / 2, "{:?}", at.elapsed());
+    holder.execute_batch("COMMIT").unwrap();
+    went_on(home.path(), "rev", FRESH).unwrap();
+    assert_eq!(named(home.path(), JOINED).as_deref(), Some("rev"));
+    assert_eq!(named(home.path(), FRESH).as_deref(), Some("rev"));
+}
+
+#[test]
+fn a_name_that_fits_no_member_alone_or_a_store_that_cannot_be_read_names_none() {
+    let (home, dir) = started("went-on-none", QUICK_FIX, &[]);
+    for (token, session) in [
+        ("rev", JOINED),
+        ("dev", "9e990c1d-1111-4000-8000-000000000005"),
+    ] {
+        let agent = if token == "rev" {
+            REVIEWER
+        } else {
+            "Developer"
+        };
+        join(
+            home.path(),
+            "lead",
+            token,
+            agent,
+            &dir,
+            Some(session),
+            token == "rev",
+            "",
+        )
+        .unwrap();
+    }
+    went_on(home.path(), "rev", FRESH).unwrap();
+    let asked = |session: &str| {
+        assert_eq!(named(home.path(), session), None, "{session}");
+        assert!(!leads_member(home.path(), "lead", session), "{session}");
+    };
+    // An id no member went by, too little of one, and a start two
+    // members' ids share now.
+    asked(STRANGER);
+    asked(&FRESH[..7]);
+    asked(&JOINED[..7]);
+    asked("9e990c1d");
+    // The id a member is on names it before the one another went by.
+    went_on(home.path(), "dev", "57b488af-2222-4000-8000-000000000006").unwrap();
+    assert_eq!(named(home.path(), "57b488af").as_deref(), Some("dev"));
+    assert_eq!(named(home.path(), JOINED).as_deref(), Some("rev"));
+    // A start that only ids two members went by share names neither.
+    went_on(home.path(), "rev", "c0de0000-0000-4000-8000-000000000007").unwrap();
+    went_on(home.path(), "dev", "c0de1111-0000-4000-8000-000000000008").unwrap();
+    asked("9e990c1d");
+    asked("57b488af");
+    assert_eq!(named(home.path(), FRESH).as_deref(), Some("rev"));
+    // A member leads no run, and a caller in none has no members.
+    assert!(!leads_member(home.path(), "rev", FRESH));
+    assert_eq!(
+        member_by_session(home.path(), "stranger", FRESH).unwrap(),
+        None
+    );
+    assert!(start_outside(home.path(), "lead", None, Some(STRANGER))
+        .unwrap()
+        .is_some());
+
+    // Another lead's member is named in that lead's run alone, by the id it
+    // went by as well.
+    let theirs = "7e1a0000-0000-4000-8000-000000000009";
+    begin(home.path(), "other", &team(QUICK_FIX), &dir).unwrap();
+    join(
+        home.path(),
+        "other",
+        "their-rev",
+        REVIEWER,
+        &dir,
+        Some(theirs),
+        true,
+        "",
+    )
+    .unwrap();
+    went_on(
+        home.path(),
+        "their-rev",
+        "7e1a1111-0000-4000-8000-00000000000a",
+    )
+    .unwrap();
+    for session in [theirs, &theirs[..8]] {
+        assert_eq!(
+            member_by_session(home.path(), "other", session)
+                .unwrap()
+                .map(|member| member.token)
+                .as_deref(),
+            Some("their-rev"),
+            "{session}"
+        );
+        asked(session);
+        assert!(
+            start_outside(home.path(), "lead", None, Some(session))
+                .unwrap()
+                .is_some(),
+            "a resume by {session} is not the lead's member"
+        );
+    }
+    let ours = Runs::open(home.path())
+        .unwrap()
+        .earlier_sessions("lead")
+        .unwrap();
+    assert!(
+        ours.iter().all(|(token, _)| token != "their-rev"),
+        "the lead's run holds none of another run's earlier ids: {ours:?}"
+    );
+
+    // A store a later Chord kept is not read.
+    Connection::open(folder(home.path()).join(FILE))
+        .unwrap()
+        .execute_batch(&format!("PRAGMA user_version = {}", SCHEMA + 1))
+        .unwrap();
+    assert!(member_by_session(home.path(), "lead", FRESH).is_err());
+    assert!(!leads_member(home.path(), "lead", FRESH));
+    assert!(!leads_member(home.path(), "lead", JOINED));
+    assert!(went_on(home.path(), "rev", STRANGER).is_err());
+}
+
+#[test]
+fn going_on_outside_any_run_keeps_nothing() {
+    let home = Scratch::new("run-home-went-on-none");
+    went_on(home.path(), "rev", FRESH).unwrap();
+    assert!(!folder(home.path()).join(FILE).exists());
+    let (home, _dir) = started("went-on-lead", QUICK_FIX, &[]);
+    went_on(home.path(), "lead", FRESH).unwrap();
+    went_on(home.path(), "stranger", FRESH).unwrap();
+    let runs = Runs::open(home.path()).unwrap();
+    assert!(runs.members("lead").unwrap().is_empty());
+    assert!(runs.earlier_sessions("lead").unwrap().is_empty());
 }
 
 #[test]
@@ -1280,7 +1516,21 @@ fn a_brief_longer_than_the_most_is_kept_cut_on_a_character() {
 #[test]
 fn a_run_ended_long_ago_is_deleted_and_a_recent_one_kept() {
     let (home, dir) = started("prune", QUICK_FIX, &[("dev", "Developer", false)]);
+    went_on(home.path(), "dev", JOINED).unwrap();
+    went_on(home.path(), "dev", FRESH).unwrap();
     begin(home.path(), "recent", &team(QUICK_FIX), &dir).unwrap();
+    join(
+        home.path(),
+        "recent",
+        "dev2",
+        "Developer",
+        &dir,
+        Some(JOINED),
+        false,
+        "",
+    )
+    .unwrap();
+    went_on(home.path(), "dev2", FRESH).unwrap();
     assert!(end(home.path(), "lead").unwrap());
     assert!(end(home.path(), "recent").unwrap());
     let long_ago = now() - KEPT_ENDED.as_secs() as i64 - 1;
@@ -1291,11 +1541,30 @@ fn a_run_ended_long_ago_is_deleted_and_a_recent_one_kept() {
             params![long_ago],
         )
         .unwrap();
+    // An earlier id whose member a Chord that did not know them deleted.
+    runs.conn
+        .execute(
+            "INSERT INTO earlier_sessions (lead, token, session) VALUES ('gone', 'gone', ?1)",
+            params![STRANGER],
+        )
+        .unwrap();
     // Any begin or end prunes.
     assert!(!end(home.path(), "nobody").unwrap());
     let count = |sql: &str| -> i64 { runs.conn.query_row(sql, [], |row| row.get(0)).unwrap() };
     assert_eq!(count("SELECT COUNT(*) FROM runs WHERE lead = 'lead'"), 0);
     assert_eq!(count("SELECT COUNT(*) FROM members WHERE lead = 'lead'"), 0);
+    assert_eq!(
+        count("SELECT COUNT(*) FROM earlier_sessions WHERE lead = 'lead'"),
+        0
+    );
+    assert_eq!(
+        count("SELECT COUNT(*) FROM earlier_sessions WHERE token = 'gone'"),
+        0
+    );
+    assert_eq!(
+        count("SELECT COUNT(*) FROM earlier_sessions WHERE lead = 'recent'"),
+        1
+    );
     assert_eq!(count("SELECT COUNT(*) FROM gates WHERE lead = 'lead'"), 0);
     assert_eq!(count("SELECT COUNT(*) FROM ended WHERE lead = 'lead'"), 0);
     assert_eq!(count("SELECT COUNT(*) FROM runs WHERE lead = 'recent'"), 1);
@@ -1395,6 +1664,27 @@ fn a_run_holds_nothing_while_agents_are_off_and_holds_again_once_on() {
     );
     agents_switched(home.path(), true);
     assert_eq!(holds(home.path()), before);
+}
+
+#[test]
+fn a_member_reads_only_as_it_joined_a_run_that_holds() {
+    let (home, _dir) = started(
+        "member-reads",
+        SHIP_WITH_CHECKS,
+        &[("rev", REVIEWER, true), ("dev", "Developer", false)],
+    );
+    let home = home.path();
+    assert!(member_reads_only(home, "rev"));
+    for token in ["dev", "lead", "stranger"] {
+        assert!(!member_reads_only(home, token), "{token}");
+    }
+    agents_switched(home, false);
+    assert!(!member_reads_only(home, "rev"));
+    agents_switched(home, true);
+    assert!(member_reads_only(home, "rev"));
+    assert!(end(home, "lead").unwrap());
+    assert!(!member_reads_only(home, "rev"));
+    assert!(!member_reads_only(Path::new("/nowhere-at-all"), "rev"));
 }
 
 /// Runs git in `dir` and says what it printed, failing the test when git

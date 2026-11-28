@@ -173,8 +173,10 @@ struct IntegratedStartParams {
     compact_at: Option<u64>,
     #[serde(default)]
     cache_ttl: Option<String>,
+    /// Whether the session reads only. None leaves it to the run the
+    /// session is a member of.
     #[serde(default)]
-    reads_only: bool,
+    reads_only: Option<bool>,
     /// The agent session id of the session that started this one.
     #[serde(default)]
     starter: Option<String>,

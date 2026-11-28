@@ -569,11 +569,12 @@ const KEEPS_MODE = /permission mode for the rest of this session$/;
     agent's own tools name the session by. */
 function identify(session: Session, id: string) {
   if (session.id === id) return;
+  const before = session.id;
   session.id = id;
   keepToken(session);
   adopt(session.project, id);
   identified(session.key, id);
-  agentIdentified(session.key, id);
+  agentIdentified(session.key, id, before);
   // A conversation that went on from another goes by the row's name.
   keepName(session);
 }
@@ -777,7 +778,9 @@ async function begin(key: string, link: Link, starting: Session, told: Told) {
     mode,
     effort,
     configDir: dirFor(starting.account, starting.agent),
-    readsOnly: switches.agents && agentOfRow(key, starting.id)?.readsOnly === true ? true : undefined,
+    // A row with no agent known leaves it to the core, which keeps a member
+    // that reads only reading only.
+    readsOnly: switches.agents ? agentOfRow(key, starting.id)?.readsOnly : undefined,
     profile: starting.profile ?? undefined,
     ...told,
     ...originOf(starting),

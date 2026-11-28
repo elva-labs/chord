@@ -53,6 +53,20 @@ again with the team goes on with the run it has. The lead starts only the
 team's agents in its run, and a session it starts outside the team is
 refused.
 
+A member is named by the id of the conversation it is on, or by any id it
+went by in the run, such as the one it had before it went on as a fresh
+conversation or from the conversation before it. Each is given whole or by
+its start, as a tool names any session (see
+[orchestrator](orchestrator.md#the-tools)). The ids the members are on now
+are matched first, and the ids they went by only where none of those fits.
+A name that fits more than one member names none of them, and so does
+every name while the run cannot be read. A session in the run resumes only
+a session named as a member this way.
+
+A member that only reads as it joins the run starts again and goes on
+reading only while the run has not ended and agents are switched on, unless
+reading only was switched off for its session.
+
 A run ends when its lead's session is closed for good. An ended run is kept
 for 30 days and then removed.
 
@@ -260,9 +274,10 @@ settings cannot be read, since what the agent may do is not known.
 
 A lead in Claude Code in Chord that only reads has start left to its mode,
 since the run starts only the team's agents and holds a start as above, and
-send and stop where the session they name is a member of its run. A send or
-a stop to any other session it started, which no run holds, is asked about
-as for any session that only reads (see [reading
+send and stop where the session they name is a member of its run, named as
+[a team's run](#a-teams-run) says. A send or a stop to any other session it
+started, which no run holds, or by a name that names no member, is asked
+about as for any session that only reads (see [reading
 only](integrated.md#the-mode-a-session-starts-in)). Left to the mode, a
 call is asked about where the mode asks for it. The window's own questions
 stand as well: before a start in another project, on another harness or

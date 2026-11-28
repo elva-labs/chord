@@ -141,10 +141,15 @@ export function agentReadsOnly(key: string, id: string | null, on: boolean) {
   if (note !== undefined) ahead.set(key, agentNoteReadsOnly(note, on));
 }
 
-/** The row's conversation is now known by `id`: the agent picked before is
-    kept by it. */
-export function agentIdentified(key: string, id: string) {
+/** The row's conversation is now known by `id`, where it was known by
+    `before`, or by none: the agent picked on the row is kept by it, else
+    the one the conversation was kept with by `before`. */
+export function agentIdentified(key: string, id: string, before: string | null) {
   if (key in byRow) keepById(id, byRow[key]);
+  else if (before !== null) {
+    const kept = read().get(before);
+    if (kept !== undefined) keepById(id, kept);
+  }
 }
 
 /** The note to send ahead of the row's next message, given once. */

@@ -45,6 +45,7 @@
 //! the tool server and read by the window and the harnesses' holds.
 //! Nothing of it is in the project.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -69,7 +70,15 @@ pub const BRIEF_MOST: usize = 8_000;
 pub const REASON_MOST: usize = 500;
 
 /// The tables that keep a run, by its lead, the run's own last.
-const RUN_TABLES: [&str; 6] = ["members", "gates", "plans", "verdicts", "waivers", "runs"];
+const RUN_TABLES: [&str; 7] = [
+    "members",
+    "earlier_sessions",
+    "gates",
+    "plans",
+    "verdicts",
+    "waivers",
+    "runs",
+];
 
 /// How long a write waits for another session's write to finish.
 const BUSY: Duration = Duration::from_secs(5);
@@ -685,6 +694,13 @@ impl Runs {
                 base TEXT
             );
             CREATE INDEX IF NOT EXISTS members_by_lead ON members (lead);
+            CREATE TABLE IF NOT EXISTS earlier_sessions (
+                lead TEXT NOT NULL,
+                token TEXT NOT NULL,
+                session TEXT NOT NULL,
+                PRIMARY KEY (token, session)
+            );
+            CREATE INDEX IF NOT EXISTS earlier_sessions_by_lead ON earlier_sessions (lead);
             CREATE TABLE IF NOT EXISTS gates (
                 lead TEXT NOT NULL,
                 id INTEGER NOT NULL,
@@ -783,6 +799,14 @@ impl Runs {
         self.conn
             .execute("DELETE FROM ended WHERE at < ?1", params![before])
             .map_err(failed)?;
+        // A Chord that does not know the earlier ids deletes a run's
+        // members without them.
+        self.conn
+            .execute(
+                "DELETE FROM earlier_sessions WHERE token NOT IN (SELECT token FROM members)",
+                [],
+            )
+            .map_err(failed)?;
         Ok(())
     }
 
@@ -870,6 +894,44 @@ impl Runs {
             .query_map(params![lead], member_from)
             .map_err(failed)?;
         rows.collect::<Result<_, _>>().map_err(failed)
+    }
+
+    /// The ids the members of a lead's run went by before the one each is
+    /// on now, each with the member's token.
+    fn earlier_sessions(&self, lead: &str) -> Result<Vec<(String, String)>, String> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT earlier.token, earlier.session FROM earlier_sessions AS earlier
+                 JOIN members ON members.token = earlier.token AND members.lead = earlier.lead
+                 WHERE earlier.lead = ?1",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map(params![lead], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)
+    }
+
+    /// The member a token names goes on as the conversation `session`: the
+    /// id it was on is kept among its earlier ones, which still name it.
+    /// Nothing for a token that is no member.
+    fn went_on(&self, token: &str, session: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO earlier_sessions (lead, token, session)
+                 SELECT lead, token, session FROM members
+                 WHERE token = ?1 AND session IS NOT NULL AND session <> ?2",
+                params![token, session],
+            )
+            .map_err(failed)?;
+        self.conn
+            .execute(
+                "UPDATE members SET session = ?2 WHERE token = ?1",
+                params![token, session],
+            )
+            .map_err(failed)?;
+        Ok(())
     }
 
     /// The lead of the run a session is in, as its lead or a member, while
@@ -1123,7 +1185,8 @@ pub fn end(home: &Path, lead: &str) -> Result<bool, String> {
 /// folder it works in, with the brief it was given and, once known, its
 /// harness's id. The change in a folder other than the lead's counts from
 /// the newest commit it shares with the run's. A member recorded already
-/// keeps its agent, brief and folder and takes the id. A brief is a record
+/// keeps its agent, brief and folder and takes the id, and the id it was on
+/// still names it, as [`member_by_session`] takes it. A brief is a record
 /// and never holds a start back: one longer than [`BRIEF_MOST`] is kept
 /// cut to that.
 #[allow(clippy::too_many_arguments)]
@@ -1179,6 +1242,9 @@ impl Runs {
                 .zip(git::head(folder))
                 .and_then(|(base, head)| git::merge_base(folder, base, &head))
         };
+        if let Some(session) = session {
+            runs.went_on(token, session)?;
+        }
         runs.conn
             .execute(
                 "INSERT INTO members (token, lead, agent, session, reads_only, brief, folder, base)
@@ -1975,6 +2041,23 @@ pub fn leads_member(home: &Path, token: &str, session: &str) -> bool {
             .is_some_and(|member| member.lead == token)
 }
 
+/// Whether the session a token names is a member that reads only of a run
+/// that holds, as [`leads`] takes one to: as it joined the run. A store
+/// that cannot be read says it is not.
+pub fn member_reads_only(home: &Path, token: &str) -> bool {
+    if paused(home) {
+        return false;
+    }
+    let Some(runs) = Runs::existing(home).ok().flatten() else {
+        return false;
+    };
+    runs.member(token)
+        .ok()
+        .flatten()
+        .filter(|member| member.reads_only)
+        .is_some_and(|member| runs.run(&member.lead).ok().flatten().is_some())
+}
+
 /// Whether every run holds nothing: agents are switched off in the
 /// settings. The runs are kept as they are and hold again once agents are
 /// on.
@@ -2030,9 +2113,12 @@ pub fn command_held(home: &Path, token: &str, command: &str) -> Option<String> {
     }
 }
 
-/// The member of the caller's run that a resumed session's id names, by
-/// the id or a prefix of it eight characters long at least that names one
-/// member alone.
+/// The member of the caller's run that a session's id names, by the id or
+/// a prefix of it eight characters long at least that names one member
+/// alone. The id a member is on now names it first; only where none fits
+/// does one it went by before in the run, so a member that went on as a
+/// fresh conversation or from the conversation before it is still named
+/// by the id it joined with.
 pub fn member_by_session(
     home: &Path,
     caller: &str,
@@ -2051,18 +2137,55 @@ pub fn member_by_session(
     if session.chars().count() < SESSION_PREFIX {
         return Ok(None);
     }
-    let mut matching = runs.members(&lead)?.into_iter().filter(|member| {
-        member
-            .session
-            .as_deref()
-            .is_some_and(|id| id.starts_with(session))
-    });
-    let first = matching.next();
-    Ok(if matching.next().is_some() {
-        None
-    } else {
-        first
+    let members = runs.members(&lead)?;
+    let now: Vec<&Member> = members
+        .iter()
+        .filter(|member| {
+            member
+                .session
+                .as_deref()
+                .is_some_and(|id| id.starts_with(session))
+        })
+        .collect();
+    if !now.is_empty() {
+        return Ok(match now.as_slice() {
+            [member] => Some((*member).clone()),
+            _ => None,
+        });
+    }
+    let earlier: BTreeSet<String> = runs
+        .earlier_sessions(&lead)?
+        .into_iter()
+        .filter(|(_, id)| id.starts_with(session))
+        .map(|(token, _)| token)
+        .collect();
+    let mut tokens = earlier.into_iter();
+    Ok(match (tokens.next(), tokens.next()) {
+        (Some(token), None) => members.into_iter().find(|member| member.token == token),
+        _ => None,
     })
+}
+
+/// Records that the session a token names goes on as the conversation
+/// `session`, a fresh one or one resumed, so where it is a member of a
+/// team's run the id names it, and so do the ids it went by before.
+/// Nothing for a token that is no member, or where no run was ever kept.
+/// Only a member on a new id writes: the rest only read, which waits on
+/// no other writer of the store.
+pub fn went_on(home: &Path, token: &str, session: &str) -> Result<(), String> {
+    let session = session.trim();
+    if session.is_empty() {
+        return Ok(());
+    }
+    let Some(runs) = Runs::existing(home)? else {
+        return Ok(());
+    };
+    match runs.member(token)? {
+        Some(member) if member.session.as_deref() != Some(session) => {
+            runs.at_once(|runs| runs.went_on(token, session))
+        }
+        _ => Ok(()),
+    }
 }
 
 /// How much of a session's id names it, at least, as the start tool takes

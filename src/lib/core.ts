@@ -269,7 +269,8 @@ export interface IntegratedStartOptions {
   /** How long Claude Code keeps its prompt cache, as for `spawn`. */
   cacheTtl?: "5m" | "1h";
   /** Whether the session starts reading only: the agent's own tools that
-      change files are refused whatever the mode allows. */
+      change files are refused whatever the mode allows. Absent, it reads
+      only where it is a member that reads only of a run that holds. */
   readsOnly?: boolean;
   /** The session that started this one, as for `spawn`. */
   starter?: string;
