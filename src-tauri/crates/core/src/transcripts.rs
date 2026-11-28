@@ -34,6 +34,11 @@ pub struct Transcript {
     pub id: String,
     /// Seconds since the epoch, for ordering and for the fallback label.
     pub modified: u64,
+    /// Seconds since the epoch of the last entry the user or the agent
+    /// wrote, which is when the session was last used: the file is written
+    /// to on a resume or a quit with no turn in it. Absent when the end of
+    /// the file holds no such entry, which reads as `modified`.
+    pub active: Option<u64>,
     pub size: u64,
     /// Absent when the format moved, which is a missing title rather than a
     /// broken pane.
@@ -111,6 +116,7 @@ pub fn directory_for(claude_dir: &Path, project: &Path) -> PathBuf {
 /// belongs to no project asked for never needs one.
 struct Details {
     cwd: Option<String>,
+    active: Option<u64>,
     title: OnceLock<Option<String>>,
 }
 
@@ -279,6 +285,7 @@ pub fn list_many(claude_dir: &Path, projects: &[PathBuf]) -> Vec<Vec<Transcript>
                 .map(|item| Transcript {
                     id: item.id.clone(),
                     modified: item.modified,
+                    active: item.details.active,
                     size: item.size,
                     title: item.details.title(&item.path, item.size),
                     cwd: item
@@ -417,8 +424,58 @@ fn read_details(path: &Path) -> Details {
     OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     Details {
         cwd: read_head(path).as_deref().and_then(cwd_in),
+        active: read_tail(path).as_deref().and_then(last_turn_at),
         title: OnceLock::new(),
     }
+}
+
+/// When the last user or assistant entry of the tail was written, in seconds
+/// since the epoch.
+fn last_turn_at(tail: &str) -> Option<u64> {
+    tail.lines().rev().find_map(|line| {
+        let value: serde_json::Value = serde_json::from_str(line).ok()?;
+        match value.get("type")?.as_str()? {
+            "user" | "assistant" => epoch_seconds(value.get("timestamp")?.as_str()?),
+            _ => None,
+        }
+    })
+}
+
+/// Seconds since the epoch of an RFC 3339 time in UTC, such as
+/// `2026-11-20T10:11:12.345Z`, or with a numeric offset.
+fn epoch_seconds(text: &str) -> Option<u64> {
+    let number = |range: std::ops::Range<usize>| -> Option<i64> { text.get(range)?.parse().ok() };
+    let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
+    let (hour, minute, second) = (number(11..13)?, number(14..16)?, number(17..19)?);
+    if text.get(4..5)? != "-" || text.get(7..8)? != "-" || !(1..=12).contains(&month) {
+        return None;
+    }
+    // Days from the civil date, counted from 1970-01-01.
+    let shifted = if month <= 2 { year - 1 } else { year };
+    let era = shifted.div_euclid(400);
+    let of_year = shifted - era * 400;
+    let of_month = (month + 9) % 12;
+    let of_era_day = (153 * of_month + 2) / 5 + day - 1;
+    let of_era = of_year * 365 + of_year / 4 - of_year / 100 + of_era_day;
+    let days = era * 146_097 + of_era - 719_468;
+    let rest = text.get(19..)?;
+    let rest = rest.trim_start_matches(|c: char| c == '.' || c.is_ascii_digit());
+    let offset = match rest.chars().next()? {
+        'Z' | 'z' => 0,
+        sign @ ('+' | '-') => {
+            let hours: i64 = rest.get(1..3)?.parse().ok()?;
+            let minutes: i64 = rest.get(4..6).and_then(|m| m.parse().ok()).unwrap_or(0);
+            let total = hours * 3600 + minutes * 60;
+            if sign == '+' {
+                total
+            } else {
+                -total
+            }
+        }
+        _ => return None,
+    };
+    let seconds = days * 86_400 + hour * 3600 + minute * 60 + second - offset;
+    u64::try_from(seconds).ok()
 }
 
 /// Where the session ran, from the first line that says.
@@ -648,6 +705,51 @@ mod tests {
     #[test]
     fn mangling_is_lossy_and_cannot_be_reversed() {
         assert_eq!(mangle(Path::new("/a/b-c")), mangle(Path::new("/a/b_c")));
+    }
+
+    #[test]
+    fn reads_an_rfc_3339_time_as_seconds_since_the_epoch() {
+        assert_eq!(epoch_seconds("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(
+            epoch_seconds("2026-11-20T10:11:12.345Z"),
+            Some(1_795_169_472)
+        );
+        assert_eq!(
+            epoch_seconds("2026-11-20T12:11:12+02:00"),
+            epoch_seconds("2026-11-20T10:11:12Z")
+        );
+        assert_eq!(epoch_seconds("2024-02-29T00:00:00Z"), Some(1_709_164_800));
+        assert_eq!(epoch_seconds("yesterday"), None);
+    }
+
+    // A resume or a quit appends records that are not a turn, so the file's
+    // write time says nothing of when the session was last used.
+    #[test]
+    fn dates_a_session_by_its_last_turn_not_by_its_file() {
+        let home = home("last-turn");
+        let project = Path::new("/home/ada/dev/demo");
+        write_transcript(
+            &home,
+            project,
+            "used",
+            concat!(
+                r#"{"type":"user","cwd":"/home/ada/dev/demo","timestamp":"2026-11-01T08:00:00.000Z"}"#,
+                "\n",
+                r#"{"type":"assistant","timestamp":"2026-11-01T08:00:05.000Z"}"#,
+                "\n",
+                r#"{"type":"last-prompt","timestamp":"2026-11-20T10:00:00.000Z"}"#,
+                "\n",
+                r#"{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-20T10:00:01.000Z"}"#,
+                "\n"
+            ),
+        );
+        write_transcript(&home, project, "bare", r#"{"type":"user"}"#);
+        let found = list(&home, project);
+        let used = found.iter().find(|item| item.id == "used").unwrap();
+        assert_eq!(used.active, epoch_seconds("2026-11-01T08:00:05Z"));
+        assert!(used.modified > used.active.unwrap());
+        let bare = found.iter().find(|item| item.id == "bare").unwrap();
+        assert_eq!(bare.active, None);
     }
 
     #[test]

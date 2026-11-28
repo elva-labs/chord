@@ -1511,6 +1511,11 @@ export interface Transcript {
   id: string;
   /** Seconds since the epoch. */
   modified: number;
+  /** Seconds since the epoch of the last entry the user or the agent
+      wrote: when the session was last used, which the file's write time is
+      not, since a resume or a quit writes to it too. Absent when the core
+      does not say, which reads as `modified`. */
+  active?: number | null;
   size: number;
   /** Absent when the transcript format moved: a missing title, not an error. */
   title: string | null;

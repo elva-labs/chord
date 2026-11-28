@@ -78,6 +78,7 @@ pub fn list_many(codex_home: &Path, projects: &[PathBuf]) -> Vec<Vec<Transcript>
                     id: row.get(0)?,
                     title: name_of(row.get(1)?, row.get(2)?, row.get(3)?),
                     modified: row.get::<_, i64>(4).map(|s| s.max(0) as u64)?,
+                    active: None,
                     size: row.get::<_, i64>(5).map(|s| s.max(0) as u64)?,
                     cwd: (cwd != root).then_some(cwd),
                 })
