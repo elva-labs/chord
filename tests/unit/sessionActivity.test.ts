@@ -6,8 +6,10 @@ import { resetAttention } from "$lib/attention.svelte";
 import {
   GREEN_FOR,
   YELLOW_FOR,
+  activeShown,
   create,
   dotAge,
+  ended,
   exact,
   recency,
   lastActive,
@@ -15,6 +17,7 @@ import {
   reset as resetSessions,
   sessions,
   started,
+  typed,
   wake,
   type Session,
 } from "$lib/sessions.svelte";
@@ -115,8 +118,90 @@ describe("when a session was last active", () => {
     started(one.key, "pty-1", "one");
     one.activeAt = Date.now() - 6 * DAY;
     const was = one.activeAt;
-    one.changedAt = Date.now();
+    ended({ id: "pty-1", code: 0, clean: true });
+    expect(one.status).toBe("exited");
     expect(lastActive(one)).toBe(was);
+  });
+
+  it("moves when a line is sent in the terminal that fires no prompt hook", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    one.activeAt = Date.now() - 6 * DAY;
+    typed("pty-1", "/compact");
+    expect(Date.now() - lastActive(one)).toBeGreaterThan(5 * DAY);
+    typed("pty-1", "\r");
+    expect(Date.now() - lastActive(one)).toBeLessThan(5000);
+  });
+
+  it("moves when an idle notice ends a turn", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    exact("one", "prompt");
+    one.activeAt = Date.now() - 6 * DAY;
+    exact("one", "idle");
+    expect(one.working).toBe(false);
+    expect(Date.now() - lastActive(one)).toBeLessThan(5000);
+  });
+
+  it("reads now while the agent works a turn, and as it was after", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    exact("one", "prompt");
+    one.activeAt = Date.now() - 6 * DAY;
+    const now = Date.now();
+    expect(one.working).toBe(true);
+    expect(activeShown(one, now)).toBe(now);
+    expect(dotAge(one, now)).toBe("recent");
+    one.working = false;
+    expect(activeShown(one, now)).toBe(now - 6 * DAY);
+  });
+});
+
+describe("a row left from the last quit", () => {
+  const write = (id: string, modified: number, active: number | null) => {
+    sessions.history[A] = [
+      { id, title: null, modified, size: 1, cwd: null, agent: "claude-code", account: null, active },
+    ];
+  };
+
+  it("keeps its stored time however late its transcript was written", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    one.activeAt = Date.now() - 40 * DAY;
+    const was = one.activeAt;
+    quit();
+    open();
+    write("one", Math.floor(Date.now() / 1000), Math.floor(was / 1000));
+    expect(lastActive(row("one"))).toBe(was);
+    expect(dotAge(row("one"), Date.now())).toBe("stale");
+  });
+
+  it("takes the time of the transcript's last turn, not of its last write", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    quit();
+    const record = JSON.parse(localStorage.getItem("chord.open")!);
+    for (const entry of record.open) delete entry.active;
+    localStorage.setItem("chord.open", JSON.stringify(record));
+    open();
+    const turn = Math.floor((Date.now() - 9 * DAY) / 1000);
+    write("one", Math.floor(Date.now() / 1000), turn);
+    expect(lastActive(row("one"))).toBe(turn * 1000);
+  });
+
+  it("is woken before its history is read without taking the window's start for its time", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    quit();
+    const record = JSON.parse(localStorage.getItem("chord.open")!);
+    for (const entry of record.open) delete entry.active;
+    localStorage.setItem("chord.open", JSON.stringify(record));
+    open();
+    wake(row("one").key);
+    expect(row("one").activeAt).toBeNull();
+    const turn = Math.floor((Date.now() - 9 * DAY) / 1000);
+    write("one", turn, turn);
+    expect(lastActive(row("one"))).toBe(turn * 1000);
   });
 });
 
@@ -142,7 +227,6 @@ describe("the dot's age", () => {
     open();
     expect(row("one").status).toBe("dormant");
     expect(dotAge(row("one"), now)).toBe("stale");
-    one.activeAt = null;
   });
 
   it("is none for a session that exited or failed", () => {

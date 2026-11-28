@@ -3366,6 +3366,9 @@ export function typed(ptyId: string, data: string) {
     session.engaged = true;
     spoke(session.key);
     stirred(session);
+    // A line sent is the user's activity, which a slash command is too
+    // though the agent fires no prompt hook for it.
+    if (session.needs === null && (worded.has(session.key) || /\S/u.test(data))) touched(session);
   }
   pressed.set(session.key, Date.now());
   const hooked = session.exact && session.agent !== "codex";
@@ -3983,6 +3986,7 @@ export function exact(
       if (ends) {
         session.working = false;
         changed(session);
+        touched(session);
       }
       session.delegated = false;
       unseen(session, false, !ends);
@@ -4021,7 +4025,7 @@ export function groupOf(
 }
 
 /** Every row, grouped by status and sorted within each group by when the
-    row last changed, the latest first. A group with nothing in it is left
+    row was last active, the latest first. A group with nothing in it is left
     out. */
 export function byStatus(
   atWork?: (session: Session) => boolean,
@@ -4030,7 +4034,7 @@ export function byStatus(
     ...group,
     sessions: sessions.all
       .filter((session) => groupOf(session, atWork) === group.id)
-      .sort((a, b) => b.changedAt - a.changedAt),
+      .sort((a, b) => lastActive(b) - lastActive(a)),
   })).filter((group) => group.sessions.length > 0);
 }
 
