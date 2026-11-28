@@ -185,8 +185,8 @@ export function liveUnder(path: string): number {
   return drawnUnder(path).filter(isLive).length;
 }
 
-/** When a transcript drawn under the project was last written, in
-    milliseconds, or null when it has none: its own, but for those of
+/** When a session of the project was last used by its transcripts, in
+    milliseconds, the latest over those drawn under it, or null when it has none: its own, but for those of
     sessions that hang under a starter in another project, and those of
     sessions that hang under one of its rows from another project. */
 function written(path: string): number | null {
@@ -195,11 +195,12 @@ function written(path: string): number | null {
       .filter((session) => session.id !== null && drawnIn(session) !== path)
       .map((session) => session.id),
   );
-  // Newest first, as the history is kept.
-  const newest = (sessions.history[path] ?? []).find(
-    (entry) => !elsewhere.has(entry.id),
-  );
-  let latest = newest === undefined ? null : turnAt(newest);
+  let latest: number | null = null;
+  for (const entry of sessions.history[path] ?? []) {
+    if (elsewhere.has(entry.id)) continue;
+    const at = turnAt(entry);
+    if (latest === null || at > latest) latest = at;
+  }
   for (const row of drawing.ownFor(path)) {
     for (const kid of drawing.childrenOf(row)) {
       if (kid.project === path || kid.id === null) continue;

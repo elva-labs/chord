@@ -104,6 +104,14 @@ describe("last used", () => {
     expect(lastActive("/repo")).toBe(NOW - DAY);
   });
 
+  it("dates a project by its latest turn, not by the entry written last", () => {
+    // Written now, but its last turn was 30 days ago.
+    const old = { ...entry("a", NOW), active: Math.floor((NOW - 30 * DAY) / 1000) };
+    sessions.history["/repo"] = [old, entry("b", NOW - 2 * DAY)];
+    expect(lastUsed("/repo")).toBe(NOW - 2 * DAY);
+    expect(lastActive("/repo")).toBe(NOW - 2 * DAY);
+  });
+
   // A row left from the last quit is drawn again at the start, which is no
   // use of the project: its transcript says when it was worked in.
   it("does not take a row left from the last quit as activity", () => {
