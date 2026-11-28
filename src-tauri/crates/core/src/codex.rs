@@ -51,6 +51,12 @@ const LIST: &str = "SELECT id, name, title, first_user_message, updated_at, toke
                     FROM threads WHERE (cwd = ?1 OR cwd LIKE ?2) AND archived = 0 AND source <> 'exec' \
                     ORDER BY updated_at DESC";
 
+/// The same listing from an index that does not say where a thread's rollout
+/// is: its threads are listed all the same, dated by the index alone.
+const LIST_WITHOUT_ROLLOUT: &str = "SELECT id, name, title, first_user_message, updated_at, tokens_used, cwd, NULL \
+                    FROM threads WHERE (cwd = ?1 OR cwd LIKE ?2) AND archived = 0 AND source <> 'exec' \
+                    ORDER BY updated_at DESC";
+
 /// Newest first. A project Codex has never been used in has none.
 pub fn list(codex_home: &Path, project: &Path) -> Vec<Transcript> {
     list_many(codex_home, &[project.to_path_buf()])
@@ -64,7 +70,10 @@ pub fn list_many(codex_home: &Path, projects: &[PathBuf]) -> Vec<Vec<Transcript>
     let Some(connection) = open(codex_home) else {
         return vec![Vec::new(); projects.len()];
     };
-    let Ok(mut statement) = connection.prepare(LIST) else {
+    let Ok(mut statement) = connection
+        .prepare(LIST)
+        .or_else(|_| connection.prepare(LIST_WITHOUT_ROLLOUT))
+    else {
         return vec![Vec::new(); projects.len()];
     };
     projects
