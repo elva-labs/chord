@@ -591,6 +591,7 @@ function settle(
   state: IntegratedState,
   before: IntegratedState | null,
   link: Link,
+  reattached = false,
 ) {
   const working = state === "working";
   const asking = state === "asking";
@@ -599,7 +600,9 @@ function settle(
   session.needs = asking ? "permission" : null;
   if (changed) {
     session.changedAt = Date.now();
-    touched(session);
+    // A window taking up a run already going draws it as it is, which is
+    // no activity of the session.
+    if (!reattached) touched(session);
   }
   if (asking && before !== "asking") rang(session.key);
   else if (state === "idle" && before !== null && before !== "idle") {
@@ -1286,7 +1289,7 @@ export function reattach(key: string, handle: string, spoken = true): Promise<Re
         if (harnessProfile(session.agent).namesRunningModel)
           session.runsOn = snapshot.settings.model ?? snapshot.ready.defaultModel ?? null;
       }
-      settle(session, snapshot.state, before, link);
+      settle(session, snapshot.state, before, link, true);
       void rejoined(key);
       return "up";
     } catch (error) {

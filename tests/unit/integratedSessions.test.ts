@@ -2501,6 +2501,23 @@ describe("a session the core still runs after a reload", () => {
     expect(session.needs).toBeNull();
   });
 
+  it("keeps the time the row was last active when the window takes up a request being asked", async () => {
+    const before = await started();
+    send(before.key, "first");
+    fake.startTurn(before.handle);
+    fake.ask(before.handle, "Bash", { command: "ls" });
+    resetSessions();
+    resetIntegrated();
+    stopListening();
+    stopListening = await listenIntegrated();
+    const row = reopened(PROJECT, "integrated-session-1", "claude-code", null, null, null, "integrated");
+    const asked = Date.now() - 3 * 86_400_000;
+    row.activeAt = asked;
+    expect(await reattach(row.key, before.handle)).toBe("up");
+    expect(byKey(row.key)!.needs).toBe("permission");
+    expect(byKey(row.key)!.activeAt).toBe(asked);
+  });
+
   // What the turn did before the reload is not heard again: its end is
   // news whatever comes after the window takes it up.
   it("marks a turn that ran across the reload when it ends, with nothing said after it", async () => {
