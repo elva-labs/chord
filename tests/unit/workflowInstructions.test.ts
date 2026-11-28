@@ -39,6 +39,7 @@ describe("what an orchestrator is told", () => {
     expect(first).toContain("name the step it is for");
     expect(first).toContain("names the session whose work it checks");
     expect(first).toContain("Do the small steps that change no file yourself, without starting a session");
+    expect(first).toContain("When your sandbox refuses one, ask the user rather than starting a session.");
     expect(first).toContain("marking a pull request ready or draft");
   });
 
@@ -47,7 +48,7 @@ describe("what an orchestrator is told", () => {
   it("names in a start only what the workflow's steps have", () => {
     const [first, step, last] = instructionLines(directWorkflow());
     expect(first).toBe(
-      "You direct this work: do not edit files. Delegate every piece by starting a session with the workbench's start tool, never with your own subagents. In each start, name the step it is for. Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running session a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue.",
+      "You direct this work: do not edit files. Delegate every piece by starting a session with the workbench's start tool, never with your own subagents. In each start, name the step it is for. Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running session a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue. When your sandbox refuses one, ask the user rather than starting a session.",
     );
     expect(step).toContain('For the step "Work", split the task into pieces and start a session for each, on any agent and model.');
     expect(last).toBe('When every piece has come out of "Work", report to the user.');

@@ -84,7 +84,7 @@ function stepLine(workflow: Workflow, index: number): string {
 /** What an orchestrator does itself rather than start a session for: the
     steps that change no file, GitHub's among them. */
 const OWN_STEPS =
-  "Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running session a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue.";
+  "Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running session a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue. When your sandbox refuses one, ask the user rather than starting a session.";
 
 /** The instructions as sentences, one per line of the list. */
 export function instructionLines(workflow: Workflow): string[] {

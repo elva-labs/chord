@@ -6,7 +6,8 @@ own and, unless the team says otherwise, only reads and hands every piece
 of work on the code to a session of its own, as an orchestrator under a
 workflow does (see [orchestrator](orchestrator.md)). It is told to do the
 small steps that change no file itself, such as checking CI, asking a
-member a question, or marking a pull request ready and commenting on it.
+member a question, or marking a pull request ready and commenting on it, and
+to ask the user rather than start a session when its sandbox refuses one.
 
 ## What a team holds
 

@@ -28,7 +28,8 @@ any workflow's do: edit no files, hand out work only through `start` and
 never through its own subagents, name the step in each start, and do the
 small steps that change no file itself rather than start a session for
 them, such as git fetch, checking CI, or editing and commenting on a pull
-request. A session that follows no workflow is told none of this.
+request, and ask the user when its sandbox refuses one. A session that
+follows no workflow is told none of this.
 
 The rest is said where it is needed, in the descriptions of the tools,
 which a session reads when it takes the tool up: `wait` says to wait on

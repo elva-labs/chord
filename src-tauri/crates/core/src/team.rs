@@ -747,7 +747,7 @@ fn gate_line(gate: &Gate) -> String {
 
 /// What a lead does itself rather than start a session for: the steps
 /// that change no file, GitHub's among them.
-const OWN_STEPS: &str = "Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running member a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue.";
+const OWN_STEPS: &str = "Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running member a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue. When your sandbox refuses one, ask the user rather than starting a session.";
 
 /// When a lead asks a gate's agent again and when it keeps the approval
 /// it gave, told to a lead whose team has a gate on the change.
@@ -846,6 +846,9 @@ mod tests {
         assert!(told.contains("Run at most 3 sessions"));
         assert!(told.contains("\n2. Do the small steps that change no file yourself"));
         assert!(told.contains("marking a pull request ready or draft"));
+        assert!(told.contains(
+            "When your sandbox refuses one, ask the user rather than starting a session."
+        ));
         assert!(told.contains(KEEP_OR_ASK));
 
         let mut quick = shipped().remove(1);
