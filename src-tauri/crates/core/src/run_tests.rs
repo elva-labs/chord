@@ -2894,6 +2894,90 @@ fn a_keep_in_two_folders_names_the_folder_and_the_gate_stands_kept_once_none_is_
 }
 
 #[test]
+fn a_keep_holds_through_a_clean_rebase_and_ends_when_the_lines_differ() {
+    let (home, dir) = on_a_branch("keep-rebase", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("g\n", "G\n"));
+    commit(&dir);
+    approved_now(home.path());
+    write(
+        &dir,
+        "list.txt",
+        &LETTERS.replace("g\n", "G\n").replace("c\n", "C\n"),
+    );
+    commit(&dir);
+    kept(home.path(), "Capitalised a line, as the review asked.").unwrap();
+    assert_eq!(change_standing(home.path()), Standing::Kept);
+
+    main_moves(&dir, &[("list.txt", &format!("top\n{LETTERS}"))]);
+    rebased(&dir, &[]);
+    assert_eq!(
+        change_standing(home.path()),
+        Standing::Kept,
+        "the same lines on a new base, as an approval holds"
+    );
+    assert_eq!(
+        command_held(home.path(), "lead", "git push origin work"),
+        None
+    );
+
+    write(
+        &dir,
+        "list.txt",
+        &format!(
+            "top\n{}",
+            LETTERS.replace("g\n", "GG\n").replace("c\n", "C\n")
+        ),
+    );
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn a_gate_added_after_a_keep_waits_and_the_kept_one_stays_kept() {
+    let (home, dir) = started("keep-add", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    let keep = kept(home.path(), "A rename.").unwrap();
+
+    let added = gate_add(home.path(), "lead", REVIEWER, When::Plan, None).unwrap();
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    let of = |id: i64| now.gates.iter().find(|gate| gate.gate.id == id).unwrap();
+    assert_eq!(of(1).standing, Standing::Kept);
+    assert_eq!(of(1).kept.as_ref().map(|k| k.id), Some(keep.id));
+    assert_eq!(of(added.id).standing, Standing::Waiting);
+    assert!(start_held(home.path(), "lead", false).unwrap().is_some());
+}
+
+#[test]
+fn a_verdict_read_in_the_reviewers_own_folder_is_kept_only_in_the_folder_it_is_on() {
+    let (home, dir, own) = read_in_a_folder_of_its_own("keep-own");
+    approved_from(home.path(), &own).unwrap();
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert!(
+        same(given[0].folder.as_deref().unwrap(), &dir),
+        "the verdict is on the lead's folder, whose change was read"
+    );
+    write(
+        &dir,
+        "src/lib.rs",
+        &served(&[GUARD]).replace("render(data)", "render(&data)"),
+    );
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+
+    let refused = kept_in(home.path(), &own, "A borrow.").unwrap_err();
+    assert!(
+        refused.contains("is not a folder Reviewer's gate is judged in"),
+        "{refused}"
+    );
+    let keep = kept_in(home.path(), &dir, "A borrow.").unwrap();
+    assert_eq!(keep.verdict, given[0].id);
+    assert!(same(&keep.folder, &dir));
+    assert_eq!(change_standing(home.path()), Standing::Kept);
+    let _ = std::fs::remove_dir_all(&own);
+}
+
+#[test]
 fn an_approval_names_its_follow_ups_and_asking_for_changes_names_none() {
     let (home, dir) = started("follow-ups", QUICK_FIX, &[("rev", "Reviewer", true)]);
     write(&dir, "src/main.rs", "fn main() { run() }\n");
