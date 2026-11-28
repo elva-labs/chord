@@ -176,6 +176,29 @@ describe("a row left from the last quit", () => {
     expect(dotAge(row("one"), Date.now())).toBe("stale");
   });
 
+  it("moves to a later turn its transcript holds, as when the session went on outside the app", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    one.activeAt = Date.now() - 30 * DAY;
+    quit();
+    open();
+    const turn = Math.floor((Date.now() - 3600_000) / 1000);
+    write("one", Math.floor(Date.now() / 1000), turn);
+    expect(lastActive(row("one"))).toBe(turn * 1000);
+    expect(dotAge(row("one"), Date.now())).toBe("recent");
+  });
+
+  it("does not move to a write with no turn in it", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    const stored = Date.now() - 30 * DAY;
+    one.activeAt = stored;
+    quit();
+    open();
+    write("one", Math.floor(Date.now() / 1000), null);
+    expect(lastActive(row("one"))).toBe(stored);
+  });
+
   it("takes the time of the transcript's last turn, not of its last write", () => {
     const one = create(A);
     started(one.key, "pty-1", "one");

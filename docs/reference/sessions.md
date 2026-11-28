@@ -286,7 +286,7 @@ it is started again on the one chosen for it, or on Codex's default. The
 [usage log](#usage-log) names the same model. A running session
 with neither takes one line, and its dot says what it is doing. A row left
 from the last quit with nothing running behind it takes one line too, its
-name and its time, the one it had at the quit or, for a row from a version that did not keep it, the time of the last turn in its transcript, unless it
+name and its time, the one it had at the quit, or the time of the last turn in its transcript where that is later, as when the session went on outside the app or a turn ended while the window was away; for a row from a version that did not keep a time, that turn's time, or when the transcript was last written where it holds none, unless it
 came back unread with a line, as [after a restart](#after-a-restart)
 says. Those rows come after the running
 ones, and the project's past sessions after them. A row not active for more than 14 days folds away at once, unless it is unread, running or asking, or a session it started is. Once a project has more

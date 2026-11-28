@@ -1369,6 +1369,19 @@ const written = $derived.by(() => {
   return index;
 });
 
+/** The same by the core's time of the last turn alone, for the sessions it
+    reports one for. */
+const turns = $derived.by(() => {
+  const index = new Map<string, Map<string, number>>();
+  for (const [project, entries] of Object.entries(sessions.history)) {
+    const byId = new Map<string, number>();
+    for (const entry of entries)
+      if (!byId.has(entry.id) && entry.active != null) byId.set(entry.id, entry.active * 1000);
+    index.set(project, byId);
+  }
+  return index;
+});
+
 /** When a session's conversation in a project was last used, in
     milliseconds, or null when the project's history does not list it. */
 export function transcriptAt(project: string, id: string): number | null {
@@ -1390,9 +1403,14 @@ export function lastActive(session: Session): number {
 }
 
 /** When a session was last active as far as the window knows, or null when
-    nothing says. */
+    nothing says: the later of the stored time and the last turn its
+    transcript holds, which is how work done while the window was away or cut
+    off counts. Without a stored time, when the transcript was last used. */
 export function knownActive(session: Session): number | null {
-  if (session.activeAt !== null) return session.activeAt;
+  if (session.activeAt !== null) {
+    const turn = session.id === null ? undefined : turns.get(session.project)?.get(session.id);
+    return turn === undefined ? session.activeAt : Math.max(session.activeAt, turn);
+  }
   return session.id === null ? null : transcriptAt(session.project, session.id);
 }
 
