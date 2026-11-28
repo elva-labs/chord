@@ -184,12 +184,16 @@ describe("go to", () => {
     const waiting = create(B);
     const newest = create(C);
     old.changedAt = 3000;
+    old.activeAt = old.changedAt;
     waiting.changedAt = 1000;
+    waiting.activeAt = waiting.changedAt;
     newest.changedAt = 2000;
+    newest.activeAt = newest.changedAt;
     // The one that needs you is the oldest change, and stays last.
     started(waiting.key, "pty-2", "session-pty-2");
     exact("session-pty-2", "stop");
     waiting.changedAt = 1000;
+    waiting.activeAt = waiting.changedAt;
     expect(sessionKeys(goToItems(""))).toEqual([old.key, newest.key, waiting.key]);
   });
 
@@ -197,7 +201,9 @@ describe("go to", () => {
     const first = create(A);
     const second = create(B);
     first.changedAt = 1000;
+    first.activeAt = first.changedAt;
     second.changedAt = 2000;
+    second.activeAt = second.changedAt;
     first.title = "Fix the cache";
     second.title = "Fix the parser";
     const keys = (query: string) => sessionKeys(goToItems(query));
@@ -232,6 +238,7 @@ describe("go to", () => {
   it("gives a session its project and the time of its change", () => {
     const own = create(A);
     own.changedAt = Date.now() - 3 * 60_000;
+    own.activeAt = own.changedAt;
     const item = goToItems("").find((candidate) => candidate.kind === "session");
     expect(item).toMatchObject({ project: "one", when: "3m", group: "Sessions" });
   });
@@ -241,6 +248,7 @@ describe("go to", () => {
     const quiet = create(B);
     quiet.status = "dormant";
     quiet.changedAt = Date.now() - 2 * 86_400_000 - 60_000;
+    quiet.activeAt = quiet.changedAt;
     const end = (path: string) =>
       goToItems("").find((item) => item.kind === "project" && item.path === path);
     expect(end(A)).toMatchObject({ end: "1 live", group: "Projects" });
@@ -252,7 +260,9 @@ describe("go to", () => {
     const one = create(A);
     const two = create(B);
     one.changedAt = 1000;
+    one.activeAt = one.changedAt;
     two.changedAt = 5000;
+    two.activeAt = two.changedAt;
     expect(projectPaths(goToItems(""))).toEqual([B, A, C]);
   });
 
@@ -287,9 +297,12 @@ describe("chats in go to", () => {
 
   beforeEach(() => {
     resetChats(CHATS);
-    create(A).changedAt = 3000;
+    const own = create(A);
+    own.changedAt = 3000;
+    own.activeAt = own.changedAt;
     const open = create(CHATS);
     open.changedAt = 2500;
+    open.activeAt = open.changedAt;
     open.title = "Plan the export rework";
     sessions.history[CHATS] = [
       { id: "old", modified: 2, size: 1, title: "Invoice export formats", agent: "claude-code", account: null },
@@ -342,7 +355,9 @@ describe("where go to starts", () => {
     const first = create(A);
     const second = create(B);
     first.changedAt = 1_000;
+    first.activeAt = first.changedAt;
     second.changedAt = 2_000;
+    second.activeAt = second.changedAt;
     select(second.key);
     expect(goToItems("")[0]).toMatchObject({ id: `session:${second.key}` });
     openGoTo();
@@ -1042,7 +1057,9 @@ describe("a new session", () => {
     const one = create(A);
     const three = create(C);
     one.changedAt = 1000;
+    one.activeAt = one.changedAt;
     three.changedAt = 9000;
+    three.activeAt = three.changedAt;
     workspace.active = A;
     beginNew(null);
     expect(stepItems("").map((item) => item.label)).toEqual(["one", "three", "two"]);
@@ -1062,6 +1079,7 @@ describe("a new session", () => {
     started(kid.key, "pty-2", "kid-1");
     conductor.startedBy[kid.key] = starter.token;
     kid.changedAt = Date.now();
+    kid.activeAt = kid.changedAt;
     activate(C);
     sessions.active = kid.key;
     expect(workspace.active).toBe(C);

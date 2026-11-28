@@ -12,15 +12,17 @@ A session is one agent at work in one project. Open a folder as a project and st
 
 ## What a row says
 
-The dot says what the agent is doing:
+The dot says how recently the session was active and what it waits on:
 
 | Dot | Means |
 | --- | --- |
-| Green | Working |
+| Green | Active in the last 4 days |
 | Accent | Waiting for you |
 | Ringed | Asking for a permission |
-| Yellow | Left open at the last quit, not running yet |
+| Yellow | Last active more than 4 days ago |
 | Grey | Done or ended |
+
+A row's time is when the session was last active: when you last wrote to it or its agent last worked a turn. Bringing a session back, a quit and a start, and moving it between projects do not change it. A working session breathes and reads `now`, and the other states above win over the colour of the age.
 
 When the agent leaves a line for you, it shows under the row's name, with the model the session runs on and the Codex profile it runs under, if any. A session you have not looked at since it changed is marked unread. With the window in the background, a system notification says when a session starts waiting for you ([notifications](settings.md#notifications)). <kbd>Cmd</kbd><kbd>.</kbd> goes to the next session that needs you.
 
@@ -36,9 +38,9 @@ A project you have not used for a week folds under Inactive at the foot of the p
 
 ## Past sessions
 
-Under the live sessions sit the ones you ran in the project lately. Click one to resume it. Once a project has more than three rows with nothing running, the rest fold into a quiet line at its end, such as `Earlier · 8`, which counts the older sessions too, including ones run from a plain terminal. A row that is unread stays out of the fold until you read it. Opened, it shows the folded rows and a row that opens a searchable list of the older ones. See [past sessions](reference/sessions.md#past-sessions).
+Under the live sessions sit the ones you ran in the project lately. Click one to resume it. A session not active for more than 14 days folds there at once, unless it is unread or running, or one it started is. Once a project has more than three rows with nothing running, the rest fold into a quiet line at its end, such as `Earlier · 8`, which counts the older sessions too, including ones run from a plain terminal. A row that is unread stays out of the fold until you read it. Opened, it shows the folded rows and a row that opens a searchable list of the older ones. See [past sessions](reference/sessions.md#past-sessions).
 
-When the app starts again, the sessions that were open come back as yellow rows, and the one on screen resumes. A session another session started comes back under its starter, and a line sent to it starts it. See [after a restart](reference/sessions.md#after-a-restart).
+When the app starts again, the sessions that were open come back as rows with the time they had, and the one on screen resumes. A session another session started comes back under its starter, and a line sent to it starts it. See [after a restart](reference/sessions.md#after-a-restart).
 
 ## Chats
 

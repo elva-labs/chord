@@ -20,7 +20,8 @@ import { touch } from "$lib/projects.svelte";
 import {
   create,
   historyLabel,
-  lastChanged,
+  lastActive,
+  turnAt,
   outsideFor,
   shownName,
   type HistoryEntry,
@@ -81,8 +82,8 @@ export function offered(): HistoryEntry[] {
     of the query in their name. */
 export function offeredChats(): ChatEntry[] {
   const all: ChatEntry[] = [
-    ...chatRows().map((session): ChatEntry => ({ kind: "row", session, at: lastChanged(session) })),
-    ...pastChats().map((transcript): ChatEntry => ({ kind: "past", transcript, at: transcript.modified * 1000 })),
+    ...chatRows().map((session): ChatEntry => ({ kind: "row", session, at: lastActive(session) })),
+    ...pastChats().map((transcript): ChatEntry => ({ kind: "past", transcript, at: turnAt(transcript) })),
   ].sort((a, b) => b.at - a.at);
   const words = queryWords();
   if (words.length === 0) return all;

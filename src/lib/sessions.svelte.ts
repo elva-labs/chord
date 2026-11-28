@@ -240,9 +240,15 @@ export interface Session {
       events say, or, without them, as its output does. */
   turns: number;
   /** When the row last changed what it says: started working, went quiet,
-      asked, was looked at, ended. The palette and the chord to the next
-      session that needs you order by it. */
+      asked, was looked at, ended, came up or went down. The chord to the
+      next session that needs you orders by it. */
   changedAt: number;
+  /** When the session was last active: the user sent it a message or its
+      agent worked a turn. Null while that is read from the conversation's
+      stored record, for a row brought back that has not been active since.
+      Bringing a session back, a run coming up or going down, and a setting
+      moving the row leave it as it was. */
+  activeAt: number | null;
   exitCode: number | null;
   error: string | null;
   /** Set once the terminal has been created, so it is only built once. */
@@ -432,12 +438,12 @@ export function setPastSessions(value: PastSessions) {
 
 /** Whether a transcript has gone unchanged for longer than past sessions
     stay listed. */
-export function aged(transcript: { modified: number }): boolean {
+export function aged(transcript: { modified: number; active?: number | null }): boolean {
   const limit = PAST_SESSIONS.find(
     (span) => span.choice === sessions.pastSessions,
   )?.seconds;
   if (limit === null || limit === undefined) return false;
-  return Date.now() / 1000 - transcript.modified > limit;
+  return Date.now() - turnAt(transcript) > limit * 1000;
 }
 
 /** A row left from the last quit, with nothing running behind it, is a
@@ -1343,40 +1349,111 @@ export function forProject(project: string): Session[] {
   return sessions.all.filter((session) => session.project === project);
 }
 
-/** When each project's transcripts were last written, in milliseconds,
-    by session id: the newest where one is listed twice. */
+/** When a listed transcript's session was last used, in milliseconds: the
+    time of its last user or assistant entry where the core says, else when
+    the file was last written. */
+export function turnAt(transcript: { modified: number; active?: number | null }): number {
+  return (transcript.active ?? transcript.modified) * 1000;
+}
+
+/** When each project's sessions were last used, in milliseconds, by
+    session id: the newest where one is listed twice. */
 const written = $derived.by(() => {
   const index = new Map<string, Map<string, number>>();
   for (const [project, entries] of Object.entries(sessions.history)) {
     const byId = new Map<string, number>();
     for (const entry of entries)
-      if (!byId.has(entry.id)) byId.set(entry.id, entry.modified * 1000);
+      if (!byId.has(entry.id)) byId.set(entry.id, turnAt(entry));
     index.set(project, byId);
   }
   return index;
 });
 
-/** When a session's transcript in a project was last written, in
+/** The same by the core's time of the last turn alone, for the sessions it
+    reports one for. */
+const turns = $derived.by(() => {
+  const index = new Map<string, Map<string, number>>();
+  for (const [project, entries] of Object.entries(sessions.history)) {
+    const byId = new Map<string, number>();
+    for (const entry of entries)
+      if (!byId.has(entry.id) && entry.active != null) byId.set(entry.id, entry.active * 1000);
+    index.set(project, byId);
+  }
+  return index;
+});
+
+/** When a session's conversation in a project was last used, in
     milliseconds, or null when the project's history does not list it. */
 export function transcriptAt(project: string, id: string): number | null {
   return written.get(project)?.get(id) ?? null;
 }
 
-/** When a row last changed what it says, in milliseconds. A row left from
-    the last quit changed when its transcript was last written: the row
-    itself was only drawn again at the start. */
-export function lastChanged(session: Session): number {
-  if (session.status === "dormant" && session.id !== null) {
-    const at = transcriptAt(session.project, session.id);
-    if (at !== null) return at;
+/** How long after its last activity a session's dot is green. */
+export const GREEN_FOR = 4 * 86_400_000;
+/** How long after its last activity a session's dot is yellow, counted
+    from the same moment: past it the row goes into Earlier. */
+export const YELLOW_FOR = 14 * 86_400_000;
+
+/** When a session was last active, in milliseconds: the user's last message
+    or the agent's last turn. A row that has not been active since it was
+    brought back reads it from its conversation's stored record, and from
+    when it was made while that is not known. */
+export function lastActive(session: Session): number {
+  return knownActive(session) ?? session.changedAt;
+}
+
+/** When a session was last active as far as the window knows, or null when
+    nothing says: the later of the stored time and the last turn its
+    transcript holds, which is how work done while the window was away or cut
+    off counts. Without a stored time, when the transcript was last used. */
+export function knownActive(session: Session): number | null {
+  if (session.activeAt !== null) {
+    const turn = session.id === null ? undefined : turns.get(session.project)?.get(session.id);
+    return turn === undefined ? session.activeAt : Math.max(session.activeAt, turn);
   }
+  return session.id === null ? null : transcriptAt(session.project, session.id);
+}
+
+/** When a row last changed what it says, in milliseconds, which orders the
+    sessions a chord goes to: a session that rang rises. A row left from the
+    last quit changed when it was last active. */
+export function lastChanged(session: Session): number {
+  if (session.status === "dormant") return knownActive(session) ?? session.changedAt;
   return session.changedAt;
 }
 
-/** Rows in the order they last changed, the latest first. Rows that
-    changed in the same moment keep the order they were made in. */
-export function byChange(rows: Session[]): Session[] {
-  return [...rows].sort((a, b) => lastChanged(b) - lastChanged(a));
+/** The time a row shows: now while its agent works a turn, else when it was
+    last active. */
+export function activeShown(session: Session, now: number): number {
+  return session.working ? now : lastActive(session);
+}
+
+/** The session was active now. */
+export function touched(session: Session) {
+  session.activeAt = Date.now();
+}
+
+/** How recently a session was last active, for what its dot and its place
+    in a project's rows say: green within `GREEN_FOR`, yellow within
+    `YELLOW_FOR`, and old after that. */
+export function recency(at: number, now = Date.now()): "recent" | "stale" | "old" {
+  const age = now - at;
+  if (age <= GREEN_FOR) return "recent";
+  return age <= YELLOW_FOR ? "stale" : "old";
+}
+
+/** What a row's dot is coloured by its activity: null for a row whose run
+    ended, crashed or failed, which has the quiet grey. */
+export function dotAge(session: Session, now = Date.now()): "recent" | "stale" | null {
+  if (session.status !== "dormant" && !isLive(session)) return null;
+  const age = recency(activeShown(session, now), now);
+  return age === "recent" ? "recent" : "stale";
+}
+
+/** Rows in the order they were last active, the latest first. Rows that
+    were active in the same moment keep the order they were made in. */
+export function byActivity(rows: Session[]): Session[] {
+  return [...rows].sort((a, b) => lastActive(b) - lastActive(a));
 }
 
 export function activeSession(): Session | null {
@@ -1427,7 +1504,7 @@ export function shownName(session: Session): string {
     "New session, 3m", so the words point at one row on screen. */
 export function toldName(session: Session, now = Date.now()): string {
   const name = shownName(session);
-  return readsLikeAnother(session) ? `${name}, ${since(lastChanged(session), now)}` : name;
+  return readsLikeAnother(session) ? `${name}, ${since(activeShown(session, now), now)}` : name;
 }
 
 /** Whether another live session in the same project reads as this one. */
@@ -2146,6 +2223,7 @@ export function resumeWithout(key: string): Session | null {
   close(key, true);
   const next = create(project, id, agent, startIn, null, model, account, null, kind);
   next.ownWay = ownWay;
+  next.activeAt = knownActive(session);
   if (plugin !== null) pluginStarted(next.key, plugin);
   next.madeTree = session.madeTree;
   next.profile = profile;
@@ -2188,6 +2266,7 @@ export function resumeWithoutProfile(key: string): Session | null {
   const next = create(project, id, agent, startIn, null, model, account, null, kind);
   next.ownWay = ownWay;
   next.madeTree = madeTree;
+  next.activeAt = knownActive(session);
   handOver(key, { project, session: next.key });
   return next;
 }
@@ -2242,6 +2321,7 @@ export function wake(key: string) {
   const session = byKey(key);
   if (session?.status !== "dormant") return;
   waking(session);
+  session.activeAt = knownActive(session);
   renewToken(session);
   session.status = "starting";
   changed(session);
@@ -2316,6 +2396,9 @@ function row(
     carried: null,
     turns: 0,
     changedAt: Date.now(),
+    // A session resumed was active when its conversation last was.
+    activeAt:
+      resumedFrom === null ? Date.now() : (transcriptAt(project, resumedFrom) ?? null),
     exitCode: null,
     error: null,
     mounted: false,
@@ -3301,6 +3384,9 @@ export function typed(ptyId: string, data: string) {
     session.engaged = true;
     spoke(session.key);
     stirred(session);
+    // A line sent is the user's activity, which a slash command is too
+    // though the agent fires no prompt hook for it.
+    if (session.needs === null && (worded.has(session.key) || /\S/u.test(data))) touched(session);
   }
   pressed.set(session.key, Date.now());
   const hooked = session.exact && session.agent !== "codex";
@@ -3406,6 +3492,7 @@ export function output(key: string, bytes: number, now = Date.now(), said = fals
       session.working = true;
       stirred(session);
       changed(session);
+      touched(session);
     }
     if ((interrupts.has(key) || answered.has(key)) && session.working && work) stillLater(session);
     return;
@@ -3425,6 +3512,7 @@ export function output(key: string, bytes: number, now = Date.now(), said = fals
     session.notice = null;
     stirred(session);
     changed(session);
+    touched(session);
   }
   if (session.working && pulse.said) bulleted.add(key);
   if (!work) return;
@@ -3479,6 +3567,7 @@ function stillLater(session: Session) {
       now.needs = null;
       now.turnEnd = "cut";
       changed(now);
+      touched(now);
       unseen(now);
     }, QUIET_EXACT_MS),
   );
@@ -3512,6 +3601,7 @@ function settle(key: string) {
   if (session === null || !session.working) return;
   session.working = false;
   changed(session);
+  touched(session);
   unseen(session);
 }
 
@@ -3837,6 +3927,7 @@ export function exact(
       newTurnLine(session);
       tookLine(session.key);
       changed(session);
+      touched(session);
       beganTurn(session);
       break;
     case "stop":
@@ -3851,6 +3942,7 @@ export function exact(
       session.failure = null;
       session.background = (more.background ?? []).map(shown);
       changed(session);
+      touched(session);
       newsOverMark(session);
       if (session.note === null && line !== null) leaveLine(session, shown(line));
       unseen(session);
@@ -3866,6 +3958,7 @@ export function exact(
       session.failure = failureOf(more.error ?? null, line === null ? null : shown(line));
       session.background = [];
       changed(session);
+      touched(session);
       newsOverMark(session);
       if (session.note === null && line !== null) leaveLine(session, shown(line));
       unseen(session);
@@ -3880,7 +3973,10 @@ export function exact(
       session.needs = null;
       session.delegated = true;
       stirred(session);
-      if (idle) changed(session);
+      if (idle) {
+        changed(session);
+        touched(session);
+      }
       newsOverMark(session);
       if (session.note === null && line !== null) leaveLine(session, shown(line));
       break;
@@ -3891,7 +3987,10 @@ export function exact(
       session.needs = "permission";
       session.delegated = false;
       stirred(session);
-      if (asking) changed(session);
+      if (asking) {
+        changed(session);
+        touched(session);
+      }
       unseen(session, asking);
       break;
     }
@@ -3905,6 +4004,7 @@ export function exact(
       if (ends) {
         session.working = false;
         changed(session);
+        touched(session);
       }
       session.delegated = false;
       unseen(session, false, !ends);
@@ -3943,7 +4043,7 @@ export function groupOf(
 }
 
 /** Every row, grouped by status and sorted within each group by when the
-    row last changed, the latest first. A group with nothing in it is left
+    row was last active, the latest first. A group with nothing in it is left
     out. */
 export function byStatus(
   atWork?: (session: Session) => boolean,
@@ -3952,7 +4052,7 @@ export function byStatus(
     ...group,
     sessions: sessions.all
       .filter((session) => groupOf(session, atWork) === group.id)
-      .sort((a, b) => b.changedAt - a.changedAt),
+      .sort((a, b) => lastActive(b) - lastActive(a)),
   })).filter((group) => group.sessions.length > 0);
 }
 

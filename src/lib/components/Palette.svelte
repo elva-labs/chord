@@ -23,7 +23,7 @@
     WORKFLOWS,
     type PaletteItem,
   } from "$lib/palette.svelte";
-  import { isLive } from "$lib/sessions.svelte";
+  import { dotAge, isLive } from "$lib/sessions.svelte";
   import { conducting } from "$lib/orchestrator.svelte";
   import { switches } from "$lib/switches.svelte";
 
@@ -41,6 +41,15 @@
   let { perform }: Props = $props();
 
   let dialog: HTMLDivElement;
+
+  /** The moment a dot's age is read against, moved on every half minute. */
+  let now = $state(Date.now());
+
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
+
   let field = $state<HTMLInputElement | null>(null);
   let list = $state<HTMLDivElement | null>(null);
   let chosen = $state<string | null>(null);
@@ -332,9 +341,9 @@
               {#if item.kind === "session"}
                 <span
                   class="dot"
-                  class:live={isLive(item.session)}
+                  class:recent={dotAge(item.session, now) === "recent"}
+                  class:stale={dotAge(item.session, now) === "stale"}
                   class:working={isLive(item.session) && conducting(item.session)}
-                  class:dormant={item.session.status === "dormant"}
                   class:unread={item.session.unread}
                   class:permission={item.session.needs === "permission"}
                   data-testid="palette-dot"
@@ -669,12 +678,12 @@
     border-radius: 50%;
   }
 
-  .dot.live {
+  .dot.recent {
     background: var(--add);
     border-color: var(--add);
   }
 
-  .dot.dormant {
+  .dot.stale {
     background: var(--dormant);
     border-color: var(--dormant);
   }

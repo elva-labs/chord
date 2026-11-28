@@ -160,9 +160,9 @@ Inactive but never moves it. When each project was last used is kept in the
 window's own storage, as is when it was last filed, and both records go when
 it is closed. Filing leaves when it was last used as it was. The
 choice of order is kept there too, and Inactive is listed in the same order.
-The sessions inside a project are in the order they last changed, the latest
-first, with one exception: its past sessions come after every session still
-open, however lately they changed.
+The sessions inside a project are in the order they were last active, the
+latest first, with one exception: its past sessions come after every session
+still open, however lately they were active.
 
 While the pointer is over the pane, or the keyboard is walking its rows,
 the order holds still: what is under the pointer or the cursor stays where
@@ -209,7 +209,7 @@ session selected.
 
 The sessions that were open when the app quit come back as rows in their
 projects, in the order they had and under the names they had, with nothing
-running behind them. Their dot is yellow. The session that was on screen
+running behind them. Their time and their dot are the ones they had: a quit and a start change neither. The session that was on screen
 starts at once, through the harness's resume command, and each of the others
 starts when it is selected, so bringing a project forward starts none. With
 no session on screen at the quit, none is put there. A session closed by hand
@@ -244,17 +244,25 @@ among the rows that come back, and its unread with it, a session another
 session started as much as any other. A version that does not keep what
 waits, run in between, leaves the rows to come back read.
 
-The yellow is the terminal's, so a theme that sets its yellow sets this dot
-too. In the amber palette, whose accent is a yellow, it is a lemon instead,
-so it is never taken for an unread session.
-
 ## What a row says
 
-A row's dot is green while a process runs behind it, the yellow below for
-a row left from the last quit, the accent while it waits for you, and a
-quiet grey once it is done or has ended; only a session asking for a
-permission has a ring. A row's first line is its name and, at the end,
-when the row last changed: `now`, `4m`, `1h`, a weekday within the week, then `3w`. A session
+A row's dot is green when the session was last active within 4 days and
+yellow when that was more than 4 days ago, whether or not a process runs
+behind it, and a row older than 14 days that still shows, because it is
+unread or running, is yellow too. It is the accent while the session waits
+for you, it breathes while the agent works, and it is a quiet grey once the
+session is done or has ended; only a session asking for a permission has a
+ring. These states win over the colour of the age. The yellow is the
+terminal's, so a theme that sets its yellow sets this dot too. In the amber
+palette, whose accent is a yellow, it is a lemon instead, so it is never
+taken for an unread session. A row's first line is its name and, at the end,
+when the session was last active: `now`, `4m`, `1h`, a weekday within the
+week, then `3w`. A session is active when you write to it, in the window or
+in its terminal, and while its agent works a turn, which a working row shows
+as `now`; for a terminal session its hooks report the same. Bringing a
+session back, its run coming up or going down, reopening the window, a
+window taking up a run already going and moving the row change neither the
+time nor the dot, and both come back unchanged after a quit. A session
 the agent has left a line for, or one that started others, takes a second
 line: the agent's line, in the accent while it asks for a permission, or
 for a session that started others what those are doing; at its end is the
@@ -278,10 +286,10 @@ it is started again on the one chosen for it, or on Codex's default. The
 [usage log](#usage-log) names the same model. A running session
 with neither takes one line, and its dot says what it is doing. A row left
 from the last quit with nothing running behind it takes one line too, its
-name and its time, the time its transcript was last written, unless it
+name and its time, the one it had at the quit, or the time of the last turn in its transcript where that is later, as when the session went on outside the app or a turn ended while the window was away; for a row from a version that did not keep a time, that turn's time, or when the transcript was last written where it holds none, unless it
 came back unread with a line, as [after a restart](#after-a-restart)
 says. Those rows come after the running
-ones, and the project's past sessions after them. Once a project has more
+ones, and the project's past sessions after them. A row not active for more than 14 days folds away at once, unless it is unread, running or asking, or a session it started is. Once a project has more
 than three rows with nothing running, the first two stand and the rest fold
 away. A row that is unread never folds away, however old it is: it stands
 and counts as one of the two until it is read, and with more than two

@@ -56,6 +56,7 @@ function turn(): number {
     const from = performance.now();
     row.working = !row.working;
     row.changedAt = Date.now() + i;
+    row.activeAt = row.changedAt;
     flushSync();
     took.push(performance.now() - from);
   }
@@ -86,6 +87,7 @@ describe("the sessions pane's cost", () => {
       measured.mockClear();
       row.working = !row.working;
       row.changedAt = Date.now() + 1000 * (i + 1);
+      row.activeAt = row.changedAt;
       flushSync();
       const rows = measured.mock.contexts.filter((element) => (element as Element).classList.contains("row-slot"));
       expect(rows.length).toBeGreaterThan(0);

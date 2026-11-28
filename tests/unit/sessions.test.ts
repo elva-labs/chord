@@ -3173,6 +3173,7 @@ describe("a name the agent or a caller gave", () => {
     const one = create("/p");
     started(one.key, "pty-one", "sid-one");
     one.changedAt = now - 3 * 60_000;
+    one.activeAt = one.changedAt;
     expect(toldName(one, now)).toBe("New session");
     // A row in another project reads the same without telling them apart.
     const away = create("/q");
@@ -3181,6 +3182,7 @@ describe("a name the agent or a caller gave", () => {
     const two = create("/p");
     started(two.key, "pty-two", "sid-two");
     two.changedAt = now - 2 * 3_600_000;
+    two.activeAt = two.changedAt;
     expect(toldName(one, now)).toBe("New session, 3m");
     expect(toldName(two, now)).toBe("New session, 2h");
     // A finished row tells nothing apart.

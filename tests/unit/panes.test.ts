@@ -234,6 +234,9 @@ const rowNames = () =>
     .getAllByRole("treeitem")
     .map((el) => el.querySelector(".name")!.textContent!.trim());
 
+/** A transcript time, in seconds, an hour back and a little more for each step. */
+const recent = (step = 0) => Math.floor(Date.now() / 1000) - 3600 - step;
+
 describe("Pane shell", () => {
   it("takes focus when pointed at", async () => {
     render(SessionsPane);
@@ -306,10 +309,10 @@ describe("SessionsPane", () => {
     const mine = create("/repo", null, "claude-code");
     started(mine.key, "pty-1", "session-1");
     fake.transcripts = [
-      { id: "c1", title: "from a terminal", modified: 1000, size: 400 },
+      { id: "c1", title: "from a terminal", modified: recent(), size: 400 },
     ];
     fake.codexTranscripts = [
-      { id: "x1", title: "Refactor billing", modified: 900, size: 400 },
+      { id: "x1", title: "Refactor billing", modified: recent(100), size: 400 },
     ];
 
     render(SessionsPane);
@@ -512,6 +515,28 @@ describe("SessionsPane", () => {
     expect(layout.focus).toBe("agent");
   });
 
+  // An old starter folds away behind Earlier unless a session it started
+  // is running: the rail of started sessions stands with its row.
+  it("keeps an old starter out of Earlier while a session it started is live", async () => {
+    workspace.open.push(repo("/starter", "starter"));
+    workspace.active = "/starter";
+    const starter = create("/starter");
+    started(starter.key, "pty-1", "starter-1");
+    starter.status = "dormant";
+    starter.activeAt = Date.now() - 20 * 24 * 3600 * 1000;
+    const kid = create("/starter");
+    started(kid.key, "pty-2", "kid-1");
+    conductor.startedBy[kid.key] = starter.token;
+    touch("/starter", Date.now() - 1000);
+
+    render(SessionsPane);
+    await waitFor(() => expect(screen.getByTestId("started-session")).toBeInTheDocument());
+    expect(screen.queryByTestId("earlier-fold")).toBeNull();
+
+    kid.status = "exited";
+    await waitFor(() => expect(screen.getByTestId("earlier-fold")).toHaveTextContent("Earlier · 1"));
+  });
+
   // A session started by another hangs under its starter. Picking it goes
   // to the session, and the starter's project is the one used and drawn
   // on screen: the project it runs in, with nothing else under it, stays
@@ -556,7 +581,7 @@ describe("SessionsPane", () => {
   it("shows a project whose only session hangs elsewhere with none when its header is clicked", async () => {
     workspace.open.push(repo("/starter", "starter"), repo("/kid", "kid"));
     workspace.active = "/starter";
-    const old = Math.floor(Date.now() / 1000) - 40 * 24 * 3600;
+    const old = Math.floor(Date.now() / 1000) - 3 * 24 * 3600;
     fake.transcripts = [{ id: "gone-1", title: "earlier work", modified: old, size: 400 }];
     const gone = create("/kid");
     started(gone.key, "pty-0", "gone-1");
@@ -622,8 +647,10 @@ describe("SessionsPane", () => {
       document.querySelector<HTMLElement>(`[data-row="project:${path}"]`)!.closest("section")!;
     expect(section("/starter").querySelector("[data-testid='project-head']")).toHaveClass("on");
     expect(section("/other").querySelector("[data-testid='project-head']")).not.toHaveClass("on");
+    await waitFor(() => expect(within(section("/starter")).getByTestId("earlier-fold")).toHaveTextContent("Earlier · 2"));
+    expect(screen.queryAllByTestId("past-session")).toHaveLength(0);
+    await fireEvent.click(within(section("/starter")).getByTestId("earlier-fold"));
     await waitFor(() => expect(within(section("/starter")).getByTestId("past-session")).toHaveTextContent("earlier work"));
-    expect(within(section("/starter")).getByTestId("earlier-fold")).toHaveTextContent("Earlier · 1");
     expect(screen.getAllByTestId("past-session")).toHaveLength(1);
 
     await fireEvent.click(within(section("/starter")).getByTestId("project-new-session"));
@@ -647,6 +674,7 @@ describe("SessionsPane", () => {
     const second = create("/repo");
     started(second.key, "pty-2", "session-2");
     first.changedAt = second.changedAt - 1000;
+    first.activeAt = first.changedAt;
     layout.focus = "sessions";
 
     render(SessionsPane);
@@ -669,7 +697,7 @@ describe("SessionsPane", () => {
     const only = create("/repo");
     started(only.key, "pty-1", "session-1");
     fake.transcripts = [
-      { id: "abc-123", title: "from a terminal", modified: 1000, size: 400 },
+      { id: "abc-123", title: "from a terminal", modified: recent(), size: 400 },
     ];
     layout.focus = "sessions";
 
@@ -693,7 +721,7 @@ describe("SessionsPane", () => {
     workspace.open.push(repo("/repo", "repo"));
     workspace.active = "/repo";
     fake.transcripts = [
-      { id: "abc-123", title: "from a terminal", modified: 1000, size: 400 },
+      { id: "abc-123", title: "from a terminal", modified: recent(), size: 400 },
     ];
     layout.focus = "sessions";
 
@@ -1002,6 +1030,7 @@ describe("SessionsPane", () => {
     expect(names()).toEqual(["a", "b"]);
     busy.working = true;
     busy.changedAt = Date.now() + 1000;
+    busy.activeAt = busy.changedAt;
     await tick();
     expect(names()).toEqual(["a", "b"]);
   });
@@ -1365,8 +1394,8 @@ describe("SessionsPane", () => {
     const one = create("/repo", null, "claude-code");
     started(one.key, "pty-1", "session-1");
     fake.transcripts = [
-      { id: "session-1", title: "first", modified: 1000, size: 400 },
-      { id: "session-3", title: "third", modified: 800, size: 400 },
+      { id: "session-1", title: "first", modified: recent(), size: 400 },
+      { id: "session-3", title: "third", modified: recent(200), size: 400 },
     ];
     layout.focus = "sessions";
 
@@ -1399,7 +1428,7 @@ describe("SessionsPane", () => {
     fake.transcripts.push({
       id: "session-2",
       title: "second",
-      modified: 700,
+      modified: recent(300),
       size: 400,
     });
     closeStore(two.key);
@@ -1463,7 +1492,7 @@ describe("SessionsPane", () => {
       {
         id: "abc-123",
         title: "rename the token cache",
-        modified: 1000,
+        modified: recent(),
         size: 400,
       },
     ];
@@ -1486,8 +1515,8 @@ describe("SessionsPane", () => {
     workspace.open.push(repo("/repo", "repo"));
     workspace.active = "/repo";
     fake.transcripts = [
-      { id: "abc-123", title: "from a terminal", modified: 1000, size: 400 },
-      { id: "def-456", title: "another terminal", modified: 900, size: 400 },
+      { id: "abc-123", title: "from a terminal", modified: recent(), size: 400 },
+      { id: "def-456", title: "another terminal", modified: recent(100), size: 400 },
     ];
 
     render(SessionsPane);
@@ -1509,7 +1538,7 @@ describe("SessionsPane", () => {
     workspace.open.push(repo("/repo", "repo"));
     workspace.active = "/repo";
     fake.transcripts = [
-      { id: "abc-123", title: "earlier work", modified: 1000, size: 400 },
+      { id: "abc-123", title: "earlier work", modified: recent(), size: 400 },
     ];
 
     render(SessionsPane);
@@ -1527,7 +1556,7 @@ describe("SessionsPane", () => {
     workspace.open.push(repo("/repo", "repo"));
     workspace.active = "/repo";
     fake.transcripts = [
-      { id: "abc-123", title: "earlier work", modified: 1000, size: 400 },
+      { id: "abc-123", title: "earlier work", modified: recent(), size: 400 },
     ];
 
     render(SessionsPane);

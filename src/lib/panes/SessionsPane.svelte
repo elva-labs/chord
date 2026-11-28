@@ -19,7 +19,7 @@
   import {
     bringBack,
     resumeWholeTerminal,
-    byChange,
+    byActivity,
     byKey,
     close as closeSession,
     create,
@@ -35,10 +35,14 @@
     hasName,
     rowName,
     isLive,
+    dotAge,
+    recency,
     markRead,
     markUnread,
     shownName,
-    lastChanged,
+    lastActive,
+    activeShown,
+    turnAt,
     readsLikeAnother,
     loadHistory,
     loadMissingHistories,
@@ -796,7 +800,7 @@
 
   /** A row under a project's name: a session, live or left from the last
       quit, or a past session of the project on screen, with when it
-      changed. */
+      was last active. */
   type Entry =
     | { kind: "session"; id: string; session: Session; at: number }
     | { kind: "past"; id: string; transcript: HistoryEntry; at: number };
@@ -811,25 +815,38 @@
     return entry.kind === "session" && entry.session.unread;
   }
 
+  /** Whether an entry is a session with a session it started that is live,
+      asking or waiting to be read: its rail stands under it, and goes with
+      the row if the row folds. */
+  function holdsOne(entry: Entry): boolean {
+    return (
+      entry.kind === "session" &&
+      childrenOf(entry.session).some((kid) => isLive(kid) || kid.needs !== null || kid.unread)
+    );
+  }
+
   /** How many quiet rows a project shows before the rest fold into one
       row that counts them. */
   const QUIET_SHOWN = 2;
 
   /** What stands under a project's name: its sessions with something
-      running behind them, in the order they last changed, then the quiet
+      running behind them, in the order they were last active, then the quiet
       rows: the ones left open at the last quit, latest first, and after
       all of them its past sessions, latest first, however lately those
       changed. Once there are more than a few quiet rows, the tail of them
       stands behind a fold that counts them, and is drawn under it while
-      it is open. A quiet row that is unread never goes behind the fold:
+      it is open. A quiet row last active longer ago than the yellow
+      window goes behind it whatever their number. A quiet row that is
+      unread never goes behind the fold, nor does one with a session it
+      started that is live, asking or unread:
       it stands, and counts toward the quiet rows that stand. Past
       sessions are listed under the project on screen alone. */
   function bodyOf(path: string): { entries: Entry[]; tail: Entry[] } {
-    const own = byChange(ownFor(path)).map(
-      (session): Entry => ({ kind: "session", id: `session:${session.key}`, session, at: lastChanged(session) }),
+    const own = byActivity(ownFor(path)).map(
+      (session): Entry => ({ kind: "session", id: `session:${session.key}`, session, at: lastActive(session) }),
     );
     const past = (screenProject === path ? historyFor(path) : [])
-      .map((transcript): Entry => ({ kind: "past", id: `past:${transcript.id}`, transcript, at: transcript.modified * 1000 }))
+      .map((transcript): Entry => ({ kind: "past", id: `past:${transcript.id}`, transcript, at: turnAt(transcript) }))
       .sort((a, b) => b.at - a.at);
     const quiet = [...own.filter((entry) => !running(entry)), ...past];
     const wanted = [...own.filter(running), ...quiet];
@@ -841,12 +858,13 @@
     const tail: Entry[] = [];
     // The unread quiet rows stand first and take their places among the
     // quiet rows that stand, so the read ones fill what they leave.
-    const unread = quiet.filter(isUnread).length;
+    const unread = quiet.filter((entry) => isUnread(entry) || holdsOne(entry)).length;
     const readShown = Math.max(0, QUIET_SHOWN - unread);
     let shown = 0;
     for (const id of order) {
       const entry = byId.get(id)!;
-      if (running(entry) || isUnread(entry)) entries.push(entry);
+      if (running(entry) || isUnread(entry) || holdsOne(entry)) entries.push(entry);
+      else if (recency(entry.at, now) === "old") tail.push(entry);
       else if (!folds || shown < readShown) {
         entries.push(entry);
         shown += 1;
@@ -1215,7 +1233,7 @@
       (other) => other.key !== session.key && other.project !== session.project && shownName(other) === name,
     );
     const named = elsewhere ? `${name} in ${projectLabel(session.project)}` : name;
-    return readsLikeAnother(session) ? `${named}, ${since(lastChanged(session), now)}` : named;
+    return readsLikeAnother(session) ? `${named}, ${since(activeShown(session, now), now)}` : named;
   }
 
   /** The sessions and projects whose shells are being read before the
@@ -1751,7 +1769,7 @@
 {/snippet}
 
 <!-- A session's row. Its first line is its name and, at the end, when it
-     last changed. A second line holds what the agent left for the row,
+     was last active. A second line holds what the agent left for the row,
      with the model at its end, and for a session that started others what
      those are doing; a row with neither, and a row left from the last
      quit, takes the one line. The row's own buttons take the time's place
@@ -1818,6 +1836,8 @@
         class="dot"
         class:live={isLive(session)}
         class:dormant={session.status === "dormant"}
+        class:recent={dotAge(session, now) === "recent"}
+        class:stale={dotAge(session, now) === "stale"}
         class:working={conducting(session)}
         class:unread={session.unread}
         class:permission={session.needs === "permission"}
@@ -1835,7 +1855,7 @@
             ><Icon name="chat" size={11} /></span
           >
         {/if}
-        <span class="when" data-testid="session-when">{since(lastChanged(session), now)}</span>
+        <span class="when" data-testid="session-when">{since(activeShown(session, now), now)}</span>
       </span>
       {#if line !== null || marks.length > 0}
         <span class="second">
@@ -1896,6 +1916,8 @@
               {#each kids as kid (kid.key)}<span
                   class="dot mini"
                   class:live={isLive(kid)}
+                  class:recent={dotAge(kid, now) === "recent"}
+                  class:stale={dotAge(kid, now) === "stale"}
                   class:working={conducting(kid)}
                   class:permission={kid.needs === "permission"}
                 ></span>{/each}
@@ -1905,6 +1927,8 @@
               {#each chatStarted(session) as kid (kid.key)}<span
                   class="dot mini"
                   class:live={isLive(kid)}
+                  class:recent={dotAge(kid, now) === "recent"}
+                  class:stale={dotAge(kid, now) === "stale"}
                   class:working={conducting(kid)}
                   class:unread={kid.unread}
                   class:permission={kid.needs === "permission"}
@@ -2081,7 +2105,7 @@
      dot, one line each: the state, the name, the account it runs under
      when that is not its project's, the project it runs in when that is
      another, the model, or its step and round, or, in the accent, that it
-     is asking for a permission, and when it last changed. Short of room,
+     is asking for a permission, and when it was last active. Short of room,
      the project is cut first, then the model goes whole and the project
      with it, then the account, and the name gives way last; the time, the
      step and round, and asking always stand. Delete does nothing on these
@@ -2121,6 +2145,8 @@
               class="dot"
               class:live={isLive(kid)}
               class:dormant={kid.status === "dormant"}
+              class:recent={dotAge(kid, now) === "recent"}
+              class:stale={dotAge(kid, now) === "stale"}
               class:working={conducting(kid)}
               class:unread={kid.unread}
               class:permission={kid.needs === "permission"}
@@ -2162,7 +2188,7 @@
             {:else if role !== null}
               <span class="model role" data-testid="started-role">{role}</span>
             {/if}
-            <span class="when">{since(lastChanged(kid), now)}</span>
+            <span class="when">{since(activeShown(kid, now), now)}</span>
             <span class="state told"
               >{stateWord(kid)}{#if news.includes(kid)}, not heard by {shownName(parent)} yet{/if}{#if kidStays !== null}, {kidStays.line}{/if}</span
             >
@@ -2204,7 +2230,7 @@
         >{/if}
       {#if transcript.account !== null}<span class="tag account" data-testid="past-account">{transcript.account}</span
         >{/if}
-      <span class="when">{since(transcript.modified * 1000, now)}</span>
+      <span class="when">{since(turnAt(transcript), now)}</span>
     </button>
     {#if !isChatsFolder(path)}<span class="actions">
       <button
@@ -3578,10 +3604,10 @@
     white-space: nowrap;
   }
 
-  /* The dot says what is behind the row: green while a process runs, the
-     dormant yellow for a row left from the last quit, the accent while it
-     waits for you, and the quiet grey once it is done or ended. Only
-     asking is a ring. */
+  /* The dot says how the session stands: green while it was active lately,
+     yellow once it has been quiet for a while, the accent while it waits
+     for you, and the quiet grey once it is done or ended. Only asking is a
+     ring. */
   .dot {
     --done: color-mix(in srgb, var(--ink-3) 60%, transparent);
     width: var(--dot);
@@ -3592,14 +3618,14 @@
     background: var(--done);
   }
 
-  .dot.live {
+  .dot.live,
+  .dot.recent {
     background: var(--add);
     border-color: var(--add);
   }
 
-  /* Open when the app last quit, and not started since: it starts when
-     selected. */
-  .dot.dormant {
+  /* Not active for a while, whether a process runs behind it or not. */
+  .dot.stale {
     background: var(--dormant);
     border-color: var(--dormant);
   }

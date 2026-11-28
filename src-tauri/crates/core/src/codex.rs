@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags};
 
-use crate::transcripts::{tidy, Transcript};
+use crate::transcripts::{epoch_seconds, last_in_tail, tidy, Transcript};
 
 /// The newest state database by schema number: Codex bumps the number when
 /// the schema moves, and leaves the old file behind.
@@ -47,7 +47,13 @@ fn open(codex_home: &Path) -> Option<Connection> {
 /// out, as Codex's own picker leaves them out; so are archived ones.
 /// The project's own threads and those run anywhere under it, a worktree
 /// most of all.
-const LIST: &str = "SELECT id, name, title, first_user_message, updated_at, tokens_used, cwd \
+const LIST: &str = "SELECT id, name, title, first_user_message, updated_at, tokens_used, cwd, rollout_path \
+                    FROM threads WHERE (cwd = ?1 OR cwd LIKE ?2) AND archived = 0 AND source <> 'exec' \
+                    ORDER BY updated_at DESC";
+
+/// The same listing from an index that does not say where a thread's rollout
+/// is: its threads are listed all the same, dated by the index alone.
+const LIST_WITHOUT_ROLLOUT: &str = "SELECT id, name, title, first_user_message, updated_at, tokens_used, cwd, NULL \
                     FROM threads WHERE (cwd = ?1 OR cwd LIKE ?2) AND archived = 0 AND source <> 'exec' \
                     ORDER BY updated_at DESC";
 
@@ -64,7 +70,10 @@ pub fn list_many(codex_home: &Path, projects: &[PathBuf]) -> Vec<Vec<Transcript>
     let Some(connection) = open(codex_home) else {
         return vec![Vec::new(); projects.len()];
     };
-    let Ok(mut statement) = connection.prepare(LIST) else {
+    let Ok(mut statement) = connection
+        .prepare(LIST)
+        .or_else(|_| connection.prepare(LIST_WITHOUT_ROLLOUT))
+    else {
         return vec![Vec::new(); projects.len()];
     };
     projects
@@ -78,6 +87,9 @@ pub fn list_many(codex_home: &Path, projects: &[PathBuf]) -> Vec<Vec<Transcript>
                     id: row.get(0)?,
                     title: name_of(row.get(1)?, row.get(2)?, row.get(3)?),
                     modified: row.get::<_, i64>(4).map(|s| s.max(0) as u64)?,
+                    active: row
+                        .get::<_, Option<String>>(7)?
+                        .and_then(|path| last_message_at(Path::new(&path))),
                     size: row.get::<_, i64>(5).map(|s| s.max(0) as u64)?,
                     cwd: (cwd != root).then_some(cwd),
                 })
@@ -88,6 +100,58 @@ pub fn list_many(codex_home: &Path, projects: &[PathBuf]) -> Vec<Vec<Transcript>
             }
         })
         .collect()
+}
+
+/// When the last message of the user or the agent was written to a rollout,
+/// read from its end: the records after it, such as settings, token counts
+/// and the end of a turn, are not the session being used. None where the
+/// rollout is not there or holds no message in its last megabyte.
+fn last_message_at(path: &Path) -> Option<u64> {
+    let stamp = std::fs::metadata(path)
+        .ok()
+        .map(|meta| (meta.len(), meta.modified().ok()));
+    let key = (path.to_path_buf(), stamp?);
+    if let Some(known) = messages().lock().ok().and_then(|m| m.get(&key).copied()) {
+        return known;
+    }
+    let found = last_in_tail(path, message_at);
+    if let Ok(mut kept) = messages().lock() {
+        kept.insert(key, found);
+    }
+    found
+}
+
+type MessageKey = (PathBuf, (u64, Option<std::time::SystemTime>));
+
+fn messages() -> &'static std::sync::Mutex<std::collections::HashMap<MessageKey, Option<u64>>> {
+    static KEPT: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<MessageKey, Option<u64>>>,
+    > = std::sync::OnceLock::new();
+    KEPT.get_or_init(Default::default)
+}
+
+/// The time of the last line of the text that records a message of the user
+/// or the agent, as Codex writes it either way.
+fn message_at(tail: &str) -> Option<u64> {
+    tail.lines().rev().find_map(|line| {
+        if !line.contains("message") {
+            return None;
+        }
+        let value: serde_json::Value = serde_json::from_str(line).ok()?;
+        let payload = value.get("payload")?;
+        let counts = match value.get("type")?.as_str()? {
+            "response_item" => {
+                payload.get("type")?.as_str()? == "message"
+                    && matches!(payload.get("role")?.as_str()?, "user" | "assistant")
+            }
+            "event_msg" => matches!(
+                payload.get("type")?.as_str()?,
+                "user_message" | "agent_message"
+            ),
+            _ => false,
+        };
+        counts.then(|| epoch_seconds(value.get("timestamp")?.as_str()?))?
+    })
 }
 
 /// What a thread is called: the name the user gave it, else the title Codex
@@ -518,7 +582,7 @@ mod tests {
                  title TEXT NOT NULL DEFAULT '', first_user_message TEXT NOT NULL DEFAULT '', \
                  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, \
                  archived INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL, \
-                 tokens_used INTEGER NOT NULL DEFAULT 0)",
+                 tokens_used INTEGER NOT NULL DEFAULT 0, rollout_path TEXT)",
             )
             .unwrap();
         for (id, cwd, name, title, first, created, updated, archived, source) in rows {
@@ -586,6 +650,58 @@ mod tests {
         assert_eq!(found[0].title, None, "a fresh thread has no name yet");
         assert_eq!(found[3].modified, 20);
         assert_eq!(found[3].size, 42);
+    }
+
+    #[test]
+    fn dates_a_thread_by_the_last_message_in_its_rollout() {
+        let dir = codex_home("active");
+        seed(
+            &dir,
+            5,
+            &[
+                ("a", P, "", "t", "x", 10, 9_000_000_000, 0, "cli"),
+                ("b", P, "", "t", "x", 11, 9_000_000_001, 0, "cli"),
+            ],
+        );
+        let rollout = dir.join("rollout-a.jsonl");
+        let line = |time: &str, kind: &str, payload: &str| {
+            format!("{{\"timestamp\":\"{time}\",\"type\":\"{kind}\",\"payload\":{payload}}}\n")
+        };
+        let mut body = line(
+            "2026-11-01T08:00:00.000Z",
+            "response_item",
+            r#"{"type":"message","role":"user"}"#,
+        );
+        body.push_str(&line(
+            "2026-11-01T08:00:05.000Z",
+            "response_item",
+            r#"{"type":"message","role":"assistant"}"#,
+        ));
+        body.push_str(&line(
+            "2026-11-01T08:00:06.000Z",
+            "response_item",
+            r#"{"type":"message","role":"developer"}"#,
+        ));
+        for kind in ["thread_settings_applied", "token_count", "task_complete"] {
+            body.push_str(&line(
+                "2026-11-20T10:00:00.000Z",
+                "event_msg",
+                &format!("{{\"type\":\"{kind}\"}}"),
+            ));
+        }
+        std::fs::write(&rollout, body).unwrap();
+        Connection::open(dir.join("state_5.sqlite"))
+            .unwrap()
+            .execute(
+                "UPDATE threads SET rollout_path = ?1 WHERE id = 'a'",
+                [rollout.to_str().unwrap()],
+            )
+            .unwrap();
+        let found = list(&dir, Path::new(P));
+        let a = found.iter().find(|t| t.id == "a").unwrap();
+        assert_eq!(a.active, epoch_seconds("2026-11-01T08:00:05Z"));
+        let b = found.iter().find(|t| t.id == "b").unwrap();
+        assert_eq!(b.active, None);
     }
 
     #[test]

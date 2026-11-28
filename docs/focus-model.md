@@ -140,8 +140,8 @@ the same entry while sessions change state and move under it.
 
 **Go to** opens on <kbd>Cmd</kbd><kbd>P</kbd> and lists the sessions, then the
 projects. A session matches on its name or on the label of its project.
-Sessions are listed by when they last changed, the latest first, each with a
-dot for its state, its project and the time since. With nothing typed the
+Sessions are listed by their latest change, the latest first, each with a
+dot for its state, its project and the time since it was last active. With nothing typed the
 cursor starts on the first session that is not the one on screen, so Enter
 goes to the previous one. Every open project is listed, with how many of the
 sessions the sessions pane draws under it are live, or the time since it was

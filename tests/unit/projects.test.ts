@@ -38,9 +38,9 @@ import {
 import { conductor, resetConductor } from "$lib/conductor.svelte";
 import "$lib/orchestrator.svelte";
 import {
-  byChange,
+  byActivity,
   create,
-  lastChanged,
+  lastActive as activeAt,
   modelLabel,
   earlierLabel,
   nextNeedingYou,
@@ -90,6 +90,7 @@ describe("last used", () => {
 
     const live = create("/repo");
     live.changedAt = NOW - DAY;
+    live.activeAt = live.changedAt;
     expect(lastUsed("/repo")).toBe(NOW - 5 * DAY);
   });
 
@@ -99,7 +100,16 @@ describe("last used", () => {
     expect(lastActive("/repo")).toBe(NOW - 2 * DAY);
     const live = create("/repo");
     live.changedAt = NOW - DAY;
+    live.activeAt = live.changedAt;
     expect(lastActive("/repo")).toBe(NOW - DAY);
+  });
+
+  it("dates a project by its latest turn, not by the entry written last", () => {
+    // Written now, but its last turn was 30 days ago.
+    const old = { ...entry("a", NOW), active: Math.floor((NOW - 30 * DAY) / 1000) };
+    sessions.history["/repo"] = [old, entry("b", NOW - 2 * DAY)];
+    expect(lastUsed("/repo")).toBe(NOW - 2 * DAY);
+    expect(lastActive("/repo")).toBe(NOW - 2 * DAY);
   });
 
   // A row left from the last quit is drawn again at the start, which is no
@@ -191,6 +201,7 @@ describe("active and inactive", () => {
     const live = create("/repo");
     started(live.key, "pty-1", "s-1");
     live.changedAt = NOW - 60 * DAY;
+    live.activeAt = live.changedAt;
     expect(isActive("/repo", null, NOW)).toBe(true);
 
     live.status = "exited";
@@ -255,8 +266,10 @@ describe("a project filed by hand", () => {
     const row = create("/rows");
     row.status = "exited";
     row.changedAt = NOW - 1;
+    row.activeAt = row.changedAt;
     expect(isActive("/rows", null, NOW)).toBe(false);
     row.changedAt = NOW + 1;
+    row.activeAt = row.changedAt;
     expect(isActive("/rows", null, NOW + 1)).toBe(true);
 
     sessions.history["/written"] = [entry("a", NOW - DAY)];
@@ -271,6 +284,7 @@ describe("a project filed by hand", () => {
     const row = create("/repo");
     started(row.key, "pty-1", "s-1");
     row.changedAt = NOW - DAY;
+    row.activeAt = row.changedAt;
     expect(holdsActive("/repo")).toBe(true);
     expect(isActive("/repo", null, NOW)).toBe(true);
     row.status = "exited";
@@ -394,6 +408,7 @@ describe("a session hanging under its starter", () => {
     touch("/there", NOW - 60 * DAY);
     const { starter, kid } = hang("/there");
     kid.changedAt = NOW;
+    kid.activeAt = kid.changedAt;
     sessions.history["/there"] = [entry("kid-1", NOW)];
 
     expect(isActive("/there", null, NOW)).toBe(false);
@@ -415,6 +430,8 @@ describe("a session hanging under its starter", () => {
     const { starter, kid } = hang("/there");
     starter.status = "dormant";
     kid.status = "dormant";
+    kid.activeAt = null;
+    starter.activeAt = null;
     sessions.history["/there"] = [entry("kid-1", NOW - DAY)];
     expect(lastActive("/here")).toBe(NOW - DAY);
     expect(isActive("/here", null, NOW)).toBe(true);
@@ -589,6 +606,7 @@ describe("the next session that needs you", () => {
     started(own.key, "pty-2", "s-2");
     asking.needs = "permission";
     asking.changedAt = Date.now() - 40 * DAY;
+    asking.activeAt = asking.changedAt;
 
     expect(isActive("/old", workspace.active)).toBe(true);
     expect(nextNeedingYou()?.key).toBe(asking.key);
@@ -613,19 +631,19 @@ describe("since", () => {
 });
 
 describe("the order of a project's rows", () => {
-  it("is the latest change first, a row left from the last quit by its transcript", () => {
+  it("is the latest activity first, a row left from the last quit by its transcript", () => {
     const first = create("/repo");
     const second = create("/repo");
     const left = reopened("/repo", "t-1", "claude-code", null, null, null);
-    first.changedAt = NOW - 1000;
-    second.changedAt = NOW - 5000;
+    first.activeAt = NOW - 1000;
+    second.activeAt = NOW - 5000;
     left.changedAt = NOW;
     sessions.history["/repo"] = [entry("t-1", NOW - DAY)];
-    expect(byChange([first, second, left]).map((row) => row.key)).toEqual([first.key, second.key, left.key]);
-    expect(lastChanged(left)).toBe(NOW - DAY);
+    expect(byActivity([first, second, left]).map((row) => row.key)).toEqual([first.key, second.key, left.key]);
+    expect(activeAt(left)).toBe(NOW - DAY);
 
-    second.changedAt = NOW;
-    expect(byChange([first, second, left])[0].key).toBe(second.key);
+    second.activeAt = NOW;
+    expect(byActivity([first, second, left])[0].key).toBe(second.key);
   });
 });
 

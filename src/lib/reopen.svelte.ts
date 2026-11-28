@@ -8,6 +8,7 @@ import { pluginStarted, pluginStartOf, type PluginStart } from "$lib/pluginStart
 import {
   activeSession,
   forProject,
+  knownActive,
   reopened,
   restoredOnScreen,
   sessions,
@@ -91,6 +92,10 @@ interface Open {
   /** The plugin's start the user said yes to, when a plugin started it,
       which every run of the row tells the core again. */
   plugin?: PluginStart;
+  /** When the session was last active, in milliseconds. A record from
+      before says nothing, which reads the time from the conversation's
+      stored record. */
+  active?: number;
 }
 
 const isPluginStart = (start: unknown): start is PluginStart => {
@@ -115,6 +120,13 @@ function movesOf(session: Session): { moves?: SessionKind } {
 function pluginOf(session: Session): { plugin?: PluginStart } {
   const start = pluginStartOf(session.key);
   return start === null ? {} : { plugin: { ...start } };
+}
+
+/** When a row was last active, as the record keeps it, when that is
+    known. */
+function activeOf(session: Session): { active?: number } {
+  const at = knownActive(session);
+  return at === null ? {} : { active: at };
 }
 
 function onRecord(session: Session): boolean {
@@ -146,6 +158,7 @@ function isOpenEntry(entry: unknown): entry is Open {
     made,
     over,
     plugin,
+    active,
   } = entry as Record<string, unknown>;
   return (
     typeof project === "string" &&
@@ -164,6 +177,7 @@ function isOpenEntry(entry: unknown): entry is Open {
     (moves === undefined || moves === "terminal" || moves === "integrated") &&
     (made === undefined || typeof made === "boolean") &&
     (over === undefined || typeof over === "boolean") &&
+    (active === undefined || typeof active === "number") &&
     (plugin === undefined || (isPluginStart(plugin) && plugin.project === project))
   );
 }
@@ -262,6 +276,7 @@ export function reopen(
     );
     row.madeTree = entry.made === true;
     row.runsOn = entry.runsOn ?? null;
+    row.activeAt = entry.active ?? null;
     row.profile = entry.profile ?? null;
     if (entry.over === true) cameBackOver(row.key);
     if (entry.moves !== undefined) recordMove(row.key, entry.moves);
@@ -341,6 +356,7 @@ export function reopen(
             ...(session.ownWay ? { own: true } : {}),
             ...(session.madeTree ? { made: true } : {}),
             ...(workOver(session) ? { over: true } : {}),
+            ...activeOf(session),
             ...movesOf(session),
             ...pluginOf(session),
             ...(session.kind === "integrated"

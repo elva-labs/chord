@@ -5,7 +5,7 @@
   import { modelLabel } from "$lib/models";
   import { hostOf } from "$lib/remote.svelte";
   import { placeTextOf } from "$lib/conductor.svelte";
-  import { isLive, sessions, shownName, type Session } from "$lib/sessions.svelte";
+  import { dotAge, sessions, shownName, type Session } from "$lib/sessions.svelte";
   import { conducting, stateWord } from "$lib/orchestrator.svelte";
   import { goTo } from "$lib/workspace.svelte";
 
@@ -24,6 +24,14 @@
       .filter((session): session is Session => session !== undefined),
   );
 
+  /** The moment a dot's age is read against, moved on every half minute. */
+  let now = $state(Date.now());
+
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
+
   /** Whether any row has a step, so the rows keep a column for it. */
   let stepped = $derived(rows.some((session) => placeTextOf(session.key) !== null));
 
@@ -40,10 +48,10 @@
       <div class="row" data-testid="started-session">
         <span
           class="dot"
-          class:live={isLive(session)}
+          class:recent={dotAge(session, now) === "recent"}
           class:working={conducting(session)}
           class:asking={session.needs === "permission"}
-          class:dormant={session.status === "dormant"}
+          class:stale={dotAge(session, now) === "stale"}
           title={stateWord(session)}
         ></span>
         {#if stepped}<span class="step" data-testid="started-step">{at?.step ?? ""}</span>{/if}
@@ -99,8 +107,13 @@
     opacity: 0.6;
   }
 
-  .dot.live {
+  .dot.recent {
     background: var(--add);
+    opacity: 1;
+  }
+
+  .dot.stale {
+    background: var(--dormant);
     opacity: 1;
   }
 
@@ -112,11 +125,6 @@
     background: none;
     box-shadow: inset 0 0 0 1.75px var(--accent);
     animation: none;
-  }
-
-  .dot.dormant {
-    background: var(--dormant);
-    opacity: 1;
   }
 
   .name {

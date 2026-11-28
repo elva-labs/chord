@@ -23,6 +23,11 @@ use serde::Serialize;
 /// the names Claude Code gives a session are appended as it goes, so the
 /// latest is near the end.
 const TITLE_SCAN_BYTES: usize = 64 * 1024;
+/// The most read from the end of a file looking for the last turn, where the
+/// first window holds none: records of other kinds can run to hundreds of
+/// kilobytes after it. The window grows fourfold until it holds one or this
+/// is reached.
+const TURN_SCAN_BYTES: usize = 1024 * 1024;
 /// A title is a row in a narrow pane, not a paragraph.
 const TITLE_MAX_CHARS: usize = 80;
 
@@ -34,6 +39,11 @@ pub struct Transcript {
     pub id: String,
     /// Seconds since the epoch, for ordering and for the fallback label.
     pub modified: u64,
+    /// Seconds since the epoch of the last entry the user or the agent
+    /// wrote, which is when the session was last used: the file is written
+    /// to on a resume or a quit with no turn in it. Absent when the end of
+    /// the file holds no such entry, which reads as `modified`.
+    pub active: Option<u64>,
     pub size: u64,
     /// Absent when the format moved, which is a missing title rather than a
     /// broken pane.
@@ -111,6 +121,7 @@ pub fn directory_for(claude_dir: &Path, project: &Path) -> PathBuf {
 /// belongs to no project asked for never needs one.
 struct Details {
     cwd: Option<String>,
+    active: Option<u64>,
     title: OnceLock<Option<String>>,
 }
 
@@ -279,6 +290,7 @@ pub fn list_many(claude_dir: &Path, projects: &[PathBuf]) -> Vec<Vec<Transcript>
                 .map(|item| Transcript {
                     id: item.id.clone(),
                     modified: item.modified,
+                    active: item.details.active,
                     size: item.size,
                     title: item.details.title(&item.path, item.size),
                     cwd: item
@@ -417,8 +429,75 @@ fn read_details(path: &Path) -> Details {
     OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     Details {
         cwd: read_head(path).as_deref().and_then(cwd_in),
+        active: last_in_tail(path, last_turn_at),
         title: OnceLock::new(),
     }
+}
+
+/// What `find` reads out of the end of the file, from a window that grows
+/// from the title's until it finds something, holds the whole file or reaches
+/// the most read for a turn.
+pub(crate) fn last_in_tail(path: &Path, find: fn(&str) -> Option<u64>) -> Option<u64> {
+    let mut window = TITLE_SCAN_BYTES;
+    loop {
+        let (tail, whole) = read_tail_of(path, window)?;
+        if let Some(found) = find(&tail) {
+            return Some(found);
+        }
+        if whole || window >= TURN_SCAN_BYTES {
+            return None;
+        }
+        window = (window * 4).min(TURN_SCAN_BYTES);
+    }
+}
+
+/// When the last user or assistant entry of the tail was written, in seconds
+/// since the epoch.
+fn last_turn_at(tail: &str) -> Option<u64> {
+    tail.lines().rev().find_map(|line| {
+        let value: serde_json::Value = serde_json::from_str(line).ok()?;
+        match value.get("type")?.as_str()? {
+            "user" | "assistant" => epoch_seconds(value.get("timestamp")?.as_str()?),
+            _ => None,
+        }
+    })
+}
+
+/// Seconds since the epoch of an RFC 3339 time in UTC, such as
+/// `2026-11-20T10:11:12.345Z`, or with a numeric offset.
+pub(crate) fn epoch_seconds(text: &str) -> Option<u64> {
+    let number = |range: std::ops::Range<usize>| -> Option<i64> { text.get(range)?.parse().ok() };
+    let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
+    let (hour, minute, second) = (number(11..13)?, number(14..16)?, number(17..19)?);
+    if text.get(4..5)? != "-" || text.get(7..8)? != "-" || !(1..=12).contains(&month) {
+        return None;
+    }
+    // Days from the civil date, counted from 1970-01-01.
+    let shifted = if month <= 2 { year - 1 } else { year };
+    let era = shifted.div_euclid(400);
+    let of_year = shifted - era * 400;
+    let of_month = (month + 9) % 12;
+    let of_era_day = (153 * of_month + 2) / 5 + day - 1;
+    let of_era = of_year * 365 + of_year / 4 - of_year / 100 + of_era_day;
+    let days = era * 146_097 + of_era - 719_468;
+    let rest = text.get(19..)?;
+    let rest = rest.trim_start_matches(|c: char| c == '.' || c.is_ascii_digit());
+    let offset = match rest.chars().next()? {
+        'Z' | 'z' => 0,
+        sign @ ('+' | '-') => {
+            let hours: i64 = rest.get(1..3)?.parse().ok()?;
+            let minutes: i64 = rest.get(4..6).and_then(|m| m.parse().ok()).unwrap_or(0);
+            let total = hours * 3600 + minutes * 60;
+            if sign == '+' {
+                total
+            } else {
+                -total
+            }
+        }
+        _ => return None,
+    };
+    let seconds = days * 86_400 + hour * 3600 + minute * 60 + second - offset;
+    u64::try_from(seconds).ok()
 }
 
 /// Where the session ran, from the first line that says.
@@ -485,22 +564,29 @@ fn read_head(path: &Path) -> Option<String> {
 /// The last stretch of the file, whole lines only: the first line of the
 /// buffer is cut off unless the buffer holds the whole file.
 fn read_tail(path: &Path) -> Option<String> {
+    read_tail_of(path, TITLE_SCAN_BYTES).map(|(text, _)| text)
+}
+
+/// The last `window` bytes of the file as whole lines, and whether that is
+/// the whole file.
+fn read_tail_of(path: &Path, window: usize) -> Option<(String, bool)> {
     use std::io::{Read, Seek, SeekFrom};
     let mut file = std::fs::File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
-    let start = len.saturating_sub(TITLE_SCAN_BYTES as u64);
+    let start = len.saturating_sub(window as u64);
     file.seek(SeekFrom::Start(start)).ok()?;
     let mut buffer = Vec::with_capacity((len - start) as usize);
     file.read_to_end(&mut buffer).ok()?;
     let text = String::from_utf8_lossy(&buffer).to_string();
     if start == 0 {
-        return Some(text);
+        return Some((text, true));
     }
-    Some(
+    Some((
         text.split_once('\n')
             .map(|(_, rest)| rest.to_string())
             .unwrap_or_default(),
-    )
+        false,
+    ))
 }
 
 /// The name the user gave a session through the agent's rename command,
@@ -648,6 +734,74 @@ mod tests {
     #[test]
     fn mangling_is_lossy_and_cannot_be_reversed() {
         assert_eq!(mangle(Path::new("/a/b-c")), mangle(Path::new("/a/b_c")));
+    }
+
+    #[test]
+    fn reads_an_rfc_3339_time_as_seconds_since_the_epoch() {
+        assert_eq!(epoch_seconds("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(
+            epoch_seconds("2026-11-20T10:11:12.345Z"),
+            Some(1_795_169_472)
+        );
+        assert_eq!(
+            epoch_seconds("2026-11-20T12:11:12+02:00"),
+            epoch_seconds("2026-11-20T10:11:12Z")
+        );
+        assert_eq!(epoch_seconds("2024-02-29T00:00:00Z"), Some(1_709_164_800));
+        assert_eq!(epoch_seconds("yesterday"), None);
+    }
+
+    // A resume or a quit appends records that are not a turn, so the file's
+    // write time says nothing of when the session was last used.
+    #[test]
+    fn dates_a_session_by_its_last_turn_not_by_its_file() {
+        let home = home("last-turn");
+        let project = Path::new("/home/ada/dev/demo");
+        write_transcript(
+            &home,
+            project,
+            "used",
+            concat!(
+                r#"{"type":"user","cwd":"/home/ada/dev/demo","timestamp":"2026-11-01T08:00:00.000Z"}"#,
+                "\n",
+                r#"{"type":"assistant","timestamp":"2026-11-01T08:00:05.000Z"}"#,
+                "\n",
+                r#"{"type":"last-prompt","timestamp":"2026-11-20T10:00:00.000Z"}"#,
+                "\n",
+                r#"{"type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-20T10:00:01.000Z"}"#,
+                "\n"
+            ),
+        );
+        write_transcript(&home, project, "bare", r#"{"type":"user"}"#);
+        let found = list(&home, project);
+        let used = found.iter().find(|item| item.id == "used").unwrap();
+        assert_eq!(used.active, epoch_seconds("2026-11-01T08:00:05Z"));
+        assert!(used.modified > used.active.unwrap());
+        let bare = found.iter().find(|item| item.id == "bare").unwrap();
+        assert_eq!(bare.active, None);
+    }
+
+    #[test]
+    fn finds_the_last_turn_further_back_than_the_first_window_reaches() {
+        let home = home("far-turn");
+        let project = Path::new("/home/ada/dev/demo");
+        let filler = format!(
+            "{{\"type\":\"attachment\",\"timestamp\":\"2026-11-20T10:00:00.000Z\",\"pad\":\"{}\"}}\n",
+            "x".repeat(1000)
+        );
+        let mut body =
+            String::from("{\"type\":\"assistant\",\"timestamp\":\"2026-11-01T08:00:05.000Z\"}\n");
+        body.push_str(&filler.repeat(100));
+        write_transcript(&home, project, "far", &body);
+        let mut hopeless = String::new();
+        hopeless.push_str("{\"type\":\"assistant\",\"timestamp\":\"2026-11-01T08:00:05.000Z\"}\n");
+        hopeless.push_str(&filler.repeat(1200));
+        write_transcript(&home, project, "hopeless", &hopeless);
+        let found = list(&home, project);
+        let far = found.iter().find(|item| item.id == "far").unwrap();
+        assert_eq!(far.active, epoch_seconds("2026-11-01T08:00:05Z"));
+        let hopeless = found.iter().find(|item| item.id == "hopeless").unwrap();
+        assert_eq!(hopeless.active, None, "the search is bounded");
     }
 
     #[test]

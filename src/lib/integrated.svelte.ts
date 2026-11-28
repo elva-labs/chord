@@ -66,6 +66,8 @@ import {
   adopt,
   beganTurn,
   byKey,
+  knownActive,
+  touched,
   carriedFor,
   failed,
   followsAgain,
@@ -589,13 +591,19 @@ function settle(
   state: IntegratedState,
   before: IntegratedState | null,
   link: Link,
+  reattached = false,
 ) {
   const working = state === "working";
   const asking = state === "asking";
   const changed = session.working !== working || (session.needs === "permission") !== asking;
   session.working = working;
   session.needs = asking ? "permission" : null;
-  if (changed) session.changedAt = Date.now();
+  if (changed) {
+    session.changedAt = Date.now();
+    // A window taking up a run already going draws it as it is, which is
+    // no activity of the session.
+    if (!reattached) touched(session);
+  }
   if (asking && before !== "asking") rang(session.key);
   else if (state === "idle" && before !== null && before !== "idle") {
     const worked = link.worked;
@@ -1205,6 +1213,7 @@ export async function resume(key: string): Promise<void> {
 }
 
 function again(session: Session) {
+  session.activeAt = knownActive(session);
   renewToken(session);
   session.status = "starting";
   session.error = null;
@@ -1280,7 +1289,7 @@ export function reattach(key: string, handle: string, spoken = true): Promise<Re
         if (harnessProfile(session.agent).namesRunningModel)
           session.runsOn = snapshot.settings.model ?? snapshot.ready.defaultModel ?? null;
       }
-      settle(session, snapshot.state, before, link);
+      settle(session, snapshot.state, before, link, true);
       void rejoined(key);
       return "up";
     } catch (error) {
@@ -1413,6 +1422,7 @@ export function send(
   const session = byKey(key);
   if (link === undefined || link.handle === null || session === null) return null;
   if (words.trim() === "" && images.length === 0) return null;
+  touched(session);
   // A message the harness runs as a command goes alone, as typed: nothing
   // joined ahead of it would leave it a command. What waits to go ahead of
   // a message waits on for the next one that is not a command.
