@@ -2527,7 +2527,7 @@ fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result
     )?;
     run_changed(home, token);
     let stands: Vec<String> = gates.iter().map(gate_line).collect();
-    Ok(said(format!("Kept.\n{}", stands.join("\n"))))
+    Ok(said(format!("Recorded.\n{}", stands.join("\n"))))
 }
 
 fn gates_call(home: &Path, session: Option<&str>) -> Result<Value, String> {
@@ -5134,11 +5134,11 @@ mod tests {
             json!({ "on": "change", "change": null, "tree": tree, "approved": true }),
             json!({ "on": "change", "change": change, "approved": true }),
         ] {
-            let kept = called(&home, "sec", "verdict", named.clone());
-            assert_ne!(kept["isError"], true, "{named}: {kept}");
+            let given = called(&home, "sec", "verdict", named.clone());
+            assert_ne!(given["isError"], true, "{named}: {given}");
             assert!(
-                text_of(&kept).contains("Security reviewer, before handing over · Approved"),
-                "{named}: {kept}"
+                text_of(&given).contains("Security reviewer, before handing over · Approved"),
+                "{named}: {given}"
             );
         }
     }
@@ -5198,6 +5198,10 @@ mod tests {
             "sec",
             "verdict",
             json!({ "on": "plan", "plan": 1, "approved": true, "findings": "Fine." }),
+        );
+        assert!(
+            text_of(&approved).starts_with("Recorded.\n"),
+            "a verdict is recorded, not kept: {approved}"
         );
         assert!(
             text_of(&approved).contains("Security reviewer, before building · Approved"),
