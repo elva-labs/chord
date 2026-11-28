@@ -41,6 +41,15 @@
   let { perform }: Props = $props();
 
   let dialog: HTMLDivElement;
+
+  /** The moment a dot's age is read against, moved on every half minute. */
+  let now = $state(Date.now());
+
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
+
   let field = $state<HTMLInputElement | null>(null);
   let list = $state<HTMLDivElement | null>(null);
   let chosen = $state<string | null>(null);
@@ -332,8 +341,8 @@
               {#if item.kind === "session"}
                 <span
                   class="dot"
-                  class:recent={dotAge(item.session) === "recent"}
-                  class:stale={dotAge(item.session) === "stale"}
+                  class:recent={dotAge(item.session, now) === "recent"}
+                  class:stale={dotAge(item.session, now) === "stale"}
                   class:working={isLive(item.session) && conducting(item.session)}
                   class:unread={item.session.unread}
                   class:permission={item.session.needs === "permission"}

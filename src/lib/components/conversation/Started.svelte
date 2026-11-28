@@ -24,6 +24,14 @@
       .filter((session): session is Session => session !== undefined),
   );
 
+  /** The moment a dot's age is read against, moved on every half minute. */
+  let now = $state(Date.now());
+
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
+
   /** Whether any row has a step, so the rows keep a column for it. */
   let stepped = $derived(rows.some((session) => placeTextOf(session.key) !== null));
 
@@ -40,10 +48,10 @@
       <div class="row" data-testid="started-session">
         <span
           class="dot"
-          class:recent={dotAge(session) === "recent"}
+          class:recent={dotAge(session, now) === "recent"}
           class:working={conducting(session)}
           class:asking={session.needs === "permission"}
-          class:stale={dotAge(session) === "stale"}
+          class:stale={dotAge(session, now) === "stale"}
           title={stateWord(session)}
         ></span>
         {#if stepped}<span class="step" data-testid="started-step">{at?.step ?? ""}</span>{/if}
@@ -104,6 +112,11 @@
     opacity: 1;
   }
 
+  .dot.stale {
+    background: var(--dormant);
+    opacity: 1;
+  }
+
   .dot.working {
     animation: breathe 1.6s ease-in-out infinite;
   }
@@ -112,11 +125,6 @@
     background: none;
     box-shadow: inset 0 0 0 1.75px var(--accent);
     animation: none;
-  }
-
-  .dot.stale {
-    background: var(--dormant);
-    opacity: 1;
   }
 
   .name {
