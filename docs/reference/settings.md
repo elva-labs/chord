@@ -426,8 +426,8 @@ on to begin with, kept as `agentsOn`. Off:
 - a session's question to start another has no As choice, and a plugin's
   start suggests no agent;
 - the start tool has no `agent`, and a start that names one is refused;
-- the run's tools, `plan`, `gate_add`, `verdict` and `gates`, are neither
-  listed nor answered, and no session shows a gate line;
+- the run's tools, `plan`, `gate_add`, `keep`, `verdict` and `gates`, are
+  neither listed nor answered, and no session shows a gate line;
 - no team's run begins: a session picked as a team's lead starts as a
   plain one, which its conversation says, and so does a lead resumed.
 

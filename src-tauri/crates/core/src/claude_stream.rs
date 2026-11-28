@@ -4991,7 +4991,7 @@ mod tests {
                 in_a_run(&format!("stream-run-tools-{token}"), token);
             stream.attached = true;
             stream.control(&Control::SetReadsOnly(true)).unwrap();
-            for tool in ["plan", "gate_add", "verdict", "gates"] {
+            for tool in ["plan", "gate_add", "keep", "verdict", "gates"] {
                 assert_eq!(
                     decided(&mut stream, &format!("mcp__chord__{tool}")),
                     "",

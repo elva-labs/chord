@@ -110,7 +110,7 @@ fn kinds() -> Vec<(String, Variables, &'static [&'static str])> {
         (
             "conversation, run lead",
             "lead",
-            &["plan", "gate_add", "gates"],
+            &["plan", "gate_add", "keep", "gates"],
         ),
         (
             "conversation, run reviewer",

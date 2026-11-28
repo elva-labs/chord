@@ -9,15 +9,15 @@
   },
   "conversation, run lead": {
     "instructions": 3616,
-    "tools": 35625
+    "tools": 36903
   },
   "conversation, run member": {
     "instructions": 2811,
-    "tools": 33910
+    "tools": 33943
   },
   "conversation, run reviewer": {
     "instructions": 2811,
-    "tools": 35330
+    "tools": 35763
   },
   "terminal": {
     "instructions": 2651,

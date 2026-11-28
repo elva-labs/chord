@@ -71,12 +71,14 @@ function stepLine(workflow: Workflow, index: number): string {
       : step.reviewerApproves
         ? "The piece passes when the reviewer approves."
         : "The piece passes when you agree; the reviewer's verdict is advice.";
+  const small =
+    "When the piece passes with small fixes the reviewer names as needing no second look, have the piece's own session make them and do not review it again, unless one changes what the piece does.";
   const target = workflow.steps.findIndex((other) => other.name === step.backTo);
   const between = target < 0 ? [] : workflow.steps.slice(target + 1, index).map((other) => other.name);
   const through = between.length === 0 ? "" : `, take it through ${listed(between)} again`;
   const times = step.limit === 1 ? "at most once" : `at most ${step.limit} times`;
-  const otherwise = `If it does not pass, send it back with send to the piece's own session for ${quoted(step.backTo)}, with what the review found, which resumes that session if the workbench put it away, or start one for ${quoted(step.backTo)} that names it with work if you stopped it${through}. Then review it again for ${quoted(step.name)}, with a new review naming the same work or a line to the reviewer. Send a piece back ${times}; after that, stop and ask the user, and start another round only if they want one.`;
-  return `${lead}, ${placeText(step)}. ${passes} ${otherwise}`;
+  const otherwise = `If it does not pass, send it back with send to the piece's own session for ${quoted(step.backTo)}, with what the review found, which resumes that session if the workbench put it away, or start one for ${quoted(step.backTo)} that names it with work if you stopped it${through}. Then review it again for ${quoted(step.name)}, with a new review naming the same work or a line to the reviewer, once all it found is fixed rather than after each fix. Send a piece back ${times}; after that, stop and ask the user, and start another round only if they want one.`;
+  return `${lead}, ${placeText(step)}. ${passes} ${small} ${otherwise}`;
 }
 
 /** What an orchestrator does itself rather than start a session for: the

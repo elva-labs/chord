@@ -12,7 +12,9 @@
    * The gates of the run a session is in, as one line over the composer:
    * how many have passed and, while one holds, why, in the core's words.
    * Opened, it lists each gate as it stands, and a gate opens to the
-   * record behind it. A gate that holds is waived from its row, saying why
+   * record behind it. An approval the lead kept for a later change stands
+   * apart from one given on the change, with the lead's reason on its row
+   * and in its record. A gate that holds is waived from its row, saying why
    * in no more than the core takes. Where the run's lead has no row, the
    * run is ended from here once the user says so, and a refusal of either
    * is said where it was asked.
@@ -60,6 +62,7 @@
   const WORDS: Record<GateStanding, string> = {
     waiting: "Waiting",
     approved: "Approved",
+    kept: "Approved, kept",
     outOfDate: "Out of date",
     waived: "Waived",
     notNeeded: "Not needed",
@@ -67,6 +70,7 @@
   const ICONS: Record<GateStanding, string> = {
     waiting: "circle",
     approved: "check",
+    kept: "check",
     outOfDate: "circle",
     waived: "dash",
     notNeeded: "skip",
@@ -197,6 +201,7 @@
     if (gate.standing === "waived") return `${who} ${when(gate)}: waived`;
     if (gate.standing === "notNeeded") return `${who} ${when(gate)}: not needed`;
     if (gate.verdict === null) return `${who} ${when(gate)}: waiting`;
+    if (gate.verdict.approved && gate.standing === "kept") return `${who} approved an earlier change, kept by the lead`;
     if (gate.verdict.approved && gate.standing === "outOfDate") return `${who} approved an earlier ${plan ? "plan" : "change"}`;
     if (gate.verdict.approved) return `${who} approved the ${plan ? "plan" : "change"}`;
     return plan ? `${who} asked for changes to the plan` : `${who} asked for changes`;
@@ -213,6 +218,8 @@
     if (gate.verdict !== null) {
       lines.push(reviewed(gate));
       if (gate.verdict.findings.trim() !== "") lines.push("", gate.verdict.findings.trim());
+      if (gate.verdict.followUps.trim() !== "") lines.push("", "Follow-ups:", gate.verdict.followUps.trim());
+      if (gate.kept !== null) lines.push("", `Kept by the lead: ${gate.kept.reason}`);
     } else if (gate.waiver !== null) {
       lines.push(`Waived: ${gate.waiver.reason}`);
     } else {
@@ -289,6 +296,7 @@
               data-testid="gate-open"><Icon name="chev" size={12} /></button
             >
             {#if gate.gate.added}<span class="gsub">Added by the lead</span>{/if}
+            {#if gate.kept !== null}<span class="gsub" title={gate.kept.reason} data-testid="gate-kept">Kept by the lead: {gate.kept.reason}</span>{/if}
             {#if holds(gate) && gate.atLimit}<span class="gsub">{gate.reason}</span>{/if}
             {#if gate.folders.length > 1}
               {#each gate.folders as place (place.folder)}
@@ -346,6 +354,9 @@
       {#if shown.waiver !== null}
         <p class="note" data-testid="gate-record-waiver"><b>Waived by you, {at(shown.waiver.at)}.</b> {shown.waiver.reason}</p>
       {/if}
+      {#if shown.kept !== null}
+        <p class="note" data-testid="gate-record-keep"><b>Kept by the lead, {at(shown.kept.at)}.</b> {shown.kept.reason}</p>
+      {/if}
       {#if shown.verdict !== null}
         {@const verdict = shown.verdict}
         <p class="what">
@@ -354,12 +365,20 @@
           <span>· {at(verdict.at)}</span>
         </p>
         <p class="vd" data-testid="gate-record-verdict">
-          <b>{shown.standing === "outOfDate" ? "Out of date." : verdict.approved ? "Approved." : "Asked for changes."}</b>
-          {shown.reason}
+          {#if shown.standing === "kept"}
+            <b>Approved on an earlier change.</b> No reviewer has seen the change since; the lead kept the approval for it.
+          {:else}
+            <b>{shown.standing === "outOfDate" ? "Out of date." : verdict.approved ? "Approved." : "Asked for changes."}</b>
+            {shown.reason}
+          {/if}
         </p>
         {#if verdict.findings.trim() !== ""}
           <p class="sub">Findings</p>
           <p class="find" data-testid="gate-record-findings">{verdict.findings.trim()}</p>
+        {/if}
+        {#if verdict.followUps.trim() !== ""}
+          <p class="sub">Follow-ups, needing no second look</p>
+          <p class="find" data-testid="gate-record-follow-ups">{verdict.followUps.trim()}</p>
         {/if}
         <button type="button" class="fold" aria-expanded={details} onclick={() => (details = !details)} data-testid="gate-record-details">
           <span class="chev" class:turned={details}><Icon name="chev" size={12} /></span>Details
@@ -368,6 +387,9 @@
           <table class="rec">
             <tbody>
               <tr><th>Reviewed</th><td><code>{verdict.on.slice(0, 7)}</code>{#if verdict.folder !== null}<span class="m">{" · in "}<code>{verdict.folder}</code></span>{/if}</td></tr>
+              {#if shown.kept !== null}
+                <tr><th>Kept for</th><td><code>{shown.kept.on.slice(0, 7)}</code><span class="m">{" · in "}<code>{shown.kept.folder}</code></span></td></tr>
+              {/if}
               <tr><th>Agent</th><td data-testid="gate-record-agent">{verdict.agent}</td></tr>
               <tr>
                 <th>Brief</th>
@@ -386,13 +408,15 @@
       {#if shown.gate.added}
         <p class="what"><Icon name="shield" size={13} /><span>Added by the lead.</span></p>
       {/if}
-      {#if shown.waiver !== null || shown.asks > 0 || shown.standing === "approved" || giver !== null}
+      {#if shown.waiver !== null || shown.asks > 0 || shown.standing === "approved" || shown.standing === "kept" || giver !== null}
         <div class="foot">
           <span>
             {#if shown.waiver !== null}For this run only
             {:else if shown.asks > 0}Asked for changes {times(shown.asks)}
             {:else if shown.standing === "approved"}
               Out of date if {shown.gate.when === "plan" ? "the plan" : "the work"} changes
+            {:else if shown.standing === "kept"}
+              Out of date if the work changes again
             {/if}
           </span>
           {#if giver !== null}

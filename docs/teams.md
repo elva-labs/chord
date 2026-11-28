@@ -48,8 +48,8 @@ runs at once.
 A run begins when its lead starts, with the team as it was then and the
 commit the lead's folder was at. It records the sessions the lead starts as
 the team's members, each with its agent, its brief and the folder it works
-in, the plan the lead writes, the verdicts on its gates, and the user's
-waivers. It is kept in a small database in the workbench's directory in the
+in, the plan the lead writes, the verdicts on its gates, the lead's keeps of
+approvals and the user's waivers. It is kept in a small database in the workbench's directory in the
 user's home, and nothing of it is written into the project. A lead started
 again with the team goes on with the run it has. The lead starts only the
 team's agents in its run, and a session it starts outside the team is
@@ -177,19 +177,56 @@ A gate stands as one of:
 
 - **Waiting**: no approval yet, or changes were asked for;
 - **Approved**: approved on the plan or the change that stands;
+- **Approved, kept**: approved, then changed, and the lead kept the
+  approval for the change as it is now, with a reason;
 - **Out of date**: approved, then changed;
 - **Waived**: the user let it pass, with a reason, for this run;
 - **Not needed**: it names paths, and neither the plan nor the change
   touches any of them. A gate whose change cannot be read stays needed.
 
 A gate on the change stands in each folder something changed in, and is
-approved only once it is approved in each of them.
+approved only once it is approved or kept in each of them. Kept in one and
+approved in another, it stands kept.
 
 A gate that has asked for changes as many times as it may takes no more
 verdicts and waits for the user, whose waiver is the only way past it.
 Gates are never taken away from a run, and none of the run's tools waives
 one: the user waives a gate in the window, with a reason, as
 [in the window](#in-the-window) describes.
+
+### Keeping an approval
+
+An approval that a later change put out of date can be kept by the run's
+lead with the `keep` tool, with a reason in one sentence, so a follow-up
+the reviewer named or a change in no behaviour, such as a rename, a comment
+or formatting, needs no second look. The lead is told to keep for those
+and to ask the gate's agent again for a change in behaviour, for anything
+that touches what the agent flagged as a risk, and whenever it is unsure.
+
+The lead keeps an approval only where:
+
+- the gate is on the change, never on the plan, which is read again
+  whenever it changes;
+- the gate's last verdict in the folder named is an approval, and the
+  change has moved on from it, so nothing is kept that was never approved,
+  that asked for changes after, or that stands approved already;
+- the user has not waived the gate, and it has not asked for changes as
+  many times as its rounds, so a gate waiting for the user stays the
+  user's;
+- agents and teams are switched on, and the run is going on.
+
+A gate out of date in more than one folder is kept in one at a time, and
+the keep names the folder. Each keep records the lead, the time, the
+reason, the approval it keeps and the change it was kept for, and holds
+for that change alone: the next edit puts the gate out of date again, and
+a rebase that leaves the work's lines as they were keeps it as it keeps a
+verdict. A Chord from before keeps reads a kept gate as out of date.
+
+An approval can name follow-ups: small things left to fix that need no
+second look. They are kept with the verdict and shown by the `gates` tool
+and in the gate's record, and are what the lead keeps the approval for
+once they are made. The user's waiver is unchanged: only the user waives a
+gate, and only a waiver passes one that holds without an approval.
 
 ## In the window
 
@@ -203,11 +240,14 @@ the team's run and never joins another as a member. With no teams in use,
 the Agents tab says what a team is under New team.
 
 A session in a run, its lead or a member, shows one line above the
-composer: how many of the gates needed stand, and why the next one holds.
+composer: how many of the gates needed stand, and why the next one holds,
+or, when none holds and the lead kept an approval, that it did and why.
 The line opens to each gate with its standing. A gate that holds offers
-Waive, which asks only why, in 500 characters at most. A gate with a
-verdict opens its record: which agent approved or asked for changes on
-what, the findings, and the rest behind Details, with Copy summary. A
+Waive, which asks only why, in 500 characters at most. A kept gate reads
+Approved, kept, not in the colour of an approval, with the lead's reason
+under it. A gate with a verdict opens its record: which agent approved or
+asked for changes on what, the findings, the follow-ups, the lead's keep
+and when it was made, and the rest behind Details, with Copy summary. A
 member whose lead has no row in the window offers End run, which asks
 first and then ends the run by its lead, and says so when the run cannot
 be ended. The line is read again when the run moves, once for a burst of
@@ -236,13 +276,17 @@ A session in a run has tools of the run beside the
   before out of date;
 - `gate_add`, for the lead: adds a gate for one of the team's agents, on
   the plan or the change, on some paths or always;
+- `keep`, for the lead: keeps an approval of the change that went out of
+  date, with a reason, as [keeping an approval](#keeping-an-approval)
+  says;
 - `verdict`, for a member whose agent approves a gate: approves the plan or
-  the change it read, or asks for changes with findings that say what must
-  change, on each gate its agent approves;
+  the change it read, with any follow-ups that need no second look, or
+  asks for changes with findings that say what must change, on each gate
+  its agent approves;
 - `gates`, for every session in the run: the plan, its version and hash,
   the hash of the change in each folder and the commit it is counted
-  from, and each gate's agent, when it holds, how it stands and why, and
-  the last verdict's findings.
+  from, and each gate's agent, when it holds, how it stands and why, the
+  last verdict's findings and follow-ups, and the lead's keep.
 
 ## What a run holds
 
@@ -329,8 +373,8 @@ holds every such command.
 
 The lead's stop is held in Chord: when it would end its turn while a gate
 it can move holds the hand-over, it is sent back once, told which gate
-holds and to ask for the verdicts the `gates` tool names, or to stop and
-ask the user. On Claude Code the conversation shows a notice that Chord
+holds and to ask for the verdicts the `gates` tool names, to keep an
+approval a small change put out of date, or to stop and ask the user. On Claude Code the conversation shows a notice that Chord
 sent the lead back to work, naming the gate that holds. Stopping again ends
 the turn. It is not sent back when every open gate waits for the user, or
 when the run cannot be read. On Codex the lead goes on in a turn of its
@@ -366,8 +410,8 @@ What the holds do not see:
 - a push or a pull request in a terminal session, and a terminal lead's
   stop;
 - the run's database itself. Every session runs as the user, so one with
-  a shell can write the database directly: add a verdict or a waiver, or
-  act as another session of the run. Only the run's tools are held to the
+  a shell can write the database directly: add a verdict, a keep or a
+  waiver, or act as another session of the run. Only the run's tools are held to the
   rules above.
 - the window's own routes. A session with a shell can reach
   `chord-remote serve` as the window does, and so waive a gate or end a

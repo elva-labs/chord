@@ -289,6 +289,7 @@ pub const CONTAINED_TOOLS: &[&str] = &[
     "settings",
     "plan",
     "gate_add",
+    "keep",
     "verdict",
     "gates",
 ];

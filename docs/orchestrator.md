@@ -681,7 +681,11 @@ and carries the piece on. A piece that does not pass is sent back with
 `send` to its own session for the step the review goes back to, resumed
 first if it is not running, or carried on in a new start that names it
 where the orchestrator stopped it, and is reviewed again by a new review
-naming the same work or by a line to the reviewer.
+naming the same work or by a line to the reviewer, once all the review
+found is fixed rather than after each fix. A piece that passes with small
+fixes the reviewer names as needing no second look has them made by its
+own session and is not reviewed again, unless one changes what the piece
+does.
 
 The workbench counts the rounds of each review for each piece: a review
 started, a review resumed with a prompt, and a line sent to a review that

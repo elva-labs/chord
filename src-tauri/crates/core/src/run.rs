@@ -32,14 +32,24 @@
 //! something changed in, and a push is judged against them all, since
 //! worktrees share their branches.
 //!
-//! A gate is Waiting, Approved, Out of date, Waived or Not needed. While a
-//! gate on the plan is open, building is held: starting a session that
-//! changes files. While any gate is open, handing over is held: the lead's
-//! done, a pull request, a merge and a push. A push and a pull request send
-//! commits alone, so they are held too while a place where a gate on the
-//! change stands approved holds work that is not committed. A gate that
-//! asked for changes as many times as its rounds waits for the user, whose
-//! waiver, with a reason, is the only way past it, and lasts for this run.
+//! A gate is Waiting, Approved, Kept, Out of date, Waived or Not needed.
+//! While a gate on the plan is open, building is held: starting a session
+//! that changes files. While any gate is open, handing over is held: the
+//! lead's done, a pull request, a merge and a push. A push and a pull
+//! request send commits alone, so they are held too while a place where a
+//! gate on the change stands approved or kept holds work that is not
+//! committed. A gate that asked for changes as many times as its rounds
+//! waits for the user, whose waiver, with a reason, is the only way past
+//! it, and lasts for this run.
+//!
+//! An approval may name follow-ups: small fixes the reviewer needs no
+//! second look at. The lead may keep a gate on the change whose last
+//! verdict in a place was an approval and is out of date there, with a
+//! reason: the gate is Kept, and passes, while that place's change is the
+//! one it was kept for, and a later change puts it out of date again. A
+//! gate on the plan, one that waits for the user and one never approved
+//! are never kept. Keeps are a table of their own, so a build that knows
+//! nothing of them reads a kept gate as out of date.
 //!
 //! The record is kept in a small database in the core's home, written by
 //! the tool server and read by the window and the harnesses' holds.
@@ -60,8 +70,9 @@ use crate::team::{self, Gate, Team, When, MOST_GATES, ROUNDS};
 /// The database's file, in the runs' folder.
 pub const FILE: &str = "runs.db";
 
-/// How long a plan, a path, a list of paths, findings, a brief and a
-/// waiver's reason may be, in characters or entries.
+/// How long a plan, a path, a list of paths, findings and follow-ups, a
+/// brief and the reason for a waiver or a keep may be, in characters or
+/// entries.
 pub const PLAN_MOST: usize = 20_000;
 pub const PATH_MOST: usize = 400;
 pub const PATHS_MOST: usize = 500;
@@ -70,13 +81,14 @@ pub const BRIEF_MOST: usize = 8_000;
 pub const REASON_MOST: usize = 500;
 
 /// The tables that keep a run, by its lead, the run's own last.
-const RUN_TABLES: [&str; 7] = [
+const RUN_TABLES: [&str; 8] = [
     "members",
     "earlier_sessions",
     "gates",
     "plans",
     "verdicts",
     "waivers",
+    "keeps",
     "runs",
 ];
 
@@ -255,6 +267,9 @@ pub struct Verdict {
     pub brief: String,
     pub approved: bool,
     pub findings: String,
+    /// What an approval leaves to fix that needs no second look; empty for
+    /// none and for asking for changes.
+    pub follow_ups: String,
     pub at: i64,
 }
 
@@ -267,11 +282,33 @@ pub struct Waiver {
     pub at: i64,
 }
 
+/// The lead's keep of an approval that went out of date in one place,
+/// for the change there as it was kept.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Keep {
+    pub id: i64,
+    pub gate: i64,
+    /// The approving verdict kept: the last the gate was given there.
+    pub verdict: i64,
+    /// The token of the session that kept it, the run's lead.
+    pub token: String,
+    pub folder: PathBuf,
+    /// The hash of the change it was kept for, its lines placed in the
+    /// files of `base`.
+    pub on: String,
+    pub base: Option<String>,
+    pub reason: String,
+    pub at: i64,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Standing {
     Waiting,
     Approved,
+    /// Approved on an earlier change, kept by the lead for this one.
+    Kept,
     OutOfDate,
     Waived,
     NotNeeded,
@@ -282,6 +319,7 @@ impl Standing {
         match self {
             Standing::Waiting => "Waiting",
             Standing::Approved => "Approved",
+            Standing::Kept => "Approved, kept by the lead",
             Standing::OutOfDate => "Out of date",
             Standing::Waived => "Waived",
             Standing::NotNeeded => "Not needed",
@@ -291,6 +329,12 @@ impl Standing {
     /// Whether the gate still holds what it holds.
     pub fn open(self) -> bool {
         matches!(self, Standing::Waiting | Standing::OutOfDate)
+    }
+
+    /// Whether the work stands passed on an approval, given on it or kept
+    /// for it.
+    fn approved(self) -> bool {
+        matches!(self, Standing::Approved | Standing::Kept)
     }
 }
 
@@ -309,6 +353,8 @@ pub struct GateState {
     pub reason: String,
     pub verdict: Option<Verdict>,
     pub waiver: Option<Waiver>,
+    /// The lead's keep in the first place it stands kept in.
+    pub kept: Option<Keep>,
     /// How a gate on the change stands in each place it is judged in.
     pub folders: Vec<FolderStanding>,
 }
@@ -446,11 +492,18 @@ impl Place {
     /// since are passed over. A verdict that records no base has its lines
     /// placed in the files the work began with.
     fn approves(&self, verdict: &Verdict) -> bool {
-        if self.tree.as_deref() == Ok(verdict.on.as_str()) {
+        self.holds(&verdict.on, verdict.base.as_deref())
+    }
+
+    /// Whether the place is still what the hash `on` names: its tree, or
+    /// its change with the lines placed in the files of `base`, or of the
+    /// commit the work began at when there is none.
+    fn holds(&self, on: &str, base: Option<&str>) -> bool {
+        if self.tree.as_deref() == Ok(on) {
             return true;
         }
-        let anchor = verdict.base.as_deref().or(self.start.as_deref());
-        self.change_from(anchor).as_deref() == Ok(verdict.on.as_str())
+        let anchor = base.or(self.start.as_deref());
+        self.change_from(anchor).as_deref() == Ok(on)
     }
 
     /// Whether anything changed there since its base, or that cannot be
@@ -592,16 +645,14 @@ impl State {
     }
 
     /// Why a push or a pull request is held beyond handing over: a place
-    /// where a gate on the change stands approved holds work that is not
-    /// committed, and only commits go out.
+    /// where a gate on the change stands approved or kept holds work that
+    /// is not committed, and only commits go out.
     pub fn uncommitted_held(&self) -> Option<String> {
         let approved = |place: &Place| {
             self.gates
                 .iter()
                 .flat_map(|gate| &gate.folders)
-                .any(|folder| {
-                    folder.standing == Standing::Approved && same(&folder.folder, &place.folder)
-                })
+                .any(|folder| folder.standing.approved() && same(&folder.folder, &place.folder))
         };
         let place = self.places.iter().find(|place| {
             place
@@ -629,11 +680,17 @@ impl State {
     }
 
     /// The one line the window shows above the composer: how many gates
-    /// passed of how many, and while one holds, why.
+    /// passed of how many, and while one holds, why, or while none does
+    /// and the lead kept one, that it did.
     pub fn line(&self) -> String {
         let passed = self.gates.iter().filter(|g| !g.standing.open()).count();
         let count = format!("Gates {passed} of {}", self.gates.len());
-        match self.first_open(None) {
+        let kept = || {
+            self.gates
+                .iter()
+                .find(|gate| gate.standing == Standing::Kept)
+        };
+        match self.first_open(None).or_else(kept) {
             Some(gate) => format!("{count} · {}", capitalised(&gate.reason)),
             None => count,
         }
@@ -744,26 +801,42 @@ impl Runs {
                 at INTEGER NOT NULL,
                 PRIMARY KEY (lead, gate)
             );
+            CREATE TABLE IF NOT EXISTS keeps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead TEXT NOT NULL,
+                gate INTEGER NOT NULL,
+                verdict INTEGER NOT NULL,
+                token TEXT NOT NULL,
+                folder TEXT NOT NULL,
+                seen TEXT NOT NULL,
+                base TEXT,
+                reason TEXT NOT NULL,
+                at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS keeps_by_gate ON keeps (lead, gate, id);
             CREATE TABLE IF NOT EXISTS ended (
                 lead TEXT PRIMARY KEY,
                 at INTEGER NOT NULL
             );",
         )
         .map_err(failed)?;
-        // A store made before verdicts recorded their base gains the
-        // column; its verdicts read as recorded without one.
-        let with_base = |conn: &Connection| {
+        // A store made before verdicts recorded their base or follow-ups
+        // gains the columns; its verdicts read as recorded without them.
+        let with = |conn: &Connection, column: &str| {
             conn.query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('verdicts') WHERE name = 'base'",
-                [],
+                "SELECT COUNT(*) FROM pragma_table_info('verdicts') WHERE name = ?1",
+                params![column],
                 |row| row.get::<_, i64>(0),
             )
             .map(|found| found > 0)
         };
-        if !with_base(&conn).map_err(failed)? {
-            if let Err(e) = conn.execute_batch("ALTER TABLE verdicts ADD COLUMN base TEXT") {
-                if !with_base(&conn).map_err(failed)? {
-                    return Err(failed(e));
+        for column in ["base", "follow_ups"] {
+            if !with(&conn, column).map_err(failed)? {
+                let add = format!("ALTER TABLE verdicts ADD COLUMN {column} TEXT");
+                if let Err(e) = conn.execute_batch(&add) {
+                    if !with(&conn, column).map_err(failed)? {
+                        return Err(failed(e));
+                    }
                 }
             }
         }
@@ -804,6 +877,14 @@ impl Runs {
         self.conn
             .execute(
                 "DELETE FROM earlier_sessions WHERE token NOT IN (SELECT token FROM members)",
+                [],
+            )
+            .map_err(failed)?;
+        // Nor does one that does not know keeps delete a run's keeps with
+        // its verdicts.
+        self.conn
+            .execute(
+                "DELETE FROM keeps WHERE verdict NOT IN (SELECT id FROM verdicts)",
                 [],
             )
             .map_err(failed)?;
@@ -1035,7 +1116,7 @@ impl Runs {
             .conn
             .prepare(
                 "SELECT id, gate, token, agent, agent_version, seen, plan, brief, approved,
-                        findings, at, folder, base
+                        findings, at, folder, base, follow_ups
                  FROM verdicts WHERE lead = ?1 ORDER BY id",
             )
             .map_err(failed)?;
@@ -1055,6 +1136,33 @@ impl Runs {
                     at: row.get(10)?,
                     folder: row.get::<_, Option<String>>(11)?.map(PathBuf::from),
                     base: row.get(12)?,
+                    follow_ups: row.get::<_, Option<String>>(13)?.unwrap_or_default(),
+                })
+            })
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)
+    }
+
+    pub fn keeps(&self, lead: &str) -> Result<Vec<Keep>, String> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT id, gate, verdict, token, folder, seen, base, reason, at
+                 FROM keeps WHERE lead = ?1 ORDER BY id",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map(params![lead], |row| {
+                Ok(Keep {
+                    id: row.get(0)?,
+                    gate: row.get(1)?,
+                    verdict: row.get(2)?,
+                    token: row.get(3)?,
+                    folder: PathBuf::from(row.get::<_, String>(4)?),
+                    on: row.get(5)?,
+                    base: row.get(6)?,
+                    reason: row.get(7)?,
+                    at: row.get(8)?,
                 })
             })
             .map_err(failed)?;
@@ -1107,7 +1215,8 @@ fn plan_from(row: &rusqlite::Row<'_>) -> rusqlite::Result<Plan> {
 /// team's gates. A lead started again with the team its run has goes on
 /// with that run's record, an ended run's too, which holds again from then
 /// on without the waivers the user gave it before it ended: a waiver is
-/// bound to no plan or change, so it could stand for work it never saw. A
+/// bound to no plan or change, as a verdict or a keep is, so it could
+/// stand for work it never saw. A
 /// lead started with any other team, or the same team since changed, ends
 /// the run it had: its record is removed, its members are in no run, and a
 /// run begins with the team as it is now.
@@ -1443,10 +1552,10 @@ pub fn plan(home: &Path, lead: &str, text: &str, paths: &[String]) -> Result<Pla
     })
 }
 
-/// What a session that is not a run's lead is told when it writes a plan
-/// or adds a gate.
+/// What a session that is not a run's lead is told when it writes a plan,
+/// adds a gate or keeps an approval.
 pub const ONLY_THE_LEAD: &str =
-    "Only the lead of a team's run writes its plan and adds its gates, and this session leads none.";
+    "Only the lead of a team's run writes its plan, adds its gates and keeps an approval, and this session leads none.";
 
 /// Adds a gate to the lead's run: `who`, one of its team's agents,
 /// approves the plan or the change, when the work touches `touches` if
@@ -1536,6 +1645,183 @@ pub fn waive(home: &Path, lead: &str, gate: i64, reason: &str) -> Result<Waiver,
     })
 }
 
+/// The lead's keep of an approval on gate `gate` that went out of date,
+/// with why the change since needs no second look. It is kept for the
+/// change as it is now in the folder named, or in the one place the
+/// approval is out of date in when none is named, and passes the gate
+/// there while that is the change. Refused for a gate on the plan, one
+/// the user waived, one that waits for the user, a place whose last
+/// verdict asked for changes or that was never approved, and while agents
+/// are switched off.
+pub fn keep(
+    home: &Path,
+    lead: &str,
+    gate: i64,
+    folder: Option<&Path>,
+    reason: &str,
+) -> Result<Keep, String> {
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err("Keeping an approval says why the change since needs no second look.".into());
+    }
+    too_long("reason", reason, REASON_MOST)?;
+    if paused(home) {
+        return Err(
+            "Agents and teams are switched off in the settings, so no gate holds and no approval is kept."
+                .into(),
+        );
+    }
+    let now_state = state(home, lead)?.ok_or(ONLY_THE_LEAD)?;
+    let held = now_state
+        .gates
+        .iter()
+        .find(|known| known.gate.id == gate)
+        .ok_or_else(|| format!("The run has no gate {gate}."))?;
+    let who = &held.gate.who;
+    if held.gate.when == When::Plan {
+        return Err(format!(
+            "{who}'s gate is on the plan, and only an approval of the change is kept: a plan is read again whenever it changes."
+        ));
+    }
+    if held.standing == Standing::Waived {
+        return Err(format!(
+            "The user waived {who}'s gate, so there is nothing to keep."
+        ));
+    }
+    if held.at_limit {
+        return Err(format!(
+            "{who}'s gate asked for changes as many times as its rounds and waits for the user, so the lead keeps none of it."
+        ));
+    }
+    let list = |places: &[&FolderStanding]| {
+        places
+            .iter()
+            .map(|place| place.folder.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let place = match folder {
+        Some(folder) => {
+            let place = held
+                .folders
+                .iter()
+                .find(|place| same(&place.folder, folder))
+                .ok_or_else(|| {
+                    format!(
+                        "{} is not a folder {who}'s gate is judged in; those are {}.",
+                        folder.display(),
+                        list(&held.folders.iter().collect::<Vec<_>>())
+                    )
+                })?;
+            if place.standing != Standing::OutOfDate {
+                return Err(not_kept(place.standing, &place.reason));
+            }
+            place
+        }
+        None => {
+            let out_of_date: Vec<&FolderStanding> = held
+                .folders
+                .iter()
+                .filter(|place| place.standing == Standing::OutOfDate)
+                .collect();
+            match out_of_date.as_slice() {
+                [one] => *one,
+                [] => return Err(not_kept(held.standing, &held.reason)),
+                several => {
+                    return Err(format!(
+                        "{who}'s approval is out of date in more than one folder, so keeping it names the folder: {}.",
+                        list(several)
+                    ))
+                }
+            }
+        }
+    };
+    let at = now_state
+        .places
+        .iter()
+        .find(|known| same(&known.folder, &place.folder))
+        .ok_or_else(|| {
+            format!(
+                "{} is not a folder the run's work is in.",
+                place.folder.display()
+            )
+        })?;
+    let on = at
+        .change
+        .clone()
+        .map_err(|e| format!("The change in {} cannot be read: {e}", at.folder.display()))?;
+    let runs = Runs::existing(home)?.ok_or(ONLY_THE_LEAD)?;
+    let approval = runs
+        .verdicts(lead)?
+        .into_iter()
+        .rev()
+        .find(|given| {
+            given.gate == gate
+                && given
+                    .folder
+                    .as_deref()
+                    .is_some_and(|given| same(given, &place.folder))
+        })
+        .filter(|given| given.approved)
+        .ok_or_else(|| {
+            format!(
+                "{who} has given no approval of the change in {}, so there is nothing to keep.",
+                place.folder.display()
+            )
+        })?;
+    runs.at_once(|runs| {
+        runs.run(lead)?.ok_or(ONLY_THE_LEAD)?;
+        let mut kept = Keep {
+            id: 0,
+            gate,
+            verdict: approval.id,
+            token: lead.to_string(),
+            folder: at.folder.clone(),
+            on,
+            base: at.base.clone(),
+            reason: reason.to_string(),
+            at: now(),
+        };
+        runs.conn
+            .execute(
+                "INSERT INTO keeps (lead, gate, verdict, token, folder, seen, base, reason, at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    lead,
+                    gate,
+                    kept.verdict,
+                    kept.token,
+                    kept.folder.to_string_lossy(),
+                    kept.on,
+                    kept.base,
+                    kept.reason,
+                    kept.at
+                ],
+            )
+            .map_err(failed)?;
+        kept.id = runs.conn.last_insert_rowid();
+        Ok(kept)
+    })
+}
+
+/// Why a gate, or a place it is judged in, that stands as `standing` for
+/// `reason` is not kept: only an approval that is out of date is.
+fn not_kept(standing: Standing, reason: &str) -> String {
+    match standing {
+        Standing::Approved => format!(
+            "{}, and that approval stands, so there is nothing to keep.",
+            capitalised(reason)
+        ),
+        Standing::Kept => "The approval is kept already, for the change as it is now.".into(),
+        Standing::NotNeeded | Standing::Waived => {
+            format!("{}, so there is nothing to keep.", capitalised(reason))
+        }
+        Standing::Waiting | Standing::OutOfDate => {
+            format!("Only an approval that is out of date is kept, and {reason}.")
+        }
+    }
+}
+
 /// The run of the session a token names, as its lead or a member.
 pub fn state_of(home: &Path, token: &str) -> Result<Option<State>, String> {
     let Some(runs) = Runs::existing(home)? else {
@@ -1598,6 +1884,7 @@ pub fn state(home: &Path, lead: &str) -> Result<Option<State>, String> {
     let plan = runs.latest_plan(lead)?;
     let verdicts = runs.verdicts(lead)?;
     let waivers = runs.waivers(lead)?;
+    let keeps = runs.keeps(lead)?;
     let members = runs.members(lead)?;
     let mut folders: Vec<(&Path, Option<&str>)> = vec![(&run.folder, run.base.as_deref())];
     let mut gone: Vec<PathBuf> = Vec::new();
@@ -1636,8 +1923,9 @@ pub fn state(home: &Path, lead: &str) -> Result<Option<State>, String> {
         .into_iter()
         .map(|gate| {
             let mine: Vec<&Verdict> = verdicts.iter().filter(|v| v.gate == gate.id).collect();
+            let kept: Vec<&Keep> = keeps.iter().filter(|k| k.gate == gate.id).collect();
             let waiver = waivers.iter().find(|w| w.gate == gate.id).cloned();
-            stand(gate, &mine, waiver, plan.as_ref(), &places)
+            stand(gate, &mine, &kept, waiver, plan.as_ref(), &places)
         })
         .collect();
     Ok(Some(State {
@@ -1661,9 +1949,14 @@ fn judged_places(places: &[Place]) -> Vec<&Place> {
     }
 }
 
+/// How a gate stands, by its verdicts, the lead's keeps of them and the
+/// user's waiver. A place where the last verdict was an approval that is
+/// out of date stands kept while a keep of that verdict names the change
+/// there as it is now.
 fn stand(
     gate: RunGate,
     verdicts: &[&Verdict],
+    keeps: &[&Keep],
     waiver: Option<Waiver>,
     plan: Option<&Plan>,
     places: &[Place],
@@ -1679,6 +1972,7 @@ fn stand(
         reason,
         verdict: verdict.clone(),
         waiver: waiver.clone(),
+        kept: None,
         folders,
     };
     if let Some(waiver) = &waiver {
@@ -1734,7 +2028,7 @@ fn stand(
     }
     let judged = judged_places(places);
     let several = judged.len() > 1;
-    let folders: Vec<FolderStanding> = judged
+    let (folders, kept): (Vec<FolderStanding>, Vec<Option<Keep>>) = judged
         .iter()
         .map(|place| {
             let of = if several {
@@ -1742,11 +2036,12 @@ fn stand(
             } else {
                 "the change".to_string()
             };
-            let (standing, reason) = match (&place.change, &place.changed) {
-                (Err(e), _) => (Standing::Waiting, format!("{of} cannot be read: {e}")),
+            let (standing, reason, kept) = match (&place.change, &place.changed) {
+                (Err(e), _) => (Standing::Waiting, format!("{of} cannot be read: {e}"), None),
                 (Ok(_), Ok(changed)) if !touched(changed) => (
                     Standing::NotNeeded,
                     format!("{of} touches nothing {who} approves"),
+                    None,
                 ),
                 (Ok(_), _) => {
                     let last = verdicts
@@ -1762,16 +2057,36 @@ fn stand(
                         asks,
                         gate.rounds,
                     );
-                    (standing, reason)
+                    let kept = last
+                        .filter(|_| standing == Standing::OutOfDate)
+                        .and_then(|last| {
+                            keeps.iter().rev().find(|keep| {
+                                keep.verdict == last.id
+                                    && same(&keep.folder, &place.folder)
+                                    && place.holds(&keep.on, keep.base.as_deref())
+                            })
+                        });
+                    match kept {
+                        Some(keep) => (
+                            Standing::Kept,
+                            format!("the lead kept {who}'s approval of {of}: {}", keep.reason),
+                            Some((*keep).clone()),
+                        ),
+                        None => (standing, reason, None),
+                    }
                 }
             };
-            FolderStanding {
-                folder: place.folder.clone(),
-                standing,
-                reason,
-            }
+            (
+                FolderStanding {
+                    folder: place.folder.clone(),
+                    standing,
+                    reason,
+                },
+                kept,
+            )
         })
-        .collect();
+        .unzip();
+    let kept = kept.into_iter().flatten().next();
     let open = folders.iter().find(|place| place.standing.open());
     let at_limit = asks >= gate.rounds && open.is_some();
     let (standing, reason) = match open {
@@ -1779,16 +2094,26 @@ fn stand(
             (place.standing, waits_for_the_user(&who, "the change", asks))
         }
         Some(place) => (place.standing, place.reason.clone()),
+        // A gate kept in one place and approved in another stands kept:
+        // part of what it passes no reviewer saw.
         None => folders
             .iter()
-            .find(|place| place.standing == Standing::Approved)
+            .find(|place| place.standing == Standing::Kept)
+            .or_else(|| {
+                folders
+                    .iter()
+                    .find(|place| place.standing == Standing::Approved)
+            })
             .or(folders.first())
             .map_or(
                 (Standing::Waiting, "the change cannot be read".to_string()),
                 |place| (place.standing, place.reason.clone()),
             ),
     };
-    state(standing, at_limit, reason, folders)
+    GateState {
+        kept,
+        ..state(standing, at_limit, reason, folders)
+    }
 }
 
 /// How a gate stands on the plan or on the change in one place, by the
@@ -1858,13 +2183,15 @@ pub enum Read<'a> {
 /// [`State::read_in`]. A verdict on something that no longer
 /// stands is refused, saying what changed. A gate the user waived, or one
 /// that waits for the user, takes none. Asking for changes says what must
-/// change.
+/// change. An approval may name follow-ups, small fixes it needs no second
+/// look at; asking for changes names none, all of it being findings.
 pub fn verdict(
     home: &Path,
     token: &str,
     read: Read<'_>,
     approved: bool,
     findings: &str,
+    follow_ups: &str,
     agent_version: Option<&str>,
 ) -> Result<Vec<GateState>, String> {
     let findings = findings.trim();
@@ -1872,6 +2199,14 @@ pub fn verdict(
         return Err("Asking for changes says what must change, in the findings.".into());
     }
     too_long("findings", findings, FINDINGS_MOST)?;
+    let follow_ups = follow_ups.trim();
+    if !approved && !follow_ups.is_empty() {
+        return Err(
+            "Follow-ups go with an approval; asking for changes puts all of it in the findings."
+                .into(),
+        );
+    }
+    too_long("follow-ups", follow_ups, FINDINGS_MOST)?;
     let runs = Runs::existing(home)?.ok_or(NOT_A_MEMBER)?;
     let member = runs.member(token)?.ok_or(NOT_A_MEMBER)?;
     let now_state = state(home, &member.lead)?.ok_or(NOT_A_MEMBER)?;
@@ -1972,8 +2307,9 @@ pub fn verdict(
             runs.conn
                 .execute(
                     "INSERT INTO verdicts (lead, gate, token, agent, agent_version, seen, plan,
-                                           brief, approved, findings, at, folder, base)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                                           brief, approved, findings, at, folder, base,
+                                           follow_ups)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                     params![
                         member.lead,
                         gate.gate.id,
@@ -1987,7 +2323,8 @@ pub fn verdict(
                         findings,
                         at,
                         folder,
-                        base
+                        base,
+                        follow_ups
                     ],
                 )
                 .map_err(failed)?;
@@ -2088,7 +2425,7 @@ pub fn stop_hold(home: &Path, token: &str) -> Option<String> {
 
 /// What a lead whose stop is held is told: what holds it, and how to go on.
 pub fn told_to_go_on(held: &str) -> String {
-    format!("{held} The gates tool says what each gate waits on. Ask for the verdicts it names and wait for them, or stop to ask the user.")
+    format!("{held} The gates tool says what each gate waits on. Ask for the verdicts it names and wait for them, keep an approval that is out of date where the change since needs no second look, or stop to ask the user.")
 }
 
 /// Why a shell command a session in a run would run is refused: it hands

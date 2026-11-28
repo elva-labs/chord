@@ -261,7 +261,7 @@ that only read, a subagent, whose own calls are held to the same, and the
 workbench's own tools that change no file of the project and reach nothing
 outside the workbench, such as notes, note, sessions, read, wait and
 selection, and the tools of a [team's run](teams.md#the-runs-tools), plan,
-gate_add, verdict and gates. A session that leads a team's run while agents
+gate_add, keep, verdict and gates. A session that leads a team's run while agents
 are switched on also has start left to the mode, since the run starts only
 its team's agents, and send and stop where the session they name is a
 member of its run. Any other tool is put to the user whatever the mode or

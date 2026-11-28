@@ -749,6 +749,10 @@ fn gate_line(gate: &Gate) -> String {
 /// that change no file, GitHub's among them.
 const OWN_STEPS: &str = "Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running member a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue.";
 
+/// When a lead asks a gate's agent again and when it keeps the approval
+/// it gave, told to a lead whose team has a gate on the change.
+const KEEP_OR_ASK: &str = "Gather a round's fixes: hand out all of a verdict's findings at once and ask the gate's agent for one look once they are all in, not a look for each. A change made after an approval puts it out of date. When the change since is a follow-up the reviewer named, or changes no behaviour, such as a rename, a comment or formatting, keep the approval with the keep tool and say why in one sentence. Ask the gate's agent again for a change in behaviour, for anything that touches what it flagged as a risk, and whenever you are unsure. An approval of the plan is never kept, nor a gate that asked for changes, was never approved, or waits for the user.";
+
 /// What the lead of a team's run is told when it starts: which team it
 /// leads, how it hands out work and what it does itself, its members and
 /// its gates, numbered.
@@ -772,7 +776,10 @@ pub fn lead_instructions(team: &Team) -> String {
             lines.push("Before building, write the plan with the plan tool: what you will build and every path it touches.".into());
         }
         lines.extend(team.gates.iter().map(gate_line));
-        lines.push("For a gate, start a session of the gate's agent to read what it approves and give its verdict with the verdict tool. The gates tool says how each gate stands and what its last verdict found. You may add a gate with gate_add.".into());
+        lines.push("For a gate, start a session of the gate's agent to read what it approves and give its verdict with the verdict tool. The gates tool says how each gate stands, what its last verdict found and the follow-ups it named. You may add a gate with gate_add.".into());
+        if team.gates.iter().any(|gate| gate.when == When::Change) {
+            lines.push(KEEP_OR_ASK.into());
+        }
         lines.push(format!("A gate that asked for changes {ROUNDS} times waits for the user, who alone may let it pass. When every gate stands approved, or waits for the user, report to the user."));
     }
     let numbered: Vec<String> = lines
@@ -839,6 +846,7 @@ mod tests {
         assert!(told.contains("Run at most 3 sessions"));
         assert!(told.contains("\n2. Do the small steps that change no file yourself"));
         assert!(told.contains("marking a pull request ready or draft"));
+        assert!(told.contains(KEEP_OR_ASK));
 
         let mut quick = shipped().remove(1);
         quick.start_only = false;
@@ -849,8 +857,15 @@ mod tests {
             "a lead that may edit does these itself too"
         );
         assert!(!told.contains("plan tool"), "no gate is on the plan");
+        quick.gates[0].when = When::Plan;
+        assert!(
+            !lead_instructions(&quick).contains(KEEP_OR_ASK),
+            "only an approval of the change is kept"
+        );
         quick.gates.clear();
-        assert!(lead_instructions(&quick).contains("The team has no gates."));
+        let none = lead_instructions(&quick);
+        assert!(none.contains("The team has no gates."));
+        assert!(!none.contains(KEEP_OR_ASK));
     }
 
     #[test]

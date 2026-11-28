@@ -27,6 +27,7 @@ const VERDICT = {
   brief: "Review the plan for the refresh tokens.",
   approved: true,
   findings: "The plan covers expiry and rotation.",
+  followUps: "",
   at: 1_790_000_000,
 };
 
@@ -46,6 +47,7 @@ function run(lead: string, line: string) {
         reason: null,
         verdict: VERDICT,
         waiver: null,
+        kept: null,
         folders: [],
       },
       {
@@ -56,6 +58,7 @@ function run(lead: string, line: string) {
         reason: "Reviewer has not reviewed the change",
         verdict: null,
         waiver: null,
+        kept: null,
         folders: [],
       },
       {
@@ -66,6 +69,7 @@ function run(lead: string, line: string) {
         reason: null,
         verdict: null,
         waiver: null,
+        kept: null,
         folders: [],
       },
     ],
@@ -229,6 +233,75 @@ test("shows an approval of an earlier plan as out of date, in the waiting colour
   await expect(page.getByTestId("gate-record").locator("h2")).toHaveText("Researcher approved an earlier plan");
   await expect(page.getByTestId("gate-record-verdict")).toContainText("Out of date.");
   await expect(page.getByTestId("gate-record-verdict")).not.toContainText("Approved.");
+});
+
+test("shows an approval the lead kept apart from one given on the change, with why and the follow-ups", async ({ page }) => {
+  const own = await open(page);
+  await page.evaluate((own) => {
+    const w = window as unknown as {
+      __runs: Record<string, { gates: Record<string, unknown>[]; line: string }>;
+      __runChanged: (changed: { lead: string }) => void;
+    };
+    const state = w.__runs[own];
+    Object.assign(state.gates[1], {
+      standing: "kept",
+      reason: "the lead kept Reviewer's approval of the change: renamed a local, as the review asked",
+      verdict: {
+        id: 7,
+        gate: 2,
+        token: "reviewer-token",
+        agent: "Reviewer",
+        agentVersion: null,
+        on: "c0ffee123456",
+        plan: null,
+        folder: "/projects/demo",
+        base: "abc",
+        brief: "Review the change.",
+        approved: true,
+        findings: "",
+        followUps: "Rename tmp in src/auth.ts:12 to token.",
+        at: 1_790_000_000,
+      },
+      kept: {
+        id: 1,
+        gate: 2,
+        verdict: 7,
+        token: own,
+        folder: "/projects/demo",
+        on: "beefcafe9876",
+        base: "abc",
+        reason: "renamed a local, as the review asked",
+        at: 1_790_000_100,
+      },
+    });
+    state.line = "Gates 2 of 2 · The lead kept Reviewer's approval of the change: renamed a local, as the review asked";
+    w.__runChanged({ lead: own });
+  }, own);
+  await expect(page.getByTestId("gate-line-count")).toHaveText("2 of 2");
+  await expect(page.getByTestId("gate-line-why")).toContainText("The lead kept Reviewer's approval");
+
+  await page.getByTestId("gate-line-toggle").click();
+  const row = page.getByTestId("gate-row").nth(1);
+  await expect(row).toHaveAttribute("data-standing", "kept");
+  await expect(row.getByTestId("gate-standing")).toHaveText("Approved, kept");
+  await expect(row.getByTestId("gate-kept")).toHaveText("Kept by the lead: renamed a local, as the review asked");
+  // Kept holds nothing, so there is nothing to waive, and it is not in
+  // the green of an approval given on the change.
+  await expect(row.getByTestId("gate-waive")).toHaveCount(0);
+  const approved = page.getByTestId("gate-row").nth(0).getByTestId("gate-standing");
+  const colour = (locator: Locator) => locator.evaluate((node) => getComputedStyle(node).color);
+  expect(await colour(row.getByTestId("gate-standing"))).not.toBe(await colour(approved));
+
+  await row.getByTestId("gate-open").click();
+  const record = page.getByTestId("gate-record");
+  await expect(record.locator("h2")).toHaveText("Reviewer approved an earlier change, kept by the lead");
+  await expect(page.getByTestId("gate-record-keep")).toContainText("Kept by the lead,");
+  await expect(page.getByTestId("gate-record-keep")).toContainText("renamed a local, as the review asked");
+  await expect(page.getByTestId("gate-record-verdict")).toContainText("Approved on an earlier change.");
+  await expect(page.getByTestId("gate-record-follow-ups")).toHaveText("Rename tmp in src/auth.ts:12 to token.");
+  await expect(record).toContainText("Out of date if the work changes again");
+  await page.getByTestId("gate-record-details").click();
+  await expect(record).toContainText("beefcaf");
 });
 
 test("says Copied once a gate's summary is copied", async ({ page }) => {
