@@ -1725,6 +1725,9 @@ export interface RunVerdict {
   /** What an approval leaves to fix that needs no second look; empty for
       none and for asking for changes. */
   followUps: string;
+  /** The folder's tree when it was given on the change, kept in the
+      repository's objects for a diff from it later; null for the plan. */
+  tree: string | null;
   at: number;
 }
 

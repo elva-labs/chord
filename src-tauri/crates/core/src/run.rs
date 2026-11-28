@@ -270,6 +270,11 @@ pub struct Verdict {
     /// What an approval leaves to fix that needs no second look; empty for
     /// none and for asking for changes.
     pub follow_ups: String,
+    /// The folder's tree when the verdict was given on its change, written
+    /// to the repository's objects without touching its index, branch or
+    /// files, for a diff from it to the change as it is later. None for a
+    /// gate on the plan and for a verdict recorded without one.
+    pub tree: Option<String>,
     pub at: i64,
 }
 
@@ -366,6 +371,10 @@ pub struct FolderStanding {
     pub folder: PathBuf,
     pub standing: Standing,
     pub reason: String,
+    /// The tree the approval that went out of date there was given on,
+    /// where its verdict recorded one; the gates tool names a diff from it.
+    #[serde(skip)]
+    pub approved_tree: Option<String>,
 }
 
 /// A folder the run's work is in, as it stands now.
@@ -830,7 +839,7 @@ impl Runs {
             )
             .map(|found| found > 0)
         };
-        for column in ["base", "follow_ups"] {
+        for column in ["base", "follow_ups", "tree"] {
             if !with(&conn, column).map_err(failed)? {
                 let add = format!("ALTER TABLE verdicts ADD COLUMN {column} TEXT");
                 if let Err(e) = conn.execute_batch(&add) {
@@ -1116,7 +1125,7 @@ impl Runs {
             .conn
             .prepare(
                 "SELECT id, gate, token, agent, agent_version, seen, plan, brief, approved,
-                        findings, at, folder, base, follow_ups
+                        findings, at, folder, base, follow_ups, tree
                  FROM verdicts WHERE lead = ?1 ORDER BY id",
             )
             .map_err(failed)?;
@@ -1137,6 +1146,7 @@ impl Runs {
                     folder: row.get::<_, Option<String>>(11)?.map(PathBuf::from),
                     base: row.get(12)?,
                     follow_ups: row.get::<_, Option<String>>(13)?.unwrap_or_default(),
+                    tree: row.get(14)?,
                 })
             })
             .map_err(failed)?;
@@ -2055,6 +2065,7 @@ fn stand(
     let (folders, kept): (Vec<FolderStanding>, Vec<Option<Keep>>) = judged
         .iter()
         .map(|place| {
+            let mut approved_tree = None;
             let of = if several {
                 format!("the change in {}", place.folder.display())
             } else {
@@ -2081,6 +2092,9 @@ fn stand(
                         asks,
                         gate.rounds,
                     );
+                    if standing == Standing::OutOfDate {
+                        approved_tree = last.and_then(|last| last.tree.clone());
+                    }
                     let kept = last
                         .filter(|_| standing == Standing::OutOfDate)
                         .and_then(|last| {
@@ -2105,6 +2119,7 @@ fn stand(
                     folder: place.folder.clone(),
                     standing,
                     reason,
+                    approved_tree,
                 },
                 kept,
             )
@@ -2250,7 +2265,7 @@ pub fn verdict(
             on.words()
         ));
     }
-    let (seen, version, folder, base) = match read {
+    let (seen, version, folder, base, tree) = match read {
         Read::Plan { version } => {
             let plan = now_state
                 .plan
@@ -2269,7 +2284,7 @@ pub fn verdict(
                     )
                 });
             }
-            (plan.hash.clone(), Some(plan.version), None, None)
+            (plan.hash.clone(), Some(plan.version), None, None, None)
         }
         Read::Change { folder, change } => {
             let own = folder.filter(|folder| {
@@ -2304,6 +2319,7 @@ pub fn verdict(
                 None,
                 Some(place.folder.to_string_lossy().into_owned()),
                 anchor,
+                place.tree.clone().ok(),
             )
         }
     };
@@ -2332,8 +2348,9 @@ pub fn verdict(
                 .execute(
                     "INSERT INTO verdicts (lead, gate, token, agent, agent_version, seen, plan,
                                            brief, approved, findings, at, folder, base,
-                                           follow_ups)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                                           follow_ups, tree)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+                             ?15)",
                     params![
                         member.lead,
                         gate.gate.id,
@@ -2348,7 +2365,8 @@ pub fn verdict(
                         at,
                         folder,
                         base,
-                        follow_ups
+                        follow_ups,
+                        tree
                     ],
                 )
                 .map_err(failed)?;

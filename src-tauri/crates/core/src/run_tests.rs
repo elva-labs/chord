@@ -534,6 +534,11 @@ fn building_waits_for_the_plans_approval_and_a_new_plan_makes_it_out_of_date() {
     assert_eq!(gates.len(), 1, "only its gate on the plan");
     assert_eq!(gates[0].standing, Standing::Approved);
     assert_eq!(
+        gates[0].verdict.as_ref().and_then(|v| v.tree.as_deref()),
+        None,
+        "a plan has no tree"
+    );
+    assert_eq!(
         standing(home.path(), "Cloud architect", When::Plan).standing,
         Standing::NotNeeded,
         "the plan touches nothing under infra"
@@ -2883,10 +2888,19 @@ fn an_approval_names_its_follow_ups_and_asking_for_changes_names_none() {
     let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
     assert_eq!(given[0].follow_ups, "Rename x.\nDrop the comment.");
     assert_eq!(given[0].findings, "Reads well.");
+    let tree = git::tree_hash(&dir).unwrap();
+    assert_eq!(
+        given[0].tree.as_deref(),
+        Some(tree.as_str()),
+        "the tree approved, to diff from later"
+    );
+    assert!(git::has_tree(&dir, &tree));
+    assert!(!git::has_tree(&dir, &"0".repeat(40)));
+    assert!(!git::has_tree(&dir, "--all"));
 }
 
 #[test]
-fn a_store_from_before_keeps_and_follow_ups_reads_them_as_none() {
+fn a_store_from_before_keeps_follow_ups_and_trees_reads_them_as_none() {
     let (home, dir) = started("keep-old", QUICK_FIX, &[("rev", "Reviewer", true)]);
     write(&dir, "src/main.rs", "fn main() { run() }\n");
     given(home.path(), "rev", When::Change, true, "", None).unwrap();
@@ -2896,7 +2910,8 @@ fn a_store_from_before_keeps_and_follow_ups_reads_them_as_none() {
     Connection::open(&file)
         .unwrap()
         .execute_batch(
-            "DROP INDEX keeps_by_gate; DROP TABLE keeps; ALTER TABLE verdicts DROP COLUMN follow_ups",
+            "DROP INDEX keeps_by_gate; DROP TABLE keeps;
+             ALTER TABLE verdicts DROP COLUMN follow_ups; ALTER TABLE verdicts DROP COLUMN tree",
         )
         .unwrap();
     assert_eq!(
@@ -2906,12 +2921,14 @@ fn a_store_from_before_keeps_and_follow_ups_reads_them_as_none() {
     );
     let runs = Runs::open(home.path()).unwrap();
     assert_eq!(runs.verdicts("lead").unwrap()[0].follow_ups, "");
+    assert_eq!(runs.verdicts("lead").unwrap()[0].tree, None);
     assert!(runs.keeps("lead").unwrap().is_empty());
     // An older build writes a verdict naming only the columns it knows.
     runs.conn
-        .execute("UPDATE verdicts SET follow_ups = NULL", [])
+        .execute("UPDATE verdicts SET follow_ups = NULL, tree = NULL", [])
         .unwrap();
     assert_eq!(runs.verdicts("lead").unwrap()[0].follow_ups, "");
+    assert_eq!(runs.verdicts("lead").unwrap()[0].tree, None);
     kept(home.path(), "A rename.").unwrap();
     assert_eq!(change_gate(home.path()).standing, Standing::Kept);
 }

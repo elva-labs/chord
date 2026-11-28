@@ -734,6 +734,14 @@ pub fn head_tree(dir: &Path) -> Option<String> {
         .filter(|hash| !hash.is_empty())
 }
 
+/// Whether the folder's repository still holds a tree, such as one
+/// [`tree_hash`] wrote, which git may clear away once nothing refers to it.
+pub fn has_tree(dir: &Path, tree: &str) -> bool {
+    !tree.is_empty()
+        && tree.chars().all(|c| c.is_ascii_hexdigit())
+        && run(dir, &["cat-file", "-e", &format!("{tree}^{{tree}}")]).is_ok()
+}
+
 /// Where the folder is in its repository, from the top, ending in `/`;
 /// empty at the top.
 pub fn prefix(dir: &Path) -> Result<String, String> {

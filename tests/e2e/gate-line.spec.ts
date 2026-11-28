@@ -28,6 +28,7 @@ const VERDICT = {
   approved: true,
   findings: "The plan covers expiry and rotation.",
   followUps: "",
+  tree: null,
   at: 1_790_000_000,
 };
 

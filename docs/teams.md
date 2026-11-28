@@ -228,6 +228,15 @@ for that change alone: the next edit puts the gate out of date again, and
 a rebase that leaves the work's lines as they were keeps it as it keeps a
 verdict. A Chord from before keeps reads a kept gate as out of date.
 
+An approval of the change records the folder's tree as well, written to
+the repository's objects with an index of its own, so the user's index,
+branches and files are left as they were. While the gate is out of date,
+`gates` names the `git diff` from that tree to the folder's tree now, to
+run in the folder, and the lead reads what changed since the approval
+before keeping it. Git clears away a tree nothing refers to after a while;
+`gates` then says the tree approved is no longer in the repository, and
+the lead reads the whole change.
+
 An approval can name follow-ups: small things left to fix that need no
 second look. They are kept with the verdict and shown by the `gates` tool
 and in the gate's record, and are what the lead keeps the approval for
@@ -292,7 +301,8 @@ A session in a run has tools of the run beside the
 - `gates`, for every session in the run: the plan, its version and hash,
   the hash of the change in each folder and the commit it is counted
   from, and each gate's agent, when it holds, how it stands and why, the
-  last verdict's findings and follow-ups, and the lead's keep.
+  last verdict's findings and follow-ups, the diff since an approval that
+  went out of date, and the lead's keep.
 
 ## What a run holds
 

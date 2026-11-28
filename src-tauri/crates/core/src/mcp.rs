@@ -2281,7 +2281,7 @@ pub fn gate_add_tool() -> Value {
 pub fn keep_tool() -> Value {
     json!({
         "name": "keep",
-        "description": format!("Keeps a reviewer's approval that went out of date in the team's run you lead, for the change as it is now, so its gate passes without another review. Keep one when the change since is a follow-up the reviewer named, or changes no behaviour, such as a rename, a comment, formatting or a test's wording. Ask the reviewer again instead for a change in behaviour, for anything that touches what the reviewer flagged as a risk, and whenever you are unsure. Only a gate on the change whose last verdict there approved is kept: never one on the plan, one that asked for changes or was never approved, one that waits for the user, or one the user waived. Name the hash of the change you read, as the gates tool shows it; a keep of a change that moved on since is refused. It holds for this change alone: a later change puts it out of date again, and an approval is kept once. Say why in one sentence, which the user sees beside the gate, at most {} characters.", crate::run::REASON_MOST),
+        "description": format!("Keeps a reviewer's approval that went out of date in the team's run you lead, for the change as it is now, so its gate passes without another review. Read what changed since the approval first, in the diff the gates tool names, or the whole change when the approved tree is gone. Keep one when the change since is a follow-up the reviewer named, or changes no behaviour, such as a rename, a comment, formatting or a test's wording. Ask the reviewer again instead for a change in behaviour, for anything that touches what the reviewer flagged as a risk, and whenever you are unsure. Only a gate on the change whose last verdict there approved is kept: never one on the plan, one that asked for changes or was never approved, one that waits for the user, or one the user waived. Name the hash of the change you read, as the gates tool shows it; a keep of a change that moved on since is refused. It holds for this change alone: a later change puts it out of date again, and an approval is kept once. Say why in one sentence, which the user sees beside the gate, at most {} characters.", crate::run::REASON_MOST),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -2318,7 +2318,7 @@ pub fn verdict_tool() -> Value {
 pub fn gates_tool() -> Value {
     json!({
         "name": "gates",
-        "description": "Reads the team's run you are in: the plan, its version and hash, the hash of the change in each folder the work is in with the commit it is counted from, and each gate's agent, when it holds, and whether it waits, approved, is kept by the lead, out of date, waived or not needed, with the last verdict's findings and follow-ups. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A change is the lines taken out and put in since the commit the work counts from, in the folder's files as they are, committed or not, so a rebase that puts the same lines on a newer base keeps an approval. The hash counts from that commit, so after a rebase the same change can have a new hash, and a verdict on the hash read before it is refused: read it again. Only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
+        "description": "Reads the team's run you are in: the plan, its version and hash, the hash of the change in each folder the work is in with the commit it is counted from, and each gate's agent, when it holds, and whether it waits, approved, is kept by the lead, out of date, waived or not needed, with the last verdict's findings and follow-ups, and for an approval out of date, the diff from the tree it approved to the tree now. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A change is the lines taken out and put in since the commit the work counts from, in the folder's files as they are, committed or not, so a rebase that puts the same lines on a newer base keeps an approval. The hash counts from that commit, so after a rebase the same change can have a new hash, and a verdict on the hash read before it is refused: read it again. Only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
         "inputSchema": { "type": "object", "properties": {} }
     })
 }
@@ -2601,8 +2601,9 @@ fn gate_line(gate: &crate::run::GateState) -> String {
 }
 
 /// The run's gates, each on its line with the last verdict's findings
-/// and follow-ups, the change a keep is for, and, on the change in more
-/// than one folder, how it stands in each under it, after the line the
+/// and follow-ups, the diff since an approval that went out of date, the
+/// change a keep is for, and, on the change in more than one folder, how
+/// it stands in each under it, after the line the
 /// window shows and what a verdict names: the plan's version and hash,
 /// and the hash of the change in each folder with the commit it is
 /// counted from.
@@ -2662,6 +2663,11 @@ fn gates_text(state: &crate::run::State) -> String {
                 lines.push(format!("    > {line}"));
             }
         }
+        for place in &gate.folders {
+            if let Some(line) = since_approved(state, place) {
+                lines.push(line);
+            }
+        }
         if let Some(kept) = &gate.kept {
             lines.push(format!(
                 "    Kept for the change {} in {}; a later change puts it out of date.",
@@ -2671,6 +2677,30 @@ fn gates_text(state: &crate::run::State) -> String {
         }
     }
     lines.join("\n")
+}
+
+/// For a gate out of date in a place whose approval recorded the tree it
+/// was on, the diff from that tree to the one there now, or that the tree
+/// is no longer in the repository.
+fn since_approved(
+    state: &crate::run::State,
+    standing: &crate::run::FolderStanding,
+) -> Option<String> {
+    if standing.standing != crate::run::Standing::OutOfDate {
+        return None;
+    }
+    let approved = standing.approved_tree.as_deref()?;
+    let place = state
+        .places
+        .iter()
+        .find(|place| crate::run::same(&place.folder, &standing.folder))?;
+    let now = place.tree.as_deref().ok()?;
+    let folder = place.folder.display();
+    Some(if crate::git::has_tree(&place.folder, approved) {
+        format!("    What changed in {folder} since the approval: git diff {approved} {now}, run there.")
+    } else {
+        format!("    The tree approved in {folder}, {approved}, is no longer in the repository, so read the whole change.")
+    })
 }
 
 /// The run as the gates tool reads it: the gates, then the plan's text and
@@ -5254,6 +5284,39 @@ mod tests {
 
         std::fs::write(folder.join("more.txt"), "named\n").unwrap();
         let gates = called(&home, "lead", "gates", json!({}));
+        let now = crate::git::tree_hash(&folder).unwrap();
+        let diff = format!(
+            "\n    What changed in {} since the approval: git diff {tree} {now}, run there.",
+            folder.display()
+        );
+        assert!(text_of(&gates).contains(&diff), "{}", text_of(&gates));
+        let shown = std::process::Command::new("git")
+            .args(["diff", &tree, &now])
+            .current_dir(&folder)
+            .output()
+            .unwrap();
+        assert!(shown.status.success());
+        let shown = String::from_utf8_lossy(&shown.stdout);
+        assert!(
+            shown.contains("-more\n+named\n"),
+            "the diff shows the change since the approval, not yet committed: {shown}"
+        );
+        let runs =
+            rusqlite::Connection::open(crate::run::folder(&home).join(crate::run::FILE)).unwrap();
+        let gone = "0".repeat(40);
+        runs.execute("UPDATE verdicts SET tree = ?1", [&gone])
+            .unwrap();
+        let gone_read = called(&home, "lead", "gates", json!({}));
+        let text = text_of(&gone_read);
+        assert!(
+            text.contains(&format!(
+                "\n    The tree approved in {}, {gone}, is no longer in the repository, so read the whole change.",
+                folder.display()
+            )),
+            "{text}"
+        );
+        runs.execute("UPDATE verdicts SET tree = ?1", [&tree])
+            .unwrap();
         let change = text_of(&gates)
             .lines()
             .find_map(|line| line.strip_prefix("The change in "))
@@ -5304,6 +5367,10 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("\n    Kept for the change "), "{text}");
+        assert!(
+            !text.contains("since the approval: git diff"),
+            "a kept gate names no diff: {text}"
+        );
 
         let log = std::fs::read_to_string(show::requests_path(&home)).unwrap();
         let told = log
