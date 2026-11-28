@@ -2105,7 +2105,7 @@
      dot, one line each: the state, the name, the account it runs under
      when that is not its project's, the project it runs in when that is
      another, the model, or its step and round, or, in the accent, that it
-     is asking for a permission, and when it last changed. Short of room,
+     is asking for a permission, and when it was last active. Short of room,
      the project is cut first, then the model goes whole and the project
      with it, then the account, and the name gives way last; the time, the
      step and round, and asking always stand. Delete does nothing on these
