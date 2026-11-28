@@ -299,11 +299,12 @@ pub const RUN_UNASKED: &[&str] = &[
     "settings_change",
     "theme_save",
     "styles_write",
-    // Write and read the team's run the caller is in: its plan, its gates
-    // and the verdicts on them, in the workbench's store, listed only to
-    // the run's lead and members.
+    // Write and read the team's run the caller is in: its plan, its gates,
+    // the verdicts on them and the lead's keeps of those, in the
+    // workbench's store, listed only to the run's lead and members.
     "plan",
     "gate_add",
+    "keep",
     "verdict",
     "gates",
 ];
@@ -525,7 +526,7 @@ fn switched_off(home: &Path, name: &str, arguments: &Value) -> Option<&'static s
         "note" | "notes" if !settings.notes_on => {
             Some("Notes are switched off in the workbench's settings, so none are kept or read.")
         }
-        "plan" | "gate_add" | "verdict" | "gates" if !settings.agents_on => {
+        "plan" | "gate_add" | "keep" | "verdict" | "gates" if !settings.agents_on => {
             Some("Agents and teams are switched off in the workbench's settings, so no run holds or reads gates until they are on again.")
         }
         "start" if !settings.agents_on && named_agent() => {
@@ -1308,6 +1309,7 @@ fn call(
         "notes" => notes_call(home, session, &arguments),
         "plan" => plan_call(home, session, &arguments),
         "gate_add" => gate_add_call(home, session, &arguments),
+        "keep" => keep_call(home, session, &arguments),
         "verdict" => verdict_call(home, session, &arguments),
         "gates" => gates_call(home, session),
         "start" | "send" => match start_held_in_run(home, session, &arguments)? {
@@ -2199,17 +2201,23 @@ pub fn describe_selection(selection: Option<&crate::selection::Selection>, cwd: 
 }
 
 /// The tools of the team's run a session is in, by name.
-pub const RUN_TOOLS: &[&str] = &["plan", "gate_add", "verdict", "gates"];
+pub const RUN_TOOLS: &[&str] = &["plan", "gate_add", "keep", "verdict", "gates"];
 
 /// Every tool of a team's run, as its lead or members see them.
 pub fn run_tools() -> Vec<Value> {
-    vec![plan_tool(), gate_add_tool(), verdict_tool(), gates_tool()]
+    vec![
+        plan_tool(),
+        gate_add_tool(),
+        keep_tool(),
+        verdict_tool(),
+        gates_tool(),
+    ]
 }
 
-/// The tools of the team's run the session is in: the lead writes the plan
-/// and adds gates, a member whose agent approves a gate gives verdicts,
-/// and each reads the gates. None for a session in no run, or a store
-/// that cannot be read.
+/// The tools of the team's run the session is in: the lead writes the
+/// plan, adds gates and keeps approvals, a member whose agent approves a
+/// gate gives verdicts, and each reads the gates. None for a session in no
+/// run, or a store that cannot be read.
 fn run_tools_for(home: &Path, session: Option<&str>) -> Vec<Value> {
     let Some(token) = session else {
         return Vec::new();
@@ -2219,7 +2227,7 @@ fn run_tools_for(home: &Path, session: Option<&str>) -> Vec<Value> {
     };
     let mut listed = Vec::new();
     if state.run.lead == token {
-        listed.extend([plan_tool(), gate_add_tool()]);
+        listed.extend([plan_tool(), gate_add_tool(), keep_tool()]);
     } else {
         let member = crate::run::Runs::existing(home)
             .ok()
@@ -2270,10 +2278,27 @@ pub fn gate_add_tool() -> Value {
     })
 }
 
+pub fn keep_tool() -> Value {
+    json!({
+        "name": "keep",
+        "description": format!("Keeps a reviewer's approval of the change that went out of date, in the team's run you lead, for the change as it is now, so its gate passes without another review; your instructions say when to keep and when to ask again. Read the diff since the approval that the gates tool names first, and name the hash of the change you read. Refused for a gate on the plan, one whose last verdict did not approve, one waiting for the user or waived, an approval kept once already, and a change that moved on since you read it. The reason is one sentence the user sees beside the gate, at most {} characters.", crate::run::REASON_MOST),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "gate": { "type": "integer", "description": "The gate's number, as the gates tool shows it after #." },
+                "change": { "type": "string", "description": "The hash of the change you read, as the gates tool shows it." },
+                "reason": { "type": "string", "description": "Why the change since the approval needs no second look." },
+                "folder": { "type": "string", "description": "The folder whose change it is kept for, when the approval is out of date in more than one." }
+            },
+            "required": ["gate", "change", "reason"]
+        }
+    })
+}
+
 pub fn verdict_tool() -> Value {
     json!({
         "name": "verdict",
-        "description": format!("Gives your verdict on the plan or the change of the team's run you were started in, on each gate your agent approves. Name what you read, as the gates tool shows it: the plan's version, or the change's hash and, when the change is in more than one folder, the folder. A verdict on a plan or a change that no longer stands is refused; read it again and give the verdict on what stands. Approve it, or ask for changes and say what must change in the findings. A change made after you approve puts the approval out of date, and the lead asks again. After as many asks as the gate's rounds the gate waits for the user. Findings are at most {} characters.", crate::run::FINDINGS_MOST),
+        "description": format!("Gives your verdict on the plan or the change of the team's run you were started in, on each gate your agent approves. Name what you read, as the gates tool shows it: the plan's version, or the change's hash and, when the change is in more than one folder, the folder. A verdict on a plan or a change that no longer stands is refused; read it again and give the verdict on what stands. Put all you found in one verdict. Approve it, naming in the follow-ups the small fixes that need no second look, or ask for changes and say in the findings what must change, marking which findings must change and which are suggestions. A change made after you approve puts the approval out of date: the lead asks you again, or keeps your approval when the change since is a follow-up you named or changes no behaviour. After as many asks as the gate's rounds the gate waits for the user. Findings and follow-ups are at most {} characters each.", crate::run::FINDINGS_MOST),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -2282,7 +2307,8 @@ pub fn verdict_tool() -> Value {
                 "change": { "type": "string", "description": "On the change: the hash of the change you read." },
                 "folder": { "type": "string", "description": "On the change: the folder whose change you read, when the change is in more than one, or your own folder when you read in it and it has the change of one of them." },
                 "approved": { "type": "boolean", "description": "true to approve, false to ask for changes." },
-                "findings": { "type": "string", "description": "What you found; what must change, when you ask for changes." }
+                "findings": { "type": "string", "description": "What you found; what must change, when you ask for changes." },
+                "follow_ups": { "type": "string", "description": "With an approval: the small fixes that need no second look, one to a line." }
             },
             "required": ["on", "approved"]
         }
@@ -2292,7 +2318,7 @@ pub fn verdict_tool() -> Value {
 pub fn gates_tool() -> Value {
     json!({
         "name": "gates",
-        "description": "Reads the team's run you are in: the plan, its version and hash, the hash of the change in each folder the work is in with the commit it is counted from, and each gate's agent, when it holds, and whether it waits, approved, is out of date, waived or not needed, with the last verdict's findings. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A change is the lines taken out and put in since the commit the work counts from, in the folder's files as they are, committed or not, so a rebase that puts the same lines on a newer base keeps an approval. The hash counts from that commit, so after a rebase the same change can have a new hash, and a verdict on the hash read before it is refused: read it again. Only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
+        "description": "Reads the team's run you are in: the plan, its version and hash, the hash of the change in each folder the work is in with the commit it is counted from, and each gate's agent, when it holds, and whether it waits, approved, is kept by the lead, out of date, waived or not needed, with the last verdict's findings and follow-ups, and for an approval out of date, the diff from the tree it approved to the tree now. While a gate on the plan waits, building is held; while any gate waits, handing over is held: no push and no pull request. A change is the lines taken out and put in since the commit the work counts from, in the folder's files as they are, committed or not, so a rebase that puts the same lines on a newer base keeps an approval. The hash counts from that commit, so after a rebase the same change can have a new hash, and a verdict on the hash read before it is refused: read it again. Only commits go out, so a push or a pull request is held while an approved change is not all committed. Paths are measured from the run's folder.",
         "inputSchema": { "type": "object", "properties": {} }
     })
 }
@@ -2420,6 +2446,34 @@ fn gate_add_call(home: &Path, session: Option<&str>, arguments: &Value) -> Resul
     )))
 }
 
+fn keep_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
+    let lead = session.ok_or(crate::run::ONLY_THE_LEAD)?;
+    let gate = arguments
+        .get("gate")
+        .and_then(Value::as_i64)
+        .ok_or("gate is the gate's number, as the gates tool shows it after #.")?;
+    let folder = arguments
+        .get("folder")
+        .and_then(Value::as_str)
+        .map(Path::new);
+    let change = ["change", "tree"]
+        .iter()
+        .find_map(|key| arguments.get(*key).and_then(Value::as_str))
+        .ok_or("change is the hash of the change you read, as the gates tool shows it.")?;
+    let reason = arguments
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let kept = crate::run::keep(home, lead, gate, folder, change, reason)?;
+    run_changed(home, lead);
+    Ok(said(format!(
+        "Kept the approval on gate #{} for the change in {}.\n\n{}",
+        kept.gate,
+        kept.folder.display(),
+        gates_of(home, lead)?
+    )))
+}
+
 fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result<Value, String> {
     let token = session.ok_or(crate::run::NOT_A_MEMBER)?;
     let on = when_of(arguments, "on")?;
@@ -2450,6 +2504,10 @@ fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result
         .get("findings")
         .and_then(Value::as_str)
         .unwrap_or("");
+    let follow_ups = arguments
+        .get("follow_ups")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let version = match crate::run::Runs::existing(home)?
         .map(|runs| runs.member(token))
         .transpose()?
@@ -2458,10 +2516,18 @@ fn verdict_call(home: &Path, session: Option<&str>, arguments: &Value) -> Result
         Some(member) => crate::run::agent_version(&own_agents(home)?, &member.agent),
         None => None,
     };
-    let gates = crate::run::verdict(home, token, read, approved, findings, version.as_deref())?;
+    let gates = crate::run::verdict(
+        home,
+        token,
+        read,
+        approved,
+        findings,
+        follow_ups,
+        version.as_deref(),
+    )?;
     run_changed(home, token);
     let stands: Vec<String> = gates.iter().map(gate_line).collect();
-    Ok(said(format!("Kept.\n{}", stands.join("\n"))))
+    Ok(said(format!("Recorded.\n{}", stands.join("\n"))))
 }
 
 fn gates_call(home: &Path, session: Option<&str>) -> Result<Value, String> {
@@ -2535,10 +2601,12 @@ fn gate_line(gate: &crate::run::GateState) -> String {
 }
 
 /// The run's gates, each on its line with the last verdict's findings
-/// and, on the change in more than one folder, how it stands in each
-/// under it, after the line the window shows and what a verdict names:
-/// the plan's version and hash, and the hash of the change in each folder
-/// with the commit it is counted from.
+/// and follow-ups, the diff since an approval that went out of date, the
+/// change a keep is for, and, on the change in more than one folder, how
+/// it stands in each under it, after the line the
+/// window shows and what a verdict names: the plan's version and hash,
+/// and the hash of the change in each folder with the commit it is
+/// counted from.
 fn gates_text(state: &crate::run::State) -> String {
     let mut lines = vec![state.line()];
     if let Some(plan) = &state.plan {
@@ -2589,8 +2657,50 @@ fn gates_text(state: &crate::run::State) -> String {
                 lines.push(format!("    > {line}"));
             }
         }
+        if let Some(verdict) = gate.verdict.as_ref().filter(|v| !v.follow_ups.is_empty()) {
+            lines.push("    Follow-ups, needing no second look:".to_string());
+            for line in verdict.follow_ups.lines() {
+                lines.push(format!("    > {line}"));
+            }
+        }
+        for place in &gate.folders {
+            if let Some(line) = since_approved(state, place) {
+                lines.push(line);
+            }
+        }
+        if let Some(kept) = &gate.kept {
+            lines.push(format!(
+                "    Kept for the change {} in {}; a later change puts it out of date.",
+                kept.on,
+                kept.folder.display()
+            ));
+        }
     }
     lines.join("\n")
+}
+
+/// For a gate out of date in a place whose approval recorded the tree it
+/// was on, the diff from that tree to the one there now, or that the tree
+/// is no longer in the repository.
+fn since_approved(
+    state: &crate::run::State,
+    standing: &crate::run::FolderStanding,
+) -> Option<String> {
+    if standing.standing != crate::run::Standing::OutOfDate {
+        return None;
+    }
+    let approved = standing.approved_tree.as_deref()?;
+    let place = state
+        .places
+        .iter()
+        .find(|place| crate::run::same(&place.folder, &standing.folder))?;
+    let now = place.tree.as_deref().ok()?;
+    let folder = place.folder.display();
+    Some(if crate::git::has_tree(&place.folder, approved) {
+        format!("    What changed in {folder} since the approval: git diff {approved} {now}, run there.")
+    } else {
+        format!("    The tree approved in {folder}, {approved}, is no longer in the repository, so read the whole change.")
+    })
 }
 
 /// The run as the gates tool reads it: the gates, then the plan's text and
@@ -3289,7 +3399,9 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("with its conversation, and the prompt is what it goes on with"));
-        for name in ["note", "notes", "plan", "gate_add", "verdict", "gates"] {
+        for name in [
+            "note", "notes", "plan", "gate_add", "keep", "verdict", "gates",
+        ] {
             assert!(switched_off(&home, name, &json!({})).is_some(), "{name}");
         }
         assert!(switched_off(&home, "start", &note)
@@ -4845,7 +4957,10 @@ mod tests {
                 .filter(|name| RUN_TOOLS.contains(&name.as_str()))
                 .collect::<Vec<_>>()
         };
-        assert_eq!(run_tools_of(Some("lead")), ["plan", "gate_add", "gates"]);
+        assert_eq!(
+            run_tools_of(Some("lead")),
+            ["plan", "gate_add", "keep", "gates"]
+        );
         assert_eq!(run_tools_of(Some("sec")), ["verdict", "gates"]);
         assert_eq!(
             run_tools_of(Some("dev")),
@@ -5019,11 +5134,11 @@ mod tests {
             json!({ "on": "change", "change": null, "tree": tree, "approved": true }),
             json!({ "on": "change", "change": change, "approved": true }),
         ] {
-            let kept = called(&home, "sec", "verdict", named.clone());
-            assert_ne!(kept["isError"], true, "{named}: {kept}");
+            let given = called(&home, "sec", "verdict", named.clone());
+            assert_ne!(given["isError"], true, "{named}: {given}");
             assert!(
-                text_of(&kept).contains("Security reviewer, before handing over · Approved"),
-                "{named}: {kept}"
+                text_of(&given).contains("Security reviewer, before handing over · Approved"),
+                "{named}: {given}"
             );
         }
     }
@@ -5085,6 +5200,10 @@ mod tests {
             json!({ "on": "plan", "plan": 1, "approved": true, "findings": "Fine." }),
         );
         assert!(
+            text_of(&approved).starts_with("Recorded.\n"),
+            "a verdict is recorded, not kept: {approved}"
+        );
+        assert!(
             text_of(&approved).contains("Security reviewer, before building · Approved"),
             "{approved}"
         );
@@ -5128,5 +5247,141 @@ mod tests {
             })
             .collect();
         assert_eq!(told, ["lead", "lead", "lead"]);
+    }
+
+    #[test]
+    fn the_lead_keeps_an_out_of_date_approval_and_the_gates_show_it_with_the_follow_ups() {
+        let (home, folder) = in_a_run("run-keep");
+        std::fs::write(folder.join("more.txt"), "more\n").unwrap();
+        let tree = crate::git::tree_hash(&folder).unwrap();
+        let asked = called(
+            &home,
+            "sec",
+            "verdict",
+            json!({ "on": "change", "tree": tree, "approved": false, "findings": "Must: name it.", "follow_ups": "Later." }),
+        );
+        assert_eq!(asked["isError"], true);
+        assert!(
+            text_of(&asked).starts_with("Follow-ups go with an approval"),
+            "{asked}"
+        );
+        let approved = called(
+            &home,
+            "sec",
+            "verdict",
+            json!({ "on": "change", "tree": tree, "approved": true, "follow_ups": "Name it more.\nDrop the blank line." }),
+        );
+        assert_ne!(approved["isError"], true, "{approved}");
+        let read = called(&home, "lead", "gates", json!({}));
+        let text = text_of(&read);
+        assert!(
+            text.contains(
+                "\n    Follow-ups, needing no second look:\n    > Name it more.\n    > Drop the blank line."
+            ),
+            "{text}"
+        );
+        let line = text
+            .lines()
+            .find(|line| line.contains("Security reviewer, before handing over"))
+            .unwrap();
+        let gate: i64 = line[1..].split(' ').next().unwrap().parse().unwrap();
+
+        std::fs::write(folder.join("more.txt"), "named\n").unwrap();
+        let gates = called(&home, "lead", "gates", json!({}));
+        let now = crate::git::tree_hash(&folder).unwrap();
+        let diff = format!(
+            "\n    What changed in {} since the approval: git diff {tree} {now}, run there.",
+            folder.display()
+        );
+        assert!(text_of(&gates).contains(&diff), "{}", text_of(&gates));
+        let shown = std::process::Command::new("git")
+            .args(["diff", &tree, &now])
+            .current_dir(&folder)
+            .output()
+            .unwrap();
+        assert!(shown.status.success());
+        let shown = String::from_utf8_lossy(&shown.stdout);
+        assert!(
+            shown.contains("-more\n+named\n"),
+            "the diff shows the change since the approval, not yet committed: {shown}"
+        );
+        let runs =
+            rusqlite::Connection::open(crate::run::folder(&home).join(crate::run::FILE)).unwrap();
+        let gone = "0".repeat(40);
+        runs.execute("UPDATE verdicts SET tree = ?1", [&gone])
+            .unwrap();
+        let gone_read = called(&home, "lead", "gates", json!({}));
+        let text = text_of(&gone_read);
+        assert!(
+            text.contains(&format!(
+                "\n    The tree approved in {}, {gone}, is no longer in the repository, so read the whole change.",
+                folder.display()
+            )),
+            "{text}"
+        );
+        runs.execute("UPDATE verdicts SET tree = ?1", [&tree])
+            .unwrap();
+        let change = text_of(&gates)
+            .lines()
+            .find_map(|line| line.strip_prefix("The change in "))
+            .and_then(|line| line.split(" is ").nth(1))
+            .and_then(|rest| rest.split(',').next())
+            .unwrap()
+            .to_string();
+        let unnamed = called(&home, "lead", "keep", json!({ "reason": "Named." }));
+        assert_eq!(unnamed["isError"], true);
+        assert_eq!(
+            text_of(&unnamed),
+            "gate is the gate's number, as the gates tool shows it after #."
+        );
+        let unread = called(
+            &home,
+            "lead",
+            "keep",
+            json!({ "gate": gate, "reason": "Named." }),
+        );
+        assert_eq!(
+            text_of(&unread),
+            "change is the hash of the change you read, as the gates tool shows it."
+        );
+        let member = called(
+            &home,
+            "sec",
+            "keep",
+            json!({ "gate": gate, "change": change, "reason": "Mine." }),
+        );
+        assert_eq!(member["isError"], true);
+        assert_eq!(text_of(&member), crate::run::ONLY_THE_LEAD);
+        let kept = called(
+            &home,
+            "lead",
+            "keep",
+            json!({ "gate": gate, "change": change, "reason": "Did the follow-up the review named." }),
+        );
+        assert_ne!(kept["isError"], true, "{kept}");
+        let text = text_of(&kept);
+        assert!(
+            text.starts_with(&format!(
+                "Kept the approval on gate #{gate} for the change in "
+            )),
+            "{text}"
+        );
+        assert!(
+            text.contains("Security reviewer, before handing over · Approved, kept by the lead · the lead kept Security reviewer's approval of the change: Did the follow-up the review named."),
+            "{text}"
+        );
+        assert!(text.contains("\n    Kept for the change "), "{text}");
+        assert!(
+            !text.contains("since the approval: git diff"),
+            "a kept gate names no diff: {text}"
+        );
+
+        let log = std::fs::read_to_string(show::requests_path(&home)).unwrap();
+        let told = log
+            .lines()
+            .filter_map(show::classify)
+            .filter(|request| matches!(request, Request::Run(_)))
+            .count();
+        assert_eq!(told, 2, "the approval and the keep each told the window");
     }
 }

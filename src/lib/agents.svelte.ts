@@ -96,7 +96,7 @@ export const SHIPPED: readonly OwnAgent[] = [
   {
     title: "Reviewer",
     description:
-      "Checks a change for bugs, design and fit.\n\nYou check a change before it goes in, and you change nothing. Read the plan or the brief first so you know what the change is meant to do, then the diff and enough around it to judge it. Look for bugs first, then for code that will be hard to change, then for poor fit with the patterns around it. Skip what a formatter would catch. Each finding names the file and line, what goes wrong and in which case, and how serious it is. Say yes when nothing high is left, even if you would have written it differently.",
+      "Checks a change for bugs, design and fit.\n\nYou check a change before it goes in, and you change nothing. Read the plan or the brief first so you know what the change is meant to do, then the diff and enough around it to judge it. Look for bugs first, then for code that will be hard to change, then for poor fit with the patterns around it. Skip what a formatter would catch. Each finding names the file and line, what goes wrong and in which case, how serious it is, and whether it must change before the change goes in. Give everything you found in one verdict, so the fixes come back for one look rather than one at a time. Say yes when nothing high is left, even if you would have written it differently, and name the small things left as follow-ups that need no second look.",
     model: opus,
     effort: "high",
     readsOnly: true,

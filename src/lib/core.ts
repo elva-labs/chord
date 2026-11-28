@@ -1727,6 +1727,12 @@ export interface RunVerdict {
   brief: string;
   approved: boolean;
   findings: string;
+  /** What an approval leaves to fix that needs no second look; empty for
+      none and for asking for changes. */
+  followUps: string;
+  /** The folder's tree when it was given on the change, kept in the
+      repository's objects for a diff from it later; null for the plan. */
+  tree: string | null;
   at: number;
 }
 
@@ -1737,7 +1743,26 @@ export interface RunWaiver {
   at: number;
 }
 
-export type GateStanding = "waiting" | "approved" | "outOfDate" | "waived" | "notNeeded";
+/** The lead's keep of an approval that went out of date in one place, for
+    the change there as it was kept. */
+export interface RunKeep {
+  id: number;
+  gate: number;
+  /** The approving verdict kept: the last the gate was given there. */
+  verdict: number;
+  /** The token of the session that kept it, the run's lead. */
+  token: string;
+  folder: string;
+  /** The hash of the change it was kept for. */
+  on: string;
+  base: string | null;
+  reason: string;
+  at: number;
+}
+
+/** Kept is an approval given on an earlier change that the lead kept for
+    this one. */
+export type GateStanding = "waiting" | "approved" | "kept" | "outOfDate" | "waived" | "notNeeded";
 
 /** A reading of the core's that may have failed, with why. */
 export type Reading<T> = { ok: T } | { error: string };
@@ -1773,6 +1798,8 @@ export interface RunGateState {
   reason: string;
   verdict: RunVerdict | null;
   waiver: RunWaiver | null;
+  /** The lead's keep in the first place it stands kept in. */
+  kept: RunKeep | null;
   /** How a gate on the change stands in each place it is judged in. */
   folders: { folder: string; standing: GateStanding; reason: string }[];
 }

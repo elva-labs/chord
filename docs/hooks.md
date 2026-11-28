@@ -130,9 +130,9 @@ a line of its own, `tools.notify.approval_mode = "approve"`:
 - `settings`, which reads the workbench's settings;
 - `settings_change`, `theme_save` and `styles_write`, for which the window
   shows the change and asks the user every time before making it.
-- `plan`, `gate_add`, `verdict` and `gates`, which write and read the
-  [team's run](teams.md#the-runs-tools) the caller is in, listed only to
-  the run's sessions.
+- `plan`, `gate_add`, `keep`, `verdict` and `gates`, which write and read
+  the [team's run](teams.md#the-runs-tools) the caller is in, listed only
+  to the run's sessions.
 
 It says nothing for the server as a whole, so every other tool asks as
 the user's approval policy says, with Codex's question the only one before

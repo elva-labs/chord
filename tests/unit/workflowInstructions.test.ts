@@ -38,6 +38,9 @@ describe("what an orchestrator is told", () => {
     expect(first).toContain("leave the model out where it says no model");
     expect(first).toContain("name the step it is for");
     expect(first).toContain("names the session whose work it checks");
+    expect(first).toContain("Do the small steps that change no file yourself, without starting a session");
+    expect(first).toContain("When your sandbox refuses one, ask the user rather than starting a session.");
+    expect(first).toContain("marking a pull request ready or draft");
   });
 
   // Direct has one step, on any model, and no review: what each start
@@ -45,7 +48,7 @@ describe("what an orchestrator is told", () => {
   it("names in a start only what the workflow's steps have", () => {
     const [first, step, last] = instructionLines(directWorkflow());
     expect(first).toBe(
-      "You direct this work and do not do it yourself: do not edit files. Delegate every piece by starting a session with the workbench's start tool, never with your own subagents. In each start, name the step it is for.",
+      "You direct this work: do not edit files. Delegate every piece by starting a session with the workbench's start tool, never with your own subagents. In each start, name the step it is for. Do the small steps that change no file yourself, without starting a session: reading, git fetch and git status, checking CI, asking a running session a question, and what places the work in GitHub, such as marking a pull request ready or draft, editing its title, description, labels or reviewers, commenting on pull requests and issues, and opening or closing an issue. When your sandbox refuses one, ask the user rather than starting a session.",
     );
     expect(step).toContain('For the step "Work", split the task into pieces and start a session for each, on any agent and model.');
     expect(last).toBe('When every piece has come out of "Work", report to the user.');
@@ -81,7 +84,7 @@ describe("what an orchestrator is told", () => {
       '2. For the step "Work", split the task into pieces and start a session for each, on claude-code with the model sonnet. Run one "Work" session at a time.',
     );
     expect(lines[2]).toBe(
-      '3. For the step "Review", start a review of each piece once it has come out of "Work", on claude-code with the model opus. The piece passes when the reviewer approves and you agree. If it does not pass, send it back with send to the piece\'s own session for "Work", with what the review found, which resumes that session if the workbench put it away, or start one for "Work" that names it with work if you stopped it. Then review it again for "Review", with a new review naming the same work or a line to the reviewer. Send a piece back at most 3 times; after that, stop and ask the user, and start another round only if they want one.',
+      '3. For the step "Review", start a review of each piece once it has come out of "Work", on claude-code with the model opus. The piece passes when the reviewer approves and you agree. When the piece passes with small fixes the reviewer names as needing no second look, have the piece\'s own session make them and do not review it again, unless one changes what the piece does. If it does not pass, send it back with send to the piece\'s own session for "Work", with what the review found, which resumes that session if the workbench put it away, or start one for "Work" that names it with work if you stopped it. Then review it again for "Review", with a new review naming the same work or a line to the reviewer, once all it found is fixed rather than after each fix. Send a piece back at most 3 times; after that, stop and ask the user, and start another round only if they want one.',
     );
     expect(lines[3]).toBe('4. When every piece has passed "Review", report to the user.');
   });

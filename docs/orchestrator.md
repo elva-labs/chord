@@ -25,8 +25,11 @@ workflow's own steps. A fresh install has a workflow for exactly that,
 Direct: one step of work, on any model, with as many sessions at once as a
 session may run (see [settings](reference/settings.md#workflows)). Its steps add what
 any workflow's do: edit no files, hand out work only through `start` and
-never through its own subagents, and name the step in each start. A session
-that follows no workflow is told none of this.
+never through its own subagents, name the step in each start, and do the
+small steps that change no file itself rather than start a session for
+them, such as git fetch, checking CI, or editing and commenting on a pull
+request, and ask the user when its sandbox refuses one. A session that
+follows no workflow is told none of this.
 
 The rest is said where it is needed, in the descriptions of the tools,
 which a session reads when it takes the tool up: `wait` says to wait on
@@ -679,7 +682,11 @@ and carries the piece on. A piece that does not pass is sent back with
 `send` to its own session for the step the review goes back to, resumed
 first if it is not running, or carried on in a new start that names it
 where the orchestrator stopped it, and is reviewed again by a new review
-naming the same work or by a line to the reviewer.
+naming the same work or by a line to the reviewer, once all the review
+found is fixed rather than after each fix. A piece that passes with small
+fixes the reviewer names as needing no second look has them made by its
+own session and is not reviewed again, unless one changes what the piece
+does.
 
 The workbench counts the rounds of each review for each piece: a review
 started, a review resumed with a prompt, and a line sent to a review that

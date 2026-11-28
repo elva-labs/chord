@@ -91,6 +91,7 @@ fn given(
                 Read::Plan { version: latest },
                 approved,
                 findings,
+                "",
                 version,
             )
         }
@@ -100,7 +101,7 @@ fn given(
                 folder: None,
                 change: &change,
             };
-            verdict(home, token, read, approved, findings, version)
+            verdict(home, token, read, approved, findings, "", version)
         }
     }
 }
@@ -533,6 +534,11 @@ fn building_waits_for_the_plans_approval_and_a_new_plan_makes_it_out_of_date() {
     assert_eq!(gates.len(), 1, "only its gate on the plan");
     assert_eq!(gates[0].standing, Standing::Approved);
     assert_eq!(
+        gates[0].verdict.as_ref().and_then(|v| v.tree.as_deref()),
+        None,
+        "a plan has no tree"
+    );
+    assert_eq!(
         standing(home.path(), "Cloud architect", When::Plan).standing,
         Standing::NotNeeded,
         "the plan touches nothing under infra"
@@ -554,6 +560,11 @@ fn building_waits_for_the_plans_approval_and_a_new_plan_makes_it_out_of_date() {
         "Security reviewer's approval of the plan is out of date"
     );
     assert!(start_held(home.path(), "lead", false).unwrap().is_some());
+    let told = stop_held(home.path(), "lead").unwrap();
+    assert!(
+        !told.contains("keep an approval"),
+        "an approval of the plan is not kept: {told}"
+    );
 }
 
 #[test]
@@ -1073,6 +1084,7 @@ fn a_push_from_a_members_worktree_is_judged_on_the_change_there() {
         },
         true,
         "",
+        "",
         None,
     )
     .unwrap();
@@ -1215,7 +1227,7 @@ fn given_in(home: &Path, folder: Option<&Path>) -> Result<Vec<GateState>, String
         folder,
         change: &change,
     };
-    verdict(home, "rev", read, true, "", None)
+    verdict(home, "rev", read, true, "", "", None)
 }
 
 #[test]
@@ -1233,7 +1245,7 @@ fn a_reviewer_reading_in_its_own_folder_approves_the_change_with_its_tree() {
         folder: Some(&own),
         change: &tree,
     };
-    let gates = verdict(home.path(), "rev", read, true, "", None).unwrap();
+    let gates = verdict(home.path(), "rev", read, true, "", "", None).unwrap();
     assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
     let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
     assert!(
@@ -1248,7 +1260,7 @@ fn a_reviewer_reading_in_its_own_folder_approves_the_change_with_its_tree() {
         folder: Some(&own),
         change: &tree,
     };
-    let refused = verdict(home.path(), "rev", read, true, "", None).unwrap_err();
+    let refused = verdict(home.path(), "rev", read, true, "", "", None).unwrap_err();
     assert!(
         refused.contains("which is the change in none of the run's folders"),
         "{refused}"
@@ -1269,13 +1281,13 @@ fn a_verdict_on_a_plan_that_was_replaced_is_refused() {
     let old = Read::Plan {
         version: read.version,
     };
-    let refused = verdict(home.path(), "sec", old, true, "", None).unwrap_err();
+    let refused = verdict(home.path(), "sec", old, true, "", "", None).unwrap_err();
     assert_eq!(
         refused,
         "Version 1 of the plan is not the latest: version 2 is. Read it with the gates tool and give the verdict on it."
     );
     let none = Read::Plan { version: 7 };
-    let refused = verdict(home.path(), "sec", none, true, "", None).unwrap_err();
+    let refused = verdict(home.path(), "sec", none, true, "", "", None).unwrap_err();
     assert_eq!(
         refused,
         "The plan has no version 7; the latest is version 2."
@@ -1285,6 +1297,7 @@ fn a_verdict_on_a_plan_that_was_replaced_is_refused() {
         "sec",
         Read::Plan { version: 2 },
         true,
+        "",
         "",
         None,
     )
@@ -1307,7 +1320,7 @@ fn a_verdict_on_a_tree_that_changed_since_it_was_read_is_refused() {
         folder: None,
         change: &read,
     };
-    let refused = verdict(home.path(), "rev", old, true, "", None).unwrap_err();
+    let refused = verdict(home.path(), "rev", old, true, "", "", None).unwrap_err();
     assert!(refused.contains(&format!("not {read}.")), "{refused}");
     assert!(refused.contains("is not the one read"), "{refused}");
     assert!(Runs::open(home.path())
@@ -2218,11 +2231,11 @@ fn a_reviewer_reading_the_work_before_a_rebase_approves_the_change_after_it() {
         folder: Some(&own),
         change: &change,
     };
-    let gates = verdict(home.path(), "rev2", read, true, "", None).unwrap();
+    let gates = verdict(home.path(), "rev2", read, true, "", "", None).unwrap();
     assert_eq!(gates[0].standing, Standing::Approved, "{}", gates[0].reason);
 
     write(&own, "list.txt", &LETTERS.replace("c\n", "CC\n"));
-    let refused = verdict(home.path(), "rev2", read, true, "", None).unwrap_err();
+    let refused = verdict(home.path(), "rev2", read, true, "", "", None).unwrap_err();
     assert!(refused.contains("the change in none"), "{refused}");
     let _ = std::fs::remove_dir_all(&own);
 }
@@ -2347,7 +2360,7 @@ fn a_reader_in_its_own_folder_finds_its_place_among_two_by_the_change() {
         folder: Some(&own),
         change: &change,
     };
-    let gates = verdict(home.path(), "rev2", read, true, "", None).unwrap();
+    let gates = verdict(home.path(), "rev2", read, true, "", "", None).unwrap();
     let stands = |folder: &Path| {
         gates[0]
             .folders
@@ -2363,7 +2376,7 @@ fn a_reader_in_its_own_folder_finds_its_place_among_two_by_the_change() {
     write(&dev, "list.txt", &LETTERS.replace("c\n", "C\n"));
     commit(&dev);
     rebased(&dev, &[]);
-    let refused = verdict(home.path(), "rev2", read, true, "", None).unwrap_err();
+    let refused = verdict(home.path(), "rev2", read, true, "", "", None).unwrap_err();
     assert!(
         refused.contains("has the change in more than one folder"),
         "{refused}"
@@ -2393,7 +2406,7 @@ fn approved_from(home: &Path, own: &Path) -> Result<Vec<GateState>, String> {
         folder: Some(own),
         change: &change,
     };
-    verdict(home, "rev2", read, true, "", None)
+    verdict(home, "rev2", read, true, "", "", None)
 }
 
 #[test]
@@ -2464,4 +2477,618 @@ fn a_reader_behind_the_lead_approves_a_conflict_resolved_either_way() {
         );
         let _ = std::fs::remove_dir_all(&own);
     }
+}
+
+/// The gate's standing on the change and why, as the lead reads it.
+fn change_gate(home: &Path) -> GateState {
+    standing(home, REVIEWER, When::Change)
+}
+
+/// The change as the lead reads it now in `folder`, or in the first place
+/// gate 1 is out of date in when none is named; empty when there is no
+/// run to read.
+fn read_now(home: &Path, folder: Option<&Path>) -> String {
+    let Ok(Some(now)) = state(home, "lead") else {
+        return String::new();
+    };
+    let out_of_date = now
+        .gates
+        .iter()
+        .find(|gate| gate.gate.id == 1)
+        .and_then(|gate| {
+            gate.folders
+                .iter()
+                .find(|place| place.standing == Standing::OutOfDate)
+        })
+        .map(|place| place.folder.clone());
+    let Some(at) = folder.map(Path::to_path_buf).or(out_of_date) else {
+        return String::new();
+    };
+    now.places
+        .iter()
+        .find(|place| same(&place.folder, &at))
+        .and_then(|place| place.change.clone().ok())
+        .unwrap_or_default()
+}
+
+fn kept(home: &Path, reason: &str) -> Result<Keep, String> {
+    keep(home, "lead", 1, None, &read_now(home, None), reason)
+}
+
+fn kept_in(home: &Path, folder: &Path, reason: &str) -> Result<Keep, String> {
+    keep(
+        home,
+        "lead",
+        1,
+        Some(folder),
+        &read_now(home, Some(folder)),
+        reason,
+    )
+}
+
+#[test]
+fn the_lead_keeps_an_out_of_date_approval_for_the_change_as_it_is_now() {
+    let (home, dir) = started("keep-one", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    let refused = kept(home.path(), "Nothing changed.").unwrap_err();
+    assert_eq!(
+        refused,
+        "Reviewer approved the change, and that approval stands, so there is nothing to keep."
+    );
+
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    assert_eq!(change_gate(home.path()).standing, Standing::OutOfDate);
+    assert_eq!(
+        kept(home.path(), " ").unwrap_err(),
+        "Keeping an approval says why the change since needs no second look."
+    );
+    let long = kept(home.path(), &"a".repeat(REASON_MOST + 1)).unwrap_err();
+    assert!(long.contains("reason"), "{long}");
+
+    let verdicts = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    let keep = kept(home.path(), " Renamed the call the review named. ").unwrap();
+    assert_eq!(
+        (keep.gate, keep.verdict, keep.token.as_str()),
+        (1, verdicts[0].id, "lead")
+    );
+    assert_eq!(keep.reason, "Renamed the call the review named.");
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    assert_eq!(Ok(keep.on.clone()), now.places[0].change);
+    assert!(same(&keep.folder, &dir));
+    let gate = &now.gates[0];
+    assert_eq!(gate.standing, Standing::Kept);
+    assert_eq!(
+        gate.reason,
+        "the lead kept Reviewer's approval of the change: Renamed the call the review named."
+    );
+    assert_eq!(gate.kept.as_ref().map(|k| k.id), Some(keep.id));
+    assert_eq!(gate.verdict.as_ref().map(|v| v.id), Some(verdicts[0].id));
+    assert_eq!(now.handing_over_held(), None);
+    assert!(!now.waits_for_the_user());
+    assert_eq!(
+        now.line(),
+        "Gates 1 of 1 · The lead kept Reviewer's approval of the change: Renamed the call the review named."
+    );
+    assert_eq!(
+        Runs::open(home.path()).unwrap().verdicts("lead").unwrap(),
+        verdicts,
+        "keeping writes no verdict"
+    );
+    assert_eq!(
+        kept(home.path(), "Again.").unwrap_err(),
+        "The approval is kept already, for the change as it is now."
+    );
+
+    commit(&dir);
+    assert_eq!(
+        change_gate(home.path()).standing,
+        Standing::Kept,
+        "a commit of the same tree keeps it"
+    );
+    write(&dir, "src/main.rs", "fn main() { begin() }\n");
+    let gate = change_gate(home.path());
+    assert_eq!(
+        (gate.standing, gate.kept),
+        (Standing::OutOfDate, None),
+        "a keep holds for its change alone"
+    );
+    assert!(command_held(home.path(), "lead", "git push origin main").is_some());
+    assert_eq!(
+        kept(home.path(), "Formatting only.").unwrap_err(),
+        KEPT_ONCE
+    );
+    assert_eq!(change_gate(home.path()).standing, Standing::OutOfDate);
+
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { begin()  }\n");
+    kept(home.path(), "Formatting only.").unwrap();
+    assert_eq!(
+        change_gate(home.path()).standing,
+        Standing::Kept,
+        "a new approval is kept once in its turn"
+    );
+
+    given(
+        home.path(),
+        "rev",
+        When::Change,
+        false,
+        "Must: undo it.",
+        None,
+    )
+    .unwrap();
+    assert_eq!(change_gate(home.path()).standing, Standing::Waiting);
+    let refused = kept(home.path(), "No.").unwrap_err();
+    assert!(
+        refused.starts_with(
+            "Only an approval that is out of date is kept, and Reviewer asked for changes"
+        ),
+        "{refused}"
+    );
+}
+
+#[test]
+fn a_keep_of_a_change_that_moved_on_since_the_lead_read_it_is_refused() {
+    let (home, dir) = started("keep-race", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    let read = read_now(home.path(), None);
+    write(&dir, "src/main.rs", "fn main() { stop() }\n");
+    let now = read_now(home.path(), None);
+    assert_ne!(read, now);
+    let moved = keep(home.path(), "lead", 1, None, &read, "A rename.").unwrap_err();
+    assert!(
+        moved.ends_with(&format!(
+            " is not the one read: it is {now} now, not {read}. Read it again with the gates tool and keep the approval for it."
+        )),
+        "{moved}"
+    );
+    assert_eq!(change_gate(home.path()).standing, Standing::OutOfDate);
+    assert!(
+        Runs::open(home.path())
+            .unwrap()
+            .keeps("lead")
+            .unwrap()
+            .is_empty(),
+        "a refused keep keeps nothing"
+    );
+
+    let tree = git::tree_hash(&dir).unwrap();
+    let by_tree = keep(home.path(), "lead", 1, None, &tree, "A rename.").unwrap();
+    assert_eq!(
+        by_tree.on, now,
+        "a keep named by its tree is kept for the change"
+    );
+    assert_eq!(change_gate(home.path()).standing, Standing::Kept);
+}
+
+#[test]
+fn a_held_lead_is_told_to_keep_only_where_a_keep_could_move_a_gate_on() {
+    const KEEP: &str = " keep an approval that is out of date where";
+    let told = |home: &Path| stop_held(home, "lead").unwrap();
+    let (home, dir) = started("stop-keep", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    let waiting = told(home.path());
+    assert!(!waiting.contains(KEEP), "nothing approved yet: {waiting}");
+    assert!(
+        waiting
+            .ends_with("Ask for the verdicts it names and wait for them, or stop to ask the user."),
+        "{waiting}"
+    );
+
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    let out_of_date = told(home.path());
+    assert!(out_of_date.contains(KEEP), "{out_of_date}");
+    let hold = stop_hold(home.path(), "lead").unwrap();
+    assert!(
+        hold.held.starts_with("Handing over is held: "),
+        "{}",
+        hold.held
+    );
+    assert_eq!(hold.told, out_of_date);
+    assert!(out_of_date.starts_with(&hold.held));
+
+    kept(home.path(), "A rename.").unwrap();
+    assert_eq!(stop_held(home.path(), "lead"), None);
+    write(&dir, "src/main.rs", "fn main() { begin() }\n");
+    let kept_once = told(home.path());
+    assert!(!kept_once.contains(KEEP), "kept once already: {kept_once}");
+
+    given(
+        home.path(),
+        "rev",
+        When::Change,
+        false,
+        "Must: undo it.",
+        None,
+    )
+    .unwrap();
+    write(&dir, "src/main.rs", "fn main() { end() }\n");
+    let asked = told(home.path());
+    assert!(!asked.contains(KEEP), "asked for changes: {asked}");
+}
+
+#[test]
+fn a_kept_approval_holds_uncommitted_work_from_going_out_as_an_approval_does() {
+    let (home, dir) = started("keep-sent", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    commit(&dir);
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    kept(home.path(), "A rename.").unwrap();
+    let held = state(home.path(), "lead")
+        .unwrap()
+        .unwrap()
+        .uncommitted_held()
+        .unwrap();
+    assert!(held.starts_with("Sending is held"), "{held}");
+}
+
+#[test]
+fn no_approval_is_kept_that_was_never_given_was_kept_once_asked_for_changes_or_waits_for_the_user()
+{
+    let (home, dir) = started("keep-none", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    let never = kept(home.path(), "Small.").unwrap_err();
+    assert_eq!(
+        never,
+        "Only an approval that is out of date is kept, and Reviewer has not approved the change yet."
+    );
+    assert_eq!(
+        keep(home.path(), "lead", 9, None, "", "Small.").unwrap_err(),
+        "The run has no gate 9."
+    );
+    let plan_gate = gate_add(home.path(), "lead", REVIEWER, When::Plan, None).unwrap();
+    assert_eq!(
+        keep(home.path(), "lead", plan_gate.id, None, "", "Small.").unwrap_err(),
+        "Reviewer's gate is on the plan, and only an approval of the change is kept: a plan is read again whenever it changes."
+    );
+
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { go() }\n");
+    kept(home.path(), "A rename.").unwrap();
+    write(&dir, "src/main.rs", "fn main() { went() }\n");
+    assert_eq!(
+        kept(home.path(), "Another rename.").unwrap_err(),
+        "This approval was kept once already; ask the gate's agent again."
+    );
+
+    given(
+        home.path(),
+        "rev",
+        When::Change,
+        false,
+        "Must: test it.",
+        None,
+    )
+    .unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    let asked = kept(home.path(), "Tested.").unwrap_err();
+    assert!(
+        asked.starts_with(
+            "Only an approval that is out of date is kept, and Reviewer asked for changes"
+        ),
+        "{asked}"
+    );
+    for round in 2..=ROUNDS {
+        write(&dir, "src/main.rs", &format!("// round {round}\n"));
+        given(home.path(), "rev", When::Change, false, "Again.", None).unwrap();
+    }
+    assert_eq!(
+        kept(home.path(), "Tested.").unwrap_err(),
+        "Reviewer's gate asked for changes as many times as its rounds and waits for the user, so the lead keeps none of it."
+    );
+    waive(home.path(), "lead", 1, "Checked it myself.").unwrap();
+    assert_eq!(
+        kept(home.path(), "Tested.").unwrap_err(),
+        "The user waived Reviewer's gate, so there is nothing to keep."
+    );
+    assert_eq!(
+        Runs::open(home.path())
+            .unwrap()
+            .keeps("lead")
+            .unwrap()
+            .len(),
+        1,
+        "a refusal keeps nothing"
+    );
+}
+
+#[test]
+fn only_the_lead_keeps_and_only_while_its_run_holds() {
+    let (home, dir) = started("keep-who", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    assert_eq!(
+        keep(
+            home.path(),
+            "rev",
+            1,
+            None,
+            &read_now(home.path(), None),
+            "Mine."
+        )
+        .unwrap_err(),
+        ONLY_THE_LEAD
+    );
+    agents_switched(home.path(), false);
+    assert_eq!(
+        kept(home.path(), "Small.").unwrap_err(),
+        "Agents and teams are switched off in the settings, so no gate holds and no approval is kept."
+    );
+    agents_switched(home.path(), true);
+    assert!(end(home.path(), "lead").unwrap());
+    assert_eq!(kept(home.path(), "Small.").unwrap_err(), ONLY_THE_LEAD);
+
+    let empty = Scratch::new("run-home-keep-nostore");
+    assert_eq!(kept(empty.path(), "Small.").unwrap_err(), ONLY_THE_LEAD);
+    assert!(
+        !folder(empty.path()).join(FILE).exists(),
+        "no store is made"
+    );
+}
+
+#[test]
+fn a_keep_in_two_folders_names_the_folder_and_the_gate_stands_kept_once_none_is_open() {
+    let (home, dir) = started("keep-two", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    let tree_dir = worktree(&dir, "work");
+    join(
+        home.path(),
+        "lead",
+        "dev",
+        "Developer",
+        &tree_dir,
+        None,
+        false,
+        "",
+    )
+    .unwrap();
+    write(&dir, "src/main.rs", "fn main() { lead() }\n");
+    write(&tree_dir, "src/main.rs", "fn main() { work() }\n");
+    given_in(home.path(), Some(&dir)).unwrap();
+    given_in(home.path(), Some(&tree_dir)).unwrap();
+    assert_eq!(change_gate(home.path()).standing, Standing::Approved);
+
+    write(&dir, "src/main.rs", "fn main() { lead2() }\n");
+    write(&tree_dir, "src/main.rs", "fn main() { work2() }\n");
+    let several = kept(home.path(), "Small.").unwrap_err();
+    assert!(
+        several.starts_with("Reviewer's approval is out of date in more than one folder, so keeping it names the folder: "),
+        "{several}"
+    );
+    let elsewhere = Scratch::new("run-keep-elsewhere");
+    let stranger = kept_in(home.path(), elsewhere.path(), "Small.").unwrap_err();
+    assert!(
+        stranger.contains("is not a folder Reviewer's gate is judged in"),
+        "{stranger}"
+    );
+
+    let keep_lead = kept_in(home.path(), &dir, "A comment.").unwrap();
+    assert!(same(&keep_lead.folder, &dir));
+    let gate = change_gate(home.path());
+    assert_eq!(
+        gate.standing,
+        Standing::OutOfDate,
+        "the worktree is still open"
+    );
+    let standings: Vec<Standing> = gate.folders.iter().map(|f| f.standing).collect();
+    assert_eq!(standings, [Standing::Kept, Standing::OutOfDate]);
+    let again = kept_in(home.path(), &dir, "Again.").unwrap_err();
+    assert!(again.starts_with("The approval is kept already"), "{again}");
+
+    kept(home.path(), "A rename.").unwrap();
+    assert_eq!(change_gate(home.path()).standing, Standing::Kept);
+
+    given_in(home.path(), Some(&tree_dir)).unwrap();
+    let gate = change_gate(home.path());
+    assert_eq!(
+        gate.standing,
+        Standing::Kept,
+        "kept in one folder and approved in the other stands kept"
+    );
+    assert!(gate.kept.is_some_and(|k| same(&k.folder, &dir)));
+}
+
+#[test]
+fn a_keep_holds_through_a_clean_rebase_and_ends_when_the_lines_differ() {
+    let (home, dir) = on_a_branch("keep-rebase", &[("list.txt", LETTERS)]);
+    write(&dir, "list.txt", &LETTERS.replace("g\n", "G\n"));
+    commit(&dir);
+    approved_now(home.path());
+    write(
+        &dir,
+        "list.txt",
+        &LETTERS.replace("g\n", "G\n").replace("c\n", "C\n"),
+    );
+    commit(&dir);
+    kept(home.path(), "Capitalised a line, as the review asked.").unwrap();
+    assert_eq!(change_standing(home.path()), Standing::Kept);
+
+    main_moves(&dir, &[("list.txt", &format!("top\n{LETTERS}"))]);
+    rebased(&dir, &[]);
+    assert_eq!(
+        change_standing(home.path()),
+        Standing::Kept,
+        "the same lines on a new base, as an approval holds"
+    );
+    assert_eq!(
+        command_held(home.path(), "lead", "git push origin work"),
+        None
+    );
+
+    write(
+        &dir,
+        "list.txt",
+        &format!(
+            "top\n{}",
+            LETTERS.replace("g\n", "GG\n").replace("c\n", "C\n")
+        ),
+    );
+    commit(&dir);
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+}
+
+#[test]
+fn a_gate_added_after_a_keep_waits_and_the_kept_one_stays_kept() {
+    let (home, dir) = started("keep-add", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    let keep = kept(home.path(), "A rename.").unwrap();
+
+    let added = gate_add(home.path(), "lead", REVIEWER, When::Plan, None).unwrap();
+    let now = state(home.path(), "lead").unwrap().unwrap();
+    let of = |id: i64| now.gates.iter().find(|gate| gate.gate.id == id).unwrap();
+    assert_eq!(of(1).standing, Standing::Kept);
+    assert_eq!(of(1).kept.as_ref().map(|k| k.id), Some(keep.id));
+    assert_eq!(of(added.id).standing, Standing::Waiting);
+    assert!(start_held(home.path(), "lead", false).unwrap().is_some());
+}
+
+#[test]
+fn a_verdict_read_in_the_reviewers_own_folder_is_kept_only_in_the_folder_it_is_on() {
+    let (home, dir, own) = read_in_a_folder_of_its_own("keep-own");
+    approved_from(home.path(), &own).unwrap();
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert!(
+        same(given[0].folder.as_deref().unwrap(), &dir),
+        "the verdict is on the lead's folder, whose change was read"
+    );
+    write(
+        &dir,
+        "src/lib.rs",
+        &served(&[GUARD]).replace("render(data)", "render(&data)"),
+    );
+    assert_eq!(change_standing(home.path()), Standing::OutOfDate);
+
+    let refused = kept_in(home.path(), &own, "A borrow.").unwrap_err();
+    assert!(
+        refused.contains("is not a folder Reviewer's gate is judged in"),
+        "{refused}"
+    );
+    let keep = kept_in(home.path(), &dir, "A borrow.").unwrap();
+    assert_eq!(keep.verdict, given[0].id);
+    assert!(same(&keep.folder, &dir));
+    assert_eq!(change_standing(home.path()), Standing::Kept);
+    let _ = std::fs::remove_dir_all(&own);
+}
+
+#[test]
+fn an_approval_names_its_follow_ups_and_asking_for_changes_names_none() {
+    let (home, dir) = started("follow-ups", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    let change = state(home.path(), "lead").unwrap().unwrap().places[0]
+        .change
+        .clone()
+        .unwrap();
+    let read = || Read::Change {
+        folder: None,
+        change: &change,
+    };
+    let refused = verdict(
+        home.path(),
+        "rev",
+        read(),
+        false,
+        "Must: test.",
+        "Rename x.",
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        refused,
+        "Follow-ups go with an approval; asking for changes puts all of it in the findings."
+    );
+    let long = "a".repeat(FINDINGS_MOST + 1);
+    let refused = verdict(home.path(), "rev", read(), true, "", &long, None).unwrap_err();
+    assert!(refused.contains("follow-ups"), "{refused}");
+    let gates = verdict(
+        home.path(),
+        "rev",
+        read(),
+        true,
+        "Reads well.",
+        " Rename x.\nDrop the comment. ",
+        None,
+    )
+    .unwrap();
+    assert_eq!(gates[0].standing, Standing::Approved);
+    assert_eq!(
+        gates[0].verdict.as_ref().map(|v| v.follow_ups.as_str()),
+        Some("Rename x.\nDrop the comment.")
+    );
+    let given = Runs::open(home.path()).unwrap().verdicts("lead").unwrap();
+    assert_eq!(given[0].follow_ups, "Rename x.\nDrop the comment.");
+    assert_eq!(given[0].findings, "Reads well.");
+    let tree = git::tree_hash(&dir).unwrap();
+    assert_eq!(
+        given[0].tree.as_deref(),
+        Some(tree.as_str()),
+        "the tree approved, to diff from later"
+    );
+    assert!(git::has_tree(&dir, &tree));
+    assert!(!git::has_tree(&dir, &"0".repeat(40)));
+    assert!(!git::has_tree(&dir, "--all"));
+}
+
+#[test]
+fn a_store_from_before_keeps_follow_ups_and_trees_reads_them_as_none() {
+    let (home, dir) = started("keep-old", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    kept(home.path(), "A rename.").unwrap();
+    let file = folder(home.path()).join(FILE);
+    Connection::open(&file)
+        .unwrap()
+        .execute_batch(
+            "DROP INDEX keeps_by_gate; DROP TABLE keeps;
+             ALTER TABLE verdicts DROP COLUMN follow_ups; ALTER TABLE verdicts DROP COLUMN tree",
+        )
+        .unwrap();
+    assert_eq!(
+        change_gate(home.path()).standing,
+        Standing::OutOfDate,
+        "without its keeps the approval is out of date, as an older build reads it"
+    );
+    let runs = Runs::open(home.path()).unwrap();
+    assert_eq!(runs.verdicts("lead").unwrap()[0].follow_ups, "");
+    assert_eq!(runs.verdicts("lead").unwrap()[0].tree, None);
+    assert!(runs.keeps("lead").unwrap().is_empty());
+    // An older build writes a verdict naming only the columns it knows.
+    runs.conn
+        .execute("UPDATE verdicts SET follow_ups = NULL, tree = NULL", [])
+        .unwrap();
+    assert_eq!(runs.verdicts("lead").unwrap()[0].follow_ups, "");
+    assert_eq!(runs.verdicts("lead").unwrap()[0].tree, None);
+    kept(home.path(), "A rename.").unwrap();
+    assert_eq!(change_gate(home.path()).standing, Standing::Kept);
+}
+
+#[test]
+fn a_keep_whose_verdict_is_gone_is_pruned_and_one_whose_run_is_removed_goes_with_it() {
+    let (home, dir) = started("keep-prune", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    kept(home.path(), "A rename.").unwrap();
+    let runs = Runs::open(home.path()).unwrap();
+    // A keep an older build left after removing its verdicts.
+    runs.conn
+        .execute(
+            "INSERT INTO keeps (lead, gate, verdict, token, folder, seen, base, reason, at)
+             VALUES ('gone', 1, 999, 'gone', '/gone', 'x', NULL, 'Old.', 0)",
+            [],
+        )
+        .unwrap();
+    assert!(!end(home.path(), "nobody").unwrap());
+    let count = |sql: &str| -> i64 { runs.conn.query_row(sql, [], |row| row.get(0)).unwrap() };
+    assert_eq!(count("SELECT COUNT(*) FROM keeps WHERE lead = 'gone'"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM keeps WHERE lead = 'lead'"), 1);
+    runs.remove("lead").unwrap();
+    assert_eq!(count("SELECT COUNT(*) FROM keeps WHERE lead = 'lead'"), 0);
 }
