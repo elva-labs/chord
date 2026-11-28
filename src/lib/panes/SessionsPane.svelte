@@ -815,19 +815,30 @@
     return entry.kind === "session" && entry.session.unread;
   }
 
+  /** Whether an entry is a session with a session it started that is live,
+      asking or waiting to be read: its rail stands under it, and goes with
+      the row if the row folds. */
+  function holdsOne(entry: Entry): boolean {
+    return (
+      entry.kind === "session" &&
+      childrenOf(entry.session).some((kid) => isLive(kid) || kid.needs !== null || kid.unread)
+    );
+  }
+
   /** How many quiet rows a project shows before the rest fold into one
       row that counts them. */
   const QUIET_SHOWN = 2;
 
   /** What stands under a project's name: its sessions with something
-      running behind them, in the order they last changed, then the quiet
+      running behind them, in the order they were last active, then the quiet
       rows: the ones left open at the last quit, latest first, and after
       all of them its past sessions, latest first, however lately those
       changed. Once there are more than a few quiet rows, the tail of them
       stands behind a fold that counts them, and is drawn under it while
       it is open. A quiet row last active longer ago than the yellow
       window goes behind it whatever their number. A quiet row that is
-      unread never goes behind the fold:
+      unread never goes behind the fold, nor does one with a session it
+      started that is live, asking or unread:
       it stands, and counts toward the quiet rows that stand. Past
       sessions are listed under the project on screen alone. */
   function bodyOf(path: string): { entries: Entry[]; tail: Entry[] } {
@@ -847,12 +858,12 @@
     const tail: Entry[] = [];
     // The unread quiet rows stand first and take their places among the
     // quiet rows that stand, so the read ones fill what they leave.
-    const unread = quiet.filter(isUnread).length;
+    const unread = quiet.filter((entry) => isUnread(entry) || holdsOne(entry)).length;
     const readShown = Math.max(0, QUIET_SHOWN - unread);
     let shown = 0;
     for (const id of order) {
       const entry = byId.get(id)!;
-      if (running(entry) || isUnread(entry)) entries.push(entry);
+      if (running(entry) || isUnread(entry) || holdsOne(entry)) entries.push(entry);
       else if (recency(entry.at, now) === "old") tail.push(entry);
       else if (!folds || shown < readShown) {
         entries.push(entry);
@@ -1758,7 +1769,7 @@
 {/snippet}
 
 <!-- A session's row. Its first line is its name and, at the end, when it
-     last changed. A second line holds what the agent left for the row,
+     was last active. A second line holds what the agent left for the row,
      with the model at its end, and for a session that started others what
      those are doing; a row with neither, and a row left from the last
      quit, takes the one line. The row's own buttons take the time's place

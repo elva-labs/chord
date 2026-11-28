@@ -515,6 +515,28 @@ describe("SessionsPane", () => {
     expect(layout.focus).toBe("agent");
   });
 
+  // An old starter folds away behind Earlier unless a session it started
+  // is running: the rail of started sessions stands with its row.
+  it("keeps an old starter out of Earlier while a session it started is live", async () => {
+    workspace.open.push(repo("/starter", "starter"));
+    workspace.active = "/starter";
+    const starter = create("/starter");
+    started(starter.key, "pty-1", "starter-1");
+    starter.status = "dormant";
+    starter.activeAt = Date.now() - 20 * 24 * 3600 * 1000;
+    const kid = create("/starter");
+    started(kid.key, "pty-2", "kid-1");
+    conductor.startedBy[kid.key] = starter.token;
+    touch("/starter", Date.now() - 1000);
+
+    render(SessionsPane);
+    await waitFor(() => expect(screen.getByTestId("started-session")).toBeInTheDocument());
+    expect(screen.queryByTestId("earlier-fold")).toBeNull();
+
+    kid.status = "exited";
+    await waitFor(() => expect(screen.getByTestId("earlier-fold")).toHaveTextContent("Earlier · 1"));
+  });
+
   // A session started by another hangs under its starter. Picking it goes
   // to the session, and the starter's project is the one used and drawn
   // on screen: the project it runs in, with nothing else under it, stays
