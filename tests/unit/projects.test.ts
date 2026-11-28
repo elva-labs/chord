@@ -38,9 +38,9 @@ import {
 import { conductor, resetConductor } from "$lib/conductor.svelte";
 import "$lib/orchestrator.svelte";
 import {
-  byChange,
+  byActivity,
   create,
-  lastChanged,
+  lastActive as activeAt,
   modelLabel,
   earlierLabel,
   nextNeedingYou,
@@ -613,19 +613,19 @@ describe("since", () => {
 });
 
 describe("the order of a project's rows", () => {
-  it("is the latest change first, a row left from the last quit by its transcript", () => {
+  it("is the latest activity first, a row left from the last quit by its transcript", () => {
     const first = create("/repo");
     const second = create("/repo");
     const left = reopened("/repo", "t-1", "claude-code", null, null, null);
-    first.changedAt = NOW - 1000;
-    second.changedAt = NOW - 5000;
+    first.activeAt = NOW - 1000;
+    second.activeAt = NOW - 5000;
     left.changedAt = NOW;
     sessions.history["/repo"] = [entry("t-1", NOW - DAY)];
-    expect(byChange([first, second, left]).map((row) => row.key)).toEqual([first.key, second.key, left.key]);
-    expect(lastChanged(left)).toBe(NOW - DAY);
+    expect(byActivity([first, second, left]).map((row) => row.key)).toEqual([first.key, second.key, left.key]);
+    expect(activeAt(left)).toBe(NOW - DAY);
 
-    second.changedAt = NOW;
-    expect(byChange([first, second, left])[0].key).toBe(second.key);
+    second.activeAt = NOW;
+    expect(byActivity([first, second, left])[0].key).toBe(second.key);
   });
 });
 

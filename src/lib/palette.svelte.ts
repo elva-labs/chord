@@ -52,6 +52,7 @@ import {
   defaultAgent,
   hasName,
   historyLabel,
+  lastActive,
   otherWay,
   rowName,
   sessions,
@@ -388,7 +389,7 @@ export function lastUsed(path: string): number | null {
   const times = [
     ...sessions.all
       .filter((session) => session.project === path)
-      .map((session) => session.changedAt),
+      .map((session) => lastActive(session)),
     ...(sessions.history[path] ?? []).map(
       (transcript) => transcript.modified * 1000,
     ),
@@ -486,7 +487,7 @@ function wrapCommand(): PaletteItem | null {
     chat matches on its name and on the word chat, which lists them all. */
 function chatItems(query: string, now: number): PaletteItem[] {
   const rows = chatRows().map((session) => ({
-    at: session.changedAt,
+    at: lastActive(session),
     item: {
       kind: "session",
       id: `session:${session.key}`,
@@ -495,7 +496,7 @@ function chatItems(query: string, now: number): PaletteItem[] {
       group: CHATS,
       session,
       project: "chat",
-      when: since(session.changedAt, now),
+      when: since(lastActive(session), now),
     } satisfies PaletteItem,
   }));
   const past = pastChats().map((transcript) => ({
@@ -524,7 +525,7 @@ export function goToItems(query: string): PaletteItem[] {
   const now = Date.now();
   const rows = sessions.all
     .filter((session) => !isChat(session))
-    .sort((a, b) => b.changedAt - a.changedAt)
+    .sort((a, b) => lastActive(b) - lastActive(a))
     .map((session): PaletteItem => ({
       kind: "session",
       id: `session:${session.key}`,
@@ -533,7 +534,7 @@ export function goToItems(query: string): PaletteItem[] {
       group: SESSIONS,
       session,
       project: projectLabel(session.project),
-      when: since(session.changedAt, now),
+      when: since(lastActive(session), now),
     }))
     .filter(
       (item) =>

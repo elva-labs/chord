@@ -19,7 +19,7 @@
   import {
     bringBack,
     resumeWholeTerminal,
-    byChange,
+    byActivity,
     byKey,
     close as closeSession,
     create,
@@ -38,7 +38,7 @@
     markRead,
     markUnread,
     shownName,
-    lastChanged,
+    lastActive,
     readsLikeAnother,
     loadHistory,
     loadMissingHistories,
@@ -825,8 +825,8 @@
       it stands, and counts toward the quiet rows that stand. Past
       sessions are listed under the project on screen alone. */
   function bodyOf(path: string): { entries: Entry[]; tail: Entry[] } {
-    const own = byChange(ownFor(path)).map(
-      (session): Entry => ({ kind: "session", id: `session:${session.key}`, session, at: lastChanged(session) }),
+    const own = byActivity(ownFor(path)).map(
+      (session): Entry => ({ kind: "session", id: `session:${session.key}`, session, at: lastActive(session) }),
     );
     const past = (screenProject === path ? historyFor(path) : [])
       .map((transcript): Entry => ({ kind: "past", id: `past:${transcript.id}`, transcript, at: transcript.modified * 1000 }))
@@ -1215,7 +1215,7 @@
       (other) => other.key !== session.key && other.project !== session.project && shownName(other) === name,
     );
     const named = elsewhere ? `${name} in ${projectLabel(session.project)}` : name;
-    return readsLikeAnother(session) ? `${named}, ${since(lastChanged(session), now)}` : named;
+    return readsLikeAnother(session) ? `${named}, ${since(lastActive(session), now)}` : named;
   }
 
   /** The sessions and projects whose shells are being read before the
@@ -1835,7 +1835,7 @@
             ><Icon name="chat" size={11} /></span
           >
         {/if}
-        <span class="when" data-testid="session-when">{since(lastChanged(session), now)}</span>
+        <span class="when" data-testid="session-when">{since(lastActive(session), now)}</span>
       </span>
       {#if line !== null || marks.length > 0}
         <span class="second">
@@ -2162,7 +2162,7 @@
             {:else if role !== null}
               <span class="model role" data-testid="started-role">{role}</span>
             {/if}
-            <span class="when">{since(lastChanged(kid), now)}</span>
+            <span class="when">{since(lastActive(kid), now)}</span>
             <span class="state told"
               >{stateWord(kid)}{#if news.includes(kid)}, not heard by {shownName(parent)} yet{/if}{#if kidStays !== null}, {kidStays.line}{/if}</span
             >

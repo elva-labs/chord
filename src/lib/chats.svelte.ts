@@ -10,12 +10,12 @@
 
 import { core } from "$lib/core";
 import {
-  byChange,
+  byActivity,
   byKey,
   everyPast,
   forProject,
   isLive,
-  lastChanged,
+  lastActive,
   sessions,
   type HistoryEntry,
   type Session,
@@ -77,7 +77,7 @@ export function isChat(session: Session): boolean {
 
 /** The chats open as rows, the latest changed first. */
 export function chatRows(): Session[] {
-  return chats.dir === null ? [] : byChange(forProject(chats.dir));
+  return chats.dir === null ? [] : byActivity(forProject(chats.dir));
 }
 
 /** Every past chat not open as a row, the latest written first. */
@@ -99,7 +99,7 @@ export type ChatEntry =
     ones up to `RECENT` in all, in order of when each last changed. A row is
     never left to the older list, which only resumes. */
 export function recentChats(most = RECENT): ChatEntry[] {
-  const rows: ChatEntry[] = chatRows().map((session) => ({ kind: "row", session, at: lastChanged(session) }));
+  const rows: ChatEntry[] = chatRows().map((session) => ({ kind: "row", session, at: lastActive(session) }));
   const room = Math.max(0, most - rows.length);
   const past: ChatEntry[] = pastChats()
     .slice(0, room)
@@ -123,7 +123,7 @@ export function chatOnScreen(): Session | null {
 export function footEntries(most = RECENT): ChatEntry[] {
   if (chats.tray) return recentChats(most);
   const on = chatOnScreen();
-  return on === null ? [] : [{ kind: "row", session: on, at: lastChanged(on) }];
+  return on === null ? [] : [{ kind: "row", session: on, at: lastActive(on) }];
 }
 
 /** What the chats line marks while it is closed: a chat asking for a

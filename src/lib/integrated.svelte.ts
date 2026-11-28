@@ -66,6 +66,8 @@ import {
   adopt,
   beganTurn,
   byKey,
+  lastActive,
+  touched,
   carriedFor,
   failed,
   followsAgain,
@@ -595,7 +597,10 @@ function settle(
   const changed = session.working !== working || (session.needs === "permission") !== asking;
   session.working = working;
   session.needs = asking ? "permission" : null;
-  if (changed) session.changedAt = Date.now();
+  if (changed) {
+    session.changedAt = Date.now();
+    touched(session);
+  }
   if (asking && before !== "asking") rang(session.key);
   else if (state === "idle" && before !== null && before !== "idle") {
     const worked = link.worked;
@@ -1205,6 +1210,7 @@ export async function resume(key: string): Promise<void> {
 }
 
 function again(session: Session) {
+  session.activeAt = lastActive(session);
   renewToken(session);
   session.status = "starting";
   session.error = null;
@@ -1413,6 +1419,7 @@ export function send(
   const session = byKey(key);
   if (link === undefined || link.handle === null || session === null) return null;
   if (words.trim() === "" && images.length === 0) return null;
+  touched(session);
   // A message the harness runs as a command goes alone, as typed: nothing
   // joined ahead of it would leave it a command. What waits to go ahead of
   // a message waits on for the next one that is not a command.

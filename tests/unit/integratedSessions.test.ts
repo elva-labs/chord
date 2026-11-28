@@ -87,6 +87,7 @@ import {
   belled,
   wake,
   sessionModelName,
+  lastActive,
 } from "$lib/sessions.svelte";
 import { keepMode, modeOf, resetModes } from "$lib/sessionModes";
 import { adoptLastChosen, anyChosen, chosenFor, lastChosen, resetLastChosen } from "$lib/lastChosen.svelte";
@@ -3850,5 +3851,42 @@ describe("the agent a session works as", () => {
     await settled();
     const asked = fake.calls.filter((call) => call.method === "configure").at(-1) as { settings: object };
     expect(asked.settings).toEqual({ readsOnly: false });
+  });
+});
+
+describe("when a session was last active", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it("is not moved by bringing the session back and its run coming up", async () => {
+    const before = Date.now() - 3 * DAY;
+    sessions.history[PROJECT] = [
+      { id: "old", title: null, modified: Math.floor(before / 1000), size: 1, cwd: null, agent: "claude-code", account: null },
+    ];
+    const row = reopened(PROJECT, "old", "claude-code", null, null, null, "integrated");
+    expect(lastActive(row)).toBe(Math.floor(before / 1000) * 1000);
+    wake(row.key);
+    await launch(row.key);
+    expect(byKey(row.key)!.status).toBe("running");
+    expect(lastActive(byKey(row.key)!)).toBe(Math.floor(before / 1000) * 1000);
+  });
+
+  it("moves when the user writes to it and when its agent works a turn", async () => {
+    const before = Date.now() - 3 * DAY;
+    sessions.history[PROJECT] = [
+      { id: "old", title: null, modified: Math.floor(before / 1000), size: 1, cwd: null, agent: "claude-code", account: null },
+    ];
+    const row = reopened(PROJECT, "old", "claude-code", null, null, null, "integrated");
+    wake(row.key);
+    await launch(row.key);
+    send(row.key, "Where are we?");
+    expect(Date.now() - lastActive(byKey(row.key)!)).toBeLessThan(5000);
+
+    byKey(row.key)!.activeAt = before;
+    fake.emit(handleOf(row.key)!, { type: "state", state: "idle" });
+    await settled();
+    byKey(row.key)!.activeAt = before;
+    fake.emit(handleOf(row.key)!, { type: "state", state: "working" });
+    await settled();
+    expect(Date.now() - lastActive(byKey(row.key)!)).toBeLessThan(5000);
   });
 });
