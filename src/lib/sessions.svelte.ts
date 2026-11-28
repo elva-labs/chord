@@ -1368,6 +1368,12 @@ export function transcriptAt(project: string, id: string): number | null {
   return written.get(project)?.get(id) ?? null;
 }
 
+/** How long after its last activity a session's dot is green. */
+export const GREEN_FOR = 4 * 86_400_000;
+/** How long after its last activity a session's dot is yellow, counted
+    from the same moment: past it the row goes into Earlier. */
+export const YELLOW_FOR = 14 * 86_400_000;
+
 /** When a session was last active, in milliseconds: the user's last message
     or the agent's last turn. A row that has not been active since it was
     brought back reads it from its conversation's stored record, and from
@@ -1390,6 +1396,23 @@ export function knownActive(session: Session): number | null {
 /** The session was active now. */
 export function touched(session: Session) {
   session.activeAt = Date.now();
+}
+
+/** How recently a session was last active, for what its dot and its place
+    in a project's rows say: green within `GREEN_FOR`, yellow within
+    `YELLOW_FOR`, and old after that. */
+export function recency(at: number, now = Date.now()): "recent" | "stale" | "old" {
+  const age = now - at;
+  if (age <= GREEN_FOR) return "recent";
+  return age <= YELLOW_FOR ? "stale" : "old";
+}
+
+/** What a row's dot is coloured by its activity: null for a row whose run
+    ended, crashed or failed, which has the quiet grey. */
+export function dotAge(session: Session, now = Date.now()): "recent" | "stale" | null {
+  if (session.status !== "dormant" && !isLive(session)) return null;
+  const age = recency(lastActive(session), now);
+  return age === "recent" ? "recent" : "stale";
 }
 
 /** Rows in the order they were last active, the latest first. Rows that

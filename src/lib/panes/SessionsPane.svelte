@@ -35,6 +35,8 @@
     hasName,
     rowName,
     isLive,
+    dotAge,
+    recency,
     markRead,
     markUnread,
     shownName,
@@ -821,7 +823,9 @@
       all of them its past sessions, latest first, however lately those
       changed. Once there are more than a few quiet rows, the tail of them
       stands behind a fold that counts them, and is drawn under it while
-      it is open. A quiet row that is unread never goes behind the fold:
+      it is open. A quiet row last active longer ago than the yellow
+      window goes behind it whatever their number. A quiet row that is
+      unread never goes behind the fold:
       it stands, and counts toward the quiet rows that stand. Past
       sessions are listed under the project on screen alone. */
   function bodyOf(path: string): { entries: Entry[]; tail: Entry[] } {
@@ -847,6 +851,7 @@
     for (const id of order) {
       const entry = byId.get(id)!;
       if (running(entry) || isUnread(entry)) entries.push(entry);
+      else if (recency(entry.at, now) === "old") tail.push(entry);
       else if (!folds || shown < readShown) {
         entries.push(entry);
         shown += 1;
@@ -1818,6 +1823,8 @@
         class="dot"
         class:live={isLive(session)}
         class:dormant={session.status === "dormant"}
+        class:recent={dotAge(session, now) === "recent"}
+        class:stale={dotAge(session, now) === "stale"}
         class:working={conducting(session)}
         class:unread={session.unread}
         class:permission={session.needs === "permission"}
@@ -1896,6 +1903,8 @@
               {#each kids as kid (kid.key)}<span
                   class="dot mini"
                   class:live={isLive(kid)}
+                  class:recent={dotAge(kid, now) === "recent"}
+                  class:stale={dotAge(kid, now) === "stale"}
                   class:working={conducting(kid)}
                   class:permission={kid.needs === "permission"}
                 ></span>{/each}
@@ -1905,6 +1914,8 @@
               {#each chatStarted(session) as kid (kid.key)}<span
                   class="dot mini"
                   class:live={isLive(kid)}
+                  class:recent={dotAge(kid, now) === "recent"}
+                  class:stale={dotAge(kid, now) === "stale"}
                   class:working={conducting(kid)}
                   class:unread={kid.unread}
                   class:permission={kid.needs === "permission"}
@@ -2121,6 +2132,8 @@
               class="dot"
               class:live={isLive(kid)}
               class:dormant={kid.status === "dormant"}
+              class:recent={dotAge(kid, now) === "recent"}
+              class:stale={dotAge(kid, now) === "stale"}
               class:working={conducting(kid)}
               class:unread={kid.unread}
               class:permission={kid.needs === "permission"}
@@ -3578,10 +3591,10 @@
     white-space: nowrap;
   }
 
-  /* The dot says what is behind the row: green while a process runs, the
-     dormant yellow for a row left from the last quit, the accent while it
-     waits for you, and the quiet grey once it is done or ended. Only
-     asking is a ring. */
+  /* The dot says how the session stands: green while it was active lately,
+     yellow once it has been quiet for a while, the accent while it waits
+     for you, and the quiet grey once it is done or ended. Only asking is a
+     ring. */
   .dot {
     --done: color-mix(in srgb, var(--ink-3) 60%, transparent);
     width: var(--dot);
@@ -3592,14 +3605,14 @@
     background: var(--done);
   }
 
-  .dot.live {
+  .dot.live,
+  .dot.recent {
     background: var(--add);
     border-color: var(--add);
   }
 
-  /* Open when the app last quit, and not started since: it starts when
-     selected. */
-  .dot.dormant {
+  /* Not active for a while, whether a process runs behind it or not. */
+  .dot.stale {
     background: var(--dormant);
     border-color: var(--dormant);
   }

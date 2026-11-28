@@ -4,8 +4,12 @@ import { resetConductor } from "$lib/conductor.svelte";
 import { reopen } from "$lib/reopen.svelte";
 import { resetAttention } from "$lib/attention.svelte";
 import {
+  GREEN_FOR,
+  YELLOW_FOR,
   create,
+  dotAge,
   exact,
+  recency,
   lastActive,
   loadRemembered,
   reset as resetSessions,
@@ -113,5 +117,40 @@ describe("when a session was last active", () => {
     const was = one.activeAt;
     one.changedAt = Date.now();
     expect(lastActive(one)).toBe(was);
+  });
+});
+
+describe("the dot's age", () => {
+  it("is green to 4 days, yellow to 14, older after", () => {
+    const now = Date.now();
+    expect(GREEN_FOR).toBe(4 * DAY);
+    expect(YELLOW_FOR).toBe(14 * DAY);
+    expect(recency(now, now)).toBe("recent");
+    expect(recency(now - 4 * DAY, now)).toBe("recent");
+    expect(recency(now - 4 * DAY - 1, now)).toBe("stale");
+    expect(recency(now - 14 * DAY, now)).toBe("stale");
+    expect(recency(now - 14 * DAY - 1, now)).toBe("old");
+  });
+
+  it("is the same before a quit and after the start", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    one.activeAt = Date.now() - 6 * DAY;
+    const now = Date.now();
+    expect(dotAge(one, now)).toBe("stale");
+    quit();
+    open();
+    expect(row("one").status).toBe("dormant");
+    expect(dotAge(row("one"), now)).toBe("stale");
+    one.activeAt = null;
+  });
+
+  it("is none for a session that exited or failed", () => {
+    const one = create(A);
+    started(one.key, "pty-1", "one");
+    one.status = "exited";
+    expect(dotAge(one, Date.now())).toBeNull();
+    one.status = "crashed";
+    expect(dotAge(one, Date.now())).toBeNull();
   });
 });

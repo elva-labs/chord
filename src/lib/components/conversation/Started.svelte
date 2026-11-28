@@ -5,7 +5,7 @@
   import { modelLabel } from "$lib/models";
   import { hostOf } from "$lib/remote.svelte";
   import { placeTextOf } from "$lib/conductor.svelte";
-  import { isLive, sessions, shownName, type Session } from "$lib/sessions.svelte";
+  import { dotAge, sessions, shownName, type Session } from "$lib/sessions.svelte";
   import { conducting, stateWord } from "$lib/orchestrator.svelte";
   import { goTo } from "$lib/workspace.svelte";
 
@@ -40,10 +40,10 @@
       <div class="row" data-testid="started-session">
         <span
           class="dot"
-          class:live={isLive(session)}
+          class:recent={dotAge(session) === "recent"}
           class:working={conducting(session)}
           class:asking={session.needs === "permission"}
-          class:dormant={session.status === "dormant"}
+          class:stale={dotAge(session) === "stale"}
           title={stateWord(session)}
         ></span>
         {#if stepped}<span class="step" data-testid="started-step">{at?.step ?? ""}</span>{/if}
@@ -99,7 +99,7 @@
     opacity: 0.6;
   }
 
-  .dot.live {
+  .dot.recent {
     background: var(--add);
     opacity: 1;
   }
@@ -114,7 +114,7 @@
     animation: none;
   }
 
-  .dot.dormant {
+  .dot.stale {
     background: var(--dormant);
     opacity: 1;
   }

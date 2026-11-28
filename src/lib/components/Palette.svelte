@@ -23,7 +23,7 @@
     WORKFLOWS,
     type PaletteItem,
   } from "$lib/palette.svelte";
-  import { isLive } from "$lib/sessions.svelte";
+  import { dotAge, isLive } from "$lib/sessions.svelte";
   import { conducting } from "$lib/orchestrator.svelte";
   import { switches } from "$lib/switches.svelte";
 
@@ -332,9 +332,9 @@
               {#if item.kind === "session"}
                 <span
                   class="dot"
-                  class:live={isLive(item.session)}
+                  class:recent={dotAge(item.session) === "recent"}
+                  class:stale={dotAge(item.session) === "stale"}
                   class:working={isLive(item.session) && conducting(item.session)}
-                  class:dormant={item.session.status === "dormant"}
                   class:unread={item.session.unread}
                   class:permission={item.session.needs === "permission"}
                   data-testid="palette-dot"
@@ -669,12 +669,12 @@
     border-radius: 50%;
   }
 
-  .dot.live {
+  .dot.recent {
     background: var(--add);
     border-color: var(--add);
   }
 
-  .dot.dormant {
+  .dot.stale {
     background: var(--dormant);
     border-color: var(--dormant);
   }
