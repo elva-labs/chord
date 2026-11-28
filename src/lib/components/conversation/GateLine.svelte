@@ -238,6 +238,16 @@
   /** The session that gave the verdict, where it still has a row. */
   let giver = $derived(shown?.verdict ? byToken(shown.verdict.token) : null);
 
+  /** The record's foot: how often the gate asked for changes, and what puts its approval out of date. */
+  let foot = $derived.by(() => {
+    if (shown === null) return "";
+    if (shown.waiver !== null) return "For this run only";
+    const said = shown.asks > 0 ? [`Asked for changes ${times(shown.asks)}`] : [];
+    if (shown.standing === "approved") said.push(`Out of date if ${shown.gate.when === "plan" ? "the plan" : "the work"} changes`);
+    else if (shown.standing === "kept") said.push("Out of date if the work changes again");
+    return said.join(" · ");
+  });
+
   function openSession() {
     if (giver === null) return;
     select(giver.key);
@@ -415,17 +425,9 @@
       {#if shown.gate.added}
         <p class="what"><Icon name="shield" size={13} /><span>Added by the lead.</span></p>
       {/if}
-      {#if shown.waiver !== null || shown.asks > 0 || shown.standing === "approved" || shown.standing === "kept" || giver !== null}
+      {#if foot !== "" || giver !== null}
         <div class="foot">
-          <span>
-            {#if shown.waiver !== null}For this run only
-            {:else if shown.asks > 0}Asked for changes {times(shown.asks)}
-            {:else if shown.standing === "approved"}
-              Out of date if {shown.gate.when === "plan" ? "the plan" : "the work"} changes
-            {:else if shown.standing === "kept"}
-              Out of date if the work changes again
-            {/if}
-          </span>
+          <span data-testid="gate-record-foot">{foot}</span>
           {#if giver !== null}
             <button type="button" class="btn" onclick={openSession} data-testid="gate-record-session">
               Open session

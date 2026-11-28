@@ -246,6 +246,7 @@ test("shows an approval the lead kept apart from one given on the change, with w
     const state = w.__runs[own];
     Object.assign(state.gates[1], {
       standing: "kept",
+      asks: 1,
       reason: "the lead kept Reviewer's approval of the change: renamed a local, as the review asked",
       verdict: {
         id: 7,
@@ -303,7 +304,8 @@ test("shows an approval the lead kept apart from one given on the change, with w
   await expect(page.getByTestId("gate-record-keep")).toContainText("renamed a local, as the review asked");
   await expect(page.getByTestId("gate-record-verdict")).toContainText("Approved on an earlier change.");
   await expect(page.getByTestId("gate-record-follow-ups")).toHaveText("Rename tmp in src/auth.ts:12 to token.");
-  await expect(record).toContainText("Out of date if the work changes again");
+  // A gate that once asked for changes still warns of what ends the keep.
+  await expect(page.getByTestId("gate-record-foot")).toHaveText("Asked for changes once · Out of date if the work changes again");
   await page.getByTestId("gate-record-details").click();
   await expect(record).toContainText("beefcaf");
 });
