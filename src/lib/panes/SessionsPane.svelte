@@ -2,6 +2,8 @@
   import Pane from "$lib/components/Pane.svelte";
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
   import { putAway } from "$lib/popover";
+  import { hangMenu } from "$lib/hangMenu";
+  import { coversBrowser } from "$lib/browser.svelte";
   import {
     closeAsking,
     closingCancel,
@@ -470,9 +472,8 @@
       reopened the other way where its agent runs both ways, the chat that
       started it, and stopping it. It opens upwards near the
       pane's foot, and its keyboard cursor walks the items while it is
-      open. `fixed` places it by the window for a row in the chats foot,
-      which scrolls and would cut a menu hung from the row. */
-  let sessionMenu = $state<{ key: string; up: boolean; fixed: string | null } | null>(null);
+      open. */
+  let sessionMenu = $state<{ key: string; up: boolean } | null>(null);
   let sessionMenuAt = $state(0);
   /** The row whose menu offers its notes: one that keeps any, found as
       the menu opens. */
@@ -565,31 +566,20 @@
     ];
   });
 
-  /** About how tall a session's menu stands at its longest, which is
-      enough to tell whether it fits under its row. */
-  const SESSION_MENU_TALL = 260;
-
   function openSessionMenu(key: string, e: MouseEvent | null) {
     e?.preventDefault();
     const row = nav?.querySelector<HTMLElement>(`[data-row="${CSS.escape(`session:${key}`)}"]`) ?? null;
     const tree = nav?.querySelector<HTMLElement>(".tree");
+    // Upwards at the foot of the tree. A chat's foot row, outside the tree,
+    // goes up only where the window leaves no room under it.
     const up =
-      row !== null && tree !== null && tree !== undefined
+      row !== null && tree !== null && tree !== undefined && tree.contains(row)
         ? row.getBoundingClientRect().bottom > tree.getBoundingClientRect().bottom - 90
         : false;
-    let fixed: string | null = null;
-    if (row !== null && row.closest('[data-testid="chats-foot"]') !== null) {
-      const at = row.getBoundingClientRect();
-      const right = `right: ${window.innerWidth - at.right}px`;
-      fixed =
-        at.bottom + 4 + SESSION_MENU_TALL > window.innerHeight
-          ? `position: fixed; ${right}; top: auto; bottom: ${window.innerHeight - at.top + 2}px`
-          : `position: fixed; ${right}; top: ${at.bottom + 4}px; bottom: auto`;
-    }
     menuOpen = false;
     sortOpen = false;
     projectMenu = null;
-    sessionMenu = { key, up, fixed };
+    sessionMenu = { key, up };
     sessionMenuAt = 0;
     sessionMenuNotes = null;
     const session = byKey(key);
@@ -1611,11 +1601,16 @@
 
   // An open menu goes with a press anywhere in the window outside it and the
   // buttons that open it, Escape, the window losing focus or changing size,
-  // and the keyboard moving to another pane. The press is not stopped, so it
-  // does what it would have done.
+  // and the keyboard moving to another pane or out of this one, as to a
+  // palette, which the menu's top layer would paint over. The press is not
+  // stopped, so it does what it would have done.
   $effect(() => {
     if (!(menuOpen || sortOpen || projectMenu !== null || sessionMenu !== null)) return;
-    return putAway({
+    const left = (e: FocusEvent) => {
+      if (!nav?.closest("section[data-pane]")?.contains(e.target as Node)) closeMenus();
+    };
+    window.addEventListener("focusin", left);
+    const stop = putAway({
       inside: () => [
         ...(nav
           ?.closest("section[data-pane]")
@@ -1626,6 +1621,10 @@
       close: closeMenus,
       control: () => nav,
     });
+    return () => {
+      window.removeEventListener("focusin", left);
+      stop();
+    };
   });
 
   let heldFocus = layout.focus === "sessions";
@@ -2001,7 +2000,8 @@
       class="menu session-menu"
       data-card
       class:up={sessionMenu.up}
-      style={sessionMenu.fixed}
+      use:hangMenu
+      use:coversBrowser
       role="menu"
       data-testid="session-menu"
     >
@@ -2284,7 +2284,15 @@
      near the pane's foot. -->
 {#snippet projectMenuFor(path: string)}
   {#if projectMenu?.path === path}
-    <div class="menu project-menu" data-card class:up={projectMenu.up} role="menu" data-testid="project-menu">
+    <div
+      class="menu project-menu"
+      data-card
+      class:up={projectMenu.up}
+      use:hangMenu
+      use:coversBrowser
+      role="menu"
+      data-testid="project-menu"
+    >
       {#each projectItems as item, index (item.id)}
         {#if item.destructive && index > 0}<div class="separator" role="separator"></div>{/if}
         <button
@@ -2331,7 +2339,6 @@
   <div
     class="project"
     class:on={screenProject === project.path}
-    class:menu-open={projectMenu?.path === project.path}
     class:cursor={current === `project:${project.path}`}
     data-row="project:{project.path}"
     data-testid="project-head"
@@ -2455,7 +2462,7 @@
       ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h7M3 11.5h4" /></svg></button
     >
     {#if sortOpen}
-      <div class="menu sort-menu" data-card role="menu" data-testid="project-sort-menu">
+      <div class="menu sort-menu" data-card use:hangMenu use:coversBrowser role="menu" data-testid="project-sort-menu">
         {#each SORTS as choice, index (choice.sort)}
           <button
             role="menuitemradio"
@@ -2489,7 +2496,14 @@
       ></button
     >
     {#if menuOpen}
-      <div class="menu more-menu" data-card role="menu" data-testid="sessions-menu-items">
+      <div
+        class="menu more-menu"
+        data-card
+        use:hangMenu={{ gap: 4 }}
+        use:coversBrowser
+        role="menu"
+        data-testid="sessions-menu-items"
+      >
         {#each menuItems as item, index (item.id)}
           <button
             role="menuitem"
@@ -2970,8 +2984,6 @@
   }
 
   .sort-menu {
-    top: calc(100% + 2px);
-    right: var(--row-pad-x);
     min-width: 150px;
   }
 
@@ -2994,15 +3006,18 @@
     color: var(--ink);
   }
 
-  /* A few short items, in a pane that can be narrower than the changes
-     pane's menu: sized to fit inside the pane rather than past its edge. */
+  /* Every menu of the pane keeps its items' width, and hangMenu places it
+     by the window, over the next pane where it is the wider. */
   .menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 4px);
-    z-index: 5;
+    position: fixed;
+    inset: auto;
+    width: max-content;
+    height: fit-content;
     min-width: 184px;
+    margin: 0;
     padding: 4px 0;
+    overflow: visible;
+    color: inherit;
     background: var(--paint-surface);
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius);
@@ -3033,10 +3048,6 @@
   .menu button.at:not(:disabled) {
     background: var(--surface-2);
     color: var(--ink);
-  }
-
-  .more-menu {
-    right: var(--row-pad-x);
   }
 
   .menu .separator {
@@ -3164,37 +3175,12 @@
     color: var(--ink);
   }
 
-  /* A header with its menu open stands over the headers below it. */
-  .proj > .project.menu-open {
-    z-index: 6;
-  }
-
   .project-menu {
-    top: calc(100% + 2px);
-    right: var(--row-pad-x);
     min-width: 150px;
   }
 
-  .project-menu.up {
-    top: auto;
-    bottom: calc(100% + 2px);
-  }
-
-  /* A session's menu hangs from its row's right, under the row's own
-     buttons, and stands over the rows below it. */
   .session-menu {
-    top: calc(100% + 2px);
-    right: var(--row-pad-x);
     min-width: 190px;
-  }
-
-  .session-menu.up {
-    top: auto;
-    bottom: calc(100% + 2px);
-  }
-
-  .session:has(> .session-menu) {
-    z-index: 6;
   }
 
   .menu .chord {
