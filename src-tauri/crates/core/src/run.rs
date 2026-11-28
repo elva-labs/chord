@@ -375,6 +375,10 @@ pub struct FolderStanding {
     /// where its verdict recorded one; the gates tool names a diff from it.
     #[serde(skip)]
     pub approved_tree: Option<String>,
+    /// Whether the approval that went out of date there may be kept: it
+    /// was not kept once already.
+    #[serde(skip)]
+    pub keepable: bool,
 }
 
 /// A folder the run's work is in, as it stands now.
@@ -651,6 +655,21 @@ impl State {
     pub fn handing_over_held(&self) -> Option<String> {
         self.first_open(None)
             .map(|gate| format!("Handing over is held: {}.", gate.reason))
+    }
+
+    /// Whether the lead's keep could move on a gate that holds: one on the
+    /// change, not waiting for the user, out of date in a folder on an
+    /// approval not kept once already.
+    fn keepable(&self) -> bool {
+        self.gates.iter().any(|gate| {
+            gate.gate.when == When::Change
+                && gate.standing.open()
+                && !gate.at_limit
+                && gate
+                    .folders
+                    .iter()
+                    .any(|place| place.standing == Standing::OutOfDate && place.keepable)
+        })
     }
 
     /// Why a push or a pull request is held beyond handing over: a place
@@ -2066,6 +2085,7 @@ fn stand(
         .iter()
         .map(|place| {
             let mut approved_tree = None;
+            let mut keepable = false;
             let of = if several {
                 format!("the change in {}", place.folder.display())
             } else {
@@ -2092,8 +2112,9 @@ fn stand(
                         asks,
                         gate.rounds,
                     );
-                    if standing == Standing::OutOfDate {
-                        approved_tree = last.and_then(|last| last.tree.clone());
+                    if let Some(last) = last.filter(|_| standing == Standing::OutOfDate) {
+                        approved_tree = last.tree.clone();
+                        keepable = !keeps.iter().any(|keep| keep.verdict == last.id);
                     }
                     let kept = last
                         .filter(|_| standing == Standing::OutOfDate)
@@ -2120,6 +2141,7 @@ fn stand(
                     standing,
                     reason,
                     approved_tree,
+                    keepable,
                 },
                 kept,
             )
@@ -2451,23 +2473,34 @@ fn paused(home: &Path) -> bool {
 /// while agents are switched off, or when the run cannot be read, so a
 /// broken store never keeps a lead going.
 pub fn stop_held(home: &Path, token: &str) -> Option<String> {
-    stop_hold(home, token).map(|held| told_to_go_on(&held))
+    stop_hold(home, token).map(|hold| hold.told)
 }
 
-/// The gate that holds a lead's stop, as said to the user, such as that
-/// handing over is held as a reviewer has not approved the change yet.
-/// None where [`stop_held`] is None.
-pub fn stop_hold(home: &Path, token: &str) -> Option<String> {
+/// A lead's stop held, as said to the user and as told to the lead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StopHold {
+    /// The gate that holds it, such as that handing over is held as a
+    /// reviewer has not approved the change yet.
+    pub held: String,
+    /// What the lead is told: what holds it, and how to go on. Keeping is
+    /// named only where a keep could move on a gate that holds.
+    pub told: String,
+}
+
+/// What holds a lead's stop, None where [`stop_held`] is None.
+pub fn stop_hold(home: &Path, token: &str) -> Option<StopHold> {
     let state = state(home, token).ok().flatten()?;
     if state.waits_for_the_user() || paused(home) {
         return None;
     }
-    state.handing_over_held()
-}
-
-/// What a lead whose stop is held is told: what holds it, and how to go on.
-pub fn told_to_go_on(held: &str) -> String {
-    format!("{held} The gates tool says what each gate waits on. Ask for the verdicts it names and wait for them, keep an approval that is out of date where the change since needs no second look, or stop to ask the user.")
+    let held = state.handing_over_held()?;
+    let keep = if state.keepable() {
+        " keep an approval that is out of date where the change since needs no second look,"
+    } else {
+        ""
+    };
+    let told = format!("{held} The gates tool says what each gate waits on. Ask for the verdicts it names and wait for them,{keep} or stop to ask the user.");
+    Some(StopHold { held, told })
 }
 
 /// Why a shell command a session in a run would run is refused: it hands

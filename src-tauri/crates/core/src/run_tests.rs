@@ -560,6 +560,11 @@ fn building_waits_for_the_plans_approval_and_a_new_plan_makes_it_out_of_date() {
         "Security reviewer's approval of the plan is out of date"
     );
     assert!(start_held(home.path(), "lead", false).unwrap().is_some());
+    let told = stop_held(home.path(), "lead").unwrap();
+    assert!(
+        !told.contains("keep an approval"),
+        "an approval of the plan is not kept: {told}"
+    );
 }
 
 #[test]
@@ -2657,6 +2662,53 @@ fn a_keep_of_a_change_that_moved_on_since_the_lead_read_it_is_refused() {
         "a keep named by its tree is kept for the change"
     );
     assert_eq!(change_gate(home.path()).standing, Standing::Kept);
+}
+
+#[test]
+fn a_held_lead_is_told_to_keep_only_where_a_keep_could_move_a_gate_on() {
+    const KEEP: &str = " keep an approval that is out of date where";
+    let told = |home: &Path| stop_held(home, "lead").unwrap();
+    let (home, dir) = started("stop-keep", QUICK_FIX, &[("rev", "Reviewer", true)]);
+    write(&dir, "src/main.rs", "fn main() { run() }\n");
+    let waiting = told(home.path());
+    assert!(!waiting.contains(KEEP), "nothing approved yet: {waiting}");
+    assert!(
+        waiting
+            .ends_with("Ask for the verdicts it names and wait for them, or stop to ask the user."),
+        "{waiting}"
+    );
+
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { start() }\n");
+    let out_of_date = told(home.path());
+    assert!(out_of_date.contains(KEEP), "{out_of_date}");
+    let hold = stop_hold(home.path(), "lead").unwrap();
+    assert!(
+        hold.held.starts_with("Handing over is held: "),
+        "{}",
+        hold.held
+    );
+    assert_eq!(hold.told, out_of_date);
+    assert!(out_of_date.starts_with(&hold.held));
+
+    kept(home.path(), "A rename.").unwrap();
+    assert_eq!(stop_held(home.path(), "lead"), None);
+    write(&dir, "src/main.rs", "fn main() { begin() }\n");
+    let kept_once = told(home.path());
+    assert!(!kept_once.contains(KEEP), "kept once already: {kept_once}");
+
+    given(
+        home.path(),
+        "rev",
+        When::Change,
+        false,
+        "Must: undo it.",
+        None,
+    )
+    .unwrap();
+    write(&dir, "src/main.rs", "fn main() { end() }\n");
+    let asked = told(home.path());
+    assert!(!asked.contains(KEEP), "asked for changes: {asked}");
 }
 
 #[test]

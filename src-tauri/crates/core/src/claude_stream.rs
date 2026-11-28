@@ -546,8 +546,8 @@ impl Task {
 /// stop, which the agent's own notice of it leaves out.
 #[derive(Debug, Default, Clone, PartialEq)]
 struct StopSaid {
-    /// The reason the workbench's team hold sent a lead back to work.
-    held: Option<String>,
+    /// Why the workbench's team hold sent a lead back to work.
+    held: Option<crate::run::StopHold>,
     /// What another Stop hook said.
     hook: Option<HookSaid>,
 }
@@ -1883,8 +1883,8 @@ impl Stream {
             return;
         };
         let mut said = unescaped(said);
-        if let Some(held) = &self.stop_said.held {
-            said = said.replacen(&crate::run::told_to_go_on(held), "", 1);
+        if let Some(hold) = &self.stop_said.held {
+            said = said.replacen(&hold.told, "", 1);
             if said.trim().is_empty() {
                 return;
             }
@@ -2267,6 +2267,7 @@ impl Stream {
     /// what the hook said, or why the workbench sent a lead back to work.
     fn stop_notice(&mut self) -> (NoticeLevel, String) {
         let StopSaid { held, hook } = std::mem::take(&mut self.stop_said);
+        let held = held.map(|hold| hold.held);
         let level = match (&held, &hook) {
             (_, Some(HookSaid::Failed(_))) | (None, None) => NoticeLevel::Warning,
             _ => NoticeLevel::Info,
@@ -2417,9 +2418,9 @@ impl Stream {
             _ => None,
         };
         let decision = match held {
-            Some(held) => {
-                let reason = crate::run::told_to_go_on(&held);
-                self.stop_said.held = Some(held);
+            Some(hold) => {
+                let reason = hold.told.clone();
+                self.stop_said.held = Some(hold);
                 json!({ "decision": "block", "reason": reason })
             }
             None => json!({}),
