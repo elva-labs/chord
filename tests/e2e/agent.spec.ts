@@ -1010,7 +1010,8 @@ test.describe("several sessions in one project", () => {
   });
 
   // A restart brings both back. The one on screen resumes at once; the
-  // other waits, in yellow, until it is picked.
+  // other waits, with its dot green while it was used lately, until it is
+  // picked.
   test("come back after a restart, each starting when selected", async ({
     page,
   }) => {
@@ -1028,13 +1029,14 @@ test.describe("several sessions in one project", () => {
     const row = page.locator(`[data-row="${left}"] [data-testid='session-row']`);
     const waiting = row.locator(".dot");
     await expect(waiting).toHaveClass(/dormant/);
-    const yellow = await page.evaluate(() =>
-      getComputedStyle(document.documentElement)
-        .getPropertyValue("--ansi-yellow")
-        .trim(),
+    // Used a moment ago, so its dot is green, not yet the yellow of a row
+    // left for days.
+    await expect(waiting).toHaveClass(/recent/);
+    const green = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--add").trim(),
     );
     const [r, g, b] = [1, 3, 5].map((at) =>
-      parseInt(yellow.slice(at, at + 2), 16),
+      parseInt(green.slice(at, at + 2), 16),
     );
     await expect(waiting).toHaveCSS(
       "background-color",
@@ -1362,7 +1364,7 @@ test.describe("working, and waiting for you", () => {
   }) => {
     await page.evaluate(() => {
       window.__fake.transcripts = [
-        { id: "session-1", title: "the one", modified: 1000, size: 10 },
+        { id: "session-1", title: "the one", modified: Math.floor(Date.now() / 1000) - 3600, size: 10 },
       ];
     });
     const before = await rows(page).count();
@@ -1754,7 +1756,7 @@ test.describe("with codex installed too", () => {
     await running(page);
     await page.evaluate(() => {
       window.__fake.codexTranscripts = [
-        { id: "cx-1", title: "Refactor billing", modified: 1000, size: 10 },
+        { id: "cx-1", title: "Refactor billing", modified: Math.floor(Date.now() / 1000) - 3600, size: 10 },
       ];
       window.__fake.identify?.({
         ptyId: "pty-1",
@@ -1778,7 +1780,7 @@ test.describe("with codex installed too", () => {
       open: [ONE],
       codex: "/usr/local/bin/codex",
       codexTranscripts: [
-        { id: "old", title: "Old thread", modified: 900, size: 10 },
+        { id: "old", title: "Old thread", modified: Math.floor(Date.now() / 1000) - 3700, size: 10 },
       ],
     });
     const fold = page.getByTestId("earlier-fold");
@@ -1806,7 +1808,7 @@ test.describe("when a dialog closes", () => {
       open: [ONE, TWO],
       codex: "/usr/local/bin/codex",
       codexTranscripts: [
-        { id: "old", title: "Old thread", modified: 900, size: 10 },
+        { id: "old", title: "Old thread", modified: Math.floor(Date.now() / 1000) - 3700, size: 10 },
       ],
     });
     await page.keyboard.press(`${MOD}+1`);
