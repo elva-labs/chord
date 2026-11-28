@@ -751,7 +751,7 @@ const OWN_STEPS: &str = "Do the small steps that change no file yourself, withou
 
 /// When a lead asks a gate's agent again and when it keeps the approval
 /// it gave, told to a lead whose team has a gate on the change.
-const KEEP_OR_ASK: &str = "Gather a round's fixes: hand out all of a verdict's findings at once and ask the gate's agent for one look once they are all in, not a look for each. A change made after an approval puts it out of date. When the change since is a follow-up the reviewer named, or changes no behaviour, such as a rename, a comment or formatting, keep the approval with the keep tool and say why in one sentence. Ask the gate's agent again for a change in behaviour, for anything that touches what it flagged as a risk, and whenever you are unsure. An approval of the plan is never kept, nor a gate that asked for changes, was never approved, or waits for the user.";
+const KEEP_OR_ASK: &str = "Gather a round's fixes: hand out all of a verdict's findings at once and ask the gate's agent for one look once they are all in, not a look for each. A change made after an approval puts it out of date. When the change since is a follow-up the reviewer named, or changes no behaviour, such as a rename, a comment or formatting, keep the approval with the keep tool and say why in one sentence. An approval is kept once; after that, ask again. Ask the gate's agent again for a change in behaviour, for anything that touches what it flagged as a risk, and whenever you are unsure. An approval of the plan is never kept, nor a gate that asked for changes, was never approved, or waits for the user.";
 
 /// What the lead of a team's run is told when it starts: which team it
 /// leads, how it hands out work and what it does itself, its members and

@@ -1649,11 +1649,11 @@ pub fn waive(home: &Path, lead: &str, gate: i64, reason: &str) -> Result<Waiver,
 /// with why the change since needs no second look. It is kept for the
 /// change `read` the lead read, by its hash or its tree, in the folder
 /// named, or in the one place the approval is out of date in when none is
-/// named, and passes the gate there while that is the change. Refused
-/// when the change there is no longer `read`, for a gate on the plan, one
-/// the user waived, one that waits for the user, a place whose last
-/// verdict asked for changes or that was never approved, and while agents
-/// are switched off.
+/// named, and passes the gate there while that is the change. An approval
+/// is kept once. Refused when the change there is no longer `read`, for a
+/// gate on the plan, one the user waived, one that waits for the user, a
+/// place whose last verdict asked for changes or that was never approved,
+/// and while agents are switched off.
 pub fn keep(
     home: &Path,
     lead: &str,
@@ -1752,13 +1752,6 @@ pub fn keep(
         .change
         .clone()
         .map_err(|e| format!("The change in {} cannot be read: {e}", at.folder.display()))?;
-    let read = read.trim();
-    if on != read && at.tree.as_deref() != Ok(read) {
-        return Err(format!(
-            "The change in {} is not the one read: it is {on} now, not {read}. Read it again with the gates tool and keep the approval for it.",
-            at.folder.display()
-        ));
-    }
     let runs = Runs::existing(home)?.ok_or(ONLY_THE_LEAD)?;
     let approval = runs
         .verdicts(lead)?
@@ -1780,6 +1773,24 @@ pub fn keep(
         })?;
     runs.at_once(|runs| {
         runs.run(lead)?.ok_or(ONLY_THE_LEAD)?;
+        let before: i64 = runs
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM keeps WHERE lead = ?1 AND verdict = ?2",
+                params![lead, approval.id],
+                |row| row.get(0),
+            )
+            .map_err(failed)?;
+        if before > 0 {
+            return Err(KEPT_ONCE.into());
+        }
+        let read = read.trim();
+        if on != read && at.tree.as_deref() != Ok(read) {
+            return Err(format!(
+                "The change in {} is not the one read: it is {on} now, not {read}. Read it again with the gates tool and keep the approval for it.",
+                at.folder.display()
+            ));
+        }
         let mut kept = Keep {
             id: 0,
             gate,
@@ -1812,6 +1823,10 @@ pub fn keep(
         Ok(kept)
     })
 }
+
+/// Why an approval kept once is not kept again: one review stands in for
+/// one round of small changes, not for a series of them.
+pub const KEPT_ONCE: &str = "This approval was kept once already; ask the gate's agent again.";
 
 /// Why a gate, or a place it is judged in, that stands as `standing` for
 /// `reason` is not kept: only an approval that is out of date is.

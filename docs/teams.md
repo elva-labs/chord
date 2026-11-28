@@ -213,6 +213,9 @@ The lead keeps an approval only where:
 - the keep names the change the lead read, by the hash the `gates` tool
   shows, and the change in the folder is still that one, so a change that
   moved on after the lead read it is not kept;
+- the approval was not kept before: an approval is kept once, and after
+  that the lead asks the gate's agent again, so one review never stands in
+  for a series of changes;
 - the user has not waived the gate, and it has not asked for changes as
   many times as its rounds, so a gate waiting for the user stays the
   user's;

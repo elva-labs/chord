@@ -2584,8 +2584,20 @@ fn the_lead_keeps_an_out_of_date_approval_for_the_change_as_it_is_now() {
         "a keep holds for its change alone"
     );
     assert!(command_held(home.path(), "lead", "git push origin main").is_some());
+    assert_eq!(
+        kept(home.path(), "Formatting only.").unwrap_err(),
+        KEPT_ONCE
+    );
+    assert_eq!(change_gate(home.path()).standing, Standing::OutOfDate);
+
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { begin()  }\n");
     kept(home.path(), "Formatting only.").unwrap();
-    assert_eq!(change_gate(home.path()).standing, Standing::Kept);
+    assert_eq!(
+        change_gate(home.path()).standing,
+        Standing::Kept,
+        "a new approval is kept once in its turn"
+    );
 
     given(
         home.path(),
@@ -2659,7 +2671,8 @@ fn a_kept_approval_holds_uncommitted_work_from_going_out_as_an_approval_does() {
 }
 
 #[test]
-fn no_approval_is_kept_that_was_never_given_asked_for_changes_or_waits_for_the_user() {
+fn no_approval_is_kept_that_was_never_given_was_kept_once_asked_for_changes_or_waits_for_the_user()
+{
     let (home, dir) = started("keep-none", QUICK_FIX, &[("rev", "Reviewer", true)]);
     write(&dir, "src/main.rs", "fn main() { run() }\n");
     let never = kept(home.path(), "Small.").unwrap_err();
@@ -2675,6 +2688,15 @@ fn no_approval_is_kept_that_was_never_given_asked_for_changes_or_waits_for_the_u
     assert_eq!(
         keep(home.path(), "lead", plan_gate.id, None, "", "Small.").unwrap_err(),
         "Reviewer's gate is on the plan, and only an approval of the change is kept: a plan is read again whenever it changes."
+    );
+
+    given(home.path(), "rev", When::Change, true, "", None).unwrap();
+    write(&dir, "src/main.rs", "fn main() { go() }\n");
+    kept(home.path(), "A rename.").unwrap();
+    write(&dir, "src/main.rs", "fn main() { went() }\n");
+    assert_eq!(
+        kept(home.path(), "Another rename.").unwrap_err(),
+        "This approval was kept once already; ask the gate's agent again."
     );
 
     given(
@@ -2707,12 +2729,13 @@ fn no_approval_is_kept_that_was_never_given_asked_for_changes_or_waits_for_the_u
         kept(home.path(), "Tested.").unwrap_err(),
         "The user waived Reviewer's gate, so there is nothing to keep."
     );
-    assert!(
+    assert_eq!(
         Runs::open(home.path())
             .unwrap()
             .keeps("lead")
             .unwrap()
-            .is_empty(),
+            .len(),
+        1,
         "a refusal keeps nothing"
     );
 }
