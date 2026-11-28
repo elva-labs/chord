@@ -97,12 +97,13 @@ export type ChatEntry =
   | { kind: "past"; transcript: HistoryEntry; at: number };
 
 /** What the tray lists: every chat open as a row, then the latest past
-    ones up to `RECENT` in all, in order of when each last changed. A row is
+    ones up to `RECENT` in all, in order of when each was last active. A row is
     never left to the older list, which only resumes. */
 export function recentChats(most = RECENT): ChatEntry[] {
   const rows: ChatEntry[] = chatRows().map((session) => ({ kind: "row", session, at: lastActive(session) }));
   const room = Math.max(0, most - rows.length);
-  const past: ChatEntry[] = pastChats()
+  const past: ChatEntry[] = [...pastChats()]
+    .sort((a, b) => turnAt(b) - turnAt(a))
     .slice(0, room)
     .map((transcript) => ({ kind: "past", transcript, at: turnAt(transcript) }));
   return [...rows, ...past].sort((a, b) => b.at - a.at);

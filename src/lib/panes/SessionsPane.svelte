@@ -800,7 +800,7 @@
 
   /** A row under a project's name: a session, live or left from the last
       quit, or a past session of the project on screen, with when it
-      changed. */
+      was last active. */
   type Entry =
     | { kind: "session"; id: string; session: Session; at: number }
     | { kind: "past"; id: string; transcript: HistoryEntry; at: number };
