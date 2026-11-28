@@ -308,6 +308,42 @@ test("shows an approval the lead kept apart from one given on the change, with w
   await expect(record).toContainText("beefcaf");
 });
 
+test("names the folder a keep is in when the gate is judged in more than one", async ({ page }) => {
+  const own = await open(page);
+  await page.evaluate((own) => {
+    const w = window as unknown as {
+      __runs: Record<string, { gates: Record<string, unknown>[]; line: string }>;
+      __runChanged: (changed: { lead: string }) => void;
+    };
+    const state = w.__runs[own];
+    Object.assign(state.gates[1], {
+      standing: "outOfDate",
+      reason: "Reviewer's approval of the change in /projects/api is out of date",
+      folders: [
+        { folder: "/projects/demo", standing: "kept", reason: "the lead kept Reviewer's approval of the change in /projects/demo: a rename" },
+        { folder: "/projects/api", standing: "outOfDate", reason: "Reviewer's approval of the change in /projects/api is out of date" },
+      ],
+      kept: {
+        id: 1,
+        gate: 2,
+        verdict: 7,
+        token: own,
+        folder: "/projects/demo",
+        on: "beefcafe9876",
+        base: "abc",
+        reason: "a rename",
+        at: 1_790_000_100,
+      },
+    });
+    w.__runChanged({ lead: own });
+  }, own);
+  await page.getByTestId("gate-line-toggle").click();
+  const row = page.getByTestId("gate-row").nth(1);
+  await expect(row.getByTestId("gate-standing")).toHaveText("Out of date");
+  await expect(row.getByTestId("gate-kept")).toHaveText("Kept in demo by the lead: a rename");
+  await expect(row).toContainText("api: out of date");
+});
+
 test("says Copied once a gate's summary is copied", async ({ page }) => {
   await open(page);
   await page.getByTestId("gate-line-toggle").click();

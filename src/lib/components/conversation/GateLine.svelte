@@ -13,8 +13,9 @@
    * how many have passed and, while one holds, why, in the core's words.
    * Opened, it lists each gate as it stands, and a gate opens to the
    * record behind it. An approval the lead kept for a later change stands
-   * apart from one given on the change, with the lead's reason on its row
-   * and in its record. A gate that holds is waived from its row, saying why
+   * apart from one given on the change, with the lead's reason on its row,
+   * naming the folder where the gate is judged in several, and in its
+   * record. A gate that holds is waived from its row, saying why
    * in no more than the core takes. Where the run's lead has no row, the
    * run is ended from here once the user says so, and a refusal of either
    * is said where it was asked.
@@ -82,6 +83,10 @@
   const holds = (gate: RunGateState) => gate.standing === "waiting" || gate.standing === "outOfDate";
   const at = (seconds: number) => clock(seconds * 1000);
   const times = (count: number) => (count === 1 ? "once" : count === 2 ? "twice" : `${count} times`);
+  const base = (folder: string) => folder.split("/").at(-1);
+  /** Who kept a gate's approval, and in which folder where it is judged in several. */
+  const keptBy = (gate: RunGateState) =>
+    gate.kept !== null && gate.folders.length > 1 ? `Kept in ${base(gate.kept.folder)} by the lead` : "Kept by the lead";
 
   let field = $state<HTMLTextAreaElement | null>(null);
   let sheet = $state<HTMLDivElement | null>(null);
@@ -221,7 +226,7 @@
       lines.push(reviewed(gate));
       if (gate.verdict.findings.trim() !== "") lines.push("", gate.verdict.findings.trim());
       if (gate.verdict.followUps.trim() !== "") lines.push("", "Follow-ups:", gate.verdict.followUps.trim());
-      if (gate.kept !== null) lines.push("", `Kept by the lead: ${gate.kept.reason}`);
+      if (gate.kept !== null) lines.push("", `${keptBy(gate)}: ${gate.kept.reason}`);
     } else if (gate.waiver !== null) {
       lines.push(`Waived: ${gate.waiver.reason}`);
     } else {
@@ -298,11 +303,11 @@
               data-testid="gate-open"><Icon name="chev" size={12} /></button
             >
             {#if gate.gate.added}<span class="gsub">Added by the lead</span>{/if}
-            {#if gate.kept !== null}<span class="gsub" title={gate.kept.reason} data-testid="gate-kept">Kept by the lead: {gate.kept.reason}</span>{/if}
+            {#if gate.kept !== null}<span class="gsub" title={gate.kept.reason} data-testid="gate-kept">{keptBy(gate)}: {gate.kept.reason}</span>{/if}
             {#if holds(gate) && gate.atLimit}<span class="gsub">{gate.reason}</span>{/if}
             {#if gate.folders.length > 1}
               {#each gate.folders as place (place.folder)}
-                <span class="gsub" title={place.folder}><span class="place">{place.folder.split("/").at(-1)}</span>: {WORDS[place.standing].toLowerCase()}</span>
+                <span class="gsub" title={place.folder}><span class="place">{base(place.folder)}</span>: {WORDS[place.standing].toLowerCase()}</span>
               {/each}
             {/if}
             {#if waiving === gate.gate.id}
