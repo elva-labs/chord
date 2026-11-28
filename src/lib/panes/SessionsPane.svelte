@@ -3,6 +3,7 @@
   import ConfirmStrip from "$lib/components/ConfirmStrip.svelte";
   import { putAway } from "$lib/popover";
   import { hangMenu } from "$lib/hangMenu";
+  import { coversBrowser } from "$lib/browser.svelte";
   import {
     closeAsking,
     closingCancel,
@@ -2000,6 +2001,7 @@
       data-card
       class:up={sessionMenu.up}
       use:hangMenu
+      use:coversBrowser
       role="menu"
       data-testid="session-menu"
     >
@@ -2287,6 +2289,7 @@
       data-card
       class:up={projectMenu.up}
       use:hangMenu
+      use:coversBrowser
       role="menu"
       data-testid="project-menu"
     >
@@ -2459,7 +2462,7 @@
       ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h7M3 11.5h4" /></svg></button
     >
     {#if sortOpen}
-      <div class="menu sort-menu" data-card use:hangMenu role="menu" data-testid="project-sort-menu">
+      <div class="menu sort-menu" data-card use:hangMenu use:coversBrowser role="menu" data-testid="project-sort-menu">
         {#each SORTS as choice, index (choice.sort)}
           <button
             role="menuitemradio"
@@ -2497,6 +2500,7 @@
         class="menu more-menu"
         data-card
         use:hangMenu={{ gap: 4 }}
+        use:coversBrowser
         role="menu"
         data-testid="sessions-menu-items"
       >
